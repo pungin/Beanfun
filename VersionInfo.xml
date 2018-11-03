@@ -3,7 +3,7 @@
   <Version>2.0.0.0</Version>
   <UpdaterVersion>1.0.2.0</UpdaterVersion>
   <Date>2018-11-03</Date>
-  <Url>https://github.com/pungin/Beanfun/releases/download/v2.0.0.0/Beanfun.zip</Url>
+  <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>新增創建遊戲帳號功能
 新增修改帳號顯示名稱功能
 新增進階認證功能
