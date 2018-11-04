@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.0.0.0</Version>
-  <UpdaterVersion>1.0.3.0</UpdaterVersion>
-  <Date>2018-11-03</Date>
+  <Version>2.1.0.0</Version>
+  <UpdaterVersion>1.0.3.1</UpdaterVersion>
+  <Date>2018-11-04</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>新增創建遊戲帳號功能
-新增修改帳號顯示名稱功能
-新增進階認證功能
-新增儲值樂豆點、會員中心、客服中心功能
-現在 PlaySafe 登入可以記憶 PIN 碼
-將 DLL 合併到主程式(LE插件沒有)
+  <Note>香港Beanfun支援儲值樂豆點、會員中心、客服中心功能
+台灣Beanfun支援查詢個人認證信箱
+修復結束程式/返回登入頁面沒有成功登出帳號的問題
+香港Beanfun登出完成後現在會關閉Beanfun元件
+支援查看遊戲帳號詳細訊息
+網頁瀏覽器優化
+部分界面優化與BUG修復
   </Note>
 </VersionInfo>
