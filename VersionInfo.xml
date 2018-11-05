@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.1.0.0</Version>
+  <Version>2.2.0.0</Version>
   <UpdaterVersion>1.0.3.1</UpdaterVersion>
-  <Date>2018-11-04</Date>
+  <Date>2018-11-05</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>香港Beanfun支援儲值樂豆點、會員中心、客服中心功能
-台灣Beanfun支援查詢個人認證信箱
-修復結束程式/返回登入頁面沒有成功登出帳號的問題
-香港Beanfun登出完成後現在會關閉Beanfun元件
-支援查看遊戲帳號詳細訊息
-網頁瀏覽器優化
-部分界面優化與BUG修復
+  <Note>偵測不到遊戲目錄時可選自行選擇或者開啟瀏覽器下載遊戲
+新增跑跑卡丁車車隊快捷操作
+新增用內置網頁瀏覽器開啟遊戲官網的功能(免重新登入使用部分功能)
+支援beanfun! App的兩種防護等級登入
   </Note>
 </VersionInfo>
