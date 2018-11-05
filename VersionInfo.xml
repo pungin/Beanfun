@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.2.0.0</Version>
+  <Version>2.2.0.1</Version>
   <UpdaterVersion>1.0.3.1</UpdaterVersion>
-  <Date>2018-11-05</Date>
+  <Date>2018-11-06</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>偵測不到遊戲目錄時可選自行選擇或者開啟瀏覽器下載遊戲
 新增跑跑卡丁車車隊快捷操作
