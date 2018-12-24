@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.2.0.1</Version>
-  <UpdaterVersion>1.0.3.1</UpdaterVersion>
-  <Date>2018-11-06</Date>
+  <Version>2.4.2.9</Version>
+  <UpdaterVersion>1.1.0.2</UpdaterVersion>
+  <Date>2018-12-24</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>偵測不到遊戲目錄時可選自行選擇或者開啟瀏覽器下載遊戲
-新增跑跑卡丁車車隊快捷操作
-新增用內置網頁瀏覽器開啟遊戲官網的功能(免重新登入使用部分功能)
-支援beanfun! App的兩種防護等級登入
+  <Note>dotNet Framework框架版本需求降到4.0(部分Windows 7 用戶安裝的框架版本為4.0的不會崩潰了)
+由於亞克力效果在Windows 7下無效果甚至界面視覺更差, 所以換回之前的透明視窗
+將Locale Emulator的運行檔案合併到程式中, 需要時再釋出
+更改帳號和配置檔案的位置
   </Note>
 </VersionInfo>
