@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.4.3.1</Version>
+  <Version>2.5.0.12</Version>
   <UpdaterVersion>1.1.0.2</UpdaterVersion>
-  <Date>2018-12-24</Date>
+  <Date>2019-01-31</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>dotNet Framework框架版本需求降到4.0(部分Windows 7 用戶安裝的框架版本為4.0的不會崩潰了)
-由於亞克力效果在Windows 7下無效果甚至界面視覺更差, 所以換回之前的透明視窗
-將Locale Emulator的運行檔案合併到程式中, 需要時再釋出
-更改帳號和配置檔案的位置
+  <Note>現在香港Beanfun能獲取從未登陸過遊戲或已被鎖定的帳號了
+香港Beanfun支援更改帳號顯示名稱、創建遊戲子帳號功能
+香港Beanfun遊戲子帳號訊息增加顯示上次登入遊戲的時間
   </Note>
 </VersionInfo>
