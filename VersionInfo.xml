@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.5.0.12</Version>
-  <UpdaterVersion>1.1.0.2</UpdaterVersion>
-  <Date>2019-01-31</Date>
+  <Version>2.6.0.0</Version>
+  <UpdaterVersion>1.1.1.0</UpdaterVersion>
+  <Date>2019-02-17</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>現在香港Beanfun能獲取從未登陸過遊戲或已被鎖定的帳號了
-香港Beanfun支援更改帳號顯示名稱、創建遊戲子帳號功能
-香港Beanfun遊戲子帳號訊息增加顯示上次登入遊戲的時間
+  <Note>移除初次運行時的兩個初始化設定詢問視窗
+移除創建偵測並創建桌面捷徑的功能
+相容加速器模式現在會根據對應遊戲的實際執行檔命名檔案
+簡化香港Beanfun調用插件時的一些不必要操作
+設定默認為非傳統登入模式, 並且傳統登入更變入口移動至設定界面
+對部分設定選增加了滑鼠懸停提示功能
+優化部分提示內容
+修復若干BUG
   </Note>
 </VersionInfo>
