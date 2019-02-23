@@ -1,17 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.7.0.0</Version>
+  <Version>2.7.1.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-02-19</Date>
+  <Date>2019-02-23</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>傳統登入模式預設改為開啟
-部分不支援傳統登入的遊戲改為不會顯示設定項
-增加縮小到工具列的設定項
-視窗右上方增加設定按鍵
-增加初次運行時使用區域的詢問視窗
-修復台灣Beanfun遊戲「天堂」無法取得帳號和創建帳號的問題
-修復「絕對武力 online(CS Online)」和「爆爆王」無法創建帳號和修改密碼的問題
-優化界面佈局
-修復若干BUG
+  <Note>修正上次使用QRCode登入時預設選中登入方式為非QRCode登入的問題
+修正部分操作後QRCode登入失效的問題
   </Note>
 </VersionInfo>
