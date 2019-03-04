@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.7.1.0</Version>
+  <Version>2.7.2.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-02-23</Date>
+  <Date>2019-03-04</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>修正上次使用QRCode登入時預設選中登入方式為非QRCode登入的問題
 修正部分操作後QRCode登入失效的問題
+修正香港帳號的一個崩潰問題
   </Note>
 </VersionInfo>
