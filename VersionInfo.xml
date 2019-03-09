@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.7.2.0</Version>
+  <Version>2.7.5.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-03-04</Date>
+  <Date>2019-03-09</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>修正上次使用QRCode登入時預設選中登入方式為非QRCode登入的問題
-修正部分操作後QRCode登入失效的問題
-修正香港帳號的一個崩潰問題
+  <Note>修正默認選中的帳號不是上次登入的帳號的問題
+獲取密碼的時候現在不可以更變遊戲
+現在釋出Locale Emulator相關檔案不再提示
+遊戲「新楓之谷」帳號右鍵選單增加即時檢舉入口(需要手動登入, 香港號無法檢舉)
+修正部分BUG
   </Note>
 </VersionInfo>
