@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.7.5.0</Version>
+  <Version>2.7.6.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-03-09</Date>
+  <Date>2019-03-10</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>修正默認選中的帳號不是上次登入的帳號的問題
 獲取密碼的時候現在不可以更變遊戲
 現在釋出Locale Emulator相關檔案不再提示
 遊戲「新楓之谷」帳號右鍵選單增加即時檢舉入口(需要手動登入, 香港號無法檢舉)
-修正部分BUG
+增加Beanfun帳號不存在的提示
+修正出現部分錯誤退回登入頁面後QRCode無法登入的問題
+修正部分獲取密碼後可能造成界面卡住無法操作的問題
+修正其他若干BUG
   </Note>
 </VersionInfo>
