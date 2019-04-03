@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.8.1.0</Version>
+  <Version>2.8.3.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-03-25</Date>
+  <Date>2019-04-03</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>新增裝備卷軸星力計算器
-新增序號查詢的入口
-新增物價局入口
-外掛檢舉地址改為檢舉的頁面 不需要再打開後點擊多一步按鍵
+  <Note>修復一個無法保持在線的BUG
+現在香港Beanfun帳號能同時登入多個
   </Note>
 </VersionInfo>
