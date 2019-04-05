@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.8.3.0</Version>
+  <Version>2.8.4.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-04-03</Date>
+  <Date>2019-04-05</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>修復一個無法保持在線的BUG
-現在香港Beanfun帳號能同時登入多個
+  <Note>修正香港Beanfun初始化元件的一個問題
+修正無法重新加載QRCode的問題
+修正偵測系統語係錯誤導致繁體下依然用Locale Emulator運行的問題
   </Note>
 </VersionInfo>
