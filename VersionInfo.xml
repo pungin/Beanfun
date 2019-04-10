@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.8.5.0</Version>
+  <Version>2.8.6.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-04-05</Date>
+  <Date>2019-04-10</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>修正香港Beanfun初始化元件的一個問題
-修正無法重新加載QRCode的問題
-修正偵測系統語係錯誤導致繁體下依然用Locale Emulator運行的問題
-新增偵測到.Net Framework版本與需求版本不同提示是否要下載4.5.2版本的提示
+  <Note>修正繁體語係下繽放運行遊戲時遊戲會在繽放目錄拉屎的問題
+細化非繁體語係運行遊戲出錯時的報錯訊息
   </Note>
 </VersionInfo>
