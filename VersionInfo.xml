@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.8.6.0</Version>
+  <Version>2.9.1.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-04-10</Date>
+  <Date>2019-04-24</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>修正繁體語係下繽放運行遊戲時遊戲會在繽放目錄拉屎的問題
-細化非繁體語係運行遊戲出錯時的報錯訊息
+  <Note>現在支援在管理帳號界面更變已儲存的Beanfun帳號順序
+帳號輸入欄選中時現在默認為英文輸入法
+帳號輸入欄現在支援模糊搜尋功能
+帳號輸入欄選單新增移除帳號的按鍵
+新增beanfun!App的樂豆點兌換碼的儲值入口
+更換高清logo與icon,使得在高分屏下顯示效果好些
+新增Telegram的聯繫開發者的方式
+新增Paypal和QQ支付的捐贈方式
   </Note>
 </VersionInfo>
