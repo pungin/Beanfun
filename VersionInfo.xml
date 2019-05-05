@@ -1,16 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.1.0</Version>
+  <Version>2.9.2.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-04-24</Date>
+  <Date>2019-05-05</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>現在支援在管理帳號界面更變已儲存的Beanfun帳號順序
-帳號輸入欄選中時現在默認為英文輸入法
-帳號輸入欄現在支援模糊搜尋功能
-帳號輸入欄選單新增移除帳號的按鍵
-新增beanfun!App的樂豆點兌換碼的儲值入口
-更換高清logo與icon,使得在高分屏下顯示效果好些
-新增Telegram的聯繫開發者的方式
-新增Paypal和QQ支付的捐贈方式
+  <Note>現在開啟繽放會偵測.Net Framework版本並且給予提示
+向Beanfun網站伺服器請求連結時現在告訴伺服器不支援GZip解碼以解決幻數不正確的問題
   </Note>
 </VersionInfo>
