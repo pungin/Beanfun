@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.2.0</Version>
+  <Version>2.9.3.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-05-05</Date>
+  <Date>2019-05-11</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>現在開啟繽放會偵測.Net Framework版本並且給予提示
-向Beanfun網站伺服器請求連結時現在告訴伺服器不支援GZip解碼以解決幻數不正確的問題
+  <Note>修復香港Beanfun帳號儲值時需要重新登入的問題
+優化自動輸入帳密的體驗
+細化遊戲啟動失敗時的說明
   </Note>
 </VersionInfo>
