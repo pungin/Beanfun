@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.3.0</Version>
+  <Version>2.9.3.1</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-05-11</Date>
+  <Date>2019-05-15</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>修復香港Beanfun帳號儲值時需要重新登入的問題
-優化自動輸入帳密的體驗
-細化遊戲啟動失敗時的說明
+  <Note>優化當前選擇的Beanfun區域的顯示
+修復部分情況會出現沒有獲取密碼那一行的問題
+修復其他若干BUG
   </Note>
 </VersionInfo>
