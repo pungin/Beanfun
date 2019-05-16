@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.3.1</Version>
+  <Version>2.9.4.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-05-15</Date>
+  <Date>2019-05-17</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>優化當前選擇的Beanfun區域的顯示
-修復部分情況會出現沒有獲取密碼那一行的問題
-修復其他若干BUG
+  <Note>楓之谷工具新增「皇家糾察隊(錄影檢舉)」頁面入口
+這次真的修復了香港Beanfun帳號儲值需要重新登入的問題
+網頁瀏覽器現在不會提示腳本錯誤了
+網頁瀏覽器現在會根據系統的DPI進行縮放
+選擇香港區域的時候開啟網頁瀏覽器現在會自動設定IE的BFServiceX環境了
+現在提示有更新的時候只彈詢問視窗, 不再傳送通知(之前點擊通知也會進行更新)
+版本為2.9.4.0或以上的程式進行更新時會有下載進度條, 在未下載完更新並且沒有手動停止之前主界面改為不能進行操作
   </Note>
 </VersionInfo>
