@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.4.0</Version>
+  <Version>2.9.4.1</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-05-17</Date>
+  <Date>2019-05-20</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>楓之谷工具新增「皇家糾察隊(錄影檢舉)」頁面入口
+  <Note>隨 QRCode 便利登更新而更新
+楓之谷工具新增「皇家糾察隊(錄影檢舉)」頁面入口
 這次真的修復了香港Beanfun帳號儲值需要重新登入的問題
 網頁瀏覽器現在不會提示腳本錯誤了
 網頁瀏覽器現在會根據系統的DPI進行縮放
