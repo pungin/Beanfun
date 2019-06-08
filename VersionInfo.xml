@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.8.6.0</Version>
+  <Version>2.9.5.0</Version>
   <UpdaterVersion>1.1.1.0</UpdaterVersion>
-  <Date>2019-04-10</Date>
+  <Date>2019-06-08</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>修正繁體語係下繽放運行遊戲時遊戲會在繽放目錄拉屎的問題
-細化非繁體語係運行遊戲出錯時的報錯訊息
+  <Note>QRCode 掃碼支援切換到 Android 5.0 以下手機的App能使用圖片
+修復掃毒報告DFI - Suspicious PE的問題(建議使用2.9.1.0到2.9.4.2版本的用戶更新到這個版本)
   </Note>
 </VersionInfo>
