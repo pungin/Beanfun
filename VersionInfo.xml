@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
   <Version>2.9.5.0</Version>
-  <UpdaterVersion>1.1.1.0</UpdaterVersion>
+  <UpdaterVersion>1.1.2.29539</UpdaterVersion>
   <Date>2019-06-08</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>QRCode 掃碼支援切換到 Android 5.0 以下手機的App能使用圖片
