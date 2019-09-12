@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.5.0</Version>
-  <UpdaterVersion>1.1.2.29539</UpdaterVersion>
-  <Date>2019-06-08</Date>
+  <Version>2.9.6.23489</Version>
+  <UpdaterVersion>1.2.0.23489</UpdaterVersion>
+  <Date>2019-09-12</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>QRCode 掃碼支援切換到 Android 5.0 以下手機的App能使用圖片
-修復掃毒報告DFI - Suspicious PE的問題(建議使用2.9.1.0到2.9.4.2版本的用戶更新到這個版本)
+  <Note>由於問題較多 現在移除相容加速器模式
+增加阻止楓之谷自動更新遊戲的設定項並預設為開啟(防止自動更新發生的遊戲損壞問題)
   </Note>
 </VersionInfo>
