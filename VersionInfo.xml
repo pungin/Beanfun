@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.8.21347</Version>
+  <Version>2.9.8.21882</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
   <Date>2019-09-17</Date>
-  <Url>https://github.com/pungin/Beanfun/releases/download/v2.9.8-Beta/Beanfun.zip</Url>
+  <Url>https://raw.githubusercontent.com/pungin/Beanfun/beta/Beanfun.zip</Url>
   <Note>楓之谷工具新增回收資料夾空間的功能
 修正部分開啟程式閃退的問題
   </Note>
