@@ -6,5 +6,7 @@
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/beta/Beanfun.zip</Url>
   <Note>楓之谷工具新增回收資料夾空間的功能
 修正部分開啟程式閃退的問題
+增加更新通道的設定項
+修正獲取密碼時未進階認證的帳號會提示"已從伺服器斷線，請重新登入。"的問題
   </Note>
 </VersionInfo>
