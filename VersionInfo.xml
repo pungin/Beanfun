@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.8.26765</Version>
+  <Version>3.0.0.0</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
   <Date>2019-09-19</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>
-優化阻止自動更新後的提示
-聯繫作者新增Github和QQ群的方式
+  <Note>Beta1:
+為防止帳號選單誤觸登出按鈕，增加了確認登出的詢問窗
   </Note>
 </VersionInfo>
