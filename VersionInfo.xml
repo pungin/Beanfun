@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.8.26765</Version>
+  <Version>2.9.9.28699</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
   <Date>2019-09-19</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>楓之谷工具新增回收資料夾空間的功能
+  <Note>隨台灣Beanfun網站更新而更新
+楓之谷工具新增回收資料夾空間的功能
 修正部分開啟程式閃退的問題
 增加更新通道的設定項
 修正獲取密碼時未進階認證的帳號會提示"已從伺服器斷線，請重新登入。"的問題
