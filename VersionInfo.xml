@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>2.9.7.41470</Version>
+  <Version>2.9.8.26765</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
-  <Date>2019-09-12</Date>
+  <Date>2019-09-19</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>由於問題較多 現在移除相容加速器模式
-增加阻止楓之谷自動更新遊戲的設定項並預設為開啟(防止自動更新發生的遊戲損壞問題)
+  <Note>楓之谷工具新增回收資料夾空間的功能
+修正部分開啟程式閃退的問題
+增加更新通道的設定項
+修正獲取密碼時未進階認證的帳號會提示"已從伺服器斷線，請重新登入。"的問題
+優化阻止自動更新後的提示
+聯繫作者新增Github和QQ群的方式
   </Note>
 </VersionInfo>
