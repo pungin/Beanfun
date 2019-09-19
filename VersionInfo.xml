@@ -3,7 +3,7 @@
   <Version>3.0.0.0</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
   <Date>2019-09-19</Date>
-  <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
+  <Url>https://raw.githubusercontent.com/pungin/Beanfun/beta/Beanfun.zip</Url>
   <Note>Beta1:
 為防止帳號選單誤觸登出按鈕，增加了確認登出的詢問窗
   </Note>
