@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.0.0.3</Version>
+  <Version>3.0.0.4</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
-  <Date>2020-01-02</Date>
+  <Date>2020-01-08</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/beta/Beanfun.zip</Url>
   <Note>Beta1:
 為防止帳號選單誤觸登出按鈕，增加了確認登出的詢問窗
@@ -10,5 +10,10 @@ Beta2:
 更正緩存造成下載更新會是舊版本的問題
 更正清理楓之谷目錄造成無法更新遊戲的問題
 給所有網頁啟動的遊戲開放傳統登入的開關
+Beta3:
+把偵測.Net版本放到最開始 防止運行直接宕掉
+移除PlaySafe登入模式
+連線增加超時時間
+楓之谷啟動遊戲現在會偵測是否能連線到伺服器 如果無法連線會提示
   </Note>
 </VersionInfo>
