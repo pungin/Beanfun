@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.0.0.4</Version>
+  <Version>3.0.0.5</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
-  <Date>2020-01-08</Date>
+  <Date>2020-01-09</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/beta/Beanfun.zip</Url>
   <Note>Beta1:
 為防止帳號選單誤觸登出按鈕，增加了確認登出的詢問窗
@@ -15,5 +15,7 @@ Beta3:
 移除PlaySafe登入模式
 連線增加超時時間
 楓之谷啟動遊戲現在會偵測是否能連線到伺服器 如果無法連線會提示
+Beta4:
+目標框架降到4.0修復不會提示框架需求版本直接崩潰的問題
   </Note>
 </VersionInfo>
