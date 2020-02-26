@@ -1,20 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.0.0.7</Version>
+  <Version>3.0.1.0</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
-  <Date>2020-02-26</Date>
-  <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>為防止帳號選單誤觸登出按鈕，增加了確認登出的詢問窗
-更正緩存造成下載更新會是舊版本的問題
-更正清理楓之谷目錄造成無法更新遊戲的問題
-給所有網頁啟動的遊戲開放傳統登入的開關
-把偵測.Net版本放到最開始 防止運行直接宕掉
-移除PlaySafe登入模式
-連線增加超時時間
-楓之谷啟動遊戲現在會偵測是否能連線到伺服器 如果無法連線會提示
-目標框架降到4.0修復不會提示框架需求版本直接崩潰的問題
-現在程式初始化失敗會回到選區域界面
-取得密碼失敗增加錯誤提示語
-非繁中語係系統失敗增加一個錯誤提示語
+  <Date>2020-02-27</Date>
+  <Url>https://raw.githubusercontent.com/pungin/Beanfun/beta/Beanfun.zip</Url>
+  <Note>Beta1:
+楓之谷啟動遊戲偵測連線增加超時時間，詳細化連線錯誤提示，顯示伺服器楓之谷版本
   </Note>
 </VersionInfo>
