@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.0.1.0</Version>
+  <Version>3.0.1.1</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
-  <Date>2020-02-27</Date>
+  <Date>2020-02-28</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/beta/Beanfun.zip</Url>
   <Note>Beta1:
-楓之谷啟動遊戲偵測連線增加超時時間，詳細化連線錯誤提示，顯示伺服器楓之谷版本
+- 楓之谷啟動遊戲偵測連線增加超時時間，詳細化連線錯誤提示，顯示伺服器楓之谷版本
+Beta2:
+- 楓之谷啟動遊戲偵測連線增加超時時間，詳細化連線錯誤提示，顯示伺服器楓之谷版本
+- 遊戲帳號選單界面隱藏帳號和密碼(防止截屏洩露訊息)
+- 增加Beanfun帳號備註名功能
   </Note>
 </VersionInfo>
