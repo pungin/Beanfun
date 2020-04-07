@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.0.1.2</Version>
+  <Version>3.0.1.4</Version>
   <UpdaterVersion>1.2.0.23489</UpdaterVersion>
-  <Date>2020-03-03</Date>
-  <Url>https://raw.githubusercontent.com/pungin/Beanfun/beta/Beanfun.zip</Url>
+  <Date>2020-04-08</Date>
+  <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>Beta1:
 - 楓之谷啟動遊戲偵測連線增加超時時間，詳細化連線錯誤提示，顯示伺服器楓之谷版本
 Beta2:
 - 遊戲帳號選單界面隱藏帳號和密碼(防止截屏洩露訊息)
-- 增加Beanfun帳號備註名功能
+- 增加Beanfun帳號備註名功能(※更新這版之後，由於與舊版本資料不相容，所以無法使用舊版本)
 Beta3:
 - 優化偵測楓之谷連線
 - 撤回隱藏密碼顯示的更改
 - 遊戲子帳號根據帳號編號排序
+正式版:
+- 更正啟動程式時視窗沒有居中
+- 獲取密碼按鈕按下後提示從「獲取密碼中...」改為「正在獲取」(防止之前改動造成正在等待獲取密碼的時候視窗寬度發生變化)
   </Note>
 </VersionInfo>
