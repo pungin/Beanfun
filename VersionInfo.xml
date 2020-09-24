@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.0.1.3</Version>
-  <UpdaterVersion>1.2.0.23489</UpdaterVersion>
-  <Date>2020-04-08</Date>
+  <Version>3.1.0.1</Version>
+  <UpdaterVersion>1.2.1.0</UpdaterVersion>
+  <Date>2020-09-25</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>楓之谷啟動遊戲偵測連線增加超時時間，詳細化連線錯誤提示，顯示伺服器楓之谷版本(防止從程式啟動遊戲而無法與伺服器連線時造成程式卡住很久的問題)
-遊戲帳號選單界面隱藏帳號(防止截屏洩露訊息)
-增加Beanfun帳號備註名功能(※更新3.0.1版本之後，由於與舊版本資料不相容，所以無法使用舊版本)
-遊戲子帳號根據帳號編號排序
-更正啟動程式時視窗沒有居中
+  <Note>※v3.0.1(不含)之前的版本更新之後，由於與舊版本資料不相容，所以無法使用舊版本
+- 修復海外IP登入台灣BF時提示「請輸入圖形驗證碼」的問題
+- 更改程式圖標
+- 更正自動登入閃退問題
+- 修復自動輸入功能, 現在只需要遊戲在登入界面點擊獲取密碼即可全自動進行登入操作
+- 香港帳號不再需要系統支援SSL3即可登入
+- 非台港IP登入台灣帳號認證進階訊息後不再提示認證成功(直接進行登入操作)
+- 非Win10取消視窗透明度, Win10系統改為亞克力視窗, 部分部件改為Fluent設計
+- 新增更改程序主題顏色的配置項(可自定義輸入顏色碼, 自動根據顏色適應深色和淺色界面)
   </Note>
 </VersionInfo>
