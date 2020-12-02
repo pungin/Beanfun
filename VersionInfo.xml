@@ -1,20 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.1.0.2</Version>
+  <Version>3.1.1.2</Version>
   <UpdaterVersion>1.2.2.0</UpdaterVersion>
-  <Date>2020-09-27</Date>
+  <Date>2020-12-02</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/beta/Beanfun.zip</Url>
   <Note>※v3.0.1(不含)之前的版本更新之後，由於與舊版本資料不相容，所以無法使用舊版本
-v3.1.0:
-- 修復海外IP登入台灣BF時提示「請輸入圖形驗證碼」的問題
-v3.1.0 Beta1:
-- 修復自動輸入功能, 現在只需要遊戲在登入界面點擊獲取密碼即可全自動進行登入操作
-- 香港帳號不再需要系統支援SSL3即可登入
-- 非台港IP登入台灣帳號認證進階訊息後不再提示認證成功(直接進行登入操作)
-- 非Win10取消視窗透明度, Win10系統改為亞克力視窗, 部分部件改為Fluent設計
-- 新增更改程序主題顏色的配置項(可自定義輸入顏色碼, 自動根據顏色適應深色和淺色界面)
-v3.0.2:
-- 更改程式圖標
-- 更正自動登入閃退問題
+v3.1.1(2):
+- 修復Windows10黑暗主題下按鍵顏色會被影響的問題
+- 增加更多報錯提示
   </Note>
 </VersionInfo>
