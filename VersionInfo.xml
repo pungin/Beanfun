@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.1.1.3</Version>
-  <UpdaterVersion>1.2.2.0</UpdaterVersion>
-  <Date>2020-12-07</Date>
+  <Version>3.1.3.0</Version>
+  <UpdaterVersion>1.2.3.0</UpdaterVersion>
+  <Date>2021-01-02</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>※v3.0.1(不含)之前的版本更新之後，由於與舊版本資料不相容，所以無法使用舊版本
-- 修復Windows10黑暗主題下按鍵顏色會被影響的問題
-- 增加更多報錯提示
-- 修復海外IP使用一般登入方式登入台灣樂豆時提示「請輸入圖形驗證碼」的問題
-- 移除新楓之谷遊戲用繽放開啟遊戲時偵測伺服器遊戲版本功能
-- 阻止新楓之谷自動更新提示現在會顯示客戶端和伺服器遊戲版本並且引導玩家訪問官方更新檔或完整檔下載頁面
-- 現在獲取一次性密碼後不再自動複製，僅在開啟自動輸入時沒有偵測到遊戲在運行會自動複製
+- 更正因台灣樂豆頁面改版導致遊戲爆爆王和絕對武力無法顯示帳號的問題
+- 根據香港樂豆頁面改版更新香港樂豆相關帳號操作功能
+- 卷軸計算器增加榮耀卷軸估算
   </Note>
 </VersionInfo>
