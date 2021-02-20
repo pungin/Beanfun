@@ -1,0 +1,150 @@
+﻿<Page
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:local="clr-namespace:Beanfun"
+      xmlns:System="clr-namespace:System;assembly=mscorlib"
+      x:Class="Beanfun.AccountList"
+      mc:Ignorable="d" 
+      Title="帳號選單">
+    <Page.Resources>
+        <ResourceDictionary>
+            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}">
+                <Setter Property="Background" Value="#7FF5F5F5"/>
+                <Setter Property="Foreground" Value="Black"/>
+            </Style>
+            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
+            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
+        </ResourceDictionary>
+    </Page.Resources>
+
+    <Grid>
+        <StackPanel>
+            <Button x:Name="btn_HomePage" Margin="10,10,10,10" Style="{DynamicResource ButtonStyle}" HorizontalAlignment="Left" Cursor="Hand" ToolTip="返回登入頁面" Click="btn_Logout_Click" IsCancel="True" IsKeyboardFocusedChanged="btn_HomePage_IsKeyboardFocusedChanged">
+                <Button.Resources>
+                    <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
+                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
+                        <Setter Property="Padding" Value="2"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Background" Value="{x:Null}"/>
+                        <Setter Property="BorderBrush" Value="{x:Null}"/>
+                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                        <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="{x:Type Button}">
+                                    <Border x:Name="Bd" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                                        <ContentPresenter ContentTemplate="{TemplateBinding ContentTemplate}" Content="{TemplateBinding Content}" ContentStringFormat="{TemplateBinding ContentStringFormat}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" TargetName="Bd" Value="#40000000"/>
+                                        </Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter Property="Background" TargetName="Bd" Value="#40000000"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter Property="Background" TargetName="Bd" Value="#40000000"/>
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Resources>
+                <Image x:Name="Logo" Source="/Beanfun;component/Resources/logo.png" Stretch="Uniform" RenderOptions.BitmapScalingMode="Fant" Width="106" Height="45">
+                    <Image.Effect>
+                        <DropShadowEffect Opacity="0.7" ShadowDepth="1" BlurRadius="1" Direction="270"/>
+                    </Image.Effect>
+                </Image>
+            </Button>
+            <StackPanel Background="#7FFFFFFF">
+                <StackPanel Margin="10">
+                    <Grid>
+                        <DockPanel>
+                            <Button x:Name="btn_ChangeGame" ToolTip="更換遊戲" Padding="0" Cursor="Hand" Click="gameName_Click">
+                                <Image x:Name="imageGame" Height="48" Width="48" Stretch="Fill"/>
+                            </Button>
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="gameName" Margin="5,2,0,0" ToolTip="更換遊戲" Click="gameName_Click"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="btn_StartGame" Margin="5,5,0,0" Content="啟動遊戲" Click="Button_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </DockPanel>
+                        <StackPanel HorizontalAlignment="Right">
+                            <Button x:Name="btn_Logout" Content="登出" Margin="10,0,0,0" Click="btn_Logout_Click"/>
+                            <Button x:Name="btn_Tools" Content="工具" Margin="10,10,0,0" Click="btn_Tools_Click"/>
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <Menu x:Name="m_MenuList">
+                            <MenuItem x:Name="m_RemainPoint" Header="樂豆點數: 0 點">
+                                <MenuItem x:Name="m_UpdatePoint" Header="更新點數" Click="m_UpdatePoint_Click"/>
+                                <MenuItem x:Name="bfb_Gash" Header="儲值與購點" Click="bfb_Gash_Click"/>
+                                <MenuItem x:Name="btn_Deposite" Header="兌換beanfun!App樂豆點" Click="btn_Deposite_Click"/>
+                            </MenuItem>
+                            <MenuItem x:Name="BF_btnMember" Header="會員中心" Click="BF_btnMember_Click"/>
+                            <MenuItem x:Name="btn_Customerservice" Header="客服中心" Click="btn_Customerservice_Click"/>
+                        </Menu>
+                    </StackPanel>
+                    <ListBox x:Name="list_Account" Margin="0,10,0,0" Height="130" ToolTip="右鍵開啟選單" SelectionMode="Single">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding sname}"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                        <ListBox.Resources>
+                            <Style TargetType="{x:Type ListBoxItem}" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <EventSetter Event="MouseDoubleClick" Handler="list_Account_MouseDoubleClick"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding isEnable}" Value="false">
+                                        <Setter Property="Foreground" Value="Gray" />
+                                        <Setter Property="ToolTip" Value="帳號已鎖定" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding isEnable}" Value="true">
+                                        <Setter Property="ToolTip" Value="雙擊複製帳號" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                            <Style TargetType="{x:Type GridViewColumnHeader}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </Style>
+                        </ListBox.Resources>
+                        <ListBox.ContextMenu>
+                            <ContextMenu x:Name="m_AcountMenu">
+                                <MenuItem x:Name="m_CopyAccount" Header="複製遊戲帳號" Click="list_Account_MouseDoubleClick"/>
+                                <MenuItem x:Name="m_ChangeAccName" Header="編輯遊戲帳號" Click="m_ChangeAccName_Click"/>
+                                <MenuItem x:Name="m_ChangePassword" Header="修改帳號密碼" Click="m_ChangePassword_Click"/>
+                                <MenuItem x:Name="m_AccInfo" Header="遊戲帳號詳情" Click="m_AccInfo_Click"/>
+                                <Separator x:Name="s_Account"/>
+                                <MenuItem Header="會員中心" Click="BF_btnMember_Click"/>
+                                <MenuItem Header="客服中心" Click="btn_Customerservice_Click"/>
+                                <MenuItem x:Name="m_GetEmail" Header="查詢認證信箱" Click="m_GetEmail_Click"/>
+                                <Separator/>
+                                <MenuItem Header="官方網站" Click="btn_HomePage_Click"/>
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
+                    </ListBox>
+                    <Grid x:Name="accLimit" Margin="0,10,0,0">
+                        <Label x:Name="lbl_AccountAmountLimitNotice"/>
+                        <Button x:Name="btnAddServiceAccount" HorizontalAlignment="Right" Content="新增帳號" Click="btnAddServiceAccount_Click"/>
+                    </Grid>
+                    <DockPanel x:Name="panel_GetOtp" Margin="0,10,0,0">
+                        <Button x:Name="btnGetOtp" Content="獲取密碼" IsDefault="True" Click="btnGetOtp_Click"/>
+                        <CheckBox x:Name="autoPaste" Content="自動輸入" VerticalAlignment="Center" Margin="5,0,0,0" Checked="autoPaste_CheckedChanged" Unchecked="autoPaste_CheckedChanged" IsChecked="False" ToolTip="自動輸入需要遊戲在輸入帳密界面&#x0a;&#x0a;※ 自動輸入功能可能會由於遊戲限制出現偶爾無法正常進行的問題, 請斟酌使用" Cursor="Help"/>
+                        <TextBox x:Name="t_Password" Margin="5,0,0,0" VerticalContentAlignment="Center" VerticalAlignment="Center" IsReadOnly="True" MinWidth="160" ToolTip="點擊自動複製" TextAlignment="Center" PreviewMouseLeftButtonDown="t_Password_PreviewMouseLeftButtonDown"/>
+                    </DockPanel>
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Page>
