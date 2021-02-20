@@ -1,0 +1,104 @@
+﻿<Page
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:local="clr-namespace:Beanfun"
+      xmlns:System="clr-namespace:System;assembly=mscorlib"
+      x:Class="Beanfun.id_pass_form"
+      mc:Ignorable="d" 
+      Title="id_pass_form">
+    <Page.Resources>
+        <ResourceDictionary>
+            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}">
+                <Setter Property="Background" Value="#7FF5F5F5"/>
+                <Setter Property="Foreground" Value="Black"/>
+            </Style>
+            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
+            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
+        </ResourceDictionary>
+    </Page.Resources>
+
+    <Grid>
+        <DockPanel>
+            <StackPanel>
+                <Button ToolTip="更變遊戲" Padding="0" Click="Button_Click">
+                    <Image x:Name="imageGame" Height="80" Width="80" Cursor="Hand" Stretch="UniformToFill"/>
+                </Button>
+            </StackPanel>
+            <StackPanel Margin="5,0,0,0">
+                <DockPanel>
+                    <StackPanel>
+                        <DockPanel>
+                            <StackPanel>
+                                <TextBlock Text="帳號" Margin="0,2,5,0" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="lb_pwd" Text="密碼" Margin="0,9,5,0" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <ComboBox x:Name="t_AccountID" IsTextSearchEnabled="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" VerticalAlignment="Center" IsEditable="True" Height="20" MinWidth="150" BorderBrush="#abadb3" TextBoxBase.TextChanged="t_AccountID_TextChanged" GotFocus="t_AccountID_GotFocus" DropDownOpened="t_AccountID_DropDown" DropDownClosed="t_AccountID_DropDown">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding}" />
+                                                <Button Grid.Column="1" Style="{DynamicResource ButtonStyle}" VerticalAlignment="Center" VerticalContentAlignment="Center" Tag="{Binding}" Click="DeleteButton_Click" Content="×">
+                                                    <Button.Resources>
+                                                        <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
+                                                            <Setter Property="Foreground" Value="#FF9C9C9C"/>
+                                                            <Setter Property="Padding" Value="2"/>
+                                                            <Setter Property="BorderThickness" Value="0"/>
+                                                            <Setter Property="Background" Value="{x:Null}"/>
+                                                            <Setter Property="BorderBrush" Value="{x:Null}"/>
+                                                            <Setter Property="HorizontalAlignment" Value="Center"/>
+                                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="{x:Type Button}">
+                                                                        <Border x:Name="Bd" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                                                                            <ContentPresenter ContentTemplate="{TemplateBinding ContentTemplate}" Content="{TemplateBinding Content}" ContentStringFormat="{TemplateBinding ContentStringFormat}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                                                        </Border>
+                                                                        <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter Property="Foreground" Value="#FF595959"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsPressed" Value="True">
+                                                                                <Setter Property="Foreground" Value="Red"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsEnabled" Value="False">
+                                                                                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
+                                                                            </Trigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </Style>
+                                                    </Button.Resources>
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <PasswordBox x:Name="t_Password" Margin="0,5,0,0" MinWidth="150" VerticalContentAlignment="Center" VerticalAlignment="Center" Height="20" BorderBrush="#abadb3"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </StackPanel>
+                </DockPanel>
+                <DockPanel Margin="0,10,0,0" HorizontalAlignment="Center">
+                    <CheckBox x:Name="checkBox_RememberPWD" Content="記住密碼" Margin="10,0,0,0" Foreground="#FF666666" BorderBrush="#FFB2B2B2" Unchecked="checkBox_RememberPWD_Unchecked"/>
+                    <CheckBox x:Name="checkBox_AutoLogin" Content="自動登入" Margin="10,0,0,0" Foreground="#FF666666" BorderBrush="#FFB2B2B2" Checked="checkBox_AutoLogin_Checked"/>
+                </DockPanel>
+                <Button x:Name="btn_login" Content="登入" Height="30" Width="180" FontWeight="Bold" Margin="0,10,0,0" Click="btn_login_Click" IsDefault="True" Background="#7FF5F5F5" Foreground="Black" Style="{StaticResource ButtonAccentRevealStyle}"/>
+            </StackPanel>
+            <StackPanel Margin="10,2,0,0" HorizontalAlignment="Center">
+                <TextBlock><Hyperlink Click="RegAcc_Click"><Run Text="註冊賬號"/></Hyperlink></TextBlock>
+                <TextBlock Margin="0,8,0,0"><Hyperlink Click="FindPwd_Click"><Run Text="忘記密碼"/></Hyperlink></TextBlock>
+                <TextBlock x:Name="ManageAcc" Margin="0,8,0,0" Visibility="Collapsed"><Hyperlink Click="ManageAcc_Click"><Run Text="管理帳號"/></Hyperlink></TextBlock>
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Page>

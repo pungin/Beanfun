@@ -1,0 +1,9 @@
+diff a/Beanfun/App.xaml.cs b/Beanfun/App.xaml.cs	(rejected hunks)
+@@ -10,7 +10,6 @@
+     /// </summary>
+     public partial class App : Application
+     {
+-            }
+         public static readonly bool IsWin10 = Environment.OSVersion.Version >= new Version(10, 0);
+ 
+         public static MainWindow MainWnd {

@@ -1,0 +1,28 @@
+﻿<Page x:Class="Beanfun.qr_form"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      mc:Ignorable="d" 
+      Title="qr_form">
+    <Page.Resources>
+        <ResourceDictionary>
+            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}">
+                <Setter Property="Background" Value="#7FF5F5F5"/>
+                <Setter Property="Foreground" Value="Black"/>
+            </Style>
+            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
+            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
+        </ResourceDictionary>
+    </Page.Resources>
+
+    <Grid>
+        <StackPanel VerticalAlignment="Center">
+            <Button x:Name="gameName" HorizontalAlignment="Center" ToolTip="更變遊戲" Click="Button_Click"/>
+            <CheckBox x:Name="useNewQRCode" Margin="0,5" HorizontalAlignment="Center" Content="使用新版 QRCode 圖片" IsChecked="True" Checked="useNewQRCode_CheckedChanged" Unchecked="useNewQRCode_CheckedChanged"/>
+            <Button x:Name="btn_Refresh_QRCode" Padding="0" ToolTip="重新加載" Click="btn_Refresh_QRCode_Click">
+                <Image x:Name="qr_image" Cursor="Hand" Width="250" Height="250"/>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Page>
