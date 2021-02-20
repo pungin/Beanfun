@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.1.3.0</Version>
+  <Version>3.1.3.2</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2021-01-02</Date>
+  <Date>2021-02-20</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>※v3.0.1(不含)之前的版本更新之後，由於與舊版本資料不相容，所以無法使用舊版本
 - 更正因台灣樂豆頁面改版導致遊戲爆爆王和絕對武力無法顯示帳號的問題
 - 根據香港樂豆頁面改版更新香港樂豆相關帳號操作功能
 - 卷軸計算器增加榮耀卷軸估算
+- 更正主題顏色無效果
+- 開放源代碼
   </Note>
 </VersionInfo>
