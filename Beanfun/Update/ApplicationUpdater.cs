@@ -43,10 +43,11 @@ namespace Beanfun.Update
                     var date = xmlContent.SelectSingleNode(@"/VersionInfo/Date/text()").Value;
                     var note = xmlContent.SelectSingleNode(@"/VersionInfo/Note/text()").Value;
 
-                    MessageBoxResult result = System.Windows.MessageBox.Show($"檢測到新版本 {version.Major}.{version.Minor}.{version.Build}({version.Revision}) 當前: {crtVer.Major}.{crtVer.Minor}.{crtVer.Build}({crtVer.Revision})\r\n\r\n{note}\r\n" + "\r\n" + "是否更新(會重啟軟體)？", "更新檢測", MessageBoxButton.OKCancel);
+                    MessageBoxResult result = System.Windows.MessageBox.Show($"檢測到新版本 {version.Major}.{version.Minor}.{version.Build}({version.Revision}) 當前: {crtVer.Major}.{crtVer.Minor}.{crtVer.Build}({crtVer.Revision})\r\n\r\n{note}\r\n" + "\r\n" + "是否打開下載頁面？"/*"是否更新(會重啟軟體)？"*/, "更新檢測", MessageBoxButton.OKCancel);
                     if (result == MessageBoxResult.OK)
                     {
-                        StartUpdate(xmlContent);
+                        Process.Start("https://github.com/pungin/Beanfun/releases");
+                        //StartUpdate(xmlContent);
                     }
                 }
                 catch (Exception) { }

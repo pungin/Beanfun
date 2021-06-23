@@ -1560,6 +1560,10 @@ namespace Beanfun
                     else
                     {
                         IntPtr hWnd = WindowsAPI.FindWindow(win_class_name, null);
+                        if ("MapleStoryClass".Equals(win_class_name) && hWnd == IntPtr.Zero)
+                        {
+                            hWnd = WindowsAPI.FindWindow("MapleStoryClassTW", null);
+                        }
                         double dpixRatio = 1.0;
                         if (hWnd != IntPtr.Zero)
                         {
@@ -1596,7 +1600,7 @@ namespace Beanfun
                                 WindowsAPI.GetCursorPos(ref oldPoint);
                                 System.Drawing.Point point = new System.Drawing.Point(0, 0);
                                 WindowsAPI.ClientToScreen(hWnd, ref point);
-                                System.Drawing.Point textBoxPoint = new System.Drawing.Point((int)(370 * dpixRatio), (int)(295 * dpixRatio));
+                                System.Drawing.Point textBoxPoint = new System.Drawing.Point((int)(500 * dpixRatio), (int)(338 * dpixRatio));
                                 WindowsAPI.SetCursorPos(point.X + textBoxPoint.X, point.Y + textBoxPoint.Y);
                                 int pos = (textBoxPoint.X & 0xFFFF) | (textBoxPoint.Y << 16);
                                 WindowsAPI.PostMessage(hWnd, WM_LBUTTONDOWN, 1, pos);
