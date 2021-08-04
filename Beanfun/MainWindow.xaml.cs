@@ -31,7 +31,8 @@ namespace Beanfun
     {
         Auto = 0,
         Normal = 1,
-        LocaleEmulator = 2
+        LocaleEmulator = 2,
+        NTLEA = 3
     };
     /// <summary>
     /// MainWindow.xaml 的交互逻辑
@@ -1225,6 +1226,7 @@ namespace Beanfun
             {
                 Console.WriteLine("try open game");
                 int runMode = int.Parse(ConfigAppSettings.GetValue("startGameMode", "0"));
+                bool is64BitGame = false;
                 if (runMode == (int)GameStartMode.Auto)
                 {
                     switch (WindowsAPI.GetSystemDefaultLocaleName())
@@ -1237,12 +1239,25 @@ namespace Beanfun
                             runMode = (int)GameStartMode.Normal;
                             break;
                         default:
-                            runMode = (int)GameStartMode.LocaleEmulator;
+                            WindowsAPI.BinaryType bt;
+                            if (WindowsAPI.GetBinaryType(gamePath, out bt))
+                            {
+                                is64BitGame = bt == WindowsAPI.BinaryType.SCS_64BIT_BINARY;
+                            }
+                            OperatingSystem os = System.Environment.OSVersion;
+                            if ((os.Platform == PlatformID.Win32NT && os.Version.Major < 6) || is64BitGame || Environment.OSVersion.Version >= new Version(10, 0, 22000, 0))
+                            {
+                                runMode = (int)GameStartMode.NTLEA;
+                            }
+                            else
+                            {
+                                runMode = (int)GameStartMode.LocaleEmulator;
+                            }
                             break;
                     }
                 }
 
-                if (runMode > (int)GameStartMode.LocaleEmulator) runMode = (int)GameStartMode.LocaleEmulator;
+                if (runMode > (int)GameStartMode.NTLEA) runMode = (int)GameStartMode.NTLEA;
 
                 string commandLine = "";
                 if (account != null && password != null && account != "" && password != "" && game_commandLine != "")
@@ -1256,14 +1271,27 @@ namespace Beanfun
                 switch (runMode)
                 {
                     case (int)GameStartMode.LocaleEmulator:
+                        startByLE(gamePath, commandLine);
+                        break;
+                    case (int)GameStartMode.NTLEA:
                         OperatingSystem os = System.Environment.OSVersion;
-                        if (os.Platform == PlatformID.Win32NT && os.Version.Major < 6 && runMode != (int)GameStartMode.Normal)
+                        if (is64BitGame)
+                        {
+                            errexit("以非繁體語係系統啟動遊戲的方式不支援64-Bit遊戲。", 2);
+                            return;
+                        }
+                        else if (os.Platform == PlatformID.Win32NT && os.Version.Major < 6 && runMode != (int)GameStartMode.Normal)
                         {
                             errexit("以非繁體語係系統啟動遊戲的方式不支援Windows XP。", 2);
                             return;
                         }
-                        startByLE(gamePath, commandLine);
-                        break;
+                        else
+                        {
+                            errexit("以非繁體語係系統啟動遊戲的方式不支援Windows 11。", 2);
+                            return;
+                        }
+                        //startByNTLEA(gamePath, commandLine);
+                        //break;
                     case (int)GameStartMode.Normal:
                         ProcessStartInfo startInfo = new ProcessStartInfo(gamePath);
                         startInfo.WorkingDirectory = Path.GetDirectoryName(gamePath);
@@ -1400,6 +1428,13 @@ namespace Beanfun
             }
 
             return result.ToString();
+        }
+
+        private void startByNTLEA(string path, string command)
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo(String.Format("{0}\\ntleas.exe", System.Environment.CurrentDirectory));
+            startInfo.Arguments = String.Format("{0} C950 L3076 P1 {1}", path.StartsWith("\"") ? path : String.Format("\"{0}\"", path), command == string.Empty ? command : String.Format(" \"A{0}\"", command));
+            Process.Start(startInfo);
         }
 
         public bool AddServiceAccount(string name)

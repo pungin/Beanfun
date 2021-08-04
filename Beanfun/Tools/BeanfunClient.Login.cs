@@ -80,6 +80,7 @@ namespace Beanfun
                 if (!regex.IsMatch(response))
                 { this.errmsg = "LoginNoViewstateGenerator"; return null; }
                 string viewstateGenerator = regex.Match(response).Groups[1].Value;
+                /*
                 regex = new Regex("id=\"LBD_VCID_c_login_idpass_form_samplecaptcha\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
                 { this.errmsg = "LoginNoSamplecaptcha"; return null; }
@@ -94,6 +95,7 @@ namespace Beanfun
                     if (wnd == null) { this.errmsg = "LoginInitCaptcha"; return null; }
                     else Captcha = wnd.Captcha;
                 }
+                */
 
                 NameValueCollection payload = new NameValueCollection();
                 payload.Add("__EVENTTARGET", "");
@@ -103,8 +105,8 @@ namespace Beanfun
                 payload.Add("__EVENTVALIDATION", eventvalidation);
                 payload.Add("t_AccountID", id);
                 payload.Add("t_Password", pass);
-                payload.Add("CodeTextBox", Captcha);
-                payload.Add("LBD_VCID_c_login_idpass_form_samplecaptcha", samplecaptcha);
+                //payload.Add("CodeTextBox", Captcha);
+                //payload.Add("LBD_VCID_c_login_idpass_form_samplecaptcha", samplecaptcha);
                 //payload.Add("g-recaptcha-response", samplecaptcha);
                 payload.Add("btn_login", "登入");
 
