@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.1.4.0</Version>
+  <Version>3.1.5.0</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2021-06-24</Date>
+  <Date>2021-08-04</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>※v3.0.1(不含)之前的版本更新之後，由於與舊版本資料不相容，所以無法使用舊版本
-- 更正自動輸入失效的問題
+- 更正台灣Beanfun無法登陸的問題
   </Note>
 </VersionInfo>
