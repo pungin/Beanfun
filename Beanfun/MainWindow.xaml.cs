@@ -20,8 +20,12 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Utility.ModifyRegistry;
 
+
+
 namespace Beanfun
 {
+    
+
     enum LoginMethod : int
     {
         Regular = 0,
@@ -972,11 +976,27 @@ namespace Beanfun
             return false;
         }
 
+        private volatile bool isCancelRequested;
+
+        public void CancelWork()
+        {
+            isCancelRequested = true;
+        }
+
+        public void ResumeWork()
+        {
+            isCancelRequested = false;
+        }
+
+
         // Login do work.
         private void loginWorker_DoWork(object sender, DoWorkEventArgs e)
         {
-            if (this.pingWorker.IsBusy) this.pingWorker.CancelAsync();
-            //while (this.pingWorker.IsBusy) Thread.Sleep(137);
+            //if (this.pingWorker.IsBusy) this.pingWorker.CancelAsync();
+            // while (this.pingWorker.IsBusy)
+            //    Thread.Sleep(137);
+            CancelWork();
+
             Console.WriteLine("loginWorker starting");
             Thread.CurrentThread.Name = "Login Worker";
             e.Result = "";
@@ -1001,6 +1021,8 @@ namespace Beanfun
             {
                 e.Result = "登入失敗，未知的錯誤。\n\n" + ex.Message + "\n" + ex.StackTrace;
             }
+
+            ResumeWork();
         }
 
         // Login completed.
@@ -1570,11 +1592,19 @@ namespace Beanfun
             return this.bfClient.GetServiceContract(service_code, service_region);
         }
 
+
+
+
         // getOTP do work.
         private void getOtpWorker_DoWork(object sender, DoWorkEventArgs e)
         {
-            if (this.pingWorker.IsBusy) this.pingWorker.CancelAsync();
-            //while (this.pingWorker.IsBusy) Thread.Sleep(133);
+            CancelWork();
+            //if (this.pingWorker.IsBusy) this.pingWorker.CancelAsync();
+            /*while (this.pingWorker.IsBusy) {
+                Thread.Sleep(133);
+            }
+            */
+
             Console.WriteLine("getOtpWorker start");
             Thread.CurrentThread.Name = "GetOTP Worker";
             int index = (int)e.Argument;
@@ -1593,6 +1623,9 @@ namespace Beanfun
                 e.Result = index;
             }
 
+            //if (!this.pingWorker.IsBusy) this.pingWorker.RunWorkerAsync();
+            //this.pingWorker.RunWorkerAsync();
+            ResumeWork();
             return;
         }
 
@@ -1617,6 +1650,7 @@ namespace Beanfun
                     int accIndex = accountList.list_Account.SelectedIndex;
                     string acc = this.bfClient.accountList[index].sid;
                     accountList.t_Password.Text = this.otp;
+                    
 
                     if ((!(bool)settingPage.tradLogin.IsChecked && login_action_type == 1))
                     {
@@ -1660,6 +1694,7 @@ namespace Beanfun
                                 // 按下ESC關閉提示框
                                 WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_ESCAPE);
                                 Thread.Sleep(100);
+                                /*
                                 // 選中帳號欄
                                 System.Drawing.Point oldPoint = new System.Drawing.Point(0, 0);
                                 WindowsAPI.GetCursorPos(ref oldPoint);
@@ -1671,6 +1706,7 @@ namespace Beanfun
                                 WindowsAPI.PostMessage(hWnd, WM_LBUTTONDOWN, 1, pos);
                                 Thread.Sleep(100);
                                 WindowsAPI.SetCursorPos(oldPoint.X, oldPoint.Y);
+                                */
                                 // 清空帳號欄內容
                                 WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_END);
                                 for (int i = 0; i < 64; i++)
@@ -1709,8 +1745,10 @@ namespace Beanfun
             if (this.bfClient.accountAmountLimitNotice != "")
                 accountList.btnAddServiceAccount.IsEnabled = this.bfClient.accountList.Count < int.Parse(this.bfClient.accountAmountLimitNotice.Substring(this.bfClient.accountAmountLimitNotice.Length - 1, 1));
 
-            if (!this.pingWorker.IsBusy) this.pingWorker.RunWorkerAsync();
-        }
+            //if (!this.pingWorker.IsBusy)  this.pingWorker.RunWorkerAsync();
+            //this.pingWorker.RunWorkerAsync();
+
+            }
 
         // Ping to Beanfun website.
         private void pingWorker_DoWork(object sender, DoWorkEventArgs e)
@@ -1718,8 +1756,10 @@ namespace Beanfun
             Thread.CurrentThread.Name = "ping Worker";
             Console.WriteLine("pingWorker start");
             const int WaitSecs = 60; // 1min
+            
 
-            while (true)
+
+            while (!isCancelRequested)
             {
                 if (this.pingWorker.CancellationPending)
                 {
@@ -1734,14 +1774,16 @@ namespace Beanfun
                     continue;
                 }
 
-                if (this.bfClient != null)
-                    this.bfClient.Ping(); 
+                if (this.bfClient != null) { 
+                    this.bfClient.Ping();
+                }
 
                 for (int i = 0; i < WaitSecs; ++i)
                 {
                     if (this.pingWorker.CancellationPending)
                         break;
                     System.Threading.Thread.Sleep(1000 * 1);
+                
                 }
             }
         }
