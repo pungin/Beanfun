@@ -10,12 +10,12 @@
       Title="id_pass_form">
     <Page.Resources>
         <ResourceDictionary>
-            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}">
+            <Style TargetType="{x:Type Button}">
                 <Setter Property="Background" Value="#7FF5F5F5"/>
                 <Setter Property="Foreground" Value="Black"/>
             </Style>
-            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
-            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
+            <Style TargetType="{x:Type TextBox}"/>
+            <Style TargetType="{x:Type ListBox}"/>
         </ResourceDictionary>
     </Page.Resources>
 
@@ -92,7 +92,7 @@
                     <CheckBox x:Name="checkBox_RememberPWD" Content="記住密碼" Margin="10,0,0,0" Foreground="#FF666666" BorderBrush="#FFB2B2B2" Unchecked="checkBox_RememberPWD_Unchecked"/>
                     <CheckBox x:Name="checkBox_AutoLogin" Content="自動登入" Margin="10,0,0,0" Foreground="#FF666666" BorderBrush="#FFB2B2B2" Checked="checkBox_AutoLogin_Checked"/>
                 </DockPanel>
-                <Button x:Name="btn_login" Content="登入" Height="30" Width="180" FontWeight="Bold" Margin="0,10,0,0" Click="btn_login_Click" IsDefault="True" Background="#7FF5F5F5" Foreground="Black" Style="{StaticResource ButtonAccentRevealStyle}"/>
+                <Button x:Name="btn_login" Content="登入" Height="30" Width="180" FontWeight="Bold" Margin="0,10,0,0" Click="btn_login_Click" IsDefault="True" Background="#7FF5F5F5" Foreground="Black"/>
             </StackPanel>
             <StackPanel Margin="10,2,0,0" HorizontalAlignment="Center">
                 <TextBlock><Hyperlink Click="RegAcc_Click"><Run Text="註冊賬號"/></Hyperlink></TextBlock>

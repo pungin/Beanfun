@@ -89,8 +89,6 @@ namespace Beanfun
         {
             InitializeComponent();
 
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
-
             this.getOtpWorker = new System.ComponentModel.BackgroundWorker();
             this.loginWorker = new System.ComponentModel.BackgroundWorker();
             this.pingWorker = new System.ComponentModel.BackgroundWorker();
@@ -165,13 +163,15 @@ namespace Beanfun
 
             Initialize();
 
-            changeThemeColor((Color)ColorConverter.ConvertFromString(ConfigAppSettings.GetValue("ThemeColor", "#B6DE8E")));
+            changeThemeColor(null);
         }
 
-        public void changeThemeColor(Color color)
+        public void changeThemeColor(string sColor)
         {
+            if (sColor == null) sColor = ConfigAppSettings.GetValue("ThemeColor", "#B6DE8E");
+            Color color = (Color)ColorConverter.ConvertFromString(sColor);
             bool oldIsLightColor = isLightColor();
-            SourceChord.FluentWPF.AcrylicWindow.SetTintColor(this, color);
+            Background = new SolidColorBrush(color);
             color.R = (byte)Math.Max(color.R - 50, 0);
             color.G = (byte)Math.Max(color.G - 50, 0);
             color.B = (byte)Math.Max(color.B - 50, 0);
@@ -194,7 +194,7 @@ namespace Beanfun
         
         public bool isLightColor()
         {
-            Color color = SourceChord.FluentWPF.AcrylicWindow.GetTintColor(this);
+            Color color = ((SolidColorBrush)Background).Color;
             return (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255 > 0.5;
         }
 
@@ -570,15 +570,11 @@ namespace Beanfun
             btn_Close_MouseLeave(null, null);
             if (this.IsActive)
             {
-                Color color = SourceChord.FluentWPF.AcrylicWindow.GetTintColor(this);
-                color.R = (byte)Math.Max(color.R - 50, 0);
-                color.G = (byte)Math.Max(color.G - 50, 0);
-                color.B = (byte)Math.Max(color.B - 50, 0);
-                color.A = 0xFF;
-                this.BorderBrush = new SolidColorBrush(color);
+                changeThemeColor(null);
             }
             else
             {
+                changeThemeColor("#F3F3F3");
                 this.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("Gray"));
             }
         }
@@ -1303,26 +1299,64 @@ namespace Beanfun
             }
         }
 
-        private void releaseResource(byte[] data, string path)
+        private int releaseResource(byte[] data, string path, string md5)
         {
-            if (!File.Exists(path))
+            if (File.Exists(path))
             {
-                FileStream fsObj = new FileStream(path, FileMode.CreateNew);
-                fsObj.Write(data, 0, data.Length);
-                fsObj.Close();
+                if (md5.ToUpper().Equals(GetMD5HashFromFile(path).ToUpper()))
+                {
+                    return 0;
+                }
+                else
+                {
+                    try
+                    {
+                        File.Delete(path);
+                    }
+                    catch { return -1; }
+                }
+            }
+            FileStream fsObj = new FileStream(path, FileMode.CreateNew);
+            fsObj.Write(data, 0, data.Length);
+            fsObj.Close();
+            return 1;
+        }
+
+        private string GetMD5HashFromFile(string fileName)
+        {
+            try
+            {
+                FileStream file = new FileStream(fileName, System.IO.FileMode.Open, System.IO.FileAccess.Read, FileShare.ReadWrite);
+                System.Security.Cryptography.MD5 md5 = new System.Security.Cryptography.MD5CryptoServiceProvider();
+                byte[] retVal = md5.ComputeHash(file);
+                file.Close();
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < retVal.Length; i++)
+                {
+                    sb.Append(retVal[i].ToString("x2"));
+                }
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("GetMD5HashFromFile() fail,error:" + ex.Message);
             }
         }
 
         private void startByLE(string path, string command)
         {
-            if (!File.Exists(string.Format("{0}\\LocaleEmulator.dll", System.Environment.CurrentDirectory)) || !File.Exists(string.Format("{0}\\LoaderDll.dll", System.Environment.CurrentDirectory)))
+            if (releaseResource(
+                    global::Beanfun.Properties.Resources.LocaleEmulator, 
+                    string.Format("{0}\\LocaleEmulator.dll", System.Environment.CurrentDirectory),
+                    "3434299884D61FFF4AB71460ECC03C0A"
+                ) ==  -1
+                || releaseResource(
+                    global::Beanfun.Properties.Resources.LoaderDll, 
+                    string.Format("{0}\\LoaderDll.dll", System.Environment.CurrentDirectory),
+                    "4C9D31A794E5930708CD4622431C8E04"
+                ) == -1)
             {
-                /*
-                MessageBoxResult result = MessageBox.Show("程式檢測到您當前運行的系統非繁體語係，若要在非繁體語係之系統下運行遊戲則需要在登入器目錄下釋出額外檔案，是否確認需要釋出額外檔案？", "", MessageBoxButton.YesNo);
-                if (result == MessageBoxResult.No) return;
-                */
-                releaseResource(global::Beanfun.Properties.Resources.LocaleEmulator, string.Format("{0}\\LocaleEmulator.dll", System.Environment.CurrentDirectory));
-                releaseResource(global::Beanfun.Properties.Resources.LoaderDll, string.Format("{0}\\LoaderDll.dll", System.Environment.CurrentDirectory));
+                MessageBox.Show("釋出轉區軟體錯誤，請重新啟動電腦後再次嘗試。");
             }
 
             int CHINESEBIG5_CHARSET = 136;

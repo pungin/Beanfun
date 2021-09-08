@@ -5,18 +5,9 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Beanfun"
         mc:Ignorable="d"
-        xmlns:fw="clr-namespace:SourceChord.FluentWPF;assembly=FluentWPF"
-        fw:AcrylicWindow.Enabled="True"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterScreen"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
-    <Window.Resources>
-        <ResourceDictionary>
-            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}"/>
-            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
-            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
-        </ResourceDictionary>
-    </Window.Resources>
     <Grid>
         <DockPanel Margin="5">
             <TextBox x:Name="t_Value" VerticalContentAlignment="Center" MinWidth="200" MaxHeight="30" IsReadOnly="True"/>

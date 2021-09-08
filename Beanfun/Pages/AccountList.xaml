@@ -10,12 +10,12 @@
       Title="帳號選單">
     <Page.Resources>
         <ResourceDictionary>
-            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}">
+            <Style TargetType="{x:Type Button}">
                 <Setter Property="Background" Value="#7FF5F5F5"/>
                 <Setter Property="Foreground" Value="Black"/>
             </Style>
-            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
-            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
+            <Style TargetType="{x:Type TextBox}"/>
+            <Style TargetType="{x:Type ListBox}"/>
         </ResourceDictionary>
     </Page.Resources>
 

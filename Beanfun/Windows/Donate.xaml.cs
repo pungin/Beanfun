@@ -11,7 +11,6 @@ namespace Beanfun
         public Donate()
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
         }
 
         private void AliPay_MouseEnter(object sender, MouseEventArgs e)

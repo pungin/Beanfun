@@ -27,7 +27,6 @@ namespace Beanfun
             this.account = account;
             this.changedIndex = changedIndex;
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             t_AccountID.Text = account;
             t_AccountName.Text = App.MainWnd.accountManager.getNameByAccount(region, account);
             autoLogin.IsChecked = App.MainWnd.accountManager.getAutoLoginByAccount(region, account);

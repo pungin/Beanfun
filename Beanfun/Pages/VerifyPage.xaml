@@ -8,11 +8,11 @@
       Title="登入驗證">
     <Page.Resources>
         <ResourceDictionary>
-            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}">
+            <Style TargetType="{x:Type Button}">
                 <Setter Property="Background" Value="#7FF5F5F5"/>
                 <Setter Property="Foreground" Value="Black"/>
             </Style>
-            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
+            <Style TargetType="{x:Type TextBox}"/>
             <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
         </ResourceDictionary>
     </Page.Resources>
@@ -29,7 +29,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_Verify" Width="250" VerticalContentAlignment="Center">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Style.Triggers>
                                         <MultiTrigger>
                                             <MultiTrigger.Conditions>
@@ -58,7 +58,7 @@
                     </DockPanel>
                     <TextBox x:Name="t_Code" VerticalContentAlignment="Center" Margin="0,5,0,0">
                         <TextBox.Style>
-                            <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                            <Style TargetType="TextBox">
                                 <Style.Triggers>
                                     <MultiTrigger>
                                         <MultiTrigger.Conditions>

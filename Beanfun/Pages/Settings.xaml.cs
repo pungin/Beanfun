@@ -104,8 +104,7 @@ namespace Beanfun
         {
             try
             {
-                Color color = (Color)ColorConverter.ConvertFromString(cb_ThemeColor.Text);
-                App.MainWnd.changeThemeColor(color);
+                App.MainWnd.changeThemeColor(cb_ThemeColor.Text);
                 ConfigAppSettings.SetValue("ThemeColor", cb_ThemeColor.Text);
             } catch { }
         }

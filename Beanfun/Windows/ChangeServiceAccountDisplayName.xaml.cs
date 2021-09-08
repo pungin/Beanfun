@@ -22,7 +22,6 @@ namespace Beanfun
         public ChangeServiceAccountDisplayName(string name)
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             txtNewServiceAccountDisplayName.Text = name;
         }
 

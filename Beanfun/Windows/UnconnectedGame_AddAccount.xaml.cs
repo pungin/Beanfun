@@ -21,7 +21,6 @@ namespace Beanfun
             }
 
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
 
             string gameName = payload.Get("GameName");
             string accountLen = payload.Get("AccountLen");

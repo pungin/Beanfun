@@ -4,8 +4,6 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        xmlns:fw="clr-namespace:SourceChord.FluentWPF;assembly=FluentWPF"
-        fw:AcrylicWindow.Enabled="True"
         Title="下載"
         ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
@@ -13,13 +11,6 @@
         SizeToContent="WidthAndHeight"
         Closing="Window_Closing"
         Loaded="Window_Loaded">
-    <Window.Resources>
-        <ResourceDictionary>
-            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}"/>
-            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
-            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
-        </ResourceDictionary>
-    </Window.Resources>
     <Grid>
         <StackPanel Margin="20">
             <DockPanel>

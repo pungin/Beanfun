@@ -18,7 +18,6 @@ namespace Beanfun
         public CaptchaWnd(BeanfunClient client, string samplecaptcha)
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             this.samplecaptcha = samplecaptcha;
             Client = client;
             Button_Click(null, null);

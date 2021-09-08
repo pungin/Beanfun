@@ -100,7 +100,6 @@ namespace Beanfun
         public EquipCalculator()
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             InitFinish = true;
         }
 

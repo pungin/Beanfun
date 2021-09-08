@@ -5,22 +5,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Beanfun"
         mc:Ignorable="d"
-        xmlns:fw="clr-namespace:SourceChord.FluentWPF;assembly=FluentWPF"
-        fw:AcrylicWindow.Enabled="True"
         Title="新增帳號"
         ResizeMode="CanMinimize"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterScreen"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
     >
-    <Window.Resources>
-        <ResourceDictionary>
-            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}"/>
-            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
-            <Style TargetType="{x:Type PasswordBox}" BasedOn="{StaticResource PasswordBoxRevealStyle}"/>
-            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
-        </ResourceDictionary>
-    </Window.Resources>
     <Grid>
         <StackPanel Margin="5">
             <TextBlock>
@@ -44,7 +34,7 @@
                             <TextBlock VerticalAlignment="Center">確認專用於<Run x:Name="lblGameName5"/>暱稱:</TextBlock>
                             <TextBox x:Name="txtServiceAccountDN" MinWidth="137" Margin="5,0,0,0">
                                 <TextBox.Style>
-                                    <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                    <Style TargetType="TextBox">
                                         <Style.Triggers>
                                             <MultiTrigger>
                                                 <MultiTrigger.Conditions>

@@ -12,7 +12,6 @@ namespace Beanfun
         public AddAccount()
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             initPage();
         }
 

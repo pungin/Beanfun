@@ -22,7 +22,6 @@ namespace Beanfun
         public Contract(string ct)
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             contract.Text = ct;
         }
 

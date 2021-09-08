@@ -15,7 +15,6 @@ namespace Beanfun
         public WebBrowser(string uri)
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             ChangeUserAgent();
             var webBrowserHelper = new WebBrowserHelper(wb_Main);
             //webBrowserHelper.BeforeNavigate += new EventHandler<WebBrowserExtendedNavigatingEventArgs>(wb_Main_BeforeNavigate);

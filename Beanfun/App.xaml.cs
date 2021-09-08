@@ -45,7 +45,7 @@ namespace Beanfun
             get
             {
                 Window wnd = Current.MainWindow;
-                if (typeof(MainWindow) == wnd.GetType())
+                if (wnd != null && (typeof(MainWindow) == wnd.GetType()))
                     return (MainWindow) wnd;
                 else
                     return null;

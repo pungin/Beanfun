@@ -22,7 +22,6 @@ namespace Beanfun
         public CopyBox(string title, string value)
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             this.Title = title;
             t_Value.Text = value;
         }

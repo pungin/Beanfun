@@ -5,10 +5,6 @@
              Exit="Application_Exit">
     <Application.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <!--  FluentWPF Controls  -->
-                <ResourceDictionary Source="pack://application:,,,/FluentWPF;component/Styles/Controls.xaml" />
-            </ResourceDictionary.MergedDictionaries>
             <FontFamily x:Key="SegoeMDL2">Resources/#Segoe MDL2 Assets</FontFamily>
         </ResourceDictionary>
     </Application.Resources>

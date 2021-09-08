@@ -200,7 +200,7 @@ namespace LEProc
 
             if (ret == 0)
             {
-                WaitForSingleObject(processInformation.hProcess, INFINITE);
+                //WaitForSingleObject(processInformation.hProcess, INFINITE);
                 CloseHandle(processInformation.hProcess);
                 CloseHandle(processInformation.hThread);
             }

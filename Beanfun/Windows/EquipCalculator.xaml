@@ -5,20 +5,11 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Beanfun"
         mc:Ignorable="d"
-        xmlns:fw="clr-namespace:SourceChord.FluentWPF;assembly=FluentWPF"
-        fw:AcrylicWindow.Enabled="True"
         Title="裝備卷軸星力計算器"
         WindowStartupLocation="CenterScreen"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         SizeToContent="WidthAndHeight"
 >
-    <Window.Resources>
-        <ResourceDictionary>
-            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonRevealStyle}"/>
-            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource TextBoxRevealStyle}"/>
-            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource ListBoxRevealStyle}"/>
-        </ResourceDictionary>
-    </Window.Resources>
     <Grid>
         <DockPanel Margin="5">
             <Border Background="#7F000000">
@@ -62,7 +53,7 @@
                         <Label Content="(" Foreground="White" VerticalAlignment="Center"/>
                         <TextBox x:Name="t_BaseStat" Foreground="White" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_BaseStat_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -87,7 +78,7 @@
                         <Label Content="+" Foreground="LightGreen" VerticalAlignment="Center"/>
                         <TextBox x:Name="t_FlameStat" Foreground="LightGreen" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_FlameStat_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -120,7 +111,7 @@
                         <Label Content="(" Foreground="White" VerticalAlignment="Center"/>
                         <TextBox x:Name="t_BaseATK" Foreground="White" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_BaseATK_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -145,7 +136,7 @@
                         <Label Content="+" Foreground="LightGreen" VerticalAlignment="Center"/>
                         <TextBox x:Name="t_FlameATK" Foreground="LightGreen" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_FlameATK_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -175,7 +166,7 @@
                         <Label Content="套用 " Foreground="White" VerticalAlignment="Center"/>
                         <TextBox x:Name="t_StarForce" Foreground="White" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_StarForce_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -230,7 +221,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_GloryNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_GloryNum_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -260,7 +251,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_BlackNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_BlackNum_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -287,7 +278,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_VNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_VNum_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -314,7 +305,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_XNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_XNum_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -341,7 +332,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_RedNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_RedNum_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -368,7 +359,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_JDNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_JDNum_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -395,7 +386,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_SMNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_SMNum_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -422,7 +413,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_BMNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_BMNum_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -449,7 +440,7 @@
                     <DockPanel>
                         <TextBox x:Name="t_ScrollStat" MinWidth="35" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_ScrollStat_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>
@@ -474,7 +465,7 @@
                         <Label Content="屬性" Height="32"/>
                         <TextBox x:Name="t_ScrollATK" MinWidth="35" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_ScrollATK_GotFocus">
                             <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource TextBoxRevealStyle}">
+                                <Style TargetType="TextBox">
                                     <Setter Property="Background" Value="{x:Null}" />
                                     <Style.Triggers>
                                         <MultiTrigger>

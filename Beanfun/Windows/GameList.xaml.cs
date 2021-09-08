@@ -33,7 +33,6 @@ namespace Beanfun
         public GameList()
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
 
             string baseUrl = App.LoginRegion == "TW" ? "https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/" : "http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/";
             WebClient wc = new WebClientEx();

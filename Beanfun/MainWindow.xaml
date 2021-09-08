@@ -4,11 +4,6 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Beanfun"
-        xmlns:fw="clr-namespace:SourceChord.FluentWPF;assembly=FluentWPF"
-        fw:AcrylicWindow.Enabled="True"
-        fw:AcrylicWindow.AcrylicWindowStyle="None"
-        fw:AcrylicWindow.TintOpacity=".8"
-        fw:AcrylicWindow.FallbackColor="LightGray"
         x:Class="Beanfun.MainWindow"
         mc:Ignorable="d"
         ResizeMode="CanMinimize"
@@ -19,11 +14,17 @@
         Deactivated="Window_Activated"
         StateChanged="Window_StateChanged"
     >
+    <WindowChrome.WindowChrome>
+        <WindowChrome GlassFrameThickness="0 64 0 0"
+                      UseAeroCaptionButtons="False"
+                      NonClientFrameEdges="Left,Bottom,Right"
+                      />
+    </WindowChrome.WindowChrome>
     <Grid>
         <StackPanel>
             <Grid HorizontalAlignment="Right">
                 <DockPanel>
-                    <Button x:Name="btn_About" Style="{DynamicResource ButtonStyle}" Width="25" Height="25" ToolTip="關於" IsTabStop="False" Click="btn_About_Click" MouseLeave="btn_About_MouseLeave" IsKeyboardFocusedChanged="btn_About_IsKeyboardFocusedChanged" Content="&#xE897;" FontFamily="{StaticResource SegoeMDL2}">
+                    <Button WindowChrome.IsHitTestVisibleInChrome="True" x:Name="btn_About" Style="{DynamicResource ButtonStyle}" FontSize="11" Width="45" Height="28" ToolTip="關於" IsTabStop="False" Click="btn_About_Click" MouseLeave="btn_About_MouseLeave" IsKeyboardFocusedChanged="btn_About_IsKeyboardFocusedChanged" Content="&#xE897;" FontFamily="{StaticResource SegoeMDL2}">
                         <Button.Resources>
                             <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
                                 <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
@@ -64,7 +65,7 @@
                             </Style>
                         </Button.Resources>
                     </Button>
-                    <Button x:Name="btn_Setting" Style="{DynamicResource ButtonStyle}" Width="25" Height="25" ToolTip="設定" IsTabStop="False" Click="btn_Setting_Click" MouseLeave="btn_Setting_MouseLeave" IsKeyboardFocusedChanged="btn_Setting_IsKeyboardFocusedChanged" Content="&#xE713;" FontFamily="{StaticResource SegoeMDL2}">
+                    <Button WindowChrome.IsHitTestVisibleInChrome="True" x:Name="btn_Setting" Style="{DynamicResource ButtonStyle}" FontSize="11" Width="45" Height="28" ToolTip="設定" IsTabStop="False" Click="btn_Setting_Click" MouseLeave="btn_Setting_MouseLeave" IsKeyboardFocusedChanged="btn_Setting_IsKeyboardFocusedChanged" Content="&#xE713;" FontFamily="{StaticResource SegoeMDL2}">
                         <Button.Resources>
                             <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
                                 <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
@@ -105,7 +106,7 @@
                             </Style>
                         </Button.Resources>
                     </Button>
-                    <Button x:Name="btn_Min" Style="{DynamicResource ButtonStyle}" Width="25" Height="25" ToolTip="最小化" IsTabStop="False" Click="btn_Min_Click" MouseLeave="btn_Min_MouseLeave" IsKeyboardFocusedChanged="btn_Min_IsKeyboardFocusedChanged" Content="&#xE949;" FontFamily="{StaticResource SegoeMDL2}">
+                    <Button WindowChrome.IsHitTestVisibleInChrome="True" x:Name="btn_Min" Style="{DynamicResource ButtonStyle}" FontSize="11" Width="45" Height="28" ToolTip="最小化" IsTabStop="False" Click="btn_Min_Click" MouseLeave="btn_Min_MouseLeave" IsKeyboardFocusedChanged="btn_Min_IsKeyboardFocusedChanged" Content="&#xE921;" FontFamily="{StaticResource SegoeMDL2}">
                         <Button.Resources>
                             <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
                                 <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
@@ -146,7 +147,7 @@
                             </Style>
                         </Button.Resources>
                     </Button>
-                    <Button x:Name="btn_Close" Style="{DynamicResource ButtonStyle}" Width="25" Height="25" ToolTip="關閉" IsTabStop="False" Click="btn_Close_Click" MouseEnter="btn_Close_MouseEnter" MouseLeave="btn_Close_MouseLeave" IsKeyboardFocusedChanged="btn_Close_IsKeyboardFocusedChanged" Content="&#xE711;" FontFamily="{StaticResource SegoeMDL2}">
+                    <Button WindowChrome.IsHitTestVisibleInChrome="True" x:Name="btn_Close" Style="{DynamicResource ButtonStyle}" FontSize="11" Width="48" Height="28" ToolTip="關閉" IsTabStop="False" Click="btn_Close_Click" MouseEnter="btn_Close_MouseEnter" MouseLeave="btn_Close_MouseLeave" IsKeyboardFocusedChanged="btn_Close_IsKeyboardFocusedChanged" Content="&#xE8BB;" FontFamily="{StaticResource SegoeMDL2}">
                         <Button.Resources>
                             <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
                                 <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>

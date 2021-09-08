@@ -13,7 +13,6 @@ namespace Beanfun
         public ServiceAccountInfo(BeanfunClient.ServiceAccount account)
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             t_sn.Text = account.ssn;
             t_sname.Text = account.sname;
             t_id.Text = account.sid;

@@ -28,7 +28,6 @@ namespace Beanfun
         public DownloadProgressBar(List<string> taskFiles, string title = "正在下載...", string dir = null, bool isShowFileName = true)
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
             DownloaderClient = new WebClientEx();
             WndTitle = title;
             if (dir != null) BaseDir = dir;

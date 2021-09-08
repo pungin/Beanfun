@@ -22,7 +22,6 @@ namespace Beanfun
         public AddServiceAccount()
         {
             InitializeComponent();
-            if (!App.IsWin10) SourceChord.FluentWPF.AcrylicWindow.SetTintOpacity(this, 1.0);
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
