@@ -1245,7 +1245,7 @@ namespace Beanfun
                                 is64BitGame = bt == WindowsAPI.BinaryType.SCS_64BIT_BINARY;
                             }
                             OperatingSystem os = System.Environment.OSVersion;
-                            if ((os.Platform == PlatformID.Win32NT && os.Version.Major < 6) || is64BitGame || Environment.OSVersion.Version >= new Version(10, 0, 22000, 0))
+                            if ((os.Platform == PlatformID.Win32NT && os.Version.Major < 6) || is64BitGame)
                             {
                                 runMode = (int)GameStartMode.NTLEA;
                             }
@@ -1285,11 +1285,7 @@ namespace Beanfun
                             errexit("以非繁體語係系統啟動遊戲的方式不支援Windows XP。", 2);
                             return;
                         }
-                        else
-                        {
-                            errexit("以非繁體語係系統啟動遊戲的方式不支援Windows 11。", 2);
-                            return;
-                        }
+                        return;
                         //startByNTLEA(gamePath, commandLine);
                         //break;
                     case (int)GameStartMode.Normal:
