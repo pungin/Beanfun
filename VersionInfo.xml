@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>3.1.6.0</Version>
+  <Version>3.1.6.1</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
   <Date>2021-09-08</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>- 取消Windows11系統下亞克力效果
+  <Note>- 取消亞克力效果
 - 非繁中系統轉碼支援Windows11
   </Note>
 </VersionInfo>
