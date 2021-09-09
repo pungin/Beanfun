@@ -33,7 +33,7 @@ namespace Beanfun
             Beanfun_HK.IsEnabled = !Beanfun_TW.IsEnabled;
         }
 
-            private void Beanfun_TW_Click(object sender, RoutedEventArgs e)
+        private void Beanfun_TW_Click(object sender, RoutedEventArgs e)
         {
             if (!Beanfun_TW.IsEnabled)
                 return;

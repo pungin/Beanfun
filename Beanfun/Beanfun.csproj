@@ -117,6 +117,7 @@
     <Compile Include="LEProc\Amemiya.Extensions.ArrayExtensions.cs" />
     <Compile Include="LEProc\LERegistryRedirector.cs" />
     <Compile Include="LEProc\LoaderWrapper.cs" />
+    <Compile Include="Helper\WindowAccentCompositor.cs" />
     <Compile Include="Windows\CaptchaWnd.xaml.cs">
       <DependentUpon>CaptchaWnd.xaml</DependentUpon>
     </Compile>

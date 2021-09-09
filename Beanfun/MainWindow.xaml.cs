@@ -89,6 +89,8 @@ namespace Beanfun
         public Page return_page = null;
         public IniData INIData = null;
 
+        public WindowAccentCompositor compositor = null;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -167,7 +169,28 @@ namespace Beanfun
 
             Initialize();
 
+            if ((App.OSVersion >= App.Win7 && App.OSVersion < App.Win8) || App.OSVersion >= App.Win10)
+            {
+                compositor = new WindowAccentCompositor(this);
+                if (App.OSVersion >= App.Win7 && App.OSVersion < App.Win8)
+                {
+                    WinChrome.GlassFrameThickness = new Thickness(-1);
+
+                    const int GWL_STYLE = -16;
+                    const int WS_SYSMENU = 0x80000;
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
+                    WindowsAPI.SetWindowLong(hwnd, GWL_STYLE, WindowsAPI.GetWindowLong(hwnd, GWL_STYLE) & ~WS_SYSMENU);
+                }
+            } else frame.Content = loginWaitPage;
+
             changeThemeColor(null);
+        }
+
+        protected override void OnContentRendered(EventArgs e)
+        {
+            frame.Content = loginPage;
+
+            base.OnContentRendered(e);
         }
 
         public void changeThemeColor(string sColor)
@@ -182,6 +205,27 @@ namespace Beanfun
             color.A = 0xFF;
             this.BorderBrush = new SolidColorBrush(color);
             bool isLightMode = isLightColor();
+            if (compositor !=  null)
+            {
+                int bgA = -1;
+                if (!this.IsActive)
+                {
+                    compositor.IsEnabled = false;
+                    if (App.OSVersion >= App.Win7 && App.OSVersion < App.Win8) bgA = 0;
+                }
+                else
+                {
+                    bgA = App.OSVersion < App.Win8 ? 0x4C : App.OSVersion < App.Win11 ? 0xCC : 0x99;
+                    compositor.Color = (Color)ColorConverter.ConvertFromString(isLightMode || ((SolidColorBrush)Background).Color == Colors.Black ? "#00FFFFFF" : "#00000000");
+                    if (!compositor.IsEnabled) compositor.IsEnabled = true;
+                }
+                if (bgA != -1)
+                {
+                    Color bg = ((SolidColorBrush)Background).Color;
+                    bg.A = (byte) bgA;
+                    Background = new SolidColorBrush(bg);
+                }
+            }
             if (oldIsLightColor != isLightMode)
             {
                 btn_About_MouseLeave(null, null);
@@ -1262,8 +1306,7 @@ namespace Beanfun
                             {
                                 is64BitGame = bt == WindowsAPI.BinaryType.SCS_64BIT_BINARY;
                             }
-                            OperatingSystem os = System.Environment.OSVersion;
-                            if ((os.Platform == PlatformID.Win32NT && os.Version.Major < 6) || is64BitGame)
+                            if (App.OSVersion < App.WinVista || is64BitGame)
                             {
                                 runMode = (int)GameStartMode.NTLEA;
                             }
@@ -1292,13 +1335,12 @@ namespace Beanfun
                         startByLE(gamePath, commandLine);
                         break;
                     case (int)GameStartMode.NTLEA:
-                        OperatingSystem os = System.Environment.OSVersion;
                         if (is64BitGame)
                         {
                             errexit("以非繁體語係系統啟動遊戲的方式不支援64-Bit遊戲。", 2);
                             return;
                         }
-                        else if (os.Platform == PlatformID.Win32NT && os.Version.Major < 6 && runMode != (int)GameStartMode.Normal)
+                        else if (App.OSVersion < App.WinVista && runMode != (int)GameStartMode.Normal)
                         {
                             errexit("以非繁體語係系統啟動遊戲的方式不支援Windows XP。", 2);
                             return;
@@ -1691,22 +1733,23 @@ namespace Beanfun
                                 const byte VK_END = 0x0023;
                                 WindowsAPI.SetForegroundWindow(hWnd);
                                 Thread.Sleep(100);
-                                // 按下ESC關閉提示框
-                                WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_ESCAPE);
-                                Thread.Sleep(100);
-                                /*
-                                // 選中帳號欄
-                                System.Drawing.Point oldPoint = new System.Drawing.Point(0, 0);
-                                WindowsAPI.GetCursorPos(ref oldPoint);
-                                System.Drawing.Point point = new System.Drawing.Point(0, 0);
-                                WindowsAPI.ClientToScreen(hWnd, ref point);
-                                System.Drawing.Point textBoxPoint = new System.Drawing.Point((int)(500 * dpixRatio), (int)(338 * dpixRatio));
-                                WindowsAPI.SetCursorPos(point.X + textBoxPoint.X, point.Y + textBoxPoint.Y);
-                                int pos = (textBoxPoint.X & 0xFFFF) | (textBoxPoint.Y << 16);
-                                WindowsAPI.PostMessage(hWnd, WM_LBUTTONDOWN, 1, pos);
-                                Thread.Sleep(100);
-                                WindowsAPI.SetCursorPos(oldPoint.X, oldPoint.Y);
-                                */
+                                if  ("610074".Equals(service_code) && "T9".Equals(service_region))
+                                {
+                                    // 按下ESC關閉提示框
+                                    WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_ESCAPE);
+                                    Thread.Sleep(100);
+                                    // 選中帳號欄
+                                    System.Drawing.Point oldPoint = new System.Drawing.Point(0, 0);
+                                    WindowsAPI.GetCursorPos(ref oldPoint);
+                                    System.Drawing.Point point = new System.Drawing.Point(0, 0);
+                                    WindowsAPI.ClientToScreen(hWnd, ref point);
+                                    System.Drawing.Point textBoxPoint = new System.Drawing.Point((int)(500 * dpixRatio), (int)(338 * dpixRatio));
+                                    WindowsAPI.SetCursorPos(point.X + textBoxPoint.X, point.Y + textBoxPoint.Y);
+                                    int pos = (textBoxPoint.X & 0xFFFF) | (textBoxPoint.Y << 16);
+                                    WindowsAPI.PostMessage(hWnd, WM_LBUTTONDOWN, 1, pos);
+                                    Thread.Sleep(200);
+                                    WindowsAPI.SetCursorPos(oldPoint.X, oldPoint.Y);
+                                }
                                 // 清空帳號欄內容
                                 WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_END);
                                 for (int i = 0; i < 64; i++)

@@ -39,7 +39,16 @@ namespace Beanfun
             };
         }
 
-        public static readonly bool IsWin10 = Environment.OSVersion.Version >= new Version(10, 0) && Environment.OSVersion.Version < new Version(10, 0, 22000, 0);
+        public static readonly Version OSVersion = Environment.OSVersion.Version;
+        public static readonly Version Win2000 = new Version(5, 0);
+        public static readonly Version WinXP = new Version(5, 1);
+        public static readonly Version Win2003 = new Version(5, 2);
+        public static readonly Version WinVista = new Version(6, 0);
+        public static readonly Version Win7 = new Version(6, 1);
+        public static readonly Version Win8 = new Version(6, 2);
+        public static readonly Version Win8_1 = new Version(6, 3);
+        public static readonly Version Win10 = new Version(10, 0);
+        public static readonly Version Win11 = new Version(10, 0, 22000, 0);
 
         public static MainWindow MainWnd {
             get
