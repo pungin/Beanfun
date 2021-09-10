@@ -76,7 +76,11 @@ namespace Beanfun
         public string game_commandLine = "tw.login.maplestory.gamania.com 8484 BeanFun %s %s";
         private string otp;
         private BitmapImage qr_default;
-        private static readonly System.Windows.Forms.NotifyIcon _trayNotifyIcon = new System.Windows.Forms.NotifyIcon { Icon = Properties.Resources.icon };
+        private static readonly System.Windows.Forms.NotifyIcon _trayNotifyIcon = new System.Windows.Forms.NotifyIcon
+        {
+            Icon = Properties.Resources.icon,
+            Text = "繽放"
+        };
 
         private Version currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
 
@@ -312,16 +316,7 @@ namespace Beanfun
                 {
                     if (e.Button == System.Windows.Forms.MouseButtons.Left)
                     {
-                        if (this.Visibility == Visibility.Visible)
-                        {
-                            this.Visibility = Visibility.Hidden;
-                        }
-                        else
-                        {
-                            this.Visibility = Visibility.Visible;
-                            this.Activate();
-                        }
-
+                        this.Visibility = Visibility.Visible;
                         _trayNotifyIcon.Visible = false;
                     }
                 };
@@ -631,6 +626,7 @@ namespace Beanfun
         {
             if (settingPage != null && settingPage.minimize_to_tray != null && (bool)settingPage.minimize_to_tray.IsChecked && this.WindowState == WindowState.Minimized)
             {
+                this.WindowState = WindowState.Normal;
                 this.Visibility = Visibility.Hidden;
                 _trayNotifyIcon.Visible = true;
             }

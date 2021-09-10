@@ -190,7 +190,6 @@ namespace Beanfun
                         Byte[] cipher = File.ReadAllBytes(dataPath);
                         ModifyRegistry myRegistry = new ModifyRegistry();
                         myRegistry.BaseRegistryKey = Microsoft.Win32.Registry.CurrentUser;
-                        myRegistry.SubKey = "Software\\Beanfun";
                         string entropy = myRegistry.Read("Entropy");
                         byte[] plaintext = ProtectedData.Unprotect(cipher, Encoding.UTF8.GetBytes(entropy), DataProtectionScope.CurrentUser);
                         return System.Text.Encoding.UTF8.GetString(plaintext);
@@ -221,7 +220,6 @@ namespace Beanfun
                 
                 ModifyRegistry myRegistry = new ModifyRegistry();
                 myRegistry.BaseRegistryKey = Microsoft.Win32.Registry.CurrentUser;
-                myRegistry.SubKey = "Software\\Beanfun";
                 myRegistry.Write("Entropy", entropy);
 
                 writer.Write(ciphertext(plaintext, entropy));

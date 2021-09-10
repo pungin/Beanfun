@@ -124,9 +124,6 @@
     <Compile Include="Windows\ChangeAccount.xaml.cs">
       <DependentUpon>ChangeAccount.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Windows\DownloadProgressBar.xaml.cs">
-      <DependentUpon>DownloadProgressBar.xaml</DependentUpon>
-    </Compile>
     <Compile Include="Windows\EquipCalculator.xaml.cs">
       <DependentUpon>EquipCalculator.xaml</DependentUpon>
     </Compile>
@@ -218,10 +215,6 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Windows\ChangeAccount.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Windows\DownloadProgressBar.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
