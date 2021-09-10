@@ -1201,17 +1201,17 @@ namespace Beanfun
                 accountList.list_Account.SelectedIndex = 0;
                 
                 accountList.m_CopyAccount.Visibility = Visibility.Visible;
-                accountList.m_ChangeAccName.Visibility = !UnconnectedGame || App.LoginRegion != "TW" ? Visibility.Visible : Visibility.Collapsed;
+                //accountList.m_ChangeAccName.Visibility = !UnconnectedGame || App.LoginRegion != "TW" ? Visibility.Visible : Visibility.Collapsed;
                 accountList.m_ChangePassword.Visibility = UnconnectedGame ? Visibility.Visible : Visibility.Collapsed;
-                accountList.m_AccInfo.Visibility = !UnconnectedGame || App.LoginRegion != "TW" ? Visibility.Visible : Visibility.Collapsed;
+                //accountList.m_AccInfo.Visibility = !UnconnectedGame || App.LoginRegion != "TW" ? Visibility.Visible : Visibility.Collapsed;
                 accountList.s_Account.Visibility = Visibility.Visible;
             }
             else
             {
                 accountList.m_CopyAccount.Visibility = Visibility.Collapsed;
-                accountList.m_ChangeAccName.Visibility = Visibility.Collapsed;
+                //accountList.m_ChangeAccName.Visibility = Visibility.Collapsed;
                 accountList.m_ChangePassword.Visibility = Visibility.Collapsed;
-                accountList.m_AccInfo.Visibility = Visibility.Collapsed;
+                //accountList.m_AccInfo.Visibility = Visibility.Collapsed;
                 accountList.s_Account.Visibility = Visibility.Collapsed;
             }
             accountList.m_GetEmail.Visibility = visable;

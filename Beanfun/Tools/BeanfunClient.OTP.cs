@@ -17,10 +17,7 @@ namespace Beanfun
                 string response;
                 if (App.LoginRegion == "TW")
                 {
-                    if (true) //loginMethod == (int)LoginMethod.PlaySafe || loginMethod == (int)LoginMethod.QRCode)
-                        response = this.DownloadString("https://tw.beanfun.com/beanfun_block/game_zone/game_start_step2.aspx?service_code=" + service_code + "&service_region=" + service_region + "&sotp=" + acc.ssn + "&dt=" + GetCurrentTime(2));
-                    //else
-                    //    response = this.DownloadString("https://tw.beanfun.com/beanfun_block/auth.aspx?channel=game_zone&page_and_query=game_start_step2.aspx%3Fservice_code%3D" + service_code + "%26service_region%3D" + service_region + "%26sotp%3D" + acc.sotp + "&web_token=" + this.webtoken + (this.cardid != null ? ("&cardid=" + this.cardid) : ""));
+                    response = this.DownloadString("https://tw.beanfun.com/beanfun_block/game_zone/game_start_step2.aspx?service_code=" + service_code + "&service_region=" + service_region + "&sotp=" + acc.ssn + "&dt=" + GetCurrentTime(2));
                     Regex regex = new Regex("GetResultByLongPolling&key=(.*)\"");
                     if (!regex.IsMatch(response))
                     { this.errmsg = "OTPNoLongPollingKey:" + response; return null; }

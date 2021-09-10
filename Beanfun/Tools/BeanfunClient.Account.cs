@@ -50,65 +50,32 @@ namespace Beanfun
 
         public void GetAccounts(string service_code, string service_region, bool fatal = true)
         {
-            if (this.webtoken == null)
-            { return; }
+            if (this.webtoken == null) return;
 
             Regex regex;
-            string response;
 
-            bool UnconnectedGame;
-            string strUrl;
-            if (service_code == "610153" && service_region == "TN" || service_code == "610085" && service_region == "TC")
+            this.DownloadString("https://tw.beanfun.com/beanfun_block/auth.aspx?channel=game_zone&page_and_query=game_start.aspx%3Fservice_code_and_region%3D" + service_code + "_" + service_region + "&web_token=" + webtoken);
+
+            string response = this.DownloadString("https://tw.beanfun.com/beanfun_block/game_zone/game_server_account_list.aspx?sc=" + service_code + "&sr=" + service_region + "&dt=" + GetCurrentTime(2));
+
+            // Add account list to ListView.
+            regex = new Regex("onclick=\"([^\"]*)\"><div id=\"(\\w+)\" sn=\"(\\d+)\" name=\"([^\"]+)\"");
+            this.accountList.Clear();
+            foreach (Match match in regex.Matches(response))
             {
-                UnconnectedGame = true;
-                strUrl = "https://tw.beanfun.com/TW/auth.aspx?channel=accounts_management&page_and_query=01.aspx%3FServiceCode%3D" + service_code + "%26ServiceRegion%3D" + service_region + "&web_token=" + webtoken;
+                if (match.Groups[2].Value == "" || match.Groups[3].Value == "" || match.Groups[4].Value == "")
+                { continue; }
+                this.accountList.Add(new ServiceAccount(match.Groups[1].Value != "", match.Groups[2].Value, match.Groups[3].Value, WebUtility.HtmlDecode(match.Groups[4].Value), GetCreateTime(service_code, service_region, match.Groups[3].Value)));
             }
-            else
+
+            regex = new Regex("<div id=\"divServiceAccountAmountLimitNotice\" class=\"InnerContent\">(.*)</div>");
+            if (regex.IsMatch(response))
             {
-                UnconnectedGame = false;
-                strUrl = "https://tw.beanfun.com/beanfun_block/auth.aspx?channel=game_zone&page_and_query=game_start.aspx%3Fservice_code_and_region%3D" + service_code + "_" + service_region + "&web_token=" + webtoken;
-            }
-
-            response = this.DownloadString(strUrl);
-
-            if (UnconnectedGame)
-            {
-                regex = new Regex("<span id=\"lblGameMaxAccount\" style=\"([^\"]*)\">(.*)</span>");
-                if (regex.IsMatch(response)) accountAmountLimitNotice = "此遊戲最多允許新增帳號數:" + regex.Match(response).Groups[2].Value;
-                else accountAmountLimitNotice = "";
-
-                response = this.DownloadString("https://tw.beanfun.com/TW/accounts_management/01Accounts.aspx");
-                if (response.Contains("點我前往完成進階認證"))
+                accountAmountLimitNotice = regex.Match(response).Groups[1].Value;
+                if (accountAmountLimitNotice.Contains("進階認證"))
                     accountAmountLimitNotice = "請完成進階認證後重新登入";
-
-                regex = new Regex("<td class=\"game\" align=\"left\">(.*)</td><td class=\"game\">");
-                this.accountList.Clear();
-                foreach (Match match in regex.Matches(response))
-                {
-                    this.accountList.Add(new ServiceAccount(true, null, null, match.Groups[1].Value, null));
-                }
             }
-            else
-            {
-                // Add account list to ListView.
-                regex = new Regex("onclick=\"([^\"]*)\"><div id=\"(\\w+)\" sn=\"(\\d+)\" name=\"([^\"]+)\"");
-                this.accountList.Clear();
-                foreach (Match match in regex.Matches(response))
-                {
-                    if (match.Groups[2].Value == "" || match.Groups[3].Value == "" || match.Groups[4].Value == "")
-                    { continue; }
-                    this.accountList.Add(new ServiceAccount(match.Groups[1].Value != "", match.Groups[2].Value, match.Groups[3].Value, WebUtility.HtmlDecode(match.Groups[4].Value), GetCreateTime(service_code, service_region, match.Groups[3].Value)));
-                }
-
-                regex = new Regex("<div id=\"divServiceAccountAmountLimitNotice\" class=\"InnerContent\">(.*)</div>");
-                if (regex.IsMatch(response))
-                {
-                    accountAmountLimitNotice = regex.Match(response).Groups[1].Value;
-                    if (accountAmountLimitNotice.Contains("進階認證"))
-                        accountAmountLimitNotice = "請完成進階認證後重新登入";
-                }
-                else accountAmountLimitNotice = "";
-            }
+            else accountAmountLimitNotice = "";
 
             if (this.accountList.Count > 0) this.accountList.Sort((x, y) => { return x.ssn.CompareTo(y.ssn); });
 
@@ -133,6 +100,8 @@ namespace Beanfun
 
         public void GetAccounts_HK(string service_code, string service_region, bool fatal = true)
         {
+            if (this.bfServ == null) return;
+
             this.DownloadString("https://hk.beanfun.com/beanfun_block/auth.aspx?channel=game_zone&page_and_query=game_start.aspx%3Fservice_code_and_region%3D" + service_code + "_" + service_region + "&token=" + this.bfServ.Token);
 
             string response = this.DownloadString("https://hk.beanfun.com/beanfun_block/game_zone/game_server_account_list.aspx?service_code=" + service_code + "&service_region=" + service_region);
@@ -186,20 +155,10 @@ namespace Beanfun
             if (!regex.IsMatch(response))
             { this.errmsg = "LoginNoViewstategenerator"; return null; }
             string viewstategenerator = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__PREVIOUSPAGE\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            { this.errmsg = "LoginNoPreviouspage"; return null; }
-            string previouspage = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            { this.errmsg = "LoginNoEventvalidation"; return null; }
-            string eventvalidation = regex.Match(response).Groups[1].Value;
 
             NameValueCollection payload = new NameValueCollection();
             payload.Add("__VIEWSTATE", viewstate);
             payload.Add("__VIEWSTATEGENERATOR", viewstategenerator);
-            payload.Add("__PREVIOUSPAGE", previouspage);
-            payload.Add("__EVENTVALIDATION", eventvalidation);
 
             return payload;
         }
