@@ -65,13 +65,6 @@ namespace Beanfun
         private void Main(object sender, StartupEventArgs e)
         {
             WindowsAPI.AttachConsole(-1);
-            if (File.Exists(string.Format("{0}\\BFUpdater.exe", System.Environment.CurrentDirectory)))
-            {
-                try
-                {
-                    File.Delete(string.Format("{0}\\BFUpdater.exe", System.Environment.CurrentDirectory));
-                } catch { }
-            }
 
             StartupUri = new Uri("MainWindow.xaml", UriKind.RelativeOrAbsolute);
         }
