@@ -96,7 +96,7 @@
                             <MenuItem x:Name="btn_Customerservice" Header="客服中心" Click="btn_Customerservice_Click"/>
                         </Menu>
                     </StackPanel>
-                    <ListBox x:Name="list_Account" Margin="0,10,0,0" Height="130" ToolTip="右鍵開啟選單" SelectionMode="Single">
+                    <ListBox x:Name="list_Account" Margin="0,10,0,0" Height="130" ToolTip="右鍵開啟選單" SelectionMode="Single" FocusVisualStyle="{x:Null}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding sname}"/>

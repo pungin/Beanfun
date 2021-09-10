@@ -186,7 +186,7 @@
                     </Button>
                 </DockPanel>
             </Grid>
-            <Frame x:Name="frame" IsHitTestVisible="True" NavigationUIVisibility="Hidden" Margin="1" IsTabStop="False"/>
+            <Frame x:Name="frame" IsHitTestVisible="True" NavigationUIVisibility="Hidden" Margin="1" IsTabStop="False" FocusVisualStyle="{x:Null}"/>
         </StackPanel>
     </Grid>
 </Window>

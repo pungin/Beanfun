@@ -256,13 +256,13 @@ namespace Beanfun
             try
             {
                 App.LoginRegion = loginPage.Beanfun_TW.IsEnabled ? "HK" : "TW";
-                if (loginPage.Beanfun_TW.IsEnabled)
+                if (!loginPage.Beanfun_TW.IsEnabled)
                 {
-                    ServicePointManager.SecurityProtocol &= ~SecurityProtocolType.Ssl3;
-                }
-                else
-                {
-                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Ssl3;
+                    if (App.OSVersion < App.Win8_1)
+                    {
+                        ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                        ServicePointManager.ServerCertificateValidationCallback = (sender, certificate, chain, errors) => true;
+                    }
                 }
                 if (settingPage.tradLogin != null && !(bool)settingPage.tradLogin.IsChecked)
                     accountList.panel_GetOtp.Visibility = Visibility.Collapsed;
