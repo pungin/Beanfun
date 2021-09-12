@@ -129,7 +129,6 @@
                         <ListView x:Name="list_Account" Height="200" SelectionChanged="list_Account_SelectionChanged">
                             <ListView.View>
                                 <GridView AllowsColumnReorder="False">
-                                    <GridViewColumn Header="登入模式" Width="65" DisplayMemberBinding="{Binding method}"/>
                                     <GridViewColumn Header="帳號" Width="100" DisplayMemberBinding="{Binding account}"/>
                                     <GridViewColumn Header="備註" Width="100" DisplayMemberBinding="{Binding accountname}"/>
                                     <GridViewColumn Header="記住密碼" Width="55" DisplayMemberBinding="{Binding isSavePwd}"/>

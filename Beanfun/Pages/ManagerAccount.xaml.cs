@@ -11,7 +11,6 @@ namespace Beanfun
     {
         public class BeanfunAccount
         {
-            public string method { get; set; }
             public string account { get; set; }
             public string accountname { get; set; }
             public string isSavePwd { get; set; }
@@ -19,9 +18,9 @@ namespace Beanfun
             public string isSaveVerify { get; set; }
 
             public BeanfunAccount()
-            { this.method = null; this.account = null; this.accountname = null; this.isSavePwd = null; this.isAutoLogin = null; this.isSaveVerify = null; }
-            public BeanfunAccount(string method, string account, string accountname, string isSavePwd, string isAutoLogin, string isSaveVerify = null)
-            { this.method = method; this.account = account; this.accountname = accountname; this.isSavePwd = isSavePwd; this.isAutoLogin = isAutoLogin; this.isSaveVerify = isSaveVerify; }
+            { this.account = null; this.accountname = null; this.isSavePwd = null; this.isAutoLogin = null; this.isSaveVerify = null; }
+            public BeanfunAccount(string account, string accountname, string isSavePwd, string isAutoLogin, string isSaveVerify = null)
+            { this.account = account; this.accountname = accountname; this.isSavePwd = isSavePwd; this.isAutoLogin = isAutoLogin; this.isSaveVerify = isSaveVerify; }
         }
 
         public ManagerAccount()
@@ -29,26 +28,14 @@ namespace Beanfun
             InitializeComponent();
         }
 
-        public List<string> item_TW = new List<string>
-        {
-            "帳號密碼",
-            "QR Code便利登"
-        };
-        public List<string> item_HK = new List<string>
-        {
-            "帳號密碼"
-        };
-
         public void setupAccList(MainWindow MainWnd)
         {
             string region = !btn_TW.IsEnabled ? "TW" : "HK";
-            List<string> methodItem = region == "TW" ? item_TW : item_HK;
             string[] accList = MainWnd.accountManager.getAccountList(region);
             List<BeanfunAccount> accountList = new List<BeanfunAccount>();
             foreach (string s in accList)
             {
                 accountList.Add(new BeanfunAccount(
-                    methodItem[MainWnd.accountManager.getMethodByAccount(region, s)],
                     s,
                     MainWnd.accountManager.getNameByAccount(region, s),
                     MainWnd.accountManager.getPasswordByAccount(region, s) != "" ? "是" : "否",

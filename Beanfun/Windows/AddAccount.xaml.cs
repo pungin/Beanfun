@@ -34,7 +34,7 @@ namespace Beanfun
 
         private void region_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            initPage();
+            if (t_Verify != null) initPage();
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
