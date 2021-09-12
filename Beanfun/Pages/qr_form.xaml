@@ -13,16 +13,67 @@
             </Style>
             <Style TargetType="{x:Type TextBox}"/>
             <Style TargetType="{x:Type ListBox}"/>
+            <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
+                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
+                <Setter Property="Padding" Value="2"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Background" Value="{x:Null}"/>
+                <Setter Property="BorderBrush" Value="{x:Null}"/>
+                <Setter Property="HorizontalAlignment" Value="Center"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type Button}">
+                            <ContentPresenter ContentTemplate="{TemplateBinding ContentTemplate}" Content="{TemplateBinding Content}" ContentStringFormat="{TemplateBinding ContentStringFormat}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Page.Resources>
 
-    <Grid>
-        <StackPanel VerticalAlignment="Center">
-            <Button x:Name="gameName" HorizontalAlignment="Center" ToolTip="更變遊戲" Click="Button_Click"/>
-            <CheckBox x:Name="useNewQRCode" Margin="0,5" HorizontalAlignment="Center" Content="使用新版 QRCode 圖片" IsChecked="True" Checked="useNewQRCode_CheckedChanged" Unchecked="useNewQRCode_CheckedChanged"/>
-            <Button x:Name="btn_Refresh_QRCode" Padding="0" ToolTip="重新加載" Click="btn_Refresh_QRCode_Click">
-                <Image x:Name="qr_image" Cursor="Hand" Width="250" Height="250"/>
-            </Button>
-        </StackPanel>
+    <Grid Margin="0 20 0 0">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <StackPanel Height="160">
+                <StackPanel.Background>
+                    <LinearGradientBrush EndPoint="0,1" StartPoint="0,0">
+                        <GradientStop Color="#00FFFFFF" Offset="0.0"/>
+                        <GradientStop Color="#AAFFFFFF" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </StackPanel.Background>
+            </StackPanel>
+            <StackPanel Grid.Row="1" Background="#AAFFFFFF"/>
+        </Grid>
+        <DockPanel Margin="0 26 0 0">
+            <Grid x:Name="SideBarLeft" MinWidth="40"/>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock MouseLeave="TextBlock_MouseLeave">
+                <DockPanel MinWidth="350">
+                    <Button x:Name="btn_Refresh_QRCode" Padding="0" Width="150" Height="150" ToolTip="重新加載" Click="btn_Refresh_QRCode_Click" DockPanel.Dock="Top" MouseEnter="btn_Refresh_QRCode_MouseEnter">
+                        <Image x:Name="qr_image" Cursor="Hand"/>
+                    </Button>
+                    <Button x:Name="qr_Tip" Style="{DynamicResource ButtonStyle}" Margin="30 0 0 0" Cursor="Hand" DockPanel.Dock="Right" Visibility="Collapsed" Click="qr_Tip_Click">
+                        <Image x:Name="Logo" Source="/Beanfun;component/Resources/QRCode_Tip.png" Stretch="Uniform" RenderOptions.BitmapScalingMode="Fant" Width="163" Height="125"/>
+                    </Button>
+                </DockPanel>
+                </TextBlock>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0 10 0 0">
+                    <CheckBox Margin="5,0" Content="同時啟動上回玩的遊戲" IsEnabled="False"/>
+                </StackPanel>
+                <Button x:Name="btn_back" Content="返回一般登入" Height="30" Width="250" FontWeight="Bold" Margin="0 10 0 20" IsDefault="True" Background="#7FF5F5F5" Foreground="Black" Click="btn_back_Click"/>
+            </StackPanel>
+            <Grid MinWidth="{Binding MinWidth, ElementName=SideBarLeft}"/>
+        </DockPanel>
     </Grid>
 </Page>

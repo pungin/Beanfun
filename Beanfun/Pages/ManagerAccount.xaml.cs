@@ -29,10 +29,20 @@ namespace Beanfun
             InitializeComponent();
         }
 
+        public List<string> item_TW = new List<string>
+        {
+            "帳號密碼",
+            "QR Code便利登"
+        };
+        public List<string> item_HK = new List<string>
+        {
+            "帳號密碼"
+        };
+
         public void setupAccList(MainWindow MainWnd)
         {
             string region = !btn_TW.IsEnabled ? "TW" : "HK";
-            List<string> methodItem = region == "TW" ? MainWnd.loginPage.item_TW : MainWnd.loginPage.item_HK;
+            List<string> methodItem = region == "TW" ? item_TW : item_HK;
             string[] accList = MainWnd.accountManager.getAccountList(region);
             List<BeanfunAccount> accountList = new List<BeanfunAccount>();
             foreach (string s in accList)
@@ -99,7 +109,7 @@ namespace Beanfun
             int changedIndex = list_Account.SelectedIndex + (up ? -1 : 1);
             App.MainWnd.accountManager.addAccount(changedIndex, region, account, name, password, verify, method, autoLogin);
             setupAccList(App.MainWnd);
-            App.MainWnd.ddlAuthTypeItemsInit();
+            App.MainWnd.loginMethodInit();
             list_Account.SelectedIndex = changedIndex;
         }
 
@@ -133,19 +143,13 @@ namespace Beanfun
                     App.MainWnd.accountManager.removeAccount(region, acc.account);
                 }
                 setupAccList(App.MainWnd);
-                App.MainWnd.ddlAuthTypeItemsInit();
+                App.MainWnd.loginMethodInit();
             }
         }
 
         private void Return_Button_Click(object sender, RoutedEventArgs e)
         {
-            if (App.MainWnd.accountManager.getAccountList("TW").Length + App.MainWnd.accountManager.getAccountList("HK").Length > 0)
-                App.MainWnd.loginPage.id_pass.ManageAcc.Visibility = Visibility.Visible;
-            else
-                App.MainWnd.loginPage.id_pass.ManageAcc.Visibility = Visibility.Collapsed;
-
-            if (App.MainWnd.loginPage.ddlAuthType.SelectedIndex == (int)LoginMethod.QRCode) App.MainWnd.ddlAuthType_SelectionChanged(null, null);
-            App.MainWnd.frame.Content = App.MainWnd.loginPage;
+            App.MainWnd.frame.Content = App.MainWnd.settingPage;
         }
 
         private void list_Account_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -175,6 +179,11 @@ namespace Beanfun
                 return;
             ChangeAccount wnd = new ChangeAccount(list_Account.SelectedIndex, !btn_TW.IsEnabled ? "TW" : "HK", ((BeanfunAccount)list_Account.SelectedItem).account);
             wnd.ShowDialog();
+        }
+
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+            new AccRecovery(App.MainWnd.accountManager).ShowDialog();
         }
     }
 }

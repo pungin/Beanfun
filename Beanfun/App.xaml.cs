@@ -61,7 +61,8 @@ namespace Beanfun
             }
         }
 
-        public static string LoginRegion = "TW";
+        public static string LoginRegion = ConfigAppSettings.GetValue("loginRegion", "TW");
+        public static int LoginMethod = int.Parse(ConfigAppSettings.GetValue("loginMethod", "0"));
         private void Main(object sender, StartupEventArgs e)
         {
             WindowsAPI.AttachConsole(-1);

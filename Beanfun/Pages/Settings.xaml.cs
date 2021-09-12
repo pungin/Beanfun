@@ -24,14 +24,14 @@ namespace Beanfun
 
             cb_UpdateChannel.SelectedIndex = ConfigAppSettings.GetValue("updateChannel", "Stable").Equals("Stable") ? 0 : 1;
 
-            cb_ThemeColor.Text = ConfigAppSettings.GetValue("ThemeColor", "#B6DE8E");
+            cb_ThemeColor.Text = ConfigAppSettings.GetValue("ThemeColor", "#FF8201");
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
             if (App.MainWnd == null || App.MainWnd.frame == null) return;
-            if (App.MainWnd.return_page == null) App.MainWnd.return_page = App.MainWnd.loginPage;
-            App.MainWnd.frame.Content = App.MainWnd.return_page;
+            if (App.MainWnd.return_page == null || App.MainWnd.return_page == App.MainWnd.loginPage) App.MainWnd.NavigateLoginPage();
+            else App.MainWnd.frame.Content = App.MainWnd.return_page;
             App.MainWnd.return_page = null;
         }
 
@@ -107,6 +107,11 @@ namespace Beanfun
                 App.MainWnd.changeThemeColor(cb_ThemeColor.Text);
                 ConfigAppSettings.SetValue("ThemeColor", cb_ThemeColor.Text);
             } catch { }
+        }
+
+        private void ManageAcc_Click(object sender, RoutedEventArgs e)
+        {
+            App.MainWnd.frame.Content = App.MainWnd.manageAccPage;
         }
     }
 }

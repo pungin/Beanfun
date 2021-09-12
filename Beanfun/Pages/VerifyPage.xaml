@@ -18,12 +18,7 @@
     </Page.Resources>
 
     <Grid>
-        <StackPanel>
-            <Image x:Name="Logo" Margin="10,15,10,30" Source="/Beanfun;component/Resources/logo.png" Stretch="Uniform" RenderOptions.BitmapScalingMode="Fant" Width="106" Height="45" HorizontalAlignment="Left" Cursor="Hand" ToolTip="返回登入頁面" MouseLeftButtonDown="Image_MouseLeftButtonDown">
-                <Image.Effect>
-                    <DropShadowEffect Opacity="0.7" ShadowDepth="1" BlurRadius="1" Direction="270"/>
-                </Image.Effect>
-            </Image>
+        <StackPanel Margin="0 30 0 0">
             <StackPanel Background="#7FFFFFFF">
                 <StackPanel Margin="10">
                     <DockPanel>

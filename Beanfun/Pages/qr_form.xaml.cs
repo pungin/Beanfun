@@ -1,17 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace Beanfun
 {
@@ -23,13 +13,6 @@ namespace Beanfun
         public qr_form()
         {
             InitializeComponent();
-
-            useNewQRCode.IsChecked = bool.Parse(ConfigAppSettings.GetValue("useNewQRCode", "true"));
-        }
-
-        private void Button_Click(object sender, RoutedEventArgs e)
-        {
-            new GameList().ShowDialog();
         }
 
         private void btn_Refresh_QRCode_Click(object sender, RoutedEventArgs e)
@@ -37,13 +20,33 @@ namespace Beanfun
             App.MainWnd.refreshQRCode();
         }
 
-        private void useNewQRCode_CheckedChanged(object sender, RoutedEventArgs e)
+        private void btn_Refresh_QRCode_MouseEnter(object sender, MouseEventArgs e)
         {
-            if (App.MainWnd == null || App.MainWnd.loginPage == null || App.MainWnd.loginPage.qr == null || useNewQRCode.IsChecked == bool.Parse(ConfigAppSettings.GetValue("useNewQRCode", "true")))
-                return;
-            ConfigAppSettings.SetValue("useNewQRCode", Convert.ToString((bool)useNewQRCode.IsChecked));
+            if (qr_Tip.Visibility == Visibility.Collapsed)
+            {
+                DockPanel.SetDock(btn_Refresh_QRCode, Dock.Left);
+                qr_Tip.Visibility = Visibility.Visible;
+            }
+        }
 
-            App.MainWnd.refreshQRCode();
+        private void qr_Tip_Click(object sender, RoutedEventArgs e)
+        {
+            Process.Start("https://tw.beanfun.com/bfevent/bfApp/Page20160930/PC/index.html");
+        }
+
+        private void TextBlock_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (qr_Tip.Visibility == Visibility.Visible)
+            {
+                DockPanel.SetDock(btn_Refresh_QRCode, Dock.Top);
+                qr_Tip.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void btn_back_Click(object sender, RoutedEventArgs e)
+        {
+            App.LoginMethod = (int)LoginMethod.Regular;
+            App.MainWnd.loginMethodChanged();
         }
     }
 }

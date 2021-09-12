@@ -154,14 +154,8 @@
   <data name="Scroll_SM" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\Scroll_SM.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
-  <data name="logo" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\logo.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
   <data name="QRCode_QQPay" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\QRCode_QQPay.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="logo_darkmode" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\logo_darkmode.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="LoaderDll" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\loaderdll.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
@@ -174,5 +168,8 @@
   </data>
   <data name="segmdl2" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\segmdl2.ttf;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="QRCode_Tip" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\QRCode_Tip.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
 </root>

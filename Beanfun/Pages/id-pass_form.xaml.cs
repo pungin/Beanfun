@@ -59,11 +59,6 @@ namespace Beanfun
             new WebBrowser(url).Show();
         }
 
-        private void ManageAcc_Click(object sender, RoutedEventArgs e)
-        {
-            App.MainWnd.frame.Content = App.MainWnd.manageAccPage;
-        }
-
         private void btn_login_Click(object sender, RoutedEventArgs e)
         {
             if (t_AccountID.Text == null || t_AccountID.Text == "")
@@ -76,6 +71,7 @@ namespace Beanfun
                 MessageBox.Show("請輸入密碼");
                 return;
             }
+            System.Console.WriteLine("PW" + t_Password.Password);
             App.MainWnd.do_Login();
         }
 
@@ -162,8 +158,8 @@ namespace Beanfun
 
                     int loginMethod = App.MainWnd.accountManager.getMethodByAccount(App.LoginRegion, t_AccountID.Text);
                     if (loginMethod > -1)
-                        App.MainWnd.loginPage.ddlAuthType.SelectedIndex = loginMethod;
-                    App.MainWnd.ddlAuthType_SelectionChanged(null, null);
+                        App.LoginMethod = loginMethod;
+                    App.MainWnd.loginMethodChanged();
                 }
             }
 
@@ -208,7 +204,7 @@ namespace Beanfun
             if (result == MessageBoxResult.Yes)
             {
                 App.MainWnd.accountManager.removeAccount(App.LoginRegion, t_AccID_toDelete);
-                App.MainWnd.ddlAuthTypeItemsInit();
+                App.MainWnd.loginMethodInit();
 
                 foreach (string s in t_AccountID.Items)
                 {
@@ -221,6 +217,12 @@ namespace Beanfun
                     }
                 }
             }
+        }
+
+        private void btn_QRCode_Click(object sender, RoutedEventArgs e)
+        {
+            App.LoginMethod = (int)LoginMethod.QRCode;
+            App.MainWnd.loginMethodChanged();
         }
     }
 }

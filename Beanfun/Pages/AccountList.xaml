@@ -20,72 +20,46 @@
     </Page.Resources>
 
     <Grid>
-        <StackPanel>
-            <Button x:Name="btn_HomePage" Margin="10,10,10,10" Style="{DynamicResource ButtonStyle}" HorizontalAlignment="Left" Cursor="Hand" ToolTip="返回登入頁面" Click="btn_Logout_Click" IsCancel="True" IsKeyboardFocusedChanged="btn_HomePage_IsKeyboardFocusedChanged">
-                <Button.Resources>
-                    <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
-                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
-                        <Setter Property="Padding" Value="2"/>
-                        <Setter Property="BorderThickness" Value="0"/>
-                        <Setter Property="Background" Value="{x:Null}"/>
-                        <Setter Property="BorderBrush" Value="{x:Null}"/>
-                        <Setter Property="HorizontalAlignment" Value="Center"/>
-                        <Setter Property="VerticalAlignment" Value="Center"/>
-                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                        <Setter Property="VerticalContentAlignment" Value="Center"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="{x:Type Button}">
-                                    <Border x:Name="Bd" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
-                                        <ContentPresenter ContentTemplate="{TemplateBinding ContentTemplate}" Content="{TemplateBinding Content}" ContentStringFormat="{TemplateBinding ContentStringFormat}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" TargetName="Bd" Value="#40000000"/>
-                                        </Trigger>
-                                        <Trigger Property="IsKeyboardFocused" Value="True">
-                                            <Setter Property="Background" TargetName="Bd" Value="#40000000"/>
-                                        </Trigger>
-                                        <Trigger Property="IsPressed" Value="True">
-                                            <Setter Property="Background" TargetName="Bd" Value="#40000000"/>
-                                        </Trigger>
-                                        <Trigger Property="IsEnabled" Value="False">
-                                            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Button.Resources>
-                <Image x:Name="Logo" Source="/Beanfun;component/Resources/logo.png" Stretch="Uniform" RenderOptions.BitmapScalingMode="Fant" Width="106" Height="45">
-                    <Image.Effect>
-                        <DropShadowEffect Opacity="0.7" ShadowDepth="1" BlurRadius="1" Direction="270"/>
-                    </Image.Effect>
-                </Image>
-            </Button>
-            <StackPanel Background="#7FFFFFFF">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="88"/>
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel>
+                <StackPanel.Background>
+                    <LinearGradientBrush EndPoint="0,1" StartPoint="0,0">
+                        <GradientStop Color="#00FFFFFF" Offset="0.0"/>
+                        <GradientStop Color="#7FFFFFFF" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </StackPanel.Background>
+            </StackPanel>
+            <StackPanel Grid.Row="1" Background="#7FFFFFFF"/>
+        </Grid>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <DockPanel Margin="10 30 0 0" VerticalAlignment="Top" >
+                <Button x:Name="btn_ChangeGame" Height="48" Width="48" ToolTip="更換遊戲" Padding="0" Cursor="Hand" Click="gameName_Click">
+                    <Image x:Name="imageGame" Stretch="Fill"/>
+                </Button>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="gameName" Margin="5,2,0,0" Content="GameName" ToolTip="更換遊戲" Click="gameName_Click"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="btn_StartGame" Margin="5,5,0,0" Content="啟動遊戲" Click="Button_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </DockPanel>
+            <StackPanel Margin="0 30 10 0" HorizontalAlignment="Right">
+                <Button x:Name="btn_Logout" Content="登出" Margin="10,0,0,0" IsCancel="True" Click="btn_Logout_Click"/>
+                <Button x:Name="btn_Tools" Content="工具" Margin="10,10,0,0" Click="btn_Tools_Click"/>
+            </StackPanel>
+            <StackPanel Grid.Row="1">
                 <StackPanel Margin="10">
-                    <Grid>
-                        <DockPanel>
-                            <Button x:Name="btn_ChangeGame" ToolTip="更換遊戲" Padding="0" Cursor="Hand" Click="gameName_Click">
-                                <Image x:Name="imageGame" Height="48" Width="48" Stretch="Fill"/>
-                            </Button>
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button x:Name="gameName" Margin="5,2,0,0" ToolTip="更換遊戲" Click="gameName_Click"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button x:Name="btn_StartGame" Margin="5,5,0,0" Content="啟動遊戲" Click="Button_Click"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </DockPanel>
-                        <StackPanel HorizontalAlignment="Right">
-                            <Button x:Name="btn_Logout" Content="登出" Margin="10,0,0,0" Click="btn_Logout_Click"/>
-                            <Button x:Name="btn_Tools" Content="工具" Margin="10,10,0,0" Click="btn_Tools_Click"/>
-                        </StackPanel>
-                    </Grid>
-                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <StackPanel Orientation="Horizontal">
                         <Menu x:Name="m_MenuList">
                             <MenuItem x:Name="m_RemainPoint" Header="樂豆點數: 0 點">
                                 <MenuItem x:Name="m_UpdatePoint" Header="更新點數" Click="m_UpdatePoint_Click"/>
@@ -145,6 +119,6 @@
                     </DockPanel>
                 </StackPanel>
             </StackPanel>
-        </StackPanel>
+        </Grid>
     </Grid>
 </Page>

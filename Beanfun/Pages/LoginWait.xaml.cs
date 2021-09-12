@@ -30,8 +30,8 @@ namespace Beanfun
             App.MainWnd.loginWorker.CancelAsync();
             App.MainWnd.bfAPPAutoLogin.IsEnabled = false;
             t_Info.Content = "正在登入,請稍等...";
-            if (App.MainWnd.loginPage.ddlAuthType.SelectedIndex == (int)LoginMethod.QRCode) App.MainWnd.ddlAuthType_SelectionChanged(null, null);
-            App.MainWnd.frame.Content = App.MainWnd.loginPage;
+            if (App.LoginMethod == (int)LoginMethod.QRCode) App.MainWnd.loginMethodChanged();
+            App.MainWnd.return_page = App.MainWnd.loginPage;
         }
     }
 }

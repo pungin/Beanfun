@@ -147,10 +147,9 @@ namespace Beanfun
             public string viewstate;
             public string eventvalidation;
             public string bitmapUrl;
-            public bool oldAppQRCode;
         }
 
-        public QRCodeClass GetQRCodeValue(string skey, bool oldAppQRCode)
+        public QRCodeClass GetQRCodeValue(string skey)
         {
             string response = this.DownloadString("https://tw.newlogin.beanfun.com/login/qr_form.aspx?skey=" + skey );
             Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
@@ -165,36 +164,21 @@ namespace Beanfun
 
             //Thread.Sleep(3000);
 
-            string value;
-            string strEncryptData;
-            if (oldAppQRCode)
-            {
-                string qrdata = this.DownloadString("https://tw.newlogin.beanfun.com/generic_handlers/get_qrcodeData.ashx?skey=" + skey + "&startGame=");
-                regex = new Regex("\"strEncryptData\": \"(.*)\"}");
-                if (!regex.IsMatch(qrdata))
-                { this.errmsg = "LoginNoQrcodedata"; return null; }
-                value = regex.Match(qrdata).Groups[1].Value;
-                strEncryptData = Uri.UnescapeDataString(value);
-            }
-            else
-            {
-                regex = new Regex("\\$\\(\"#theQrCodeImg\"\\).attr\\(\"src\", \"../(.*)\" \\+ obj.strEncryptData\\);");
-                if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoHash"; return null; }
-                value = regex.Match(response).Groups[1].Value;
+            regex = new Regex("\\$\\(\"#theQrCodeImg\"\\).attr\\(\"src\", \"../(.*)\" \\+ obj.strEncryptData\\);");
+            if (!regex.IsMatch(response))
+            { this.errmsg = "LoginNoHash"; return null; }
+            string value = regex.Match(response).Groups[1].Value;
 
-                strEncryptData = this.getQRCodeStrEncryptData(skey);
-                if (strEncryptData == null || strEncryptData == "")
-                { this.errmsg = "LoginIntResultError"; return null; }
-            }
+            string strEncryptData = this.getQRCodeStrEncryptData(skey);
+            if (strEncryptData == null || strEncryptData == "")
+            { this.errmsg = "LoginIntResultError"; return null; }
 
             QRCodeClass res = new QRCodeClass();
             res.skey = skey;
             res.viewstate = viewstate;
             res.eventvalidation = eventvalidation;
             res.value = strEncryptData;
-            res.bitmapUrl = oldAppQRCode ? ("http://tw.newlogin.beanfun.com/qrhandler.ashx?u=" + value) : ("https://tw.newlogin.beanfun.com/" + value);
-            res.oldAppQRCode = oldAppQRCode;
+            res.bitmapUrl = "https://tw.newlogin.beanfun.com/" + value;
 
             return res;
         }
@@ -214,7 +198,7 @@ namespace Beanfun
             BitmapImage result;
             try
             {
-                byte[] buffer = this.DownloadData(qrcodeclass.bitmapUrl + (qrcodeclass.oldAppQRCode ? "" : qrcodeclass.value));
+                byte[] buffer = this.DownloadData(qrcodeclass.bitmapUrl + qrcodeclass.value);
                 result = new BitmapImage();
                 result.BeginInit();
                 result.StreamSource = new MemoryStream(buffer);
@@ -269,10 +253,10 @@ namespace Beanfun
                 this.Headers.Set("Referer", @"https://tw.newlogin.beanfun.com/login/qr_form.aspx?skey=" + skey);
 
                 NameValueCollection payload = new NameValueCollection();
-                payload.Add(qrcodeclass.oldAppQRCode ? "data" : "status", qrcodeclass.value);
+                payload.Add("status", qrcodeclass.value);
                 //Debug.WriteLine(qrcodeclass.value);
                 
-                string response = this.UploadString(qrcodeclass.oldAppQRCode ? "https://tw.bfapp.beanfun.com/api/Check/CheckLoginStatus" : "https://tw.newlogin.beanfun.com/generic_handlers/CheckLoginStatus.ashx", payload);
+                string response = this.UploadString("https://tw.newlogin.beanfun.com/generic_handlers/CheckLoginStatus.ashx", payload);
                 JObject jsonData;
                 try { jsonData = JObject.Parse(response); }
                 catch { this.errmsg = "LoginJsonParseFailed"; return -1; }

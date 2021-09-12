@@ -21,10 +21,8 @@ namespace Beanfun
         {
             MessageBoxResult result = MessageBox.Show("即將登出，是否要繼續？", "登出", MessageBoxButton.YesNo);
             if (result == MessageBoxResult.No) return;
-            if (App.MainWnd.bfClient != null)
-                App.MainWnd.bfClient.Logout();
-            if (App.MainWnd.loginPage.ddlAuthType.SelectedIndex == (int)LoginMethod.QRCode) App.MainWnd.ddlAuthType_SelectionChanged(null, null);
-            App.MainWnd.frame.Content = App.MainWnd.loginPage;
+            if (App.LoginMethod == (int)LoginMethod.QRCode) App.MainWnd.loginMethodChanged();
+            App.MainWnd.NavigateLoginPage();
         }
 
         private void list_Account_MouseDoubleClick(object sender, RoutedEventArgs e)
@@ -183,11 +181,6 @@ namespace Beanfun
         private void gameName_Click(object sender, RoutedEventArgs e)
         {
             new GameList().ShowDialog();
-        }
-
-        private void btn_HomePage_IsKeyboardFocusedChanged(object sender, DependencyPropertyChangedEventArgs e)
-        {
-            if (btn_HomePage.IsKeyboardFocused) list_Account.Focus();
         }
 
         private void m_ChangePassword_Click(object sender, RoutedEventArgs e)

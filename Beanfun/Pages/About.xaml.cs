@@ -33,8 +33,8 @@ namespace Beanfun
         private void Button_Click(object sender, RoutedEventArgs e)
         {
             if (App.MainWnd == null) return;
-            if (App.MainWnd.return_page == null) App.MainWnd.return_page = App.MainWnd.loginPage;
-            App.MainWnd.frame.Content = App.MainWnd.return_page;
+            if (App.MainWnd.return_page == null || App.MainWnd.return_page == App.MainWnd.loginPage) App.MainWnd.NavigateLoginPage();
+            else App.MainWnd.frame.Content = App.MainWnd.return_page;
             App.MainWnd.return_page = null;
         }
 

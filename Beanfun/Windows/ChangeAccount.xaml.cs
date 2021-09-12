@@ -49,7 +49,7 @@ namespace Beanfun
             int method = App.MainWnd.accountManager.getMethodByAccount(region, account);
             App.MainWnd.accountManager.removeAccount(region, account);
             App.MainWnd.accountManager.addAccount(changedIndex, region, t_AccountID.Text, t_AccountName.Text, pwd, verify, method, (bool)autoLogin.IsChecked);
-            App.MainWnd.ddlAuthTypeItemsInit();
+            App.MainWnd.loginMethodInit();
             this.Close();
         }
     }

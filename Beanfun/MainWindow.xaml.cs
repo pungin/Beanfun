@@ -197,9 +197,21 @@ namespace Beanfun
             base.OnContentRendered(e);
         }
 
+        public void NavigateLoginPage()
+        {
+            frame.Content = loginPage;
+
+            btn_Region.Visibility = Visibility.Visible;
+
+            try
+            {
+                if (bfClient != null) bfClient.Logout();
+            } catch { }
+        }
+
         public void changeThemeColor(string sColor)
         {
-            if (sColor == null) sColor = ConfigAppSettings.GetValue("ThemeColor", "#B6DE8E");
+            if (sColor == null) sColor = ConfigAppSettings.GetValue("ThemeColor", "#FF8201");
             Color color = (Color)ColorConverter.ConvertFromString(sColor);
             bool oldIsLightColor = isLightColor();
             Background = new SolidColorBrush(color);
@@ -234,12 +246,10 @@ namespace Beanfun
             {
                 btn_About_MouseLeave(null, null);
                 btn_Setting_MouseLeave(null, null);
+                btn_Region_MouseLeave(null, null);
                 btn_Min_MouseLeave(null, null);
                 btn_Close_MouseLeave(null, null);
-                BitmapImage logo = new BitmapImage(new Uri("pack://application:,,,/Resources/logo" + (isLightMode ? "" : "_darkmode") + ".png"));
-                if (loginPage != null) loginPage.Logo.Source = logo;
-                if (verifyPage != null) verifyPage.Logo.Source = logo;
-                if (accountList != null) accountList.Logo.Source = logo;
+                LogoIcon.Fill = new SolidColorBrush(isLightMode ? Colors.Black : Colors.White);
                 if (aboutPage != null) aboutPage.initThemeColor(isLightMode);
             }
         }
@@ -259,8 +269,7 @@ namespace Beanfun
         {
             try
             {
-                App.LoginRegion = loginPage.Beanfun_TW.IsEnabled ? "HK" : "TW";
-                if (!loginPage.Beanfun_TW.IsEnabled)
+                if (App.LoginRegion == "TW")
                 {
                     if (App.OSVersion < App.Win8_1)
                     {
@@ -298,7 +307,6 @@ namespace Beanfun
                 if (res == false)
                     errexit("帳號記錄初始化失敗，未知的錯誤。", 0);
 
-                loginPage.ddlAuthType.SelectionChanged += this.ddlAuthType_SelectionChanged;
                 settingPage.t_GamePath.PreviewMouseLeftButtonDown += this.btn_SetGamePath_Click;
                 LastLoginAccountID = ConfigAppSettings.GetValue("AccountID", LastLoginAccountID);
                 int loginMethod = accountManager.getMethodByAccount(App.LoginRegion, LastLoginAccountID);
@@ -307,10 +315,11 @@ namespace Beanfun
                 if (loginMethod > (int)LoginMethod.QRCode)
                     loginMethod = (int)LoginMethod.QRCode;
 
-                ddlAuthTypeItemsInit();
+                loginMethodInit();
                 reLoadGameInfo();
 
-                loginPage.ddlAuthType.SelectedIndex = loginMethod;
+                App.LoginMethod = loginMethod;
+                loginMethodChanged();
 
                 _trayNotifyIcon.MouseClick += (sender, e) =>
                 {
@@ -323,7 +332,7 @@ namespace Beanfun
 
                 frame.Content = loginPage;
 
-                if (loginPage.ddlAuthType.SelectedIndex == (int)LoginMethod.Regular && (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked)
+                if (loginMethod == (int)LoginMethod.Regular && (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked)
                 {
                     do_Login();
                 }
@@ -522,8 +531,7 @@ namespace Beanfun
                                 large_image = null;
                                 small_image = null;
                             }
-                            loginPage.id_pass.imageGame.Source = large_image;
-                            loginPage.qr.gameName.Content = gs.name;
+                            loginPage.id_pass.imageGame.ImageSource = large_image;
                             accountList.imageGame.Source = small_image;
                             accountList.gameName.Content = gs.name;
                             SelectedGame = gs;
@@ -609,6 +617,7 @@ namespace Beanfun
         {
             btn_About_MouseLeave(null, null);
             btn_Setting_MouseLeave(null, null);
+            btn_Region_MouseLeave(null, null);
             btn_Min_MouseLeave(null, null);
             btn_Close_MouseLeave(null, null);
             if (this.IsActive)
@@ -656,6 +665,27 @@ namespace Beanfun
         private void btn_Setting_IsKeyboardFocusedChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             if (btn_Setting.IsKeyboardFocused) frame.Focus();
+        }
+
+        private void btn_Region_Click(object sender, RoutedEventArgs e)
+        {
+            App.LoginRegion = App.LoginRegion == "TW" ? "HK" : "TW";
+            ConfigAppSettings.SetValue("loginRegion", App.LoginRegion);
+            loginMethodInit();
+            reLoadGameInfo();
+        }
+
+        private void btn_Region_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (this.IsActive)
+                btn_Region.Foreground = new SolidColorBrush(getTitleButtonColor());
+            else
+                btn_Region.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("Gray"));
+        }
+
+        private void btn_Region_IsKeyboardFocusedChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (btn_Region.IsKeyboardFocused) frame.Focus();
         }
 
         private void btn_Min_MouseLeave(object sender, MouseEventArgs e)
@@ -728,41 +758,32 @@ namespace Beanfun
             }
         }
 
-        public void ddlAuthType_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        public void loginMethodChanged()
         {
             qrCheckLogin.IsEnabled = false;
             
             if (App.LoginRegion == "TW")
             {
-                switch (loginPage.ddlAuthType.SelectedIndex)
+                switch (App.LoginMethod)
                 {
-                    case (int)Beanfun.LoginMethod.QRCode:
-                        loginPage.ddlAuthType.IsEnabled = false;
+                    case (int)LoginMethod.QRCode:
+                        btn_Region.IsEnabled = false;
                         loginPage.qr.qr_image.Source = qr_default;
                         loginPage.login_form.Content = loginPage.qr;
-                        qrWorker.RunWorkerAsync(loginPage == null || loginPage.qr == null || loginPage.qr.useNewQRCode == null || (bool)loginPage.qr.useNewQRCode.IsChecked ? false : true);
+                        qrWorker.RunWorkerAsync(loginPage == null || loginPage.qr == null ? false : true);
                         break;
                     default:
                         loginPage.login_form.Content = loginPage.id_pass;
-                        if (loginPage.ddlAuthType.SelectedIndex == (int)Beanfun.LoginMethod.Regular)
-                        {
-                            loginPage.id_pass.lb_pwd.Text = "密碼";
-                        }
-                        else
-                        {
-                            loginPage.id_pass.lb_pwd.Text = "PIN碼";
-                        }
                         break;
                 }
             }
             else
             {
                 loginPage.login_form.Content = loginPage.id_pass;
-                loginPage.ddlAuthType.SelectedIndex = (int)Beanfun.LoginMethod.Regular;
-                loginPage.id_pass.lb_pwd.Text = "密碼";
+                App.LoginMethod = (int)LoginMethod.Regular;
             }
 
-            if (loginPage.ddlAuthType.SelectedIndex == (int)Beanfun.LoginMethod.Regular && (loginPage.id_pass.t_Password.Password == "" || loginPage.id_pass.t_Password.Password == null))
+            if (App.LoginMethod == (int)Beanfun.LoginMethod.Regular && (loginPage.id_pass.t_Password.Password == "" || loginPage.id_pass.t_Password.Password == null))
             {
                 string pwd = accountManager.getPasswordByAccount(App.LoginRegion, loginPage.id_pass.t_AccountID.Text);
 
@@ -787,30 +808,28 @@ namespace Beanfun
             }
         }
 
-        public void ddlAuthTypeItemsInit()
+        public void loginMethodInit()
         {
             try
             {
-                loginPage.ddlAuthType.Items.Clear();
                 if (App.LoginRegion == "TW")
                 {
-                    foreach (string type in loginPage.item_TW)
-                    {
-                        loginPage.ddlAuthType.Items.Add(type);
-                    }
+                    btn_Region.Content = "TW";
+                    btn_Region.ToolTip = "切換到香港專區";
+                    loginPage.id_pass.btn_QRCode.IsEnabled = true;
 
                     accountList.btn_Deposite.Visibility = Visibility.Visible;
                 }
                 else
                 {
-                    foreach (string type in loginPage.item_HK)
-                    {
-                        loginPage.ddlAuthType.Items.Add(type);
-                    }
+                    btn_Region.Content = "HK";
+                    btn_Region.ToolTip = "切換到台灣專區";
+                    loginPage.id_pass.btn_QRCode.IsEnabled = false;
 
                     accountList.btn_Deposite.Visibility = Visibility.Collapsed;
                 }
-            } catch { }
+            }
+            catch { }
 
             try
             {
@@ -837,11 +856,6 @@ namespace Beanfun
                 loginPage.id_pass.t_AccountID.ItemsSource = null;
                 loginPage.id_pass.t_AccountID.ItemsSource = accList;
 
-                if (accountManager.getAccountList().Length > 0)
-                    loginPage.id_pass.ManageAcc.Visibility = Visibility.Visible;
-                else
-                    loginPage.id_pass.ManageAcc.Visibility = Visibility.Collapsed;
-
                 int loginMethod = accountManager.getMethodByAccount(App.LoginRegion, accId);
                 if (loginMethod < (int)LoginMethod.Regular)
                 {
@@ -854,7 +868,8 @@ namespace Beanfun
                 {
                     loginPage.id_pass.t_AccountID.SelectedIndex = selectedIndex;
 
-                    loginPage.ddlAuthType.SelectedIndex = loginMethod;
+                    App.LoginMethod = loginMethod;
+                    loginMethodChanged();
 
                     string pwd = accountManager.getPasswordByAccount(App.LoginRegion, accId);
                     if (loginMethod != (int)LoginMethod.Regular)
@@ -874,7 +889,8 @@ namespace Beanfun
                     loginPage.id_pass.checkBox_RememberPWD.IsChecked = false;
                     loginPage.id_pass.checkBox_AutoLogin.IsChecked = false;
 
-                    loginPage.ddlAuthType.SelectedIndex = (int)LoginMethod.Regular;
+                    App.LoginMethod = (int)LoginMethod.Regular;
+                    loginMethodChanged();
 
                     verifyPage.t_Verify.Text = "";
                     verifyPage.checkBoxRememberVerify.IsChecked = false;
@@ -886,8 +902,9 @@ namespace Beanfun
 
         public void do_Login()
         {
+            btn_Region.Visibility = Visibility.Collapsed;
+            this.loginWorker.RunWorkerAsync(App.LoginMethod);
             frame.Content = loginWaitPage;
-            this.loginWorker.RunWorkerAsync(loginPage.ddlAuthType.SelectedIndex);
         }
 
         public bool errexit(string msg, int method, string title = null)
@@ -966,7 +983,7 @@ namespace Beanfun
                     if (result == MessageBoxResult.Yes)
                         Process.Start("http://hk.download.beanfun.com/beanfun20/beanfun_2_0_93_170_hk.exe");
 
-                    frame.Content = loginPage;
+                    NavigateLoginPage();
                     return false;
                 case "LoginNoMethod":
                     msg = "登入出錯，選擇了不存在的登入方式。";
@@ -1008,9 +1025,9 @@ namespace Beanfun
                 App.Current.Shutdown();
             else if (method == 1)
             {
-                ddlAuthType_SelectionChanged(null, null);
+                loginMethodChanged();
                 accountList.t_Password.Text = "";
-                frame.Content = loginPage;
+                NavigateLoginPage();
             }
 
             return false;
@@ -1042,13 +1059,13 @@ namespace Beanfun
             e.Result = "";
             try
             {
-                loginPage.Dispatcher.Invoke(
+                loginWaitPage.Dispatcher.Invoke(
                     new Action(
                         delegate
                         {
-                            if (loginPage.ddlAuthType.SelectedIndex != (int)LoginMethod.QRCode)
+                            if (App.LoginMethod != (int)LoginMethod.QRCode)
                                 this.bfClient = new BeanfunClient();
-                            this.bfClient.Login(loginPage.id_pass.t_AccountID.Text, loginPage.id_pass.t_Password.Password, loginPage.ddlAuthType.SelectedIndex, this.qrcodeClass, this.service_code, this.service_region);
+                            this.bfClient.Login(loginPage.id_pass.t_AccountID.Text, loginPage.id_pass.t_Password.Password, App.LoginMethod, this.qrcodeClass, this.service_code, this.service_region);
                         }
                     )
                 );
@@ -1072,7 +1089,7 @@ namespace Beanfun
             if (e != null && e.Error != null)
             {
                 errexit(e.Error.Message, 1);
-                frame.Content = loginPage;
+                NavigateLoginPage();
                 return;
             }
             if (e != null && (string)e.Result != null)
@@ -1092,10 +1109,10 @@ namespace Beanfun
                     verifyPage.t_Code.Text = "";
                     string response = this.bfClient.getVerifyPageInfo();
                     if (response == null)
-                    { MessageBox.Show(this.bfClient.errmsg); frame.Content = loginPage; }
+                    { MessageBox.Show(this.bfClient.errmsg); NavigateLoginPage(); }
                     string errmsg = reLoadVerifyPage(response);
                     if (errmsg != null)
-                    { MessageBox.Show(errmsg); frame.Content = loginPage; }
+                    { MessageBox.Show(errmsg); NavigateLoginPage(); }
                 }
                 else if (((string)e.Result).StartsWith("bfAPPAutoLogin.ashx"))
                 {
@@ -1116,8 +1133,8 @@ namespace Beanfun
                 return;
             }
             
-            ConfigAppSettings.SetValue("loginMethod", loginPage.ddlAuthType.SelectedIndex.ToString());
-            if (App.LoginRegion != "TW" || loginPage.ddlAuthType.SelectedIndex != (int)LoginMethod.QRCode)
+            ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
+            if (App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode)
             {
                 LastLoginAccountID = loginPage.id_pass.t_AccountID.Text;
                 ConfigAppSettings.SetValue("AccountID", LastLoginAccountID);
@@ -1127,17 +1144,18 @@ namespace Beanfun
                     "",
                     loginPage.id_pass.checkBox_RememberPWD.IsEnabled && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked ? loginPage.id_pass.t_Password.Password : "",
                     (bool)verifyPage.checkBoxRememberVerify.IsChecked ? verifyPage.t_Verify.Text : "",
-                    loginPage.ddlAuthType.SelectedIndex,
+                    App.LoginMethod,
                     (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked
                 );
 
-                ddlAuthTypeItemsInit();
+                loginMethodInit();
             }
             else ConfigAppSettings.SetValue("AccountID", null);
 
             try
             {
                 frame.Content = accountList;
+                btn_Region.Visibility = Visibility.Collapsed;
 
                 redrawSAccountList();
 
@@ -1836,12 +1854,12 @@ namespace Beanfun
         {
             this.bfClient = new BeanfunClient();
             string skey = this.bfClient.GetSessionkey();
-            this.qrcodeClass = this.bfClient.GetQRCodeValue(skey, (bool)e.Argument);
+            this.qrcodeClass = this.bfClient.GetQRCodeValue(skey);
         }
 
         private void qrWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            loginPage.ddlAuthType.IsEnabled = true;
+            btn_Region.IsEnabled = true;
             if (updateQRCodeImage()) qrCheckLogin.IsEnabled = true;
         }
         
@@ -1867,7 +1885,7 @@ namespace Beanfun
 
         public void refreshQRCode()
         {
-            qrWorker.RunWorkerAsync(loginPage == null || loginPage.qr == null || loginPage.qr.useNewQRCode == null || (bool)loginPage.qr.useNewQRCode.IsChecked ? false : true);
+            qrWorker.RunWorkerAsync(loginPage == null || loginPage.qr == null ? false : true);
         }
 
         public bool updateQRCodeImage()
@@ -1907,7 +1925,7 @@ namespace Beanfun
                     break;
                 case "-2":
                     Console.WriteLine("登入請求已逾時");
-                    frame.Content = loginPage;
+                    NavigateLoginPage();
                     break;
                 case "-1":
                     errexit((string)resultJson["StrReslut"], 1);

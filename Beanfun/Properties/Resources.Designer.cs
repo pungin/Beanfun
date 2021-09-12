@@ -93,26 +93,6 @@ namespace Beanfun.Properties {
         /// <summary>
         ///   查找 System.Drawing.Bitmap 类型的本地化资源。
         /// </summary>
-        internal static System.Drawing.Bitmap logo {
-            get {
-                object obj = ResourceManager.GetObject("logo", resourceCulture);
-                return ((System.Drawing.Bitmap)(obj));
-            }
-        }
-        
-        /// <summary>
-        ///   查找 System.Drawing.Bitmap 类型的本地化资源。
-        /// </summary>
-        internal static System.Drawing.Bitmap logo_darkmode {
-            get {
-                object obj = ResourceManager.GetObject("logo_darkmode", resourceCulture);
-                return ((System.Drawing.Bitmap)(obj));
-            }
-        }
-        
-        /// <summary>
-        ///   查找 System.Drawing.Bitmap 类型的本地化资源。
-        /// </summary>
         internal static System.Drawing.Bitmap QRCode_Alipay {
             get {
                 object obj = ResourceManager.GetObject("QRCode_Alipay", resourceCulture);
@@ -126,6 +106,16 @@ namespace Beanfun.Properties {
         internal static System.Drawing.Bitmap QRCode_QQPay {
             get {
                 object obj = ResourceManager.GetObject("QRCode_QQPay", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   查找 System.Drawing.Bitmap 类型的本地化资源。
+        /// </summary>
+        internal static System.Drawing.Bitmap QRCode_Tip {
+            get {
+                object obj = ResourceManager.GetObject("QRCode_Tip", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

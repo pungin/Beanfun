@@ -27,8 +27,8 @@ namespace Beanfun
 
         private void Image_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (App.MainWnd.loginPage.ddlAuthType.SelectedIndex == (int)LoginMethod.QRCode) App.MainWnd.ddlAuthType_SelectionChanged(null, null);
-            App.MainWnd.frame.Content = App.MainWnd.loginPage;
+            if (App.LoginMethod == (int)LoginMethod.QRCode) App.MainWnd.loginMethodChanged();
+            App.MainWnd.return_page = App.MainWnd.loginPage;
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)

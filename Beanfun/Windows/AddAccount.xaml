@@ -17,10 +17,6 @@
                 <System:String>台灣 Taiwan</System:String>
                 <System:String>香港 HongKong</System:String>
             </ComboBox>
-            <DockPanel HorizontalAlignment="Center">
-                <Label Content="登入模式" Margin="5"/>
-                <ComboBox x:Name="b_Method" Margin="5" SelectionChanged="method_SelectionChanged"/>
-            </DockPanel>
             <TextBox x:Name="t_AccountID" VerticalContentAlignment="Center" Margin="5" Width="200">
                 <TextBox.Style>
                     <Style TargetType="{x:Type TextBox}">

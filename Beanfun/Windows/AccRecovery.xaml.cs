@@ -61,7 +61,7 @@ namespace Beanfun
                 else
                 {
                     MessageBox.Show("匯入成功");
-                    App.MainWnd.ddlAuthTypeItemsInit();
+                    App.MainWnd.loginMethodInit();
                 }
             }
             catch

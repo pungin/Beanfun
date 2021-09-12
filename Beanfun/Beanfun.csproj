@@ -358,7 +358,6 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
     <Resource Include="Resources\Scroll_Glory.png" />
-    <Resource Include="Resources\logo_darkmode.png" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
@@ -425,9 +424,6 @@
     <Resource Include="Resources\refresh.png" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Resources\logo.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="LocaleEmulator.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Resource>
@@ -465,6 +461,9 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\QRCode_QQPay.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\QRCode_Tip.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="AfterResolveReferences">
