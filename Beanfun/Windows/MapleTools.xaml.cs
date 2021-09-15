@@ -81,5 +81,10 @@ namespace Beanfun
 
             MessageBox.Show("楓之谷資料夾空間回收完成");
         }
+
+        private void btn_ChangeFont_Click(object sender, RoutedEventArgs e)
+        {
+            new ChangeFont().Show();
+        }
     }
 }

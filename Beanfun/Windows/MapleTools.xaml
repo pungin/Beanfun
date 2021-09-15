@@ -16,6 +16,7 @@
             <Button Content="外掛檢舉(GM上線核實)" Margin="5" Click="btn_PlayerReport_Click"/>
             <Button Content="皇家糾察隊(錄影檢舉)" Margin="5" Click="btn_VideoReport_Click"/>
             <Button Content="裝備卷軸星力計算器" Margin="5" Click="btn_EquipCalculator_Click"/>
+            <Button Content="更正任務字體模糊" Margin="5" Click="btn_ChangeFont_Click"/>
         </StackPanel>
     </Grid>
 </Window>
