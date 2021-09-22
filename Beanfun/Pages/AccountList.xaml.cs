@@ -188,7 +188,7 @@ namespace Beanfun
             new UnconnectedGame_ChangePassword().ShowDialog();
         }
 
-        private void btn_Tools_Click(object sender, RoutedEventArgs e)
+        public void btn_Tools_Click(object sender, RoutedEventArgs e)
         {
             string gameCode = App.MainWnd.service_code + "_" + App.MainWnd.service_region;
             switch (gameCode)

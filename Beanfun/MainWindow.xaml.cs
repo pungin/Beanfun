@@ -464,6 +464,8 @@ namespace Beanfun
 
                 if ((bool)settingPage.autoKillPatcher.IsChecked)
                     checkPatcher.IsEnabled = true;
+
+                settingPage.btn_Tools.Visibility = Visibility.Visible;
             }
             else
             {
@@ -471,6 +473,11 @@ namespace Beanfun
                 checkPlayPage.IsEnabled = false;
                 settingPage.autoKillPatcher.Visibility = Visibility.Collapsed;
                 checkPatcher.IsEnabled = false;
+
+                if (gameCode == "610096_TE")
+                    settingPage.btn_Tools.Visibility = Visibility.Visible;
+                else
+                    settingPage.btn_Tools.Visibility = Visibility.Collapsed;
             }
 
             if (this.bfClient != null && !loginWorker.IsBusy && !getOtpWorker.IsBusy)

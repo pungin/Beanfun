@@ -82,6 +82,7 @@
                         </StackPanel>
                         <StackPanel>
                             <CheckBox x:Name="skipPlayWnd" Margin="2" Content="跳過Play視窗" Checked="skipPlayWnd_CheckedChanged" Unchecked="skipPlayWnd_CheckedChanged" IsChecked="True" ToolTip="跳過Play視窗的等待直接啟動遊戲&#x0a;※僅支援遊戲「新楓之谷」" Cursor="Help"/>
+                            <Button x:Name="btn_Tools" Content="工具" Margin="2" Click="btn_Tools_Click"/>
                         </StackPanel>
                     </StackPanel>
                     <Button Content="返回" Margin="0,5,0,0" Click="Button_Click" IsCancel="True"/>

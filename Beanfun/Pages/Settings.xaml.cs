@@ -113,5 +113,10 @@ namespace Beanfun
         {
             App.MainWnd.frame.Content = App.MainWnd.manageAccPage;
         }
+
+        private void btn_Tools_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.MainWnd.accountList != null) App.MainWnd.accountList.btn_Tools_Click(null, null);
+        }
     }
 }
