@@ -4,8 +4,7 @@
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
   <Date>2021-09-23</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>- 暫時移除窗口模糊效果
-- 轉區啟動遊戲現在會比對轉區檔案MD5值進行更換
+  <Note>- 轉區啟動遊戲現在會比對轉區檔案MD5值進行更換
 - 非繁中系統轉碼支援Windows11
 - 修復自動輸入、斷線問題
 - 窗口在Win7上使用Aero效果 在Win10上使用模糊效果 在Win11上使用亞克力效果
