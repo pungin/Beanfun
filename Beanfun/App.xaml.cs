@@ -99,13 +99,19 @@ namespace Beanfun
             }
         }
 
+        public static string ConvertVersion(Version version)
+        {
+            if (version < new Version(4,1))
+                return $"{version.Major}.{version.Minor}.{version.Build}({version.Revision})";
+            DateTime buildDate = new DateTime(2000, 1, 1).AddDays(version.Build).AddSeconds(version.Revision * 2);
+            return $"{version.Major}.{version.Minor}({buildDate.ToString("yyMMddHHmm")})";
+        }
+
         internal static string AssemblyVersion
         {
             get
             {
-                Version version = Assembly.GetExecutingAssembly().GetName().Version;
-                DateTime buildDate = new DateTime(2000, 1, 1).AddDays(version.Build).AddSeconds(version.Revision * 2);
-                return $"{version.Major}.{version.Minor}({buildDate.ToString("yyMMddHHmm")})";
+                return ConvertVersion(Assembly.GetExecutingAssembly().GetName().Version);
             }
         }
     }
