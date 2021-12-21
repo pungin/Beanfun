@@ -98,5 +98,15 @@ namespace Beanfun
                 catch { }
             }
         }
+
+        internal static string AssemblyVersion
+        {
+            get
+            {
+                Version version = Assembly.GetExecutingAssembly().GetName().Version;
+                DateTime buildDate = new DateTime(2000, 1, 1).AddDays(version.Build).AddSeconds(version.Revision * 2);
+                return $"{version.Major}.{version.Minor}({buildDate.ToString("yyMMddHHmm")})";
+            }
+        }
     }
 }

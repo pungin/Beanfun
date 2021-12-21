@@ -119,14 +119,16 @@
     <Compile Include="LEProc\LERegistryRedirector.cs" />
     <Compile Include="LEProc\LoaderWrapper.cs" />
     <Compile Include="Helper\WindowAccentCompositor.cs" />
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
     <Compile Include="Windows\CaptchaWnd.xaml.cs">
       <DependentUpon>CaptchaWnd.xaml</DependentUpon>
     </Compile>
     <Compile Include="Windows\ChangeAccount.xaml.cs">
       <DependentUpon>ChangeAccount.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Windows\ChangeFont.xaml.cs">
-      <DependentUpon>ChangeFont.xaml</DependentUpon>
     </Compile>
     <Compile Include="Windows\EquipCalculator.xaml.cs">
       <DependentUpon>EquipCalculator.xaml</DependentUpon>
@@ -219,10 +221,6 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Windows\ChangeAccount.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Windows\ChangeFont.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -355,11 +353,6 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
     <Compile Include="Properties\Settings.Designer.cs">
       <AutoGen>True</AutoGen>
       <DependentUpon>Settings.settings</DependentUpon>
@@ -368,8 +361,8 @@
     <Resource Include="Resources\Scroll_Glory.png" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
       <SubType>Designer</SubType>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
     <Resource Include="Resources\segmdl2.ttf" />
     <None Include="packages.config" />
@@ -472,11 +465,6 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\QRCode_Tip.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Resources\Quest_mingliu.png" />
-    <Resource Include="Resources\Quest_msyh.png" />
-    <Resource Include="Resources\Quest_simsun.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="AfterResolveReferences">

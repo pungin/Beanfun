@@ -12,6 +12,7 @@ namespace Beanfun
         public About()
         {
             InitializeComponent();
+            version.Text = App.AssemblyVersion;
             initThemeColor(App.MainWnd.isLightColor());
         }
 

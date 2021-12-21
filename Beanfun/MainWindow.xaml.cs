@@ -82,8 +82,6 @@ namespace Beanfun
             Text = "繽放"
         };
 
-        private Version currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-
         public List<GameService> gameList = new List<GameService>();
         public GameService SelectedGame = null;
         public bool UnconnectedGame = false;
@@ -271,16 +269,16 @@ namespace Beanfun
             {
                 if (App.LoginRegion == "TW")
                 {
-                    if (App.OSVersion < App.Win8_1)
+                    if (App.OSVersion < App.Win11)
                     {
+                        if (App.OSVersion >= App.Win8_1)
+                            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Ssl3;
                         ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
                         ServicePointManager.ServerCertificateValidationCallback = (sender, certificate, chain, errors) => true;
                     }
                 }
                 if (settingPage.tradLogin != null && !(bool)settingPage.tradLogin.IsChecked)
                     accountList.panel_GetOtp.Visibility = Visibility.Collapsed;
-
-                aboutPage.version.Text = $"{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}({currentVersion.Revision})";
 
                 qr_default = new BitmapImage();
                 qr_default.BeginInit();
@@ -580,7 +578,7 @@ namespace Beanfun
 
         public void CheckUpdates(bool show)
         {
-            Update.ApplicationUpdater.CheckApplicationUpdate(currentVersion, show);
+            Update.ApplicationUpdater.CheckApplicationUpdate(show);
         }
 
         private string reLoadVerifyPage(string response)
@@ -1715,7 +1713,7 @@ namespace Beanfun
                     accountList.t_Password.Text = this.otp;
                     
 
-                    if ((!(bool)settingPage.tradLogin.IsChecked && login_action_type == 1))
+                    if (!(bool)settingPage.tradLogin.IsChecked && login_action_type == 1)
                     {
                         runGame(acc, accountList.t_Password.Text);
                     }
@@ -1725,12 +1723,6 @@ namespace Beanfun
                         if ("MapleStoryClass".Equals(win_class_name) && hWnd == IntPtr.Zero)
                         {
                             hWnd = WindowsAPI.FindWindow("MapleStoryClassTW", null);
-                        }
-                        double dpixRatio = 1.0;
-                        if (hWnd != IntPtr.Zero)
-                        {
-                            System.Drawing.Graphics currentGraphics = System.Drawing.Graphics.FromHwnd(hWnd);
-                            dpixRatio = currentGraphics.DpiX / 96.0;
                         }
                         if ((bool)accountList.autoPaste.IsChecked && accountList.autoPaste.Visibility == Visibility.Visible)
                         {
@@ -1745,6 +1737,13 @@ namespace Beanfun
                             }
                             else
                             {
+                                double dpixRatio = 1.0;
+                                if (hWnd != IntPtr.Zero)
+                                {
+                                    System.Drawing.Graphics currentGraphics = System.Drawing.Graphics.FromHwnd(hWnd);
+                                    dpixRatio = currentGraphics.DpiX / 96.0;
+                                }
+
                                 const int WM_KEYDOWN = 0X100;
                                 const int WM_LBUTTONDOWN = 0x0201;
                                 const byte VK_BACK = 0x0008;

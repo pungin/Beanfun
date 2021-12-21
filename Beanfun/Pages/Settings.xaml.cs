@@ -72,7 +72,8 @@ namespace Beanfun
             if ((bool)tradLogin.IsChecked)
             {
                 App.MainWnd.accountList.panel_GetOtp.Visibility = Visibility.Visible;
-                if (App.MainWnd.win_class_name != null && App.MainWnd.win_class_name != "" && App.MainWnd.game_exe != "" && App.MainWnd.login_action_type != 1)
+
+                if ("MapleStoryClass".Equals(App.MainWnd.win_class_name))
                     App.MainWnd.accountList.autoPaste.Visibility = Visibility.Visible;
                 else
                     App.MainWnd.accountList.autoPaste.Visibility = Visibility.Collapsed;

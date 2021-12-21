@@ -8,9 +8,9 @@ namespace Beanfun.Update
 {
     class ApplicationUpdater
     {
-        private static string baseUrl = $"https://raw.githubusercontent.com/pungin/Beanfun/{ (ConfigAppSettings.GetValue("updateChannel", "Stable").Equals("Stable") ? "master" : "beta") }/";
+        private static string baseUrl = $"https://ghproxy.com/https://raw.githubusercontent.com/pungin/Beanfun/{ (ConfigAppSettings.GetValue("updateChannel", "Stable").Equals("Stable") ? "master" : "beta") }/";
 
-        internal static void CheckApplicationUpdate(Version version, bool show)
+        internal static void CheckApplicationUpdate(bool show)
         {
             var url = $"{baseUrl}VersionInfo.xml";
 
@@ -22,7 +22,7 @@ namespace Beanfun.Update
                 var xmlContent = new XmlDocument();
                 xmlContent.Load(stream);
 
-                ProcessUpdate(xmlContent, version, show);
+                ProcessUpdate(xmlContent, System.Reflection.Assembly.GetExecutingAssembly().GetName().Version, show);
             }
             catch (Exception) { }
         }
