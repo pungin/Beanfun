@@ -1,7 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 
 namespace Beanfun
 {
@@ -10,9 +10,48 @@ namespace Beanfun
     /// </summary>
     public partial class Settings : Page
     {
+        class Language
+        {
+            public string Name {get; set; }
+            public string DisplayName { get; set; }
+        }
+
         public Settings()
         {
             InitializeComponent();
+
+            List<Language> languageList = new List<Language>();
+            languageList.Add(new Language { Name = "zh-Hant", DisplayName = "中文(繁體)" });
+            languageList.Add(new Language { Name = "zh-Hans", DisplayName = "中文(简体)" });
+            cb_Language.ItemsSource = languageList;
+            cb_Language.DisplayMemberPath = "DisplayName";
+            cb_Language.SelectedValuePath = "Name";
+            string cultureName = I18n.CultureName.ToUpper();
+            string name = null;
+            foreach (Language language in languageList)
+            {
+                if (language.Name.ToUpper().Equals(cultureName))
+                {
+                    name = language.Name;
+                    break;
+                }
+            }
+            if (name == null)
+            {
+                name = "zh-Hant";
+                switch (cultureName)
+                {
+                    case "ZH-CHS":
+                    case "ZH-CN":
+                    case "ZH-SG":
+                    case "ZH-MY":
+                    case "ZH-HANS-HK":
+                    case "ZH-HANS-MO":
+                        name = "zh-Hans";
+                        break;
+                }
+            }
+            cb_Language.SelectedValue = name;
 
             autoStartGame.IsChecked = bool.Parse(ConfigAppSettings.GetValue("autoStartGame", "false"));
             ask_update.IsChecked = bool.Parse(ConfigAppSettings.GetValue("ask_update", "true"));
@@ -118,6 +157,16 @@ namespace Beanfun
         private void btn_Tools_Click(object sender, RoutedEventArgs e)
         {
             if (App.MainWnd.accountList != null) App.MainWnd.accountList.btn_Tools_Click(null, null);
+        }
+
+        private void cb_Language_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            string language = ConfigAppSettings.GetValue("Language", null);
+            if (App.MainWnd == null || App.MainWnd.settingPage == null || (language != null && cb_Language.SelectedValue.ToString().ToUpper().Equals(language.ToUpper())))
+                return;
+            language = cb_Language.SelectedValue.ToString();
+            ConfigAppSettings.SetValue("Language", language);
+            I18n.LoadLanguage(language);
         }
     }
 }

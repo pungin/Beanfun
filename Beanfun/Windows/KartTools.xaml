@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Beanfun"
         mc:Ignorable="d"
-        Title="工具箱"
+        Title="{DynamicResource ToolBox}"
         WindowStartupLocation="CenterScreen"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         SizeToContent="WidthAndHeight"
@@ -13,21 +13,21 @@
     <Grid>
         <StackPanel Margin="5">
             <DockPanel Margin="0,0,0,3">
-                <Label Content="車隊操作" Foreground="Gray"/>
+                <Label Content="{DynamicResource ConvoyOperation}" Foreground="Gray"/>
                 <GridSplitter Background="Gray" HorizontalAlignment="Stretch" Height="1" IsTabStop="False"/>
             </DockPanel>
             <DockPanel>
                 <StackPanel Margin="5">
-                    <TextBlock><Hyperlink Click="btn_KartManageData_Click"><Run Text="車隊管理"/></Hyperlink></TextBlock>
-                    <TextBlock><Hyperlink Click="btn_KartRank_Click"><Run Text="車隊排名"/></Hyperlink></TextBlock>
+                    <TextBlock><Hyperlink Click="btn_KartManageData_Click"><Run Text="{DynamicResource ConvoyManage}"/></Hyperlink></TextBlock>
+                    <TextBlock><Hyperlink Click="btn_KartRank_Click"><Run Text="{DynamicResource ConvoyRank}"/></Hyperlink></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="5">
-                    <TextBlock><Hyperlink Click="btn_KartRank_TeamIn_Click"><Run Text="車隊搜尋"/></Hyperlink></TextBlock>
-                    <TextBlock><Hyperlink Click="btn_KartSearchMember_Click"><Run Text="車手搜尋"/></Hyperlink></TextBlock>
+                    <TextBlock><Hyperlink Click="btn_KartRank_TeamIn_Click"><Run Text="{DynamicResource ConvoySearch}"/></Hyperlink></TextBlock>
+                    <TextBlock><Hyperlink Click="btn_KartSearchMember_Click"><Run Text="{DynamicResource RiderSearch}"/></Hyperlink></TextBlock>
                 </StackPanel>
                 <StackPanel Margin="5">
-                    <TextBlock><Hyperlink Click="btn_KartCreate_Click"><Run Text="建立車隊"/></Hyperlink></TextBlock>
-                    <TextBlock><Hyperlink Click="btn_KartLeaveGuildMember_Click"><Run Text="離開車隊"/></Hyperlink></TextBlock>
+                    <TextBlock><Hyperlink Click="btn_KartCreate_Click"><Run Text="{DynamicResource CreateConvoy}"/></Hyperlink></TextBlock>
+                    <TextBlock><Hyperlink Click="btn_KartLeaveGuildMember_Click"><Run Text="{DynamicResource LeaveConvoy}"/></Hyperlink></TextBlock>
                 </StackPanel>
             </DockPanel>
         </StackPanel>

@@ -390,7 +390,7 @@ namespace Beanfun
             {
                 if (e is WebException)
                 {
-                    this.errmsg = "網路連線錯誤，請檢查官方網站連線是否正常。" + e.Message;
+                    this.errmsg = System.Windows.Application.Current.TryFindResource("NetworkConnectionError") as string + e.Message;
                 }
                 else
                 {

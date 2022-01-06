@@ -1,11 +1,11 @@
-﻿<Page x:Class="Beanfun.ManagerAccount"
+﻿<Page x:Class="Beanfun.ManageAccount"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
       xmlns:local="clr-namespace:Beanfun"
       mc:Ignorable="d" 
-      Title="管理帳號">
+      Title="{DynamicResource ManageAccount}">
     <Page.Resources>
         <ResourceDictionary>
             <Style TargetType="{x:Type Button}">
@@ -25,7 +25,7 @@
                         <DropShadowEffect Opacity="0.7" ShadowDepth="1" BlurRadius="3" Direction="270"/>
                     </Path.Effect>
                 </Path>
-                <Label Content="管理帳號" Margin="5,10,10,10" Foreground="#FFFFFFFF" FontWeight="Bold" FontSize="30">
+                <Label Content="{DynamicResource ManageAccount}" Margin="5,10,10,10" Foreground="#FFFFFFFF" FontWeight="Bold" FontSize="30">
                     <Label.Effect>
                         <DropShadowEffect Opacity="0.7" ShadowDepth="1" BlurRadius="3" Direction="270"/>
                     </Label.Effect>
@@ -35,7 +35,7 @@
                 <StackPanel Margin="10">
                     <StackPanel Margin="0,5,0,0">
                         <DockPanel HorizontalAlignment="Center">
-                            <Button x:Name="btn_TW" Content="台灣 Taiwan" Style="{DynamicResource ButtonStyle}" Margin="0,5,0,5" Click="TW_Button_Click" IsEnabled="False">
+                            <Button x:Name="btn_TW" Content="{DynamicResource Taiwan}" Style="{DynamicResource ButtonStyle}" Margin="0,5,0,5" Click="TW_Button_Click" IsEnabled="False">
                                 <Button.Resources>
                                     <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
                                         <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
@@ -80,7 +80,7 @@
                                     </Style>
                                 </Button.Resources>
                             </Button>
-                            <Button x:Name="btn_HK" Content="香港 HongKong" Style="{DynamicResource ButtonStyle}" Margin="0,5,0,5" Click="HK_Button_Click">
+                            <Button x:Name="btn_HK" Content="{DynamicResource HongKong}" Style="{DynamicResource ButtonStyle}" Margin="0,5,0,5" Click="HK_Button_Click">
                                 <Button.Resources>
                                     <Style x:Key="ButtonStyle" TargetType="{x:Type Button}">
                                         <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
@@ -129,11 +129,11 @@
                         <ListView x:Name="list_Account" Height="200" SelectionChanged="list_Account_SelectionChanged">
                             <ListView.View>
                                 <GridView AllowsColumnReorder="False">
-                                    <GridViewColumn Header="帳號" Width="100" DisplayMemberBinding="{Binding account}"/>
-                                    <GridViewColumn Header="備註" Width="100" DisplayMemberBinding="{Binding accountname}"/>
-                                    <GridViewColumn Header="記住密碼" Width="55" DisplayMemberBinding="{Binding isSavePwd}"/>
-                                    <GridViewColumn Header="自動登入" Width="55" DisplayMemberBinding="{Binding isAutoLogin}"/>
-                                    <GridViewColumn Header="記住認證資料" Width="80" DisplayMemberBinding="{Binding isSaveVerify}"/>
+                                    <GridViewColumn Header="{DynamicResource Account}" Width="100" DisplayMemberBinding="{Binding account}"/>
+                                    <GridViewColumn Header="{DynamicResource Remark}" Width="100" DisplayMemberBinding="{Binding accountname}"/>
+                                    <GridViewColumn Header="{DynamicResource RememberPassword}" Width="55" DisplayMemberBinding="{Binding isSavePwd}"/>
+                                    <GridViewColumn Header="{DynamicResource AutoLogin}" Width="55" DisplayMemberBinding="{Binding isAutoLogin}"/>
+                                    <GridViewColumn Header="{DynamicResource RememberAuthInfo}" Width="80" DisplayMemberBinding="{Binding isSaveVerify}"/>
                                 </GridView>
                             </ListView.View>
                         </ListView>
@@ -142,17 +142,17 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Button Content="資料備份" Margin="5" Click="Button_Click"/>
+                            <Button Content="{DynamicResource DataBackup}" Margin="5" Click="Button_Click"/>
                             <DockPanel Grid.Column="1" HorizontalAlignment="Right">
                                 <Button x:Name="btn_Up" Content=" ↑ " Margin="5" Click="Up_Button_Click" IsEnabled="False"/>
                                 <Button x:Name="btn_Down" Content=" ↓ " Margin="5" Click="Down_Button_Click" IsEnabled="False"/>
-                                <Button x:Name="btn_Add" Content="新增" Margin="5" Click="Add_Button_Click"/>
-                                <Button x:Name="btn_Change" Content="變更" Margin="5" Click="Change_Button_Click" IsEnabled="False"/>
-                                <Button x:Name="btn_Delete" Content="移除" Margin="5" Click="Delete_Button_Click" IsEnabled="False"/>
+                                <Button x:Name="btn_Add" Content="{DynamicResource Add}" Margin="5" Click="Add_Button_Click"/>
+                                <Button x:Name="btn_Change" Content="{DynamicResource Edit}" Margin="5" Click="Change_Button_Click" IsEnabled="False"/>
+                                <Button x:Name="btn_Delete" Content="{DynamicResource Delete}" Margin="5" Click="Delete_Button_Click" IsEnabled="False"/>
                             </DockPanel>
                         </Grid>
                     </StackPanel>
-                    <Button Content="返回" Margin="0,5,0,0" Click="Return_Button_Click" IsCancel="True"/>
+                    <Button Content="{DynamicResource Back}" Margin="0,5,0,0" Click="Return_Button_Click" IsCancel="True"/>
                 </StackPanel>
             </StackPanel>
         </StackPanel>

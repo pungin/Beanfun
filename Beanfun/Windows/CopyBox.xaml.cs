@@ -1,16 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
+﻿using System.Windows;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 
 namespace Beanfun
 {
@@ -36,11 +25,11 @@ namespace Beanfun
             try
             {
                 Clipboard.SetText(t_Value.Text);
-                MessageBox.Show("複製完成");
+                MessageBox.Show(TryFindResource("CopyFinished") as string);
             }
             catch
             {
-                MessageBox.Show("複製失敗");
+                MessageBox.Show(TryFindResource("CopyFailed") as string);
             }
         }
     }

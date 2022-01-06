@@ -1,15 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
+﻿using System.Windows;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 
 namespace Beanfun
 {
@@ -41,7 +31,7 @@ namespace Beanfun
         {
             if (t_AccountID.Text == null || t_AccountID.Text == "")
             {
-                MessageBox.Show("請輸入帳號");
+                MessageBox.Show(TryFindResource("AccountNeed") as string);
                 return;
             }
             string pwd = App.MainWnd.accountManager.getPasswordByAccount(region, account);

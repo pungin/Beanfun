@@ -20,14 +20,14 @@ namespace Beanfun
 
         private void btn_PlayerReport_Click(object sender, RoutedEventArgs e)
         {
-            if (App.LoginRegion == "HK") MessageBox.Show("「新楓之谷」即時檢舉功能需要登入台灣Beanfun帳號，不支援香港Beanfun帳號，您可以自行註冊一個台灣Beanfun帳號用來檢舉。");
+            if (App.LoginRegion == "HK") MessageBox.Show(TryFindResource("MsgPlayerReport") as string);
             //new WebBrowser("https://event.beanfun.com/customerservice/PluginReporting/PluginBoard/PluginBoardJQ.aspx").Show();
             new WebBrowser("https://event.beanfun.com/customerservice/PluginReporting/PlayerReport.aspx").Show();
         }
 
         private void btn_VideoReport_Click(object sender, RoutedEventArgs e)
         {
-            new WebBrowser("https://tw.beanfun.com/maplestory/event/20100806pl/index.html").Show();
+            new WebBrowser("https://event.beanfun.com/MapleStory/eventad/EventAD.aspx?EventADID=3453").Show();
         }
 
         private void btn_EquipCalculator_Click(object sender, RoutedEventArgs e)
@@ -37,7 +37,7 @@ namespace Beanfun
 
         private void btn_Recycling_Click(object sender, RoutedEventArgs e)
         {
-            MessageBoxResult result = MessageBox.Show("是否需要回收空間(更新遊戲時請不要使用此功能)？", "", MessageBoxButton.YesNo);
+            MessageBoxResult result = MessageBox.Show(TryFindResource("MsgRecycling") as string, "", MessageBoxButton.YesNo);
 
             if (result != MessageBoxResult.Yes) return;
 
@@ -79,7 +79,7 @@ namespace Beanfun
                 } catch { }
             }
 
-            MessageBox.Show("楓之谷資料夾空間回收完成");
+            MessageBox.Show(TryFindResource("MsgRecyclingDone") as string);
         }
     }
 }

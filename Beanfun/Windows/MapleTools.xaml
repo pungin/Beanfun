@@ -5,17 +5,17 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Beanfun"
         mc:Ignorable="d"
-        Title="工具箱"
+        Title="{DynamicResource ToolBox}"
         WindowStartupLocation="CenterScreen"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         SizeToContent="WidthAndHeight" ResizeMode="NoResize"
 >
     <Grid>
         <StackPanel Margin="20">
-            <Button Content="回收楓之谷資料夾空間" Margin="5" Click="btn_Recycling_Click"/>
-            <Button Content="外掛檢舉(GM上線核實)" Margin="5" Click="btn_PlayerReport_Click"/>
-            <Button Content="皇家糾察隊(錄影檢舉)" Margin="5" Click="btn_VideoReport_Click"/>
-            <Button Content="裝備卷軸星力計算器" Margin="5" Click="btn_EquipCalculator_Click"/>
+            <Button Content="{DynamicResource Recycling}" Margin="5" Click="btn_Recycling_Click"/>
+            <Button Content="{DynamicResource PlayerReport}" Margin="5" Click="btn_PlayerReport_Click"/>
+            <Button Content="{DynamicResource VideoReport}" Margin="5" Click="btn_VideoReport_Click"/>
+            <Button Content="{DynamicResource EquipStarForceCaculator}" Margin="5" Click="btn_EquipCalculator_Click"/>
         </StackPanel>
     </Grid>
 </Window>

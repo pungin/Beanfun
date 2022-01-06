@@ -1,17 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace Beanfun
 {
@@ -35,12 +24,12 @@ namespace Beanfun
         {
             if (this.t_Verify.Text.Length <= 0)
             {
-                MessageBox.Show("驗證資訊不能為空。");
+                MessageBox.Show(TryFindResource("MsgAuthInfoEmpty") as string);
                 return;
             }
             if (this.t_Code.Text.Length <= 0)
             {
-                MessageBox.Show("圖形驗證碼不能為空。");
+                MessageBox.Show(TryFindResource("MsgCaptchaCodeEmpty") as string);
                 return;
             }
             

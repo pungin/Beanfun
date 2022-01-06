@@ -7,7 +7,7 @@
       xmlns:System="clr-namespace:System;assembly=mscorlib"
       x:Class="Beanfun.AccountList"
       mc:Ignorable="d" 
-      Title="帳號選單">
+      Title="{DynamicResource AccountList}">
     <Page.Resources>
         <ResourceDictionary>
             <Style TargetType="{x:Type Button}">
@@ -41,36 +41,36 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <DockPanel Margin="10 30 0 0" VerticalAlignment="Top" >
-                <Button x:Name="btn_ChangeGame" Height="48" Width="48" ToolTip="更換遊戲" Padding="0" Cursor="Hand" Click="gameName_Click">
+                <Button x:Name="btn_ChangeGame" Height="48" Width="48" ToolTip="{DynamicResource GameChange}" Padding="0" Cursor="Hand" Click="gameName_Click">
                     <Image x:Name="imageGame" Stretch="Fill"/>
                 </Button>
                 <StackPanel>
                     <StackPanel Orientation="Horizontal">
-                        <Button x:Name="gameName" Margin="5,2,0,0" Content="GameName" ToolTip="更換遊戲" Click="gameName_Click"/>
+                        <Button x:Name="gameName" Margin="5,2,0,0" Content="GameName" ToolTip="{DynamicResource GameChange}" Click="gameName_Click"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
-                        <Button x:Name="btn_StartGame" Margin="5,5,0,0" Content="啟動遊戲" Click="Button_Click"/>
+                        <Button x:Name="btn_StartGame" Margin="5,5,0,0" Content="{DynamicResource GameStart}" Click="Button_Click"/>
                     </StackPanel>
                 </StackPanel>
             </DockPanel>
             <StackPanel Margin="0 30 10 0" HorizontalAlignment="Right">
-                <Button x:Name="btn_Logout" Content="登出" Margin="10,0,0,0" IsCancel="True" Click="btn_Logout_Click"/>
-                <Button x:Name="btn_Tools" Content="工具" Margin="10,10,0,0" Click="btn_Tools_Click"/>
+                <Button x:Name="btn_Logout" Content="{DynamicResource Logout}" Margin="10,0,0,0" IsCancel="True" Click="btn_Logout_Click"/>
+                <Button x:Name="btn_Tools" Content="{DynamicResource Tools}" Margin="10,10,0,0" Click="btn_Tools_Click"/>
             </StackPanel>
             <StackPanel Grid.Row="1">
                 <StackPanel Margin="10">
                     <StackPanel Orientation="Horizontal">
                         <Menu x:Name="m_MenuList">
-                            <MenuItem x:Name="m_RemainPoint" Header="樂豆點數: 0 點">
-                                <MenuItem x:Name="m_UpdatePoint" Header="更新點數" Click="m_UpdatePoint_Click"/>
-                                <MenuItem x:Name="bfb_Gash" Header="儲值與購點" Click="bfb_Gash_Click"/>
-                                <MenuItem x:Name="btn_Deposite" Header="兌換beanfun!App樂豆點" Click="btn_Deposite_Click"/>
+                            <MenuItem x:Name="m_RemainPoint" Header="{DynamicResource GashRemain}">
+                                <MenuItem x:Name="m_UpdatePoint" Header="{DynamicResource GashRefresh}" Click="m_UpdatePoint_Click"/>
+                                <MenuItem x:Name="bfb_Gash" Header="{DynamicResource GashRecharge}" Click="bfb_Gash_Click"/>
+                                <MenuItem x:Name="btn_Deposite" Header="{DynamicResource AppGashRecharge}" Click="btn_Deposite_Click"/>
                             </MenuItem>
-                            <MenuItem x:Name="BF_btnMember" Header="會員中心" Click="BF_btnMember_Click"/>
-                            <MenuItem x:Name="btn_Customerservice" Header="客服中心" Click="btn_Customerservice_Click"/>
+                            <MenuItem x:Name="BF_btnMember" Header="{DynamicResource MemberCenter}" Click="BF_btnMember_Click"/>
+                            <MenuItem x:Name="btn_Customerservice" Header="{DynamicResource CustomerService}" Click="btn_Customerservice_Click"/>
                         </Menu>
                     </StackPanel>
-                    <ListBox x:Name="list_Account" Margin="0,10,0,0" Height="130" MinWidth="290" ToolTip="右鍵開啟選單" SelectionMode="Single" FocusVisualStyle="{x:Null}">
+                    <ListBox x:Name="list_Account" Margin="0,10,0,0" Height="130" MinWidth="290" ToolTip="{DynamicResource RightClickMenu}" SelectionMode="Single" FocusVisualStyle="{x:Null}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding sname}"/>
@@ -82,10 +82,10 @@
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding isEnable}" Value="false">
                                         <Setter Property="Foreground" Value="Gray" />
-                                        <Setter Property="ToolTip" Value="帳號已鎖定" />
+                                        <Setter Property="ToolTip" Value="{DynamicResource AccountBanned}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding isEnable}" Value="true">
-                                        <Setter Property="ToolTip" Value="雙擊複製帳號" />
+                                        <Setter Property="ToolTip" Value="{DynamicResource DoubleClickCopy}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -95,27 +95,27 @@
                         </ListBox.Resources>
                         <ListBox.ContextMenu>
                             <ContextMenu x:Name="m_AcountMenu">
-                                <MenuItem x:Name="m_CopyAccount" Header="複製遊戲帳號" Click="list_Account_MouseDoubleClick"/>
-                                <MenuItem x:Name="m_ChangeAccName" Header="編輯遊戲帳號" Click="m_ChangeAccName_Click"/>
-                                <MenuItem x:Name="m_ChangePassword" Header="修改帳號密碼" Click="m_ChangePassword_Click"/>
-                                <MenuItem x:Name="m_AccInfo" Header="遊戲帳號詳情" Click="m_AccInfo_Click"/>
+                                <MenuItem x:Name="m_CopyAccount" Header="{DynamicResource CopyGameAccount}" Click="list_Account_MouseDoubleClick"/>
+                                <MenuItem x:Name="m_ChangeAccName" Header="{DynamicResource ChangeAccountName}" Click="m_ChangeAccName_Click"/>
+                                <MenuItem x:Name="m_ChangePassword" Header="{DynamicResource ChangeAccountPassword}" Click="m_ChangePassword_Click"/>
+                                <MenuItem x:Name="m_AccInfo" Header="{DynamicResource GameAccountInfo}" Click="m_AccInfo_Click"/>
                                 <Separator x:Name="s_Account"/>
-                                <MenuItem Header="會員中心" Click="BF_btnMember_Click"/>
-                                <MenuItem Header="客服中心" Click="btn_Customerservice_Click"/>
-                                <MenuItem x:Name="m_GetEmail" Header="查詢認證信箱" Click="m_GetEmail_Click"/>
+                                <MenuItem Header="{DynamicResource MemberCenter}" Click="BF_btnMember_Click"/>
+                                <MenuItem Header="{DynamicResource CustomerService}" Click="btn_Customerservice_Click"/>
+                                <MenuItem x:Name="m_GetEmail" Header="{DynamicResource CheckEmail}" Click="m_GetEmail_Click"/>
                                 <Separator/>
-                                <MenuItem Header="官方網站" Click="btn_HomePage_Click"/>
+                                <MenuItem Header="{DynamicResource OfficialSite}" Click="btn_HomePage_Click"/>
                             </ContextMenu>
                         </ListBox.ContextMenu>
                     </ListBox>
                     <Grid x:Name="accLimit" Margin="0,10,0,0">
                         <Label x:Name="lbl_AccountAmountLimitNotice"/>
-                        <Button x:Name="btnAddServiceAccount" HorizontalAlignment="Right" Content="新增帳號" Click="btnAddServiceAccount_Click"/>
+                        <Button x:Name="btnAddServiceAccount" HorizontalAlignment="Right" Content="{DynamicResource AddServiceAccount}" Click="btnAddServiceAccount_Click"/>
                     </Grid>
                     <DockPanel x:Name="panel_GetOtp" Margin="0,10,0,0">
-                        <Button x:Name="btnGetOtp" Content="獲取密碼" IsDefault="True" Click="btnGetOtp_Click"/>
-                        <CheckBox x:Name="autoPaste" Content="自動輸入" VerticalAlignment="Center" Margin="5,0,0,0" Checked="autoPaste_CheckedChanged" Unchecked="autoPaste_CheckedChanged" IsChecked="False" ToolTip="自動輸入需要遊戲在輸入帳密界面&#x0a;&#x0a;※ 自動輸入功能可能會由於遊戲限制出現偶爾無法正常進行的問題, 請斟酌使用" Cursor="Help"/>
-                        <TextBox x:Name="t_Password" Margin="5,0,0,0" VerticalContentAlignment="Center" VerticalAlignment="Center" IsReadOnly="True" MinWidth="160" ToolTip="點擊自動複製" TextAlignment="Center" PreviewMouseLeftButtonDown="t_Password_PreviewMouseLeftButtonDown"/>
+                        <Button x:Name="btnGetOtp" Content="{DynamicResource GetOtp}" IsDefault="True" Click="btnGetOtp_Click"/>
+                        <CheckBox x:Name="autoPaste" Content="{DynamicResource AutoPaste}" VerticalAlignment="Center" Margin="5,0,0,0" Checked="autoPaste_CheckedChanged" Unchecked="autoPaste_CheckedChanged" IsChecked="False" ToolTip="{DynamicResource AutoPasteTip}" Cursor="Help"/>
+                        <TextBox x:Name="t_Password" Margin="5,0,0,0" VerticalContentAlignment="Center" VerticalAlignment="Center" IsReadOnly="True" MinWidth="160" ToolTip="{DynamicResource ClickToCopy}" TextAlignment="Center" PreviewMouseLeftButtonDown="t_Password_PreviewMouseLeftButtonDown"/>
                     </DockPanel>
                 </StackPanel>
             </StackPanel>

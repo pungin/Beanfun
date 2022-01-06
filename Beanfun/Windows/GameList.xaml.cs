@@ -1,7 +1,4 @@
-﻿using Amemiya.Net;
-using System.IO;
-using System.Net;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
@@ -34,17 +31,8 @@ namespace Beanfun
         {
             InitializeComponent();
 
-            string baseUrl = App.LoginRegion == "TW" ? "https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/" : "http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/";
-            WebClient wc = new WebClientEx();
-            foreach (MainWindow.GameService game in App.MainWnd.gameList)
-            {
-                byte[] buffer = wc.DownloadData(baseUrl + game.large_image_name);
-                BitmapImage large_image = new BitmapImage();
-                large_image.BeginInit();
-                large_image.StreamSource = new MemoryStream(buffer);
-                large_image.EndInit();
-                l_GameList.Items.Add(new Game(large_image, game.name, game.service_code, game.service_region));
-            }
+            foreach (MainWindow.GameService game in App.MainWnd.GameList[App.LoginRegion.ToLower()])
+                l_GameList.Items.Add(new Game(game.Large_image, game.name, game.service_code, game.service_region));
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

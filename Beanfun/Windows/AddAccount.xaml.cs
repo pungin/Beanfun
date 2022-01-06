@@ -41,7 +41,7 @@ namespace Beanfun
         {
             if (t_AccountID.Text == null || t_AccountID.Text == "")
             {
-                MessageBox.Show("請輸入帳號");
+                MessageBox.Show(TryFindResource("AccountNeed") as string);
                 return;
             }
             App.MainWnd.accountManager.addAccount(region.SelectedIndex == 0 ? "TW" : "HK", t_AccountID.Text, t_AccountName.Text, t_Password.Text, t_Verify.Text, 0, t_Password.Text == "" ? false : (bool)autoLogin.IsChecked);

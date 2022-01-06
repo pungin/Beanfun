@@ -23,7 +23,7 @@
                                     <Setter.Value>
                                         <VisualBrush AlignmentX="Left" Stretch="None">
                                             <VisualBrush.Visual>
-                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="圖形驗證碼："/></TextBlock>
+                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="{DynamicResource CaptchaCode}"/></TextBlock>
                                             </VisualBrush.Visual>
                                         </VisualBrush>
                                     </Setter.Value>
@@ -33,10 +33,10 @@
                     </Style>
                 </TextBox.Style>
             </TextBox>
-            <Button Padding="0" HorizontalAlignment="Center" Cursor="Hand" ToolTip="重新載入圖形驗證碼" Click="Button_Click">
+            <Button Padding="0" HorizontalAlignment="Center" Cursor="Hand" ToolTip="{DynamicResource RefreshCaptchaImage}" Click="Button_Click">
                 <Image x:Name="c_login_idpass_form_samplecaptcha_CaptchaImage" Width="200" Height="45"/>
             </Button>
-            <Button Content="確認" IsDefault="True" Margin="0,5,0,0" Click="Button_Click_1"/>
+            <Button Content="{DynamicResource Confirm}" IsDefault="True" Margin="0,5,0,0" Click="Button_Click_1"/>
         </StackPanel>
     </Grid>
 </Window>

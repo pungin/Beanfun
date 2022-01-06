@@ -19,7 +19,7 @@ namespace Beanfun
 
         private void btn_Logout_Click(object sender, RoutedEventArgs e)
         {
-            MessageBoxResult result = MessageBox.Show("即將登出，是否要繼續？", "登出", MessageBoxButton.YesNo);
+            MessageBoxResult result = MessageBox.Show(TryFindResource("LogoutConfirm") as string, TryFindResource("Logout") as string, MessageBoxButton.YesNo);
             if (result == MessageBoxResult.No) return;
             if (App.LoginMethod == (int)LoginMethod.QRCode) App.MainWnd.loginMethodChanged();
             App.MainWnd.NavigateLoginPage();
@@ -54,7 +54,7 @@ namespace Beanfun
             if (bool.Parse(ConfigAppSettings.GetValue("autoPaste", "false")) == autoPaste.IsChecked)
                 return;
             if (ConfigAppSettings.GetValue("autoPaste", "") == "")
-                MessageBox.Show("自動輸入需要滿足以下條件才能正常使用:\r\n1.遊戲需要在輸入帳密界面\r\n2.遊戲沒有選中記住帳號\r\n3.遊戲帳號密碼輸入欄為空\r\n4.輸入欄激活狀態為帳號欄位\r\n\r\n※ 自動輸入功能可能會由於遊戲限制出現偶爾無法正常進行的問題, 請斟酌使用");
+                MessageBox.Show(TryFindResource("AutoPasteTip") as string);
             ConfigAppSettings.SetValue("autoPaste", Convert.ToString(autoPaste.IsChecked));
         }
 
@@ -62,11 +62,11 @@ namespace Beanfun
         {
             if (list_Account.SelectedIndex < 0 || App.MainWnd.loginWorker.IsBusy)
             {
-                MessageBox.Show("您還未選擇需要啟動遊戲的帳號。");
+                MessageBox.Show(TryFindResource("MsgSelectAccount") as string);
                 return;
             }
 
-            this.btnGetOtp.Content = "正在獲取";
+            this.btnGetOtp.Content = TryFindResource("GettingOtp") as string;
             this.t_Password.Text = "";
             this.list_Account.IsEnabled = false;
             this.btnGetOtp.IsEnabled = false;
@@ -81,7 +81,7 @@ namespace Beanfun
 
         private void t_Password_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (t_Password.Text == "" || (string)btnGetOtp.Content == "正在獲取") return;
+            if (t_Password.Text == "" || (string)btnGetOtp.Content == TryFindResource("GettingOtp") as string) return;
             try
             {
                 Clipboard.SetText(t_Password.Text);
@@ -93,7 +93,7 @@ namespace Beanfun
         {
             if (!btnAddServiceAccount.IsEnabled)
                 return;
-            if ((string) btnAddServiceAccount.Content == "前往認證")
+            if ((string) btnAddServiceAccount.Content == TryFindResource("GoToVerify") as string)
             {
                 new WebBrowser("https://tw.beanfun.com/TW/member/verify_index.aspx").Show();
             }
@@ -161,7 +161,7 @@ namespace Beanfun
 
         private void m_GetEmail_Click(object sender, RoutedEventArgs e)
         {
-            new CopyBox("認證信箱", App.MainWnd.bfClient.getEmail()).ShowDialog();
+            new CopyBox(TryFindResource("AuthEmail") as string, App.MainWnd.bfClient.getEmail()).ShowDialog();
         }
 
         private void m_AccInfo_Click(object sender, RoutedEventArgs e)

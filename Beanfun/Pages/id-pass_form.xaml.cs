@@ -63,12 +63,12 @@ namespace Beanfun
         {
             if (t_AccountID.Text == null || t_AccountID.Text == "")
             {
-                MessageBox.Show("請輸入帳號");
+                MessageBox.Show(TryFindResource("AccountNeed") as string);
                 return;
             }
             if (t_Password.Password == null || t_Password.Password == "")
             {
-                MessageBox.Show("請輸入密碼");
+                MessageBox.Show(TryFindResource("PasswordNeed") as string);
                 return;
             }
             System.Console.WriteLine("PW" + t_Password.Password);
@@ -199,7 +199,7 @@ namespace Beanfun
             Regex regex = new Regex(@"\((.*)\)");
             if (regex.IsMatch(t_AccID_toDelete)) t_AccID_toDelete = regex.Match(t_AccID_toDelete).Groups[1].Value;
 
-            MessageBoxResult result = MessageBox.Show($"即將移除帳號「{t_AccID_toDelete}」，此操作不可恢復，是否確認要移除？", "移除帳號", MessageBoxButton.YesNo);
+            MessageBoxResult result = MessageBox.Show(string.Format(TryFindResource("MsgDeleteAccount") as string, t_AccID_toDelete), TryFindResource("DeleteAccount") as string, MessageBoxButton.YesNo);
 
             if (result == MessageBoxResult.Yes)
             {

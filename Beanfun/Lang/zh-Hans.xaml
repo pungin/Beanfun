@@ -1,0 +1,303 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+    <Geometry x:Key="LogoName">M296.6,699.1c20.2,0,30.3,10.4,30.3,31.3c0,16.8-11.8,30.3-35.3,40.4c-55.8,23.6-132.1,49.1-229,76.7
+			c-12.1,3.4-21.2,5.1-27.2,5.1C11.8,852.5,0,840.4,0,816.2c0-23.5,14.4-40,43.4-49.4c4.7-1.3,12.8-3.7,24.2-7.1l189.7-51.5
+			C275.4,702.2,288.5,699.1,296.6,699.1z M14.1,272.4c0-12.8,7.4-21.8,22.2-27.2c4.7-1.3,8.7-2,12.1-2c9.4,0,18.8,4.7,28.2,14.1
+			c4.7,4.7,9.1,9.1,13.1,13.1c22.9-50.4,41.4-98.5,55.5-144.3c10.8-33.6,20-59.5,27.7-77.7c7.7-18.2,13.6-29.3,17.7-33.3
+			C198.7,7.1,207.8,3,217.9,3c22.2,0,35,10.8,38.3,32.3c0.7,3.4,1,6.4,1,9.1c0,18.2-6.1,40-18.2,65.6l-94.8,216.9
+			c12.1,14.1,27.2,32,45.4,53.5c17.5-37,34-72.6,49.4-106.9c9.4-21.5,18.2-39,26.2-52.5c8.1-11.4,17.1-17.2,27.2-17.2
+			c17.5,0,28.6,8.4,33.3,25.2c0.7,4,1,7.7,1,11.1c0,8.7-3.7,23.2-11.1,43.4c-6.7,18.2-33,71.3-78.7,159.4c-2,4.7-4,8.7-6.1,12.1
+			c-13.5,26.9-26.6,51.1-39.3,72.6l-6.1,10.1l52.5-8.1c15.5-2.7,28.2-4,38.3-4c20.8,0,31.3,8.4,31.3,25.2
+			c0,20.2-12.1,33.3-36.3,39.4c-56.5,14.1-116.7,27.6-180.6,40.4c-39,7.4-64.2,5.7-75.7-5.1C8.4,618.1,5,610,5,601.3
+			c0-21.5,11.4-35,34.3-40.4c2-0.7,3.7-1,5.1-1l59.5-9.1l10.1-20.2c16.1-30.2,30.6-58.5,43.4-84.7c-35.7-43.7-71-82-105.9-115
+			c-8.7-7.4-17.8-17.1-27.2-29.2C17.5,292.2,14.1,282.5,14.1,272.4z M522.6,724.3c27.6,0,41.4,12.4,41.4,37.3
+			c0,5.4-4.2,12.3-12.6,20.7c-8.4,8.4-21.7,19.7-39.9,33.8c-30.3,24.2-62.9,46.7-97.8,67.6c-33,19.5-58.2,29.3-75.7,29.3
+			c-26.2,0-39.3-13.8-39.3-41.4c0.7-16.8,11.1-29.6,31.3-38.3c61.9-26.9,114.3-57.8,157.4-92.8C500.7,729.7,512.5,724.3,522.6,724.3
+			z M766.7,213.9c28.9,1.4,43.7,16.5,44.4,45.4c0,22.2-23.2,38.7-69.6,49.4C685,321.5,616,332.9,534.7,343
+			c-30.3,4-44.1,15.1-41.4,33.3v37.3h348.1c26.9,0,40.4,12.1,40.4,36.3s-13.5,36.3-40.4,36.3h-70.6v134.2h116
+			c26.9,0,40.4,12.1,40.4,36.3s-13.5,36.3-40.4,36.3H363.2c-26.2,0-39.4-12.1-39.4-36.3s13.1-36.3,39.4-36.3h55.5l-3-255.2
+			c0.7-32.3,8.1-55.8,22.2-70.6c5.4-5.4,17.6-10.4,36.8-15.1c19.2-4.7,47.9-9.7,86.3-15.1c59.2-8.1,116.3-22.5,171.5-43.4
+			C744.5,216.2,755.9,213.9,766.7,213.9z M832.3,99.9c55.8,0,85.1,21.9,87.8,65.6c0.7,5.4,0.7,11.1,0,17.2v65.6
+			c0,27.6-12.4,41.4-37.3,41.4c-24.9,0-37.3-13.8-37.3-41.4v-39.3c0-24.2-12.8-37-38.3-38.3h-342c-24.2,0-37,12.8-38.3,38.3v38.3
+			c0,28.2-12.1,42.4-36.3,42.4c-24.2,0-36.3-14.1-36.3-42.4v-64.6c0-53.1,23.9-80.7,71.6-82.7c5.4,0,10.8,0,16.1,0h154.3V38.3
+			c0-25.6,14.1-38.3,42.4-38.3C667.5,0,682,12.8,682,38.3v61.5H832.3z M494.3,487.3l2,132.1h197.7V487.3H494.3z M893.8,825.2
+			c22.2,9.4,33.6,22.9,34.3,40.4c0,30.3-13.1,45.4-39.4,45.4c-28.2,0-72.3-20.2-132.1-60.5c-55.2-37.7-82.7-66.2-82.7-85.8
+			c0-24.9,12.4-37.3,37.3-37.3c4,0,43.4,22.2,118,66.6c4.7,2.7,8.4,4.7,11.1,6.1C859.2,810.8,877,819.2,893.8,825.2z
+    M1579.1,198c-2.7,24-18.3,36.3-47,37h-202c0,34.7-0.7,79.3-2,134h122c57.3,0,86,25.3,86,76c-1.3,161.3-12.3,282.3-33,363
+			c-10,38.7-27.3,62.7-52,72c-14,5.3-31.7,8-53,8c-12.7,0-27.7-1-45-3c-29.3-3.3-44-15.3-44-36c0-25.3,10.7-39,32-41
+			c6-0.7,12.3-0.7,19,0c5.3,0.7,12.7,1,22,1c24.7,0,40-7.3,46-22c2-4,3.3-8.3,4-13c16-86,24-186,24-300c0-22-12-33-36-33h-95
+			c-7.3,138.7-29.3,250-66,334c-17.3,39.3-33.3,68.5-48,87.5c-14.7,19-29.3,28.5-44,28.5c-25.3-3.3-39-16-41-38
+			c0.7-12.7,7-26.7,19-42c46.7-62.7,76.3-150.3,89-263c3.3-24.7,6-52,8-82c4.7-68,7.3-145,8-231h-80c-28-3.3-43-16-45-38
+			c6-22,21-34,45-36h151V47c1.3-30.7,15.3-46.3,42-47c27.3,1.3,41.3,17,42,47v114h127C1563.4,161,1579.1,173.3,1579.1,198z
+			 M1951.1,269c-9.3,176-48.3,312-117,408c45.3,55.3,103,104,173,146c16,9.3,24,21.7,24,37c0,19.3-8.3,33.3-25,42
+			c-5.3,2.7-10.7,4-16,4c-8.7,0-16.7-2.3-24-7c-60-34.7-120.7-90.3-182-167c-68.7,81.3-138.7,137.3-210,168c-8,3.3-15,5-21,5
+			c-18,0-29.7-9-35-27c-1.3-4.7-2-9-2-13c0-12,8-22.7,24-32c71.3-38.7,136.7-90.7,196-156c-54-86.7-86.3-195.7-97-327
+			c0-6.7-0.3-13.3-1-20c-13.3,22.7-26.7,43.3-40,62c-10.7,14.7-22,22-34,22c-14.7,0-25.7-7.3-33-22c-2-4-3-7.7-3-11
+			c0-7.3,3-15.3,9-24c53.3-82.7,99.7-191.7,139-327c6-19.3,18.3-29.3,37-30c24,0,38.3,9.7,43,29c0.7,3.3,1,6.4,1,9
+			c0,2.7-0.7,6.7-2,12c-13.3,50-31,99-53,147h289c23.3,4.7,36.7,16.7,40,36c0,24-13.3,36-40,36H1951.1z M1702.1,269
+			c10.7,132,29.3,230.3,56,295c8.7,20,18,38.7,28,56c50-82.7,78-199.7,84-351H1702.1z</Geometry>
+    <system:String x:Key="AppName">缤放</system:String>
+    <system:String x:Key="About">关于</system:String>
+    <system:String x:Key="Settings">设置</system:String>
+    <system:String x:Key="Close">关闭</system:String>
+    <system:String x:Key="CheckUpdate">检测更新</system:String>
+    <system:String x:Key="AboutText">&lt;R&gt;本程序&lt;B&gt;&lt;R Foreground="Red"&gt;不是&lt;/R&gt;游戏橘子数位科技&lt;/B&gt;开发的官方客户端程序&lt;L/&gt;&lt;L/&gt;关于游戏账号使用第三方的方式登录请再三斟酌并且请确认您下载当前程序的途径是否安全&lt;L/&gt;&lt;L/&gt;程序使用部分BeanfunLogin的代码&lt;L/&gt;&lt;/R&gt;</system:String>
+    <system:String x:Key="Contact">联系开发者</system:String>
+    <system:String x:Key="Email">发送邮件</system:String>
+    <system:String x:Key="Donate">捐赠</system:String>
+    <system:String x:Key="Feedback">缤放 反馈/建议</system:String>
+    <system:String x:Key="FeedbackText">软件版本: {0}%0d反馈/建议信息:%0d</system:String>
+    <system:String x:Key="AccountList">帐号列表</system:String>
+    <system:String x:Key="GameChange">更换游戏</system:String>
+    <system:String x:Key="GameStart">启动游戏</system:String>
+    <system:String x:Key="GashRemain">乐豆: {0} 点</system:String>
+    <system:String x:Key="GashRemainInGame"> (游戏内 {0})</system:String>
+    <system:String x:Key="GashRefresh">更新点数</system:String>
+    <system:String x:Key="GashRecharge">充值与购点</system:String>
+    <system:String x:Key="AppGashRecharge">兑换beanfun!App乐豆点</system:String>
+    <system:String x:Key="MemberCenter">会员中心</system:String>
+    <system:String x:Key="RightClickMenu">右键开启菜单</system:String>
+    <system:String x:Key="AccountBanned">账号已锁定</system:String>
+    <system:String x:Key="DoubleClickCopy">双击复制账号</system:String>
+    <system:String x:Key="CopyGameAccount">复制游戏账号</system:String>
+    <system:String x:Key="ChangeAccountName">编辑游戏账号</system:String>
+    <system:String x:Key="ChangeAccountPassword">修改游戏账号</system:String>
+    <system:String x:Key="GameAccountInfo">游戏账号详情</system:String>
+    <system:String x:Key="CheckEmail">查询认证邮箱</system:String>
+    <system:String x:Key="OfficialSite">官方网站</system:String>
+    <system:String x:Key="AddServiceAccount">添加账号</system:String>
+    <system:String x:Key="GetOtp">获取密码</system:String>
+    <system:String x:Key="GetOtpFailed">获取密码失败</system:String>
+    <system:String x:Key="GetOtpSuccessAndCopy">密码获取成功，已复制。</system:String>
+    <system:String x:Key="AutoPaste">自动输入</system:String>
+    <system:String x:Key="AutoPasteTip">自动输入需要游戏在输入账密界面&#x0a;&#x0a;※ 自动输入功能可能会由于游戏限制出现偶尔无法正常运行的问题, 请斟酌使用</system:String>
+    <system:String x:Key="ClickToCopy">点击自动复制</system:String>
+    <system:String x:Key="LogoutConfirm">即将登出，是否要继续？</system:String>
+    <system:String x:Key="MsgSelectAccount">您还未选择需要启动游戏的账号。</system:String>
+    <system:String x:Key="GettingOtp">正在获取</system:String>
+    <system:String x:Key="GoToVerify">前往验证</system:String>
+    <system:String x:Key="AuthEmail">认证邮箱</system:String>
+    <system:String x:Key="AcountOrEmail">账号或认证邮箱：</system:String>
+    <system:String x:Key="Password_">密码：</system:String>
+    <system:String x:Key="RememberPassword">记住密码</system:String>
+    <system:String x:Key="AutoLogin">自动登录</system:String>
+    <system:String x:Key="ForgotPassword">忘记密码</system:String>
+    <system:String x:Key="RegisterAccount">注册账号</system:String>
+    <system:String x:Key="Login">登录</system:String>
+    <system:String x:Key="QRCodeLogin">二维码便利登</system:String>
+    <system:String x:Key="AccountNeed">请输入账号</system:String>
+    <system:String x:Key="PasswordNeed">请输入密码</system:String>
+    <system:String x:Key="DeleteAccount">删除账号</system:String>
+    <system:String x:Key="MsgDeleteAccount">即将删除账号「{0}」，此操作不可恢复，是否确定要删除？</system:String>
+    <system:String x:Key="MsgLogging">正在登录,请稍等...</system:String>
+    <system:String x:Key="ManageAccount">管理账号</system:String>
+    <system:String x:Key="Taiwan">台湾</system:String>
+    <system:String x:Key="Account">账号</system:String>
+    <system:String x:Key="Remark">备注</system:String>
+    <system:String x:Key="RememberAuthInfo">记住验证资料</system:String>
+    <system:String x:Key="DataBackup">资料备份</system:String>
+    <system:String x:Key="Add">添加</system:String>
+    <system:String x:Key="Edit">编辑</system:String>
+    <system:String x:Key="Delete">删除</system:String>
+    <system:String x:Key="MsgDeleteAccountMng">即将删除{0}，此操作不可恢复，是否确定要删除？</system:String>
+    <system:String x:Key="MsgDeleteAccountMulti">{0} 个账号</system:String>
+    <system:String x:Key="MsgDeleteAccountSingle">账号「{0}」</system:String>
+    <system:String x:Key="RefreshQRCode">重新加载</system:String>
+    <system:String x:Key="RunLastGame">同时启动上次玩的游戏</system:String>
+    <system:String x:Key="BackRegularLogin">返回一般登录</system:String>
+    <system:String x:Key="Stable">稳定版</system:String>
+    <system:String x:Key="Development">测试版</system:String>
+    <system:String x:Key="ThemeColor">主题颜色</system:String>
+    <system:String x:Key="AutoCheckUpdate">有新版本时提示更新</system:String>
+    <system:String x:Key="RunAfterLogin">登录完成后运行游戏</system:String>
+    <system:String x:Key="MinimizeToTaskbar">最小化到任务栏</system:String>
+    <system:String x:Key="Game">游戏</system:String>
+    <system:String x:Key="GamePath">游戏路径</system:String>
+    <system:String x:Key="TraditionalLoginMode">传统登录模式</system:String>
+    <system:String x:Key="TraditionalLoginModeTip">部分游戏支持手动使用一次性密码登录&#x0a;勾选此选项后可获取一次性密码用以传统登录</system:String>
+    <system:String x:Key="KillPatcher">阻止自动更新</system:String>
+    <system:String x:Key="KillPatcherTip">自动阻止游戏自动更新来防止更新造成的游戏文件损坏&#x0a;※仅支持游戏「新枫之谷」</system:String>
+    <system:String x:Key="SkipPlayWindow">跳过Play窗口</system:String>
+    <system:String x:Key="SkipPlayWindowTip">跳过Play窗口的等待直接启动游戏&#x0a;※仅支持游戏「新枫之谷」</system:String>
+    <system:String x:Key="AuthInfoNeed">请输入进阶验证信息</system:String>
+    <system:String x:Key="Remember">记住</system:String>
+    <system:String x:Key="YourAuthInfoTip">提示您进阶验证资料为：</system:String>
+    <system:String x:Key="CaptchaCodeNeed">请输入图形验证码</system:String>
+    <system:String x:Key="RefreshCaptcha">刷新图形验证码</system:String>
+    <system:String x:Key="AuthConfirm">确认送出</system:String>
+    <system:String x:Key="MsgAuthInfoEmpty">验证资料不能为空。</system:String>
+    <system:String x:Key="MsgCaptchaCodeEmpty">图形验证码不能为空。</system:String>
+    <system:String x:Key="DataRecovery">账密恢复</system:String>
+    <system:String x:Key="Password">密码</system:String>
+    <system:String x:Key="Data">资料</system:String>
+    <system:String x:Key="Export">汇出</system:String>
+    <system:String x:Key="Recovery">恢复</system:String>
+    <system:String x:Key="ExportDone">汇出完成</system:String>
+    <system:String x:Key="RecoveryFailed">汇入失败</system:String>
+    <system:String x:Key="RecoverySuccess">汇入成功</system:String>
+    <system:String x:Key="MsgDecryptFailed">密码或资料错误，解密失败</system:String>
+    <system:String x:Key="AddAccount">增加账号</system:String>
+    <system:String x:Key="tbBeanfunAccount">请输入Beanfun账号</system:String>
+    <system:String x:Key="tbBeanfunRemark">请输入账号备注(不设置则留空)</system:String>
+    <system:String x:Key="tbBeanfunPassword">密码(不储存则留空)</system:String>
+    <system:String x:Key="tbBeanfunAuthInfo">认证信息(不储存则留空)</system:String>
+    <system:String x:Key="ServiceAccountDisplayName">使用者名称:</system:String>
+    <system:String x:Key="TermsOfService">服务条款</system:String>
+    <system:String x:Key="SystemInfo">系统信息</system:String>
+    <system:String x:Key="MsgDisplayNameNeed">请输入使用者名称！</system:String>
+    <system:String x:Key="MsgTermsOfServiceNeed">您必须先同意服务条款才可添加账号！</system:String>
+    <system:String x:Key="MsgCreateServiceAccountFailed">添加游戏账号失败, 可能这个游戏无法创建账号。</system:String>
+    <system:String x:Key="UnknownError">发生未知错误</system:String>
+    <system:String x:Key="CaptchaCode">图形验证码：</system:String>
+    <system:String x:Key="RefreshCaptchaImage">重新载入图形验证码</system:String>
+    <system:String x:Key="Confirm">确定</system:String>
+    <system:String x:Key="LoadCaptchaFailed">载入图形验证码失败</system:String>
+    <system:String x:Key="EditAccount">编辑账号</system:String>
+    <system:String x:Key="EditAccountSave">保存</system:String>
+    <system:String x:Key="MsgChangeDisplayNameError">未知错误, 更改游戏账号名失败。</system:String>
+    <system:String x:Key="Copy">复制</system:String>
+    <system:String x:Key="CopyFinished">复制完成</system:String>
+    <system:String x:Key="CopyFailed">复制失败</system:String>
+    <system:String x:Key="DonateText">&lt;R&gt;感谢使用 缤放！&lt;L/&gt;&lt;L/&gt;缤放 目前是免费开源软件，没有广告，也没有任何功能限制。&lt;L/&gt;&lt;L/&gt;如果 缤放 帮主您改善了游戏体验，请考虑捐赠。&lt;L/&gt;&lt;L/&gt;您的捐赠会支持我不断地改进它，让它成为更游戏有效率的工具。&lt;L/&gt;&lt;L/&gt;感谢您的支持！❤&lt;L/&gt;&lt;L/&gt;&lt;/R&gt;</system:String>
+    <system:String x:Key="Alipay">支付宝</system:String>
+    <system:String x:Key="EquipStarForceCaculator">装备卷轴星力计算器</system:String>
+    <system:String x:Key="EquipType">装备分类:</system:String>
+    <system:String x:Key="Accessory">饰品</system:String>
+    <system:String x:Key="Heart">心脏</system:String>
+    <system:String x:Key="HeartNotice">※卷轴属性套用武器卷</system:String>
+    <system:String x:Key="Superior">极真</system:String>
+    <system:String x:Key="Stat_">属性:</system:String>
+    <system:String x:Key="Atk_Matk_">攻击力/魔法攻击力:</system:String>
+    <system:String x:Key="StarForce">适用</system:String>
+    <system:String x:Key="StarForceSplit">星强化（最高</system:String>
+    <system:String x:Key="StarsInFused">星）</system:String>
+    <system:String x:Key="ScrollGlory">荣耀卷</system:String>
+    <system:String x:Key="ScrollJiDian">极电卷</system:String>
+    <system:String x:Key="ScrollChuanShuo">传说卷</system:String>
+    <system:String x:Key="ScrollOthers">其他卷属性</system:String>
+    <system:String x:Key="Sheet">张</system:String>
+    <system:String x:Key="Stat">属性</system:String>
+    <system:String x:Key="Atk_Matk">攻击力/魔法攻击力</system:String>
+    <system:String x:Key="GameSelected">选择游戏</system:String>
+    <system:String x:Key="ConvoyOperation">车队操作</system:String>
+    <system:String x:Key="ConvoyManage">车队管理</system:String>
+    <system:String x:Key="ConvoyRank">车队排名</system:String>
+    <system:String x:Key="ConvoySearch">车队搜索</system:String>
+    <system:String x:Key="RiderSearch">车手搜索</system:String>
+    <system:String x:Key="CreateConvoy">建立车队</system:String>
+    <system:String x:Key="LeaveConvoy">离开车队</system:String>
+    <system:String x:Key="BeanfunRegionSelected">请选择Beanfun区域</system:String>
+    <system:String x:Key="RegionSelected">请选择使用区域</system:String>
+    <system:String x:Key="Recycling">回收枫之谷文件夹空间</system:String>
+    <system:String x:Key="MsgRecycling">是否需要回收空间(更新游戏时请不要使用此功能)？</system:String>
+    <system:String x:Key="MsgRecyclingDone">枫之谷文件夹空间回收完成</system:String>
+    <system:String x:Key="PlayerReport">外挂举报(GM上线核实)</system:String>
+    <system:String x:Key="MsgPlayerReport">「新枫之谷」即时举报功能需要登录台湾Beanfun账号，不支持香港Beanfun账号，您可以自行注册一个台湾Beanfun账号用来举报。</system:String>
+    <system:String x:Key="VideoReport">皇家纠察队(录屏举报)</system:String>
+    <system:String x:Key="ServiceAccountInfo">账号详情</system:String>
+    <system:String x:Key="SerialNumber">编号</system:String>
+    <system:String x:Key="Name">名称</system:String>
+    <system:String x:Key="AuthType">验证方式</system:String>
+    <system:String x:Key="Status">状态</system:String>
+    <system:String x:Key="Banned">锁定</system:String>
+    <system:String x:Key="AccountEstablished">账号已经建立了</system:String>
+    <system:String x:Key="Days">天</system:String>
+    <system:String x:Key="CreateDate">于 {0} 建立</system:String>
+    <system:String x:Key="LastLoginDate">上次于 {0} 登录</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_1">请您设置一组专门供</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_2">使用的账号及密码</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_3">( 1 )本账号及密码只供「</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_4">」此游戏/服务使用!</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_5">( 2 ) 充值时，请登录 beanfun! 账号、密码充值。</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_6">( 3 ) 本账号及密码需由</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_7">位英数字组合而成。</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_8">设置专用于</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_9">确认专用于</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_10">昵称:</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_11">( 2~6个中英文字符 )</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_12">昵称:</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_13">检查账号</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_14">检查昵称</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_15">我同意并已阅读</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_16">服务合约</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_17">登录游戏需输入昵称</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_18">请输入账号！</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_19">账号位数不正确！</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_20">请输入密码！</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_21">密码位数不正确！</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_22">请输入确认密码！</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_23">确认密码位数不正确！</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_24">请输入昵称！</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_25">昵称位数不正确！</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_26">您必须先同意服务条款才可添加账号！</system:String>
+    <system:String x:Key="UnconnectedGame_AddAccount_27">添加游戏账号失败, 可能这个游戏无法创建账号。</system:String>
+    <system:String x:Key="ChangePassword">修改密码</system:String>
+    <system:String x:Key="AuthEmailNeed">&gt; 输入验证时的电子邮件：</system:String>
+    <system:String x:Key="DataSended">资料已寄出！</system:String>
+    <system:String x:Key="MsgChangePassword">请至您已认证的邮件信箱中收取密码设置信哟！\r\n确认码: {0}\r\n为保障安全!请您在收到信后，\r\n点击链接前先确认信中的确认码是否相同正确喔！</system:String>
+    <system:String x:Key="AuthReLogin">请完成进阶认证后重新登录</system:String>
+    <system:String x:Key="NetworkConnectionError">网络连接错误，请检查官方网站连接是否正常。</system:String>
+    <system:String x:Key="GetOtpError">密码取得失败。</system:String>
+    <system:String x:Key="InitAccountError">账号记录初始化失败，未知的错误。</system:String>
+    <system:String x:Key="LoadDataError">从乐豆官网加载信息出错，错误信息：{0}\r\n\r\n\r\n可能有如下原因：\r\n1.乐豆网站暂时维修中无法访问\r\n2.本机无法直接与乐豆连接\r\n3.如果有用游戏代理然后浏览器能访问乐豆网站，那么可能就是代理没有对本应用进行代理</system:String>
+    <system:String x:Key="FileDialog_Filter">主程序|{0}|全部文件 (*.*)|*.*</system:String>
+    <system:String x:Key="FileDialog_Title">请选择 {0} 文件</system:String>
+    <system:String x:Key="ChangHKRegion">切换到香港专区</system:String>
+    <system:String x:Key="ChangTWRegion">切换到台湾专区</system:String>
+    <system:String x:Key="LoginErrorUnknown">登录失败，未知的错误。</system:String>
+    <system:String x:Key="LoginNoResponse">初始化失败，请检查网络连接。</system:String>
+    <system:String x:Key="LoginNoSkey">获取Skey失败。</system:String>
+    <system:String x:Key="LoginNoOTP1">获取OTP1失败。</system:String>
+    <system:String x:Key="LoginNoSeed">获取Seed失败。</system:String>
+    <system:String x:Key="LoginNoHash">获取二维码失败。</system:String>
+    <system:String x:Key="LoginIntResultError">获取二维码失败，返回的初始化信息不正确。</system:String>
+    <system:String x:Key="AKeyParseFailed">获取AKey失败。</system:String>
+    <system:String x:Key="authkeyParseFailed">获取authkey失败。</system:String>
+    <system:String x:Key="LoginJsonParseFailed">检测登录结果失败，未找到返回的Json信息。</system:String>
+    <system:String x:Key="LoginNoViewstate">登录失败，未找到Viewstate信息，请检查网络连接。</system:String>
+    <system:String x:Key="LoginNoEventvalidation">登录失败，未找到Eventvalidation信息，请检查网络连接。</system:String>
+    <system:String x:Key="LoginNoViewstateGenerator">登录失败，未找到ViewstateGenerator信息，请检查网络连接。</system:String>
+    <system:String x:Key="LoginNoSamplecaptcha">登录失败，未找到Samplecaptcha信息，请检查网络连接。</system:String>
+    <system:String x:Key="LoginNoAkey">登录失败，账号或密码错误。</system:String>
+    <system:String x:Key="LoginNoAccountMatch">登录失败，无法获取账号列表。</system:String>
+    <system:String x:Key="LoginNoWebtoken">登录失败，登录后无法获取bfWebToken Cookie。</system:String>
+    <system:String x:Key="LoginUnknown">登录失败，请稍后再试</system:String>
+    <system:String x:Key="BFServiceXNotFound">调用或初始化BFService插件失败，有如下可能：\r\n1.未安装BFService插件\r\n2.BFService插件默认会安装到「文档」文件夹，请确认真实路径是否与当前系统语言的字符集支持的文字并且能正常访问\r\n\r\n是否前往下载插件？</system:String>
+    <system:String x:Key="LoginNoMethod">登录出错，选择了不存在的登录方式。</system:String>
+    <system:String x:Key="OTPUnknown">获取密码失败，请尝试重新登录。</system:String>
+    <system:String x:Key="OTPNoCreateTime">获取账号创建时间失败。</system:String>
+    <system:String x:Key="OTPNoSecretCode">获取密码失败，未找到SecretCode信息，请检查网络连接。</system:String>
+    <system:String x:Key="OTPNoMyAccountData">获取密码失败，未找到MyAccountData信息，请检查网络连接。</system:String>
+    <system:String x:Key="DecryptOTPError">解密密码失败。</system:String>
+    <system:String x:Key="MainAccount_Not_Exist">此Beanfun账号不存在，请确认您的Beanfun账号是否成功注册，或者确认账号是否是所在区域为{0}的Beanfun账号。</system:String>
+    <system:String x:Key="LoginInitCaptcha">载入图形验证码失败。</system:String>
+    <system:String x:Key="GetOtpInitError">获取密码时初始化失败，请检查网络连接。</system:String>
+    <system:String x:Key="NeedAuthToPlayGame">很抱歉，需先完成进阶验证，才可启动这款游戏</system:String>
+    <system:String x:Key="DisconnectedFromServer">已从服务器断线，请重新登录</system:String>
+    <system:String x:Key="MsgNeedAuth">为确保您的账号安全，需请您协助进行资料验证，以利保障您的权益。</system:String>
+    <system:String x:Key="MsgNeedBeanfunAuth">此账号需透过beanfun! 游戏授权登录。\r\n请使用beanfun! 游戏授权登录。</system:String>
+    <system:String x:Key="MsgCantFindGame">无法正确检测游戏安装状态。请按一下&lt;是&gt;来重新检测。若未安装游戏，请按一下&lt;否&gt;开始下载。</system:String>
+    <system:String x:Key="MsgGameAlreadyRun">游戏已经运行,可能是客户端问题导致未完全结束程序,是否要结束游戏?</system:String>
+    <system:String x:Key="MsgLEDoNotSupport64Bit">以非繁体区域设置的系统启动游戏的方式不支持64位游戏。</system:String>
+    <system:String x:Key="MsgLEDoNotSupportXP">以非繁体区域设置的系统启动游戏的方式不支持Windows XP。</system:String>
+    <system:String x:Key="MsgLERunError">启动失败，请尝试从桌面快捷方式直接启动游戏。\r\n\r\n若您系统为非繁体区域设置，可能是Locale Emulator插件不支持您的系统或是游戏自动更新导致游戏损坏了(可以尝试重新安装游戏)。</system:String>
+    <system:String x:Key="MsgLEReleaseError">释放转区软件错误，请重新启动电脑后再次尝试。</system:String>
+    <system:String x:Key="MsgLEError0xC00700C1">非繁体区域设置系统的方式启动游戏失败\r\n错误码: {0}\r\n导致这个错误的原因可能是因为使用了游戏的自动更新，导致游戏损坏了。\r\n\r\n解决方案:\r\n- 如果官方有fix更新补丁请下载下来手动覆盖一下游戏\r\n- 如果官方没有fix更新补丁或上面方法无法解决请尝试重新安装游戏\r\n</system:String>
+    <system:String x:Key="MsgLEError">非繁体区域设置系统的方式启动游戏失败\r\n错误码: {0}\r\n{1}\r\n{2}\r\n如果你有运行任何杀毒软件, 请关闭后再次尝试。\r\n如果仍然显示此窗口, 请尝试以「安全模式」启动程序。如果你进行了以上的尝试仍然没有一个有效，请随时在后面的连接提交问题\r\nhttps://github.com/xupefei/Locale-Emulator/issues\r\n\r\n\r\n你可以按 CTRL+C 将此信息复制到你的剪切板。\r\n</system:String>
+    <system:String x:Key="MsgBeanfunRejectLogin">您的登录要求已被beanfun! App拒绝。</system:String>
+    <system:String x:Key="ClientVersion">客户端版本:</system:String>
+    <system:String x:Key="ServerVersion">服务器版本:</system:String>
+    <system:String x:Key="MsgKillPatcher">游戏自动更新有可能会造成游戏程序损毁，已被阻止。{0}\r\n建议下载{1}.{2}{3}，如需要使用自动更新功能请到设置页面取消阻止。\r\n是否前往下载{4}页面？</system:String>
+    <system:String x:Key="UpdateByPatch">更新补丁来更新</system:String>
+    <system:String x:Key="UpdateByFullClient">完整客户端重新安装游戏</system:String>
+    <system:String x:Key="GamePatch">更新补丁</system:String>
+    <system:String x:Key="GameFullClient">完整客户端主程序</system:String>
+    <system:String x:Key="WarningByBeanfun">来自缤放的警告</system:String>
+    <system:String x:Key="WrongCaptcha">图形验证码输入错误</system:String>
+    <system:String x:Key="WrongAuthInfo">资料错误，请重新输入</system:String>
+    <system:String x:Key="UpdateCheck">更新检测</system:String>
+    <system:String x:Key="NoUpdatesDetected">未检测到有更新。</system:String>
+    <system:String x:Key="NewVersionDetected">检测到新版本 {0} 当前: {1}\r\n\r\n{2}\r\n" + "\r\n" + "是否打开下载页面？</system:String>
+    <system:String x:Key="Language">程序语言</system:String>
+</ResourceDictionary>

@@ -67,6 +67,8 @@ namespace Beanfun
         {
             WindowsAPI.AttachConsole(-1);
 
+            I18n.LoadLanguage(ConfigAppSettings.GetValue("Language", null));
+
             StartupUri = new Uri("MainWindow.xaml", UriKind.RelativeOrAbsolute);
         }
 

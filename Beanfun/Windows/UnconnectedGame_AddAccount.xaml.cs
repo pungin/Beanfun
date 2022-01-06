@@ -15,7 +15,7 @@ namespace Beanfun
             payload = App.MainWnd.UnconnectedGame_AddAccountInit();
             if (payload == null)
             {
-                MessageBox.Show("發生未知錯誤", "系統訊息");
+                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
                 this.Close();
                 return;
             }
@@ -54,7 +54,7 @@ namespace Beanfun
             if (payload == null || payload.Get("lblErrorMessage") == "")
             {
                 payload = null;
-                MessageBox.Show("發生未知錯誤", "系統訊息");
+                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             lblErrorMessage.Visibility = Visibility.Visible;
@@ -69,7 +69,7 @@ namespace Beanfun
             if (payload == null || payload.Get("lblErrorMessage") == "")
             {
                 payload = null;
-                MessageBox.Show("發生未知錯誤", "系統訊息");
+                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             lblErrorMessage.Visibility = Visibility.Visible;
@@ -82,7 +82,7 @@ namespace Beanfun
             string contract = App.MainWnd.GetServiceContract();
             if (contract == "")
             {
-                MessageBox.Show("發生未知錯誤", "系統訊息");
+                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
             }
             else
             {
@@ -95,7 +95,7 @@ namespace Beanfun
             string sAccountLen = lblAccountLen.Text;
             if (sAccountLen == null || sAccountLen == "" || !sAccountLen.Contains(" - "))
             {
-                MessageBox.Show("發生未知錯誤！", "系統訊息");
+                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             string[] aAccountLen = sAccountLen.Split(new string[] { " - " }, System.StringSplitOptions.None);
@@ -103,55 +103,55 @@ namespace Beanfun
             byte accountLenMax = byte.Parse(aAccountLen[1]);
             if (txtServiceAccountID.Text == null || txtServiceAccountID.Text == "")
             {
-                MessageBox.Show("請輸入帳號！", "系統訊息");
+                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_18") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             if (txtServiceAccountID.Text.Length < accountLenMin || txtServiceAccountID.Text.Length > accountLenMax)
             {
-                MessageBox.Show("帳號位數不正確！", "系統訊息");
+                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_19") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             if (txtNewPwd.Password == null || txtNewPwd.Password == "")
             {
-                MessageBox.Show("請輸入密碼！", "系統訊息");
+                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_20") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             if (txtNewPwd.Password.Length < accountLenMin || txtNewPwd.Password.Length > accountLenMax)
             {
-                MessageBox.Show("密碼位數不正確！", "系統訊息");
+                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_21") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             if (txtNewPwd2.Password == null || txtNewPwd2.Password == "")
             {
-                MessageBox.Show("請輸入確認密碼！", "系統訊息");
+                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_22") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             if (txtNewPwd2.Password.Length < accountLenMin || txtNewPwd2.Password.Length > accountLenMax)
             {
-                MessageBox.Show("確認密碼位數不正確！", "系統訊息");
+                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_23") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             if (DNtr.Visibility == Visibility.Visible)
             {
                 if (txtServiceAccountDN.Text == null || txtServiceAccountDN.Text == "")
                 {
-                    MessageBox.Show("請輸入暱稱！", "系統訊息");
+                    MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_24") as string, TryFindResource("SystemInfo") as string);
                     return;
                 }
                 if (txtServiceAccountDN.Text.Length < 2 || txtServiceAccountDN.Text.Length > 6)
                 {
-                    MessageBox.Show("暱稱位數不正確！", "系統訊息");
+                    MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_25") as string, TryFindResource("SystemInfo") as string);
                     return;
                 }
             }
             if (!(bool)chkBox1.IsChecked)
             {
-                MessageBox.Show("您必須先同意服務條款才可新增帳號！", "系統訊息");
+                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_26") as string, TryFindResource("SystemInfo") as string);
                 return;
             }
             string result = App.MainWnd.UnconnectedGame_AddAccount(txtServiceAccountID.Text, txtNewPwd.Password, txtNewPwd2.Password, DNtr.Visibility == Visibility.Visible ? txtServiceAccountDN.Text : null, payload);
             if (result == "") this.Close();
-            else if (result == null) MessageBox.Show("新增遊戲帳號失敗, 可能這個遊戲無法創建帳號。", "系統訊息");
+            else if (result == null) MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_27") as string, TryFindResource("SystemInfo") as string);
             else
             {
                 lblErrorMessage.Visibility = Visibility.Visible;

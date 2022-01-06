@@ -25,7 +25,7 @@
                         <DropShadowEffect Opacity="0.7" ShadowDepth="1" BlurRadius="3" Direction="270"/>
                     </Path.Effect>
                 </Path>
-                <Label Content="設定" Margin="5,10,10,10" Foreground="#FFFFFFFF" FontWeight="Bold" FontSize="30">
+                <Label Content="{DynamicResource Settings}" Margin="5,10,10,10" Foreground="#FFFFFFFF" FontWeight="Bold" FontSize="30">
                     <Label.Effect>
                         <DropShadowEffect Opacity="0.7" ShadowDepth="1" BlurRadius="3" Direction="270"/>
                     </Label.Effect>
@@ -34,21 +34,25 @@
             <StackPanel Background="#7FFFFFFF">
                 <StackPanel Margin="10">
                     <DockPanel Margin="0,0,0,3">
-                        <Label Content="繽放" Foreground="Gray"/>
+                        <Label Content="{DynamicResource AppName}" Foreground="Gray"/>
                         <GridSplitter Background="Gray" HorizontalAlignment="Stretch" Height="1" IsTabStop="False"/>
                     </DockPanel>
                     <StackPanel Orientation="Horizontal">
                         <StackPanel>
-                            <Button Content="管理帳號" Margin="2" Click="ManageAcc_Click"/>
+                            <Button Content="{DynamicResource ManageAccount}" Margin="2" Click="ManageAcc_Click"/>
                             <DockPanel>
-                                <Label Content="更新通道"/>
+                                <Label Content="{DynamicResource UpdateChannel}"/>
                                 <ComboBox x:Name="cb_UpdateChannel" SelectedIndex="0" SelectionChanged="cb_UpdateChannel_SelectionChanged">
-                                    <ComboBoxItem Content="穩定版"/>
-                                    <ComboBoxItem Content="測試版"/>
+                                    <ComboBoxItem Content="{DynamicResource Stable}"/>
+                                    <ComboBoxItem Content="{DynamicResource Development}"/>
                                 </ComboBox>
                             </DockPanel>
                             <DockPanel>
-                                <Label Content="主題顏色" VerticalAlignment="Center"/>
+                                <Label Content="{DynamicResource Language}"/>
+                                <ComboBox x:Name="cb_Language" SelectionChanged="cb_Language_SelectionChanged"/>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="{DynamicResource ThemeColor}" VerticalAlignment="Center"/>
                                 <ComboBox x:Name="cb_ThemeColor" SelectedIndex="0" IsEditable="True" TextBoxBase.TextChanged="cb_ThemeColor_TextChanged">
                                     <ComboBoxItem Content="#FF8201"/>
                                     <ComboBoxItem Content="#B6DE8E"/>
@@ -62,30 +66,30 @@
                             </DockPanel>
                         </StackPanel>
                         <StackPanel>
-                            <CheckBox x:Name="ask_update" Margin="2" Content="有新版本時提示更新" Checked="ask_update_CheckedChanged" Unchecked="ask_update_CheckedChanged" IsChecked="True"/>
-                            <CheckBox x:Name="autoStartGame" Margin="2" Content="登入完成後開啟遊戲" Checked="autoStartGame_CheckedChanged" Unchecked="autoStartGame_CheckedChanged"/>
-                            <CheckBox x:Name="minimize_to_tray" Margin="2" Content="最小化到工具列" Checked="minimize_to_tray_CheckedChanged" Unchecked="minimize_to_tray_CheckedChanged"/>
+                            <CheckBox x:Name="ask_update" Margin="2" Content="{DynamicResource AutoCheckUpdate}" Checked="ask_update_CheckedChanged" Unchecked="ask_update_CheckedChanged" IsChecked="True"/>
+                            <CheckBox x:Name="autoStartGame" Margin="2" Content="{DynamicResource RunAfterLogin}" Checked="autoStartGame_CheckedChanged" Unchecked="autoStartGame_CheckedChanged"/>
+                            <CheckBox x:Name="minimize_to_tray" Margin="2" Content="{DynamicResource MinimizeToTaskbar}" Checked="minimize_to_tray_CheckedChanged" Unchecked="minimize_to_tray_CheckedChanged"/>
                         </StackPanel>
                     </StackPanel>
                     <DockPanel Margin="0,3">
-                        <Label Content="遊戲" Foreground="Gray"/>
+                        <Label Content="{DynamicResource Game}" Foreground="Gray"/>
                         <GridSplitter Background="Gray" HorizontalAlignment="Stretch" Height="1" IsTabStop="False"/>
                     </DockPanel>
                     <DockPanel Margin="2">
-                        <Label Content="遊戲路徑" VerticalAlignment="Center"/>
+                        <Label Content="{DynamicResource GamePath}" VerticalAlignment="Center"/>
                         <TextBox x:Name="t_GamePath" VerticalContentAlignment="Center" MinWidth="200" Margin="2" IsReadOnly="True"/>
                     </DockPanel>
                     <StackPanel Orientation="Horizontal">
                         <StackPanel>
-                            <CheckBox x:Name="tradLogin" Margin="2" Content="傳統登入模式" Checked="tradLogin_CheckedChanged" Unchecked="tradLogin_CheckedChanged" IsChecked="True" ToolTip="部分遊戲支援手動使用一次性密碼登入&#x0a;點選此選項後可獲取一次性密碼用以傳統登入" Cursor="Help"/>
-                            <CheckBox x:Name="autoKillPatcher" Margin="2" Content="阻止自動更新" Checked="autoKillPatcher_CheckedChanged" Unchecked="autoKillPatcher_CheckedChanged" IsChecked="True" ToolTip="自動阻止遊戲自動更新來防止更新造成的遊戲損壞&#x0a;※僅支援遊戲「新楓之谷」" Cursor="Help"></CheckBox>
+                            <CheckBox x:Name="tradLogin" Margin="2" Content="{DynamicResource TraditionalLoginMode}" Checked="tradLogin_CheckedChanged" Unchecked="tradLogin_CheckedChanged" IsChecked="True" ToolTip="{DynamicResource TraditionalLoginModeTip}" Cursor="Help"/>
+                            <CheckBox x:Name="autoKillPatcher" Margin="2" Content="{DynamicResource KillPatcher}" Checked="autoKillPatcher_CheckedChanged" Unchecked="autoKillPatcher_CheckedChanged" IsChecked="True" ToolTip="{DynamicResource KillPatcherTip}" Cursor="Help"></CheckBox>
                         </StackPanel>
                         <StackPanel>
-                            <CheckBox x:Name="skipPlayWnd" Margin="2" Content="跳過Play視窗" Checked="skipPlayWnd_CheckedChanged" Unchecked="skipPlayWnd_CheckedChanged" IsChecked="True" ToolTip="跳過Play視窗的等待直接啟動遊戲&#x0a;※僅支援遊戲「新楓之谷」" Cursor="Help"/>
-                            <Button x:Name="btn_Tools" Content="工具" Margin="2" Click="btn_Tools_Click"/>
+                            <CheckBox x:Name="skipPlayWnd" Margin="2" Content="{DynamicResource SkipPlayWindow}" Checked="skipPlayWnd_CheckedChanged" Unchecked="skipPlayWnd_CheckedChanged" IsChecked="True" ToolTip="{DynamicResource SkipPlayWindowTip}" Cursor="Help"/>
+                            <Button x:Name="btn_Tools" Content="{DynamicResource Tools}" Margin="2" Click="btn_Tools_Click"/>
                         </StackPanel>
                     </StackPanel>
-                    <Button Content="返回" Margin="0,5,0,0" Click="Button_Click" IsCancel="True"/>
+                    <Button Content="{DynamicResource Back}" Margin="0,5,0,0" Click="Button_Click" IsCancel="True"/>
                 </StackPanel>
             </StackPanel>
         </StackPanel>

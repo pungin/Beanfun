@@ -37,7 +37,7 @@ namespace Beanfun
             byte[] output = encrypt_AES.TransformFinalBlock(plain_bytes, 0, plain_bytes.Length);
             t_Data.Text = Convert.ToBase64String(output);
 
-            MessageBox.Show("匯出完成");
+            MessageBox.Show(TryFindResource("ExportDone") as string);
         }
 
         private void Recovery_Button_Click(object sender, RoutedEventArgs e)
@@ -56,17 +56,17 @@ namespace Beanfun
                 string plaintext = Encoding.UTF8.GetString(byte_secretContent);
                 if (false == accMan.importRecord(plaintext))
                 {
-                    MessageBox.Show("匯入失敗");
+                    MessageBox.Show(TryFindResource("RecoveryFailed") as string);
                 }
                 else
                 {
-                    MessageBox.Show("匯入成功");
+                    MessageBox.Show(TryFindResource("RecoverySuccess") as string);
                     App.MainWnd.loginMethodInit();
                 }
             }
             catch
             {
-                MessageBox.Show("密碼或資料錯誤，解密失敗");
+                MessageBox.Show(TryFindResource("MsgDecryptFailed") as string);
                 return;
             }
         }

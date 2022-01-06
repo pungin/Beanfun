@@ -7,7 +7,7 @@ namespace Beanfun
     /// <summary>
     /// ManagerAccount.xaml 的交互逻辑
     /// </summary>
-    public partial class ManagerAccount : Page
+    public partial class ManageAccount : Page
     {
         public class BeanfunAccount
         {
@@ -23,7 +23,7 @@ namespace Beanfun
             { this.account = account; this.accountname = accountname; this.isSavePwd = isSavePwd; this.isAutoLogin = isAutoLogin; this.isSaveVerify = isSaveVerify; }
         }
 
-        public ManagerAccount()
+        public ManageAccount()
         {
             InitializeComponent();
         }
@@ -38,9 +38,9 @@ namespace Beanfun
                 accountList.Add(new BeanfunAccount(
                     s,
                     MainWnd.accountManager.getNameByAccount(region, s),
-                    MainWnd.accountManager.getPasswordByAccount(region, s) != "" ? "是" : "否",
-                    MainWnd.accountManager.getAutoLoginByAccount(region, s) ? "是" : "否",
-                    MainWnd.accountManager.getVerifyByAccount(region, s) != "" ? "是" : "否"
+                    MainWnd.accountManager.getPasswordByAccount(region, s) != "" ? TryFindResource("Yes") as string : TryFindResource("No") as string,
+                    MainWnd.accountManager.getAutoLoginByAccount(region, s) ? TryFindResource("Yes") as string : TryFindResource("No") as string,
+                    MainWnd.accountManager.getVerifyByAccount(region, s) != "" ? TryFindResource("Yes") as string : TryFindResource("No") as string
                 ));
             }
             list_Account.ItemsSource = null;
@@ -117,10 +117,10 @@ namespace Beanfun
             if (list_Account.SelectedItems.Count < 1)
                 return;
             else if(list_Account.SelectedItems.Count > 1)
-                t_acc_del = $" {list_Account.SelectedItems.Count} 個帳號";
+                t_acc_del = string.Format(TryFindResource("MsgDeleteAccountMulti") as string, list_Account.SelectedItems.Count);
             else
-                t_acc_del = $"帳號「{((BeanfunAccount)list_Account.SelectedItem).account}」";
-            MessageBoxResult result = MessageBox.Show($"即將移除{t_acc_del}，此操作不可恢復，是否確認要移除？", "移除帳號", MessageBoxButton.YesNo);
+                t_acc_del = string.Format(TryFindResource("MsgDeleteAccountSingle") as string, ((BeanfunAccount)list_Account.SelectedItem).account);
+            MessageBoxResult result = MessageBox.Show(string.Format(TryFindResource("MsgDeleteAccountMng") as string, t_acc_del), TryFindResource("DeleteAccount") as string, MessageBoxButton.YesNo);
 
             if (result == MessageBoxResult.Yes)
             {

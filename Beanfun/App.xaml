@@ -6,6 +6,9 @@
     <Application.Resources>
         <ResourceDictionary>
             <FontFamily x:Key="SegoeMDL2">Resources/#Segoe MDL2 Assets</FontFamily>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Lang\zh.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

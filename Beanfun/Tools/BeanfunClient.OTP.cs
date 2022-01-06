@@ -85,7 +85,7 @@ namespace Beanfun
                 { this.errmsg = "OTPNoResponse"; return null; }
                 response = responses[1];
                 if (responses[0] != "1")
-                { this.errmsg = "密碼取得失敗。\r\n" + response; return null; }
+                { this.errmsg = System.Windows.Application.Current.TryFindResource("GetOtpError") as string + "\r\n" + response; return null; }
                 string key = response.Substring(0, 8);
                 string plain = response.Substring(8);
                 string otp = WCDESComp.DecryStrHex(plain, key);
@@ -103,7 +103,7 @@ namespace Beanfun
             }
             catch (Exception e)
             {
-                this.errmsg = "密碼取得失敗。\n\n" + e.Message + "\n" + e.StackTrace;
+                this.errmsg = System.Windows.Application.Current.TryFindResource("GetOtpError") as string + "\n\n" + e.Message + "\n" + e.StackTrace;
                 return null;
             }
         }

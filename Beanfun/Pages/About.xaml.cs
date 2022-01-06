@@ -47,8 +47,8 @@ namespace Beanfun
         private void MailContact_Click(object sender, RoutedEventArgs e)
         {
             string to = "pungin@msn.com ";
-            string subject = "繽放 反饋/建議";
-            string body = $"軟體版本: {version.Text}%0d反饋/建議訊息:%0d";
+            string subject = TryFindResource("Feedback") as string;
+            string body = string.Format(TryFindResource("FeedbackText") as string, version.Text);
             System.Diagnostics.Process.Start($"mailto:{to}?subject={subject}&body={body}");
         }
 

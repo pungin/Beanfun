@@ -1,16 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
+﻿using System.Windows;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 
 namespace Beanfun
 {
@@ -35,7 +24,7 @@ namespace Beanfun
             this.Close();
             if (!App.MainWnd.ChangeServiceAccountDisplayName(txtNewServiceAccountDisplayName.Text))
             {
-                MessageBox.Show("未知錯誤, 更變遊戲帳號名失敗。", "系統訊息");
+                MessageBox.Show(TryFindResource("MsgChangeDisplayNameError") as string, TryFindResource("SystemInfo") as string);
             }
         }
 

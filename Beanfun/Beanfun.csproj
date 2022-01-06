@@ -114,7 +114,9 @@
     </ApplicationDefinition>
     <Compile Include="API\beanfunApp.cs" />
     <Compile Include="API\WCDESComp.cs" />
+    <Compile Include="Helper\I18n.cs" />
     <Compile Include="Helper\PacketReader.cs" />
+    <Compile Include="Helper\TextBlockHelper.cs" />
     <Compile Include="LEProc\Amemiya.Extensions.ArrayExtensions.cs" />
     <Compile Include="LEProc\LERegistryRedirector.cs" />
     <Compile Include="LEProc\LoaderWrapper.cs" />
@@ -197,8 +199,8 @@
     <Compile Include="Windows\Donate.xaml.cs">
       <DependentUpon>Donate.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Pages\ManagerAccount.xaml.cs">
-      <DependentUpon>ManagerAccount.xaml</DependentUpon>
+    <Compile Include="Pages\ManageAccount.xaml.cs">
+      <DependentUpon>ManageAccount.xaml</DependentUpon>
     </Compile>
     <Compile Include="Helper\ModifyRegistry.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -216,6 +218,18 @@
     <Compile Include="Windows\GameList.xaml.cs">
       <DependentUpon>GameList.xaml</DependentUpon>
     </Compile>
+    <Page Include="Lang\en.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Lang\zh-Hans.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Lang\zh.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Windows\CaptchaWnd.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -304,7 +318,7 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Pages\ManagerAccount.xaml">
+    <Page Include="Pages\ManageAccount.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

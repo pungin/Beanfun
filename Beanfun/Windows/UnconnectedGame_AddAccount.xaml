@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Beanfun"
         mc:Ignorable="d"
-        Title="新增帳號"
+        Title="{DynamicResource AddServiceAccount}"
         ResizeMode="CanMinimize"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterScreen"
@@ -14,24 +14,26 @@
     <Grid>
         <StackPanel Margin="5">
             <TextBlock>
-                請您設定一組專門供 <Bold><Run x:Name="lblGameName" Foreground="#339900" FontSize="15"/></Bold> 使用的帳號及密碼
+                <Run Text="{DynamicResource UnconnectedGame_AddAccount_1}"/>
+                <Bold><Run x:Name="lblGameName" Foreground="#339900" FontSize="15"/></Bold>
+                <Run Text="{DynamicResource UnconnectedGame_AddAccount_2}"/>
             </TextBlock>
             <TextBlock Margin="0,5,0,0">
-                ( 1 )本帳號及密碼只供「<Run x:Name="lblGameName1"/>」此遊戲/服務使用!
+                <Run Text="{DynamicResource UnconnectedGame_AddAccount_3}"/><Run x:Name="lblGameName1"/><Run Text="{DynamicResource UnconnectedGame_AddAccount_4}"/>
                 <LineBreak/>
-                ( 2 ) 儲值時，請登入 beanfun! 帳號、密碼儲值。
+                <Run Text="{DynamicResource UnconnectedGame_AddAccount_5}"/>
                 <LineBreak/>
-                ( 3 ) 本帳號及密碼需由 <Run x:Name="lblAccountLen"/> 位英數字組合而成。
+                <Run Text="{DynamicResource UnconnectedGame_AddAccount_6}"/><Run x:Name="lblAccountLen"/><Run Text="{DynamicResource UnconnectedGame_AddAccount_7}"/>
             </TextBlock>
             <DockPanel Margin="0,5,0,0">
                 <StackPanel>
                     <DockPanel>
-                        <TextBlock VerticalAlignment="Center">設定專用於<Run x:Name="lblGameName2"/><Run Foreground="#FF6600" Text="帳號"/>:</TextBlock>
+                        <TextBlock VerticalAlignment="Center"><Run Text="{DynamicResource UnconnectedGame_AddAccount_8}"/><Run x:Name="lblGameName2"/><Run Foreground="#FF6600" Text="{DynamicResource Account}"/>:</TextBlock>
                         <TextBox x:Name="txtServiceAccountID" MinWidth="137" Margin="5,0,0,0"/>
                     </DockPanel>
                     <StackPanel x:Name="DNtr">
                         <DockPanel Margin="0,5,0,0">
-                            <TextBlock VerticalAlignment="Center">確認專用於<Run x:Name="lblGameName5"/>暱稱:</TextBlock>
+                            <TextBlock VerticalAlignment="Center"><Run Text="{DynamicResource UnconnectedGame_AddAccount_9}"/><Run x:Name="lblGameName5"/><Run Text="{DynamicResource UnconnectedGame_AddAccount_10}"/></TextBlock>
                             <TextBox x:Name="txtServiceAccountDN" MinWidth="137" Margin="5,0,0,0">
                                 <TextBox.Style>
                                     <Style TargetType="TextBox">
@@ -45,7 +47,7 @@
                                                     <Setter.Value>
                                                         <VisualBrush AlignmentX="Left" Stretch="None">
                                                             <VisualBrush.Visual>
-                                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="登入遊戲需輸入暱稱"/></TextBlock>
+                                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="{DynamicResource UnconnectedGame_AddAccount_17}"/></TextBlock>
                                                             </VisualBrush.Visual>
                                                         </VisualBrush>
                                                     </Setter.Value>
@@ -56,26 +58,26 @@
                                 </TextBox.Style>
                             </TextBox>
                         </DockPanel>
-                        <Label Content="( 2~6個中英文字元 )"/>
+                        <Label Content="{DynamicResource UnconnectedGame_AddAccount_11}"/>
                     </StackPanel>
                     <DockPanel Margin="0,5,0,0">
-                        <TextBlock VerticalAlignment="Center">設定專用於<Run x:Name="lblGameName3"/><Run Foreground="#FF6600" Text="密碼"/>:</TextBlock>
+                        <TextBlock VerticalAlignment="Center"><Run Text="{DynamicResource UnconnectedGame_AddAccount_8}"/><Run x:Name="lblGameName3"/><Run Foreground="#FF6600" Text="{DynamicResource Password}"/>:</TextBlock>
                         <PasswordBox x:Name="txtNewPwd" MinWidth="137" Margin="5,0,0,0"/>
                     </DockPanel>
                     <DockPanel Margin="0,5,0,0">
-                        <TextBlock VerticalAlignment="Center">確認專用於<Run x:Name="lblGameName4"/><Run Foreground="#FF6600" Text="密碼"/>:</TextBlock>
+                        <TextBlock VerticalAlignment="Center"><Run Text="{DynamicResource UnconnectedGame_AddAccount_9}"/><Run x:Name="lblGameName4"/><Run Foreground="#FF6600" Text="{DynamicResource Password}"/>:</TextBlock>
                         <PasswordBox x:Name="txtNewPwd2" MinWidth="137" Margin="5,0,0,0"/>
                     </DockPanel>
                 </StackPanel>
                 <StackPanel>
                     <TextBlock Margin="5,5,0,0">
                         <Hyperlink Click="Hyperlink_Click">
-                            <Run Text="檢查帳號"/>
+                            <Run Text="{DynamicResource UnconnectedGame_AddAccount_13}"/>
                         </Hyperlink>
                     </TextBlock>
                     <TextBlock x:Name="lbtnCheckNickName" Margin="5,23,0,0">
                         <Hyperlink Click="Hyperlink_Click_1">
-                            <Run Text="檢查暱稱"/>
+                            <Run Text="{DynamicResource UnconnectedGame_AddAccount_14}"/>
                         </Hyperlink>
                     </TextBlock>
                 </StackPanel>
@@ -83,9 +85,9 @@
             <Label x:Name="lblErrorMessage" Foreground="Red" HorizontalAlignment="Center" Visibility="Collapsed"/>
             <DockPanel Margin="10">
                 <CheckBox x:Name="chkBox1">
-                    <TextBlock>我同意並已閱讀<Hyperlink Click="Hyperlink_Click_2"><Run x:Name="lbtnGameName"/></Hyperlink>服務合約書</TextBlock>
+                    <TextBlock><Run Text="{DynamicResource UnconnectedGame_AddAccount_15}"/><Hyperlink Click="Hyperlink_Click_2"><Run x:Name="lbtnGameName"/></Hyperlink><Run Text="{DynamicResource UnconnectedGame_AddAccount_16}"/></TextBlock>
                 </CheckBox>
-                <Button Content="確認送出" HorizontalAlignment="Right" Click="Button_Click" IsDefault="True"/>
+                <Button Content="{DynamicResource AuthConfirm}" HorizontalAlignment="Right" Click="Button_Click" IsDefault="True"/>
             </DockPanel>
         </StackPanel>
     </Grid>

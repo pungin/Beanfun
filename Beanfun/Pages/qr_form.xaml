@@ -60,7 +60,7 @@
             <StackPanel VerticalAlignment="Center">
                 <TextBlock MouseLeave="TextBlock_MouseLeave">
                 <DockPanel MinWidth="350">
-                    <Button x:Name="btn_Refresh_QRCode" Padding="0" Width="150" Height="150" ToolTip="重新加載" Click="btn_Refresh_QRCode_Click" DockPanel.Dock="Top" MouseEnter="btn_Refresh_QRCode_MouseEnter">
+                    <Button x:Name="btn_Refresh_QRCode" Padding="0" Width="150" Height="150" ToolTip="{DynamicResource RefreshQRCode}" Click="btn_Refresh_QRCode_Click" DockPanel.Dock="Top" MouseEnter="btn_Refresh_QRCode_MouseEnter">
                         <Image x:Name="qr_image" Cursor="Hand"/>
                     </Button>
                     <Button x:Name="qr_Tip" Style="{DynamicResource ButtonStyle}" Margin="30 0 0 0" Cursor="Hand" DockPanel.Dock="Right" Visibility="Collapsed" Click="qr_Tip_Click">
@@ -69,9 +69,9 @@
                 </DockPanel>
                 </TextBlock>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0 10 0 0">
-                    <CheckBox Margin="5,0" Content="同時啟動上回玩的遊戲" IsEnabled="False"/>
+                    <CheckBox Margin="5,0" Content="{DynamicResource RunLastGame}" IsEnabled="False"/>
                 </StackPanel>
-                <Button x:Name="btn_back" Content="返回一般登入" Height="30" Width="250" FontWeight="Bold" Margin="0 10 0 20" IsDefault="True" Background="#7FF5F5F5" Foreground="Black" Click="btn_back_Click"/>
+                <Button x:Name="btn_back" Content="{DynamicResource BackRegularLogin}" Height="30" Width="250" FontWeight="Bold" Margin="0 10 0 20" IsDefault="True" Background="#7FF5F5F5" Foreground="Black" Click="btn_back_Click"/>
             </StackPanel>
             <Grid MinWidth="{Binding MinWidth, ElementName=SideBarLeft}"/>
         </DockPanel>

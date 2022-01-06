@@ -5,7 +5,7 @@
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
       xmlns:local="clr-namespace:Beanfun"
       mc:Ignorable="d" 
-      Title="登入驗證">
+      Title="LoginVerify">
     <Page.Resources>
         <ResourceDictionary>
             <Style TargetType="{x:Type Button}">
@@ -35,7 +35,7 @@
                                                 <Setter.Value>
                                                     <VisualBrush AlignmentX="Left" Stretch="None">
                                                         <VisualBrush.Visual>
-                                                            <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent">請輸入進階驗證資訊</TextBlock>
+                                                            <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent" Text="{DynamicResource AuthInfoNeed}"/>
                                                         </VisualBrush.Visual>
                                                     </VisualBrush>
                                                 </Setter.Value>
@@ -45,10 +45,10 @@
                                 </Style>
                             </TextBox.Style>
                         </TextBox>
-                        <CheckBox x:Name="checkBoxRememberVerify" VerticalAlignment="Center" Content="記住" Margin="5"/>
+                        <CheckBox x:Name="checkBoxRememberVerify" VerticalAlignment="Center" Content="{DynamicResource Remember}" Margin="5"/>
                     </DockPanel>
                     <DockPanel Margin="0,5,0,0">
-                        <Label Content="提示您進階驗證資料為："/>
+                        <Label Content="{DynamicResource YourAuthInfoTip}"/>
                         <Label x:Name="labelAuthType" Content="XXXXXXXXXXXXXXXXXXXXX"/>
                     </DockPanel>
                     <TextBox x:Name="t_Code" VerticalContentAlignment="Center" Margin="0,5,0,0">
@@ -64,7 +64,7 @@
                                             <Setter.Value>
                                                 <VisualBrush AlignmentX="Left" Stretch="None">
                                                     <VisualBrush.Visual>
-                                                        <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="請輸入圖形驗證碼"/></TextBlock>
+                                                        <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="{DynamicResource CaptchaCodeNeed}"/></TextBlock>
                                                     </VisualBrush.Visual>
                                                 </VisualBrush>
                                             </Setter.Value>
@@ -74,10 +74,10 @@
                             </Style>
                         </TextBox.Style>
                     </TextBox>
-                    <Button Padding="0" HorizontalAlignment="Center" Margin="0,5,0,0" Cursor="Hand" ToolTip="更變圖形驗證碼" Click="Button_Click_1">
+                    <Button Padding="0" HorizontalAlignment="Center" Margin="0,5,0,0" Cursor="Hand" ToolTip="{DynamicResource RefreshCaptcha}" Click="Button_Click_1">
                         <Image x:Name="imageCaptcha" Height="36" Width="160"/>
                     </Button>
-                    <Button Content="確認送出" Margin="0,5,0,0" IsDefault="True" Click="Button_Click"/>
+                    <Button Content="{DynamicResource AuthConfirm}" Margin="0,5,0,0" IsDefault="True" Click="Button_Click"/>
                 </StackPanel>
             </StackPanel>
         </StackPanel>

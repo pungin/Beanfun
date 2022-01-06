@@ -4,7 +4,7 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
       mc:Ignorable="d" 
-      Title="正在登入">
+      Title="Logging">
     <Page.Resources>
         <ResourceDictionary>
             <Style TargetType="{x:Type Button}">
@@ -20,8 +20,8 @@
         <StackPanel Margin="0 30 0 0">
             <StackPanel Background="#7FFFFFFF">
                 <StackPanel Margin="10">
-                    <Label x:Name="t_Info" Content="正在登入,請稍等..." HorizontalAlignment="Center"/>
-                    <Button Content="取消" Margin="0,5,0,0" Click="Button_Click" IsCancel="True"/>
+                    <Label x:Name="t_Info" Content="{DynamicResource MsgLogging}" HorizontalAlignment="Center"/>
+                    <Button Content="{DynamicResource Cancel}" Margin="0,5,0,0" Click="Button_Click" IsCancel="True"/>
                 </StackPanel>
             </StackPanel>
         </StackPanel>

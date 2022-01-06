@@ -24,8 +24,6 @@ using Utility.ModifyRegistry;
 
 namespace Beanfun
 {
-    
-
     enum LoginMethod : int
     {
         Regular = 0,
@@ -44,7 +42,7 @@ namespace Beanfun
     public partial class MainWindow : Window
     {
         public LoginPage loginPage;
-        public ManagerAccount manageAccPage;
+        public ManageAccount manageAccPage;
         public LoginWait loginWaitPage = new LoginWait();
         public AccountList accountList = null;
         public VerifyPage verifyPage;
@@ -79,10 +77,10 @@ namespace Beanfun
         private static readonly System.Windows.Forms.NotifyIcon _trayNotifyIcon = new System.Windows.Forms.NotifyIcon
         {
             Icon = Properties.Resources.icon,
-            Text = "繽放"
+            Text = Application.Current.TryFindResource("AppName") as string
         };
 
-        public List<GameService> gameList = new List<GameService>();
+        public Dictionary<string, List<GameService>> GameList = new Dictionary<string, List<GameService>>();
         public GameService SelectedGame = null;
         public bool UnconnectedGame = false;
 
@@ -163,7 +161,7 @@ namespace Beanfun
             this.bfAPPAutoLogin.Tick += this.bfAPPAutoLogin_Tick;
 
             loginPage = new LoginPage();
-            manageAccPage = new ManagerAccount();
+            manageAccPage = new ManageAccount();
             verifyPage = new VerifyPage();
             accountList = new AccountList();
             settingPage = new Settings();
@@ -303,7 +301,7 @@ namespace Beanfun
 
                 bool res = accountManager.init();
                 if (res == false)
-                    errexit("帳號記錄初始化失敗，未知的錯誤。", 0);
+                    errexit(TryFindResource("InitAccountError") as string, 0);
 
                 settingPage.t_GamePath.PreviewMouseLeftButtonDown += this.btn_SetGamePath_Click;
                 LastLoginAccountID = ConfigAppSettings.GetValue("AccountID", LastLoginAccountID);
@@ -337,7 +335,7 @@ namespace Beanfun
             }
             catch (Exception ex)
             {
-                MessageBox.Show("從樂豆官網加載訊息出錯，錯誤訊息：" + ex.Message + "\r\n\r\n\r\n可能有如下原因：\r\n1.樂豆網站暫時維修中無法訪問\r\n2.本機無法直接與樂豆連線\r\n3.如果有用遊戲代理然後瀏覽器能訪問樂豆網站，那麼可能就是代理沒有對本應用進行代理"/* + "\r\n\r\n" + ex.StackTrace*/);
+                MessageBox.Show(string.Format((TryFindResource("LoadDataError") as string).Replace("\\r\\n", "\r\n"), ex.Message)/* + "\r\n\r\n" + ex.StackTrace*/);
 
                 new LoginRegionSelection().ShowDialog();
             }
@@ -354,9 +352,48 @@ namespace Beanfun
             public string small_image_name { get; set; }
             public string download_url { get; set; }
 
+            private string imageBaseUrl
+            {
+                get
+                {
+                    return App.LoginRegion == "TW" ? "https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/" : "http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/";
+                }
+            }
+
+            private BitmapImage xlarge_image;
+            public BitmapImage XLarge_image
+            {
+                get
+                {
+                    if (xlarge_image == null)
+                        xlarge_image = loadImage($"{ imageBaseUrl }{ xlarge_image_name }");
+                    return xlarge_image;
+                }
+            }
+
+            private BitmapImage large_image;
+            public BitmapImage Large_image {
+                get {
+                    if (large_image == null)
+                        large_image = loadImage($"{ imageBaseUrl }{ large_image_name }");
+                    return large_image;
+                }
+            }
+
+            private BitmapImage small_image;
+            public BitmapImage Small_image
+            {
+                get
+                {
+                    if (small_image == null)
+                        small_image = loadImage($"{ imageBaseUrl }{ small_image_name }");
+                    return small_image;
+                }
+            }
+
             public GameService(string name, string service_code, string service_region, string website_url, string xlarge_image_name, string large_image_name, string small_image_name, string download_url)
             {
-                this.name = name;
+                this.name = I18n.ToSimplified(name);
                 this.service_code = service_code;
                 this.service_region = service_region;
                 this.website_url = website_url;
@@ -364,6 +401,24 @@ namespace Beanfun
                 this.large_image_name = large_image_name;
                 this.small_image_name = small_image_name;
                 this.download_url = download_url;
+            }
+
+            private BitmapImage loadImage(string url)
+            {
+                BitmapImage image;
+                try
+                {
+                    byte[] buffer = new WebClientEx().DownloadData(url);
+                    image = new BitmapImage();
+                    image.BeginInit();
+                    image.StreamSource = new MemoryStream(buffer);
+                    image.EndInit();
+                }
+                catch (Exception)
+                {
+                    image = null;
+                }
+                return image;
             }
         }
 
@@ -502,42 +557,16 @@ namespace Beanfun
                     break;
             }
 
-           WebClient wc = new WebClientEx();
-
             try
             {
                 if (loginPage != null)
                 {
-                    foreach (GameService gs in gameList)
+                    foreach (GameService gs in GameList[App.LoginRegion.ToLower()])
                     {
                         if (gs.service_region == this.service_region && gs.service_code == this.service_code)
                         {
-                            BitmapImage large_image;
-                            BitmapImage small_image;
-                            try
-                            {
-
-                                string baseUrl = App.LoginRegion == "TW" ? "https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/" : "http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/";
-
-                                byte[] buffer = wc.DownloadData(baseUrl + gs.large_image_name);
-                                large_image = new BitmapImage();
-                                large_image.BeginInit();
-                                large_image.StreamSource = new MemoryStream(buffer);
-                                large_image.EndInit();
-
-                                buffer = wc.DownloadData(baseUrl + gs.small_image_name);
-                                small_image = new BitmapImage();
-                                small_image.BeginInit();
-                                small_image.StreamSource = new MemoryStream(buffer);
-                                small_image.EndInit();
-                            }
-                            catch (Exception)
-                            {
-                                large_image = null;
-                                small_image = null;
-                            }
-                            loginPage.id_pass.imageGame.ImageSource = large_image;
-                            accountList.imageGame.Source = small_image;
+                            loginPage.id_pass.imageGame.ImageSource = gs.Large_image;
+                            accountList.imageGame.Source = gs.Small_image;
                             accountList.gameName.Content = gs.name;
                             SelectedGame = gs;
                             break;
@@ -550,27 +579,31 @@ namespace Beanfun
 
         public void reLoadGameInfo()
         {
-            WebClient wc = new WebClientEx();
-
-            string res = Encoding.UTF8.GetString(wc.DownloadData("https://" + App.LoginRegion.ToLower() + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"));
-
-            StringIniParser sip = new StringIniParser();
-            INIData = sip.ParseString(res);
-
-            res = Encoding.UTF8.GetString(wc.DownloadData("https://" + App.LoginRegion.ToLower() + ".beanfun.com/game_zone/"));
-            Regex reg = new Regex("Services.ServiceList = (.*);");
-            if (reg.IsMatch(res))
+            if (!GameList.ContainsKey(App.LoginRegion.ToLower()))
             {
-                gameList.Clear();
-                string json = reg.Match(res).Groups[1].Value;
-                JObject o = JObject.Parse(json);
-                foreach (var game in o["Rows"])
+                List<GameService> gameList = new List<GameService>();
+                WebClient wc = new WebClientEx();
+
+                string res = Encoding.UTF8.GetString(wc.DownloadData("https://" + App.LoginRegion.ToLower() + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"));
+
+                StringIniParser sip = new StringIniParser();
+                INIData = sip.ParseString(res);
+
+                res = Encoding.UTF8.GetString(wc.DownloadData("https://" + App.LoginRegion.ToLower() + ".beanfun.com/game_zone/"));
+                Regex reg = new Regex("Services.ServiceList = (.*);");
+                if (reg.IsMatch(res))
                 {
-                    GameService gs = new GameService((string)game["ServiceFamilyName"], (string)game["ServiceCode"], (string)game["ServiceRegion"], (string)game["ServiceWebsiteURL"], (string)game["ServiceXLargeImageName"], (string)game["ServiceLargeImageName"], (string)game["ServiceSmallImageName"], (string)game["ServiceDownloadURL"]);
-                    gameList.Add(gs);
-                    if (gs.service_code == service_code && gs.service_region == service_region)
-                        SelectedGame = gs;
+                    string json = reg.Match(res).Groups[1].Value;
+                    JObject o = JObject.Parse(json);
+                    foreach (var game in o["Rows"])
+                    {
+                        GameService gs = new GameService((string)game["ServiceFamilyName"], (string)game["ServiceCode"], (string)game["ServiceRegion"], (string)game["ServiceWebsiteURL"], (string)game["ServiceXLargeImageName"], (string)game["ServiceLargeImageName"], (string)game["ServiceSmallImageName"], (string)game["ServiceDownloadURL"]);
+                        gameList.Add(gs);
+                        if (gs.service_code == service_code && gs.service_region == service_region)
+                            SelectedGame = gs;
+                    }
                 }
+                GameList.Add(App.LoginRegion.ToLower(), gameList);
             }
 
             selectedGameChanged();
@@ -752,8 +785,8 @@ namespace Beanfun
         {
             string gameCode = service_code + "_" + service_region;
             OpenFileDialog openFileDialog = new OpenFileDialog();
-            openFileDialog.Filter = accountList.gameName.Content + "主程式|" + game_exe + "|All files (*.*)|*.*";
-            openFileDialog.Title = "請選擇 " + game_exe + " 檔案";
+            openFileDialog.Filter = accountList.gameName.Content + string.Format(TryFindResource("FileDialog_Filter") as string, game_exe);
+            openFileDialog.Title = string.Format(TryFindResource("FileDialog_Title") as string, game_exe);
 
             if (openFileDialog.ShowDialog() == true)
             {
@@ -820,7 +853,7 @@ namespace Beanfun
                 if (App.LoginRegion == "TW")
                 {
                     btn_Region.Content = "TW";
-                    btn_Region.ToolTip = "切換到香港專區";
+                    btn_Region.ToolTip = TryFindResource("ChangHKRegion") as string;
                     loginPage.id_pass.btn_QRCode.IsEnabled = true;
 
                     accountList.btn_Deposite.Visibility = Visibility.Visible;
@@ -828,7 +861,7 @@ namespace Beanfun
                 else
                 {
                     btn_Region.Content = "HK";
-                    btn_Region.ToolTip = "切換到台灣專區";
+                    btn_Region.ToolTip = TryFindResource("ChangTWRegion") as string;
                     loginPage.id_pass.btn_QRCode.IsEnabled = false;
 
                     accountList.btn_Deposite.Visibility = Visibility.Collapsed;
@@ -919,113 +952,55 @@ namespace Beanfun
             switch (msg)
             {
                 case "LoginNoResponse":
-                    msg = "初始化失敗，請檢查網路連線。";
-                    method = 0;
-                    break;
                 case "LoginNoSkey":
-                    msg = "獲取Skey失敗。";
-                    method = 0;
-                    break;
                 case "LoginNoOTP1":
-                    msg = "獲取OTP1失敗。";
-                    method = 0;
-                    break;
                 case "LoginNoSeed":
-                    msg = "獲取Seed失敗。";
-                    method = 0;
-                    break;
                 case "LoginNoHash":
-                    msg = "獲取QRcode失敗。";
-                    method = 0;
-                    break;
                 case "LoginIntResultError":
-                    msg = "獲取QRcode失敗，返回的初始化訊息不正確。";
-                    method = 0;
-                    break;
                 case "AKeyParseFailed":
-                    msg = "獲取AKey失敗。";
-                    method = 0;
-                    break;
                 case "authkeyParseFailed":
-                    msg = "獲取authkey失敗。";
+                case "LoginUnknown":
+                    msg = TryFindResource(msg) as string;
                     method = 0;
-                    break;
-                case "LoginJsonParseFailed":
-                    msg = "偵測登入結果失敗，未找到返回的Json訊息。";
-                    break;
-                case "LoginNoViewstate":
-                    msg = "登入失敗，未找到Viewstate訊息，請檢查網絡連線。";
-                    break;
-                case "LoginNoEventvalidation":
-                    msg = "登入失敗，未找到Eventvalidation訊息，請檢查網絡連線。";
-                    break;
-                case "LoginNoViewstateGenerator":
-                    msg = "登入失敗，未找到ViewstateGenerator訊息，請檢查網絡連線。";
-                    break;
-                case "LoginNoSamplecaptcha":
-                    msg = "登入失敗，未找到Samplecaptcha訊息，請檢查網絡連線。";
                     break;
                 case "LoginNoAkey":
                 case "LoginNoProcessLoginV2JSON":
-                    msg = "登入失敗，帳號或密碼錯誤。(" + msg + ")";
+                    msg = $"{ TryFindResource("LoginNoAkey") as string }({ msg })";
                     break;
                 case "LoginNoAccountMatch":
                 case "LoginGetAccountErr":
                 case "LoginUpdateAccountListErr":
                 case "LoginAuthErr":
-                    msg = "登入失敗，無法取得帳號列表。(" + msg + ")";
-                    break;
-                case "LoginNoWebtoken":
-                    msg = "登入失敗，登入後無法取得bfWebToken Cookie。";
-                    break;
-                case "LoginUnknown":
-                    msg = "登入失敗，請稍後再試";
-                    method = 0;
+                    msg = $"{ TryFindResource("LoginNoAccountMatch") as string }({ msg })";
                     break;
                 case "BFServiceXNotFound":
-                    MessageBoxResult result = MessageBox.Show("調用或初始化BFService元件失敗，有如下可能：\n1.未安裝BFService元件\n2.BFService元件默認會安裝到「文檔」資料夾，請確認真實路徑是否為與當前語係的字元集支援的文字並且能正常訪問\n\n是否前往下載元件？", "", MessageBoxButton.YesNo);
+                    MessageBoxResult result = MessageBox.Show((TryFindResource("BFServiceXNotFound") as string).Replace("\\r\\n", "\r\n"), "", MessageBoxButton.YesNo);
 
                     if (result == MessageBoxResult.Yes)
                         Process.Start("http://hk.download.beanfun.com/beanfun20/beanfun_2_0_93_170_hk.exe");
 
                     NavigateLoginPage();
                     return false;
-                case "LoginNoMethod":
-                    msg = "登入出錯，選擇了不存在的登入方式。";
-                    break;
-                case "OTPUnknown":
-                    msg = "獲取密碼失敗，請嘗試重新登入。";
-                    break;
-                case "OTPNoCreateTime":
-                    msg = "獲取帳號創建時間失敗。";
-                    break;
-                case "OTPNoSecretCode":
-                    msg = "獲取密碼失敗，未找到SecretCode訊息，請檢查網絡連線。";
-                    break;
-                case "OTPNoMyAccountData":
-                    msg = "獲取密碼失敗，未找到MyAccountData訊息，請檢查網絡連線。";
-                    break;
-                case "DecryptOTPError":
-                    msg = "解密密碼失敗。";
-                    break;
                 case "MainAccount_Not_Exist":
-                    msg = "此Beanfun帳號不存在，請確認您的Beanfun帳號是否成功註冊，或者確認帳號所在區域為" + (App.LoginRegion == "TW" ? "台灣" : "香港") + "的Beanfun帳號。";
-                    break;
-                case "LoginInitCaptcha":
-                    msg = "載入圖形驗證碼失敗。";
+                    msg = string.Format(TryFindResource("MainAccount_Not_Exist") as string, App.LoginRegion == "TW" ? TryFindResource("Taiwan") : TryFindResource("HongKong"));
                     break;
                 default:
                     if (msg.StartsWith("OTPNoLongPollingKey:"))
                     {
                         msg = msg.Replace("OTPNoLongPollingKey:", "");
-                        if (msg == "") msg = "獲取密碼時初始化失敗，請檢查網路連線。";
-                        else if (msg.Contains("很抱歉，需先完成進階認證")) msg = "很抱歉，需先完成進階認證，才可啟動此款遊戲";
-                        else if (msg.Contains("尚未登入，請重新登入") || msg.Contains("無法認證登入狀態")) { msg = "已從伺服器斷線，請重新登入"; method = 1; };
+                        if (msg == "") msg = TryFindResource("GetOtpInitError") as string;
+                        else if (msg.Contains("很抱歉，需先完成進階認證")) msg = TryFindResource("NeedAuthToPlayGame") as string;
+                        else if (msg.Contains("尚未登入，請重新登入") || msg.Contains("無法認證登入狀態")) { msg = TryFindResource("DisconnectedFromServer") as string; method = 1; };
+                    }
+                    else
+                    {
+                        string res = TryFindResource(msg) as string;
+                        if (res != null) msg = res;
                     }
                     break;
             }
 
-            MessageBox.Show(msg, title);
+            MessageBox.Show(I18n.ToSimplified(msg), title);
             if (method == 0)
                 App.Current.Shutdown();
             else if (method == 1)
@@ -1081,7 +1056,7 @@ namespace Beanfun
             }
             catch (Exception ex)
             {
-                e.Result = "登入失敗，未知的錯誤。\n\n" + ex.Message + "\n" + ex.StackTrace;
+                e.Result = TryFindResource("LoginErrorUnknown") as string + "\n\n" + ex.Message + "\n" + ex.StackTrace;
             }
 
             ResumeWork();
@@ -1101,7 +1076,7 @@ namespace Beanfun
             {
                 if ((string)e.Result == "LoginAdvanceCheck")
                 {
-                    MessageBox.Show("為確保您的帳號安全，需請您協助進行資料驗證，以利保障您的權益。");
+                    MessageBox.Show(TryFindResource("MsgNeedAuth") as string);
 
                     // Handle panel switching.
                     frame.Content = verifyPage;
@@ -1114,10 +1089,10 @@ namespace Beanfun
                     verifyPage.t_Code.Text = "";
                     string response = this.bfClient.getVerifyPageInfo();
                     if (response == null)
-                    { MessageBox.Show(this.bfClient.errmsg); NavigateLoginPage(); }
+                    { MessageBox.Show(I18n.ToSimplified(this.bfClient.errmsg)); NavigateLoginPage(); }
                     string errmsg = reLoadVerifyPage(response);
                     if (errmsg != null)
-                    { MessageBox.Show(errmsg); NavigateLoginPage(); }
+                    { MessageBox.Show(I18n.ToSimplified(errmsg)); NavigateLoginPage(); }
                 }
                 else if (((string)e.Result).StartsWith("bfAPPAutoLogin.ashx"))
                 {
@@ -1127,7 +1102,7 @@ namespace Beanfun
                         errexit("LoginUnknown", 1);
                         return;
                     }
-                    loginWaitPage.t_Info.Content = "此帳號需透過beanfun! 遊戲授權登入。\r\n請使用beanfun! 遊戲授權登入。";
+                    loginWaitPage.t_Info.Content = (TryFindResource("MsgNeedBeanfunAuth") as string).Replace("\\r\\n", "\r\n");
                     bfAPPAutoLogin.IsEnabled = true;
                     beanfunApp.Main(new string[] { args[1] });
                 }
@@ -1178,7 +1153,7 @@ namespace Beanfun
             }
             catch
             {
-                errexit("登入失敗，無法取得帳號列表。", 1);
+                errexit(TryFindResource("LoginNoAccountMatch") as string, 1);
             }
         }
 
@@ -1193,13 +1168,13 @@ namespace Beanfun
                 catch { accLimit = -1; }
                 if (accLimit == -1)
                 {
-                    accountList.btnAddServiceAccount.Content = "前往認證";
+                    accountList.btnAddServiceAccount.Content = TryFindResource("GoToVerify");
                     accountList.btnAddServiceAccount.IsEnabled = true;
                     accountList.btnAddServiceAccount.Visibility = Visibility.Visible;
                 }
                 else
                 {
-                    accountList.btnAddServiceAccount.Content = "新增帳號";
+                    accountList.btnAddServiceAccount.Content = TryFindResource("AddServiceAccount");
                     accountList.btnAddServiceAccount.IsEnabled = this.bfClient.accountList.Count < accLimit;
                     accountList.btnAddServiceAccount.Visibility = this.bfClient.accountList.Count < accLimit ? Visibility.Visible : Visibility.Hidden;
                 }
@@ -1243,7 +1218,7 @@ namespace Beanfun
 
         public void updateRemainPoint(int remainPoint)
         {
-            accountList.m_RemainPoint.Header = $"樂豆: { remainPoint }{(App.LoginRegion == "TW" || remainPoint == 0 ? "" : $" (遊戲內 { Math.Floor(remainPoint / 2.5) })")} 點";
+            accountList.m_RemainPoint.Header = string.Format(TryFindResource("GashRemain") as string, $"{ remainPoint }{(App.LoginRegion == "TW" || remainPoint == 0 ? "" : string.Format(TryFindResource("GashRemainInGame") as string, Math.Floor(remainPoint / 2.5)))}");
         }
 
         public void runGame(string account = null, string password = null)
@@ -1252,7 +1227,7 @@ namespace Beanfun
             string gamePath = settingPage.t_GamePath.Text;
             if (gamePath == "" || !File.Exists(gamePath))
             {
-                MessageBoxResult result = MessageBox.Show("無法正確偵測遊戲安裝狀態。請按一下<是>來重新偵測。若未安裝遊戲，請按一下<否>開始下載。", "", MessageBoxButton.YesNo);
+                MessageBoxResult result = MessageBox.Show(TryFindResource("MsgCantFindGame") as string, "", MessageBoxButton.YesNo);
                 if (result == MessageBoxResult.Yes || SelectedGame == null)
                 {
                     btn_SetGamePath_Click(null, null);
@@ -1289,7 +1264,7 @@ namespace Beanfun
 
             if (findGame)
             {
-                MessageBoxResult result = MessageBox.Show("遊戲已經運行,可能是客戶端問題導致未完全結束程序,是否要結束遊戲?", "", MessageBoxButton.YesNo);
+                MessageBoxResult result = MessageBox.Show(TryFindResource("MsgGameAlreadyRun") as string, "", MessageBoxButton.YesNo);
                 if (result == MessageBoxResult.Yes)
                 {
                     foreach (Process process in Process.GetProcessesByName(gameProcessName))
@@ -1356,12 +1331,12 @@ namespace Beanfun
                     case (int)GameStartMode.NTLEA:
                         if (is64BitGame)
                         {
-                            errexit("以非繁體語係系統啟動遊戲的方式不支援64-Bit遊戲。", 2);
+                            errexit(TryFindResource("MsgLEDoNotSupport64Bit") as string, 2);
                             return;
                         }
                         else if (App.OSVersion < App.WinVista && runMode != (int)GameStartMode.Normal)
                         {
-                            errexit("以非繁體語係系統啟動遊戲的方式不支援Windows XP。", 2);
+                            errexit(TryFindResource("MsgLEDoNotSupportXP") as string, 2);
                             return;
                         }
                         return;
@@ -1378,7 +1353,7 @@ namespace Beanfun
             }
             catch
             {
-                errexit("啟動失敗，請嘗試從桌面捷徑直接啟動遊戲。\r\n\r\n若您系統為非繁體語係系統，可能是Locale Emulator元件不支援您的系統或是遊戲自動更新導致遊戲損壞了(可以嘗試重新安裝遊戲)。", 2);
+                errexit((TryFindResource("MsgLERunError") as string).Replace("\\r\\n", "\r\n"), 2);
             }
         }
 
@@ -1439,7 +1414,7 @@ namespace Beanfun
                     "4C9D31A794E5930708CD4622431C8E04"
                 ) == -1)
             {
-                MessageBox.Show("釋出轉區軟體錯誤，請重新啟動電腦後再次嘗試。");
+                MessageBox.Show(TryFindResource("MsgLEReleaseError") as string);
             }
 
             int CHINESEBIG5_CHARSET = 136;
@@ -1470,25 +1445,13 @@ namespace Beanfun
             {
                 if (ret == 0xC00700C1)
                 {
-                    errexit($"非繁體語係系統啟動遊戲失敗\r\n"
-                                + $"錯誤碼: {Convert.ToString(ret, 16).ToUpper()}\r\n"
-                                + "導致這個錯誤的原因可能是因為使用了遊戲的自動更新，導致遊戲損壞了。\r\n"
-                                + "\r\n解決方案:\r\n"
-                                + "- 如果官方有fix更新檔請下載下來手動更新一下遊戲\r\n"
-                                + "- 如果官方沒有fix更新檔或上面方法無法解決請嘗試重新安裝遊戲\r\n"
-                    , 2);
+                    errexit(string.Format((TryFindResource("MsgLEError0xC00700C1") as string).Replace("\\r\n", "\r\n"), Convert.ToString(ret, 16).ToUpper()), 2);
                 }
                 else
                 {
-                    errexit($"非繁體語係系統啟動遊戲失敗\r\n"
-                                + $"錯誤碼: {Convert.ToString(ret, 16).ToUpper()}\r\n"
-                                + $"{string.Format($"{Environment.OSVersion} {(Is64BitOS() ? "x64" : "x86")}", Environment.OSVersion, Is64BitOS() ? "x64" : "x86")}\r\n"
-                                + $"{GenerateSystemDllVersionList()}\r\n"
-                                + "如果你有運行任何防毒軟體, 請關閉後再次嘗試。\r\n"
-                                + "如果仍然顯示此視窗, 請嘗試以「安全模式」啟動程式。"
-                                + "如果你進行了以上的嘗試仍然沒有一個有效，請隨時在後面的連結提交問題\r\n"
-                                + "https://github.com/xupefei/Locale-Emulator/issues\r\n" + "\r\n" + "\r\n"
-                                + "你可以按 CTRL+C 將此訊息複製到你的剪貼板。\r\n"
+                    errexit(string.Format((TryFindResource("MsgLEError") as string).Replace("\\r\n", "\r\n"), Convert.ToString(ret, 16).ToUpper(),
+                        string.Format($"{Environment.OSVersion} {(Is64BitOS() ? "x64" : "x86")}", Environment.OSVersion, Is64BitOS() ? "x64" : "x86"),
+                        GenerateSystemDllVersionList())
                     , 2);
                 }
             }
@@ -1693,10 +1656,10 @@ namespace Beanfun
         // getOTP completed.
         private void getOtpWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            accountList.btnGetOtp.Content = "獲取密碼";
+            accountList.btnGetOtp.Content = TryFindResource("GetOtp") as string;
             if (e.Error != null)
             {
-                errexit(e.Error.Message, 2, "獲取密碼失敗");
+                errexit(e.Error.Message, 2, TryFindResource("GetOtpFailed") as string);
             }
             else
             {
@@ -1704,7 +1667,7 @@ namespace Beanfun
 
                 if (index == -1)
                 {
-                    errexit(this.bfClient.errmsg, 2, "獲取密碼失敗");
+                    errexit(this.bfClient.errmsg, 2, TryFindResource("GetOtpFailed") as string);
                 }
                 else
                 {
@@ -1731,7 +1694,7 @@ namespace Beanfun
                                 try
                                 {
                                     Clipboard.SetText(accountList.t_Password.Text);
-                                    MessageBox.Show("密碼獲取成功，已複製。");
+                                    MessageBox.Show(TryFindResource("GetOtpSuccessAndCopy") as string);
                                 }
                                 catch { }
                             }
@@ -1927,7 +1890,7 @@ namespace Beanfun
             {
                 case "-3":
                     Console.WriteLine("登入請求被拒絕");
-                    errexit("您的登入要求已被beanfun! App拒絕。", 1);
+                    errexit(TryFindResource("MsgBeanfunRejectLogin") as string, 1);
                     break;
                 case "-2":
                     Console.WriteLine("登入請求已逾時");
@@ -1945,7 +1908,7 @@ namespace Beanfun
                     loginWorker_RunWorkerCompleted(null, null);
                     break;
             }
-            loginWaitPage.t_Info.Content = "正在登入,請稍等...";
+            loginWaitPage.t_Info.Content = TryFindResource("MsgLogging") as string;
         }
 
         private void checkPlayPage_Tick(object sender, EventArgs e)
@@ -2053,19 +2016,20 @@ namespace Beanfun
                 string info = "";
                 if (ClientMapleMajor != 0)
                 {
-                    info += $"\r\n客戶端版本:{ ClientMapleMajor }";
+                    info += $"\r\n{ TryFindResource("ClientVersion") as string }{ ClientMapleMajor }";
                     if (SrvMapleMajor != 0 && SrvMapleMinor.Split(':')[0] != "")
                     {
-                        info += $"\r\n伺服器版本:{ SrvMapleMajor }.{ SrvMapleMinor.Split(':')[0] }";
+                        info += $"\r\n{ TryFindResource("ServerVersion") as string }{ SrvMapleMajor }.{ SrvMapleMinor.Split(':')[0] }";
                     }
                 }
                 bool isCanUpdate = ClientMapleMajor != 0 && SrvMapleMajor != 0 && ClientMapleMajor >= (SrvMapleMajor - 2);
-                MessageBoxResult result = MessageBox.Show($"遊戲自動更新有可能會造成遊戲程式損毀，已被阻止。{ info }\r\n建議下載{ (isCanUpdate && ClientMapleMajor == SrvMapleMajor ? $"V{ SrvMapleMajor }.{ SrvMapleMinor.Split(':')[0] }fix" : "") }{ (isCanUpdate ? "手動更新檔來更新" : "完整檔重新安裝遊戲") }，如需要使用自動更新功能請到設定頁面取消阻止。\r\n是否前往下載{ (isCanUpdate ? "手動更新檔" : "完整檔主程式") }頁面？", "來自繽放的警告", MessageBoxButton.YesNo);
+                MessageBoxResult result = MessageBox.Show(
+                    string.Format((TryFindResource("MsgKillPatcher") as string).Replace("\\r\n", "\r\n"), info,
+                        isCanUpdate && ClientMapleMajor == SrvMapleMajor ? $"V{ SrvMapleMajor }.{ SrvMapleMinor.Split(':')[0] }fix" : "",
+                        isCanUpdate ? TryFindResource("UpdateByPatch") : TryFindResource("UpdateByFullClient"),
+                        isCanUpdate ? TryFindResource("GamePatch") : TryFindResource("GameFullClient")), TryFindResource("WarningByBeanfun") as string, MessageBoxButton.YesNo);
                 if (result == MessageBoxResult.Yes)
-                {
-                    if (isCanUpdate) Process.Start("https://tw.beanfun.com/MapleStory/download?download_type=2");
-                    else Process.Start("https://tw.beanfun.com/MapleStory/download");
-                }
+                    Process.Start($"https://maplestory.beanfun.com/download{ (isCanUpdate ? "?download_type=2" : "") }");
             }
         }
 
@@ -2089,11 +2053,11 @@ namespace Beanfun
             {
                 if (response.Contains("圖形驗證碼輸入錯誤"))
                 {
-                    MessageBox.Show("圖形驗證碼輸入錯誤");
+                    MessageBox.Show(TryFindResource("WrongCaptcha") as string);
                 }
                 else
                 {
-                    MessageBox.Show("資料錯誤，請重新輸入");
+                    MessageBox.Show(TryFindResource("WrongAuthInfo") as string);
                 }
             }
             else
@@ -2116,7 +2080,7 @@ namespace Beanfun
                     )
                 );
                 if (errmsg != null)
-                { MessageBox.Show(errmsg); }
+                { MessageBox.Show(I18n.ToSimplified(errmsg)); }
             }
         }
 

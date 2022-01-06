@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Beanfun"
         mc:Ignorable="d"
-        Title="帳密回復"
+        Title="{DynamicResource DataRecovery}"
         ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
@@ -13,16 +13,16 @@
     <Grid>
         <StackPanel>
             <DockPanel Margin="5">
-                <Label Content="密碼" VerticalAlignment="Center"/>
+                <Label Content="{DynamicResource Password}" VerticalAlignment="Center"/>
                 <TextBox x:Name="t_Password" VerticalContentAlignment="Center" Width="200"/>
             </DockPanel>
             <DockPanel Margin="5">
-                <Label Content="資料" VerticalAlignment="Center"/>
+                <Label Content="{DynamicResource Data}" VerticalAlignment="Center"/>
                 <TextBox x:Name="t_Data" VerticalContentAlignment="Center" Width="200"/>
             </DockPanel>
             <DockPanel Margin="5">
-                <Button Margin="5" Width="110" Content="匯出" Click="Export_Button_Click"/>
-                <Button Margin="5" Width="110" Content="回復" Click="Recovery_Button_Click"/>
+                <Button Margin="5" Width="110" Content="{DynamicResource Export}" Click="Export_Button_Click"/>
+                <Button Margin="5" Width="110" Content="{DynamicResource Recovery}" Click="Recovery_Button_Click"/>
             </DockPanel>
         </StackPanel>
     </Grid>

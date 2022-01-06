@@ -41,7 +41,7 @@ namespace Beanfun
             }
             catch (Exception)
             {
-                MessageBox.Show("載入圖形驗證碼失敗");
+                MessageBox.Show(TryFindResource("LoadCaptchaFailed") as string);
                 return;
             }
             c_login_idpass_form_samplecaptcha_CaptchaImage.Source = result;

@@ -8,7 +8,7 @@ namespace Beanfun.Update
 {
     class ApplicationUpdater
     {
-        private static string baseUrl = $"https://ghproxy.com/https://raw.githubusercontent.com/pungin/Beanfun/{ (ConfigAppSettings.GetValue("updateChannel", "Stable").Equals("Stable") ? "master" : "beta") }/";
+        private static string baseUrl = $"https://raw.githubusercontent.com/pungin/Beanfun/{ (ConfigAppSettings.GetValue("updateChannel", "Stable").Equals("Stable") ? "master" : "beta") }/";
 
         internal static void CheckApplicationUpdate(bool show)
         {
@@ -39,14 +39,17 @@ namespace Beanfun.Update
                     var date = xmlContent.SelectSingleNode(@"/VersionInfo/Date/text()").Value;
                     var note = xmlContent.SelectSingleNode(@"/VersionInfo/Note/text()").Value;
 
-                    MessageBoxResult result = MessageBox.Show($"檢測到新版本 {App.ConvertVersion(version)} 當前: {App.ConvertVersion(crtVer)}\r\n\r\n{note}\r\n" + "\r\n" + "是否打開下載頁面？", "更新檢測", MessageBoxButton.OKCancel);
+                    MessageBoxResult result = MessageBox.Show(string.Format((Application.Current.TryFindResource("NewVersionDetected") as string).Replace("\\r\\n", "\r\n"),
+                        App.ConvertVersion(version), App.ConvertVersion(crtVer), note),
+                        Application.Current.TryFindResource("UpdateCheck") as string, MessageBoxButton.OKCancel);
                     if (result == MessageBoxResult.OK) Process.Start("https://github.com/pungin/Beanfun/releases");
                 }
                 catch (Exception) { }
             }
             else
             {
-                if (show) MessageBox.Show($"未檢測到有更新。", "更新檢測", MessageBoxButton.OK);
+                if (show) MessageBox.Show(Application.Current.TryFindResource("NoUpdatesDetected") as string,
+                    Application.Current.TryFindResource("UpdateCheck") as string, MessageBoxButton.OK);
             }
         }
 

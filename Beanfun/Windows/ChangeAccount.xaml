@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Beanfun"
         mc:Ignorable="d"
-        Title="變更帳號"
+        Title="{DynamicResource EditAccount}"
         ResizeMode="CanMinimize"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterScreen"
@@ -25,7 +25,7 @@
                                     <Setter.Value>
                                         <VisualBrush AlignmentX="Left" Stretch="None">
                                             <VisualBrush.Visual>
-                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="請輸入Beanfun帳號"/></TextBlock>
+                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="{DynamicResource tbBeanfunAccount}"/></TextBlock>
                                             </VisualBrush.Visual>
                                         </VisualBrush>
                                     </Setter.Value>
@@ -48,7 +48,7 @@
                                     <Setter.Value>
                                         <VisualBrush AlignmentX="Left" Stretch="None">
                                             <VisualBrush.Visual>
-                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="請輸入帳號備註(不設定則留空)"/></TextBlock>
+                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="{DynamicResource tbBeanfunRemark}"/></TextBlock>
                                             </VisualBrush.Visual>
                                         </VisualBrush>
                                     </Setter.Value>
@@ -59,8 +59,8 @@
                 </TextBox.Style>
             </TextBox>
             <Grid>
-                <CheckBox x:Name="autoLogin" Content="自動登入" Margin="5"/>
-                <Button Content="變更" Margin="5" HorizontalAlignment="Right" Click="Button_Click" IsDefault="True"/>
+                <CheckBox x:Name="autoLogin" Content="{DynamicResource AutoLogin}" Margin="5"/>
+                <Button Content="{DynamicResource EditAccountSave}" Margin="5" HorizontalAlignment="Right" Click="Button_Click" IsDefault="True"/>
             </Grid>
         </StackPanel>
     </Grid>

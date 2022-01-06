@@ -1,8 +1,6 @@
 ﻿using Newtonsoft.Json.Linq;
-using System.Collections;
 using System.Collections.Specialized;
 using System.Net;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Beanfun
@@ -73,7 +71,9 @@ namespace Beanfun
             {
                 accountAmountLimitNotice = regex.Match(response).Groups[1].Value;
                 if (accountAmountLimitNotice.Contains("進階認證"))
-                    accountAmountLimitNotice = "請完成進階認證後重新登入";
+                    accountAmountLimitNotice = System.Windows.Application.Current.TryFindResource("AuthReLogin") as string;
+                else
+                    accountAmountLimitNotice = I18n.ToSimplified(accountAmountLimitNotice);
             }
             else accountAmountLimitNotice = "";
 
@@ -119,13 +119,9 @@ namespace Beanfun
 
             regex = new Regex("<div id=\"divServiceAccountAmountLimitNotice\" class=\"InnerContent\">(.*)</div>");
             if (regex.IsMatch(response))
-            {
-                accountAmountLimitNotice = regex.Match(response).Groups[1].Value;
-            }
+                accountAmountLimitNotice = I18n.ToSimplified(regex.Match(response).Groups[1].Value);
             else
-            {
                 accountAmountLimitNotice = "";
-            }
 
             if (this.accountList.Count > 0) this.accountList.Sort((x, y) => { return x.ssn.CompareTo(y.ssn); });
 

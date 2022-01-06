@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:Beanfun"
         xmlns:System="clr-namespace:System;assembly=mscorlib"
         mc:Ignorable="d"
-        Title="新增帳號"
+        Title="{DynamicResource AddAccount}"
         ResizeMode="CanMinimize"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterScreen"
@@ -14,8 +14,8 @@
     <Grid>
         <StackPanel Margin="5">
             <ComboBox x:Name="region" SelectedIndex="0" Margin="5" SelectionChanged="region_SelectionChanged">
-                <System:String>台灣 Taiwan</System:String>
-                <System:String>香港 HongKong</System:String>
+                <TextBlock Text="{DynamicResource Taiwan}"/>
+                <TextBlock Text="{DynamicResource HongKong}"/>
             </ComboBox>
             <TextBox x:Name="t_AccountID" VerticalContentAlignment="Center" Margin="5" Width="200">
                 <TextBox.Style>
@@ -30,7 +30,7 @@
                                     <Setter.Value>
                                         <VisualBrush AlignmentX="Left" Stretch="None">
                                             <VisualBrush.Visual>
-                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="請輸入Beanfun帳號"/></TextBlock>
+                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="{DynamicResource tbBeanfunAccount}"/></TextBlock>
                                             </VisualBrush.Visual>
                                         </VisualBrush>
                                     </Setter.Value>
@@ -53,7 +53,7 @@
                                     <Setter.Value>
                                         <VisualBrush AlignmentX="Left" Stretch="None">
                                             <VisualBrush.Visual>
-                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="請輸入帳號備註(不設定則留空)"/></TextBlock>
+                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="{DynamicResource tbBeanfunRemark}"/></TextBlock>
                                             </VisualBrush.Visual>
                                         </VisualBrush>
                                     </Setter.Value>
@@ -76,7 +76,7 @@
                                     <Setter.Value>
                                         <VisualBrush AlignmentX="Left" Stretch="None">
                                             <VisualBrush.Visual>
-                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="密碼(不儲存則留空)"/></TextBlock>
+                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="{DynamicResource tbBeanfunPassword}"/></TextBlock>
                                             </VisualBrush.Visual>
                                         </VisualBrush>
                                     </Setter.Value>
@@ -99,7 +99,7 @@
                                     <Setter.Value>
                                         <VisualBrush AlignmentX="Left" Stretch="None">
                                             <VisualBrush.Visual>
-                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="認證訊息(不儲存則留空)"/></TextBlock>
+                                                <TextBlock Opacity="0.5" Padding="5,0" Background="Transparent"><Run Text="{DynamicResource tbBeanfunAuthInfo}"/></TextBlock>
                                             </VisualBrush.Visual>
                                         </VisualBrush>
                                     </Setter.Value>
@@ -110,8 +110,8 @@
                 </TextBox.Style>
             </TextBox>
             <Grid>
-                <CheckBox x:Name="autoLogin" Content="自動登入" Margin="5"/>
-                <Button Content="新增" Margin="5" HorizontalAlignment="Right" Click="Button_Click" IsDefault="True"/>
+                <CheckBox x:Name="autoLogin" Content="{DynamicResource AutoLogin}" Margin="5"/>
+                <Button Content="{DynamicResource Add}" Margin="5" HorizontalAlignment="Right" Click="Button_Click" IsDefault="True"/>
             </Grid>
         </StackPanel>
     </Grid>
