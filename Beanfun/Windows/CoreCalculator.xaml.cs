@@ -22,7 +22,7 @@ namespace Beanfun
                     _mainSkillSource = new ObservableCollection<string>(MustSkills);
                     for(int i = 0; i <= _useOtherSkillCount; i++)
                     {
-                        _mainSkillSource.Add("其他" + (i + 1));
+                        _mainSkillSource.Add(string.Format("{0}{1}", TryFindResource("Others"), i + 1));
                     }
                 }
                 return _mainSkillSource;
@@ -36,7 +36,7 @@ namespace Beanfun
                 if(_secondarySkillSource.Count != MustSkills.Count + 1)
                 {
                     _secondarySkillSource = new ObservableCollection<string>(MustSkills);
-                    _secondarySkillSource.Add("其他");
+                    _secondarySkillSource.Add(TryFindResource("Others") as string);
                 }
                 return _secondarySkillSource;
             }
@@ -64,7 +64,7 @@ namespace Beanfun
             c_Skill1.ItemsSource = MainSkillSource;
             c_Skill2.ItemsSource = SecondarySkillSource;
             c_Skill3.ItemsSource = SecondarySkillSource;
-            btn_Calculator.Content = TryFindResource("Caculator") as string + "(" + this.mustCoreCount() + "核" + MustSkills.Count + "技)";
+            btn_Calculator.Content = string.Format(TryFindResource("CaculatorCore") as string, this.mustCoreCount(), MustSkills.Count);
             t_SkillName.Text = "";
         }
 
@@ -75,7 +75,7 @@ namespace Beanfun
                 this.errorMessage(TryFindResource("CoreSkillNameIsEmpty") as string);
                 return;
             }
-            if (c_Skill1.Text == c_Skill2.Text || c_Skill1.Text == c_Skill3.Text || c_Skill2.Text == c_Skill3.Text && c_Skill2.Text != "其他") 
+            if (c_Skill1.Text == c_Skill2.Text || c_Skill1.Text == c_Skill3.Text || c_Skill2.Text == c_Skill3.Text && c_Skill2.Text != TryFindResource("Others") as string) 
             {
                 this.errorMessage(TryFindResource("CoreSkillNameIsRepeat") as string);
                 return;
@@ -87,7 +87,7 @@ namespace Beanfun
                 return;
             }
             CoreItems.Add(item);
-            if (item.skill1 == "其他" + (_useOtherSkillCount + 1))
+            if (item.skill1 == string.Format("{0}{1}", TryFindResource("Others"), _useOtherSkillCount + 1))
             {
                 _useOtherSkillCount++;
                 c_Skill1.ItemsSource = MainSkillSource;
@@ -186,7 +186,7 @@ namespace Beanfun
                 for (int i = 0; i < result.Count; i++)
                 {
                     List<CoreItem> items = result[i];
-                    r = r + "第" + i + "組組合：\r\n";
+                    r += string.Format(TryFindResource("CoreGroup") as string, i + 1) + "\r\n";
                     foreach(CoreItem item in items)
                     {
                         r = r + item.ToString() + "\r\n";
@@ -219,7 +219,7 @@ namespace Beanfun
                 c_Skill1.ItemsSource = MainSkillSource;
                 c_Skill2.ItemsSource = SecondarySkillSource;
                 c_Skill3.ItemsSource = SecondarySkillSource;
-                btn_Calculator.Content = TryFindResource("Caculator") as string + "(" + this.mustCoreCount() + "核" + MustSkills.Count + "技)";
+                btn_Calculator.Content = string.Format(TryFindResource("CaculatorCore") as string, this.mustCoreCount(), MustSkills.Count);
             }
             
         }
@@ -246,7 +246,7 @@ namespace Beanfun
 
         public override string ToString()
         {
-            return this.skill1 + "(主)/" + this.skill2 + "/" + this.skill3;
+            return string.Format("{0}({1})/{2}/{3}", this.skill1, Application.Current.TryFindResource("Main"), this.skill2, this.skill3);
         }
 
         public bool Equals(CoreItem other)

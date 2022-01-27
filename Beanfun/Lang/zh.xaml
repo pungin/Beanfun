@@ -202,12 +202,17 @@
     <system:String x:Key="PerfectCoreMyCores">已有核心</system:String>
     <system:String x:Key="PerfectCoreResult">計算結果</system:String>
     <system:String x:Key="Caculator">計算</system:String>
+    <system:String x:Key="CaculatorCore">計算({0}核{1}技)</system:String>
     <system:String x:Key="SkillNameIsEmpty">技能名不能為空</system:String>
     <system:String x:Key="SkillNameIsRepeat">技能名已經添加過</system:String>
     <system:String x:Key="CoreSkillNameIsEmpty">必須先選擇3個核心技能</system:String>
     <system:String x:Key="CoreSkillNameIsRepeat">3個核心技能有重複</system:String>
     <system:String x:Key="CoreIsRepeat">已經添加過相同的核心（副技能不分順序）</system:String>
     <system:String x:Key="NotFindPerfectCore">未找到完美核心組合</system:String>
+    <system:String x:Key="Main">主</system:String>
+    <system:String x:Key="Secondary">副</system:String>
+    <system:String x:Key="Others">其他</system:String>
+    <system:String x:Key="CoreGroup">第{0}組組合：</system:String>
     <system:String x:Key="GameSelected">選擇遊戲</system:String>
     <system:String x:Key="ToolBox">工具箱</system:String>
     <system:String x:Key="ConvoyOperation">車隊操作</system:String>

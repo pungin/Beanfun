@@ -26,15 +26,15 @@
         <GroupBox Header="{DynamicResource PerfectCoreMyCores}" HorizontalAlignment="Left" Height="234" Margin="10,160,0,0" VerticalAlignment="Top" Width="318">
             <DockPanel HorizontalAlignment="Left" Height="213" LastChildFill="True" VerticalAlignment="Top" Width="308" Margin="0,0,-2,-1">
                 <DockPanel LastChildFill="True" DockPanel.Dock="Top">
-                    <Label Content="主"/>
+                    <Label Content="{DynamicResource Main}"/>
                     <ComboBox ItemsSource="{Binding MainSkillSource}" x:Name="c_Skill1"/>
                 </DockPanel>
                 <DockPanel LastChildFill="True" DockPanel.Dock="Top">
-                    <Label Content="副"/>
+                    <Label Content="{DynamicResource Secondary}"/>
                     <ComboBox ItemsSource="{Binding SecondarySkillSource}" x:Name="c_Skill2"/>
                 </DockPanel>
                 <DockPanel LastChildFill="True" DockPanel.Dock="Top">
-                    <Label Content="副"/>
+                    <Label Content="{DynamicResource Secondary}"/>
                     <ComboBox ItemsSource="{Binding SecondarySkillSource}" x:Name="c_Skill3"/>
                 </DockPanel>
                 <Grid DockPanel.Dock="Top">

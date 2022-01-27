@@ -1508,8 +1508,8 @@ namespace Beanfun
 
         private void startByNTLEA(string path, string command)
         {
-            ProcessStartInfo startInfo = new ProcessStartInfo(String.Format("{0}\\ntleas.exe", System.Environment.CurrentDirectory));
-            startInfo.Arguments = String.Format("{0} C950 L3076 P1 {1}", path.StartsWith("\"") ? path : String.Format("\"{0}\"", path), command == string.Empty ? command : String.Format(" \"A{0}\"", command));
+            ProcessStartInfo startInfo = new ProcessStartInfo(string.Format("{0}\\ntleas.exe", System.Environment.CurrentDirectory));
+            startInfo.Arguments = string.Format("{0} C950 L3076 P1 {1}", path.StartsWith("\"") ? path : string.Format("\"{0}\"", path), command == string.Empty ? command : string.Format(" \"A{0}\"", command));
             Process.Start(startInfo);
         }
 
