@@ -506,7 +506,7 @@ namespace Beanfun
                 settingPage.t_GamePath.Text = ConfigAppSettings.GetValue(dir_value_name + "." + gameCode);
             }
 
-            if (gameCode == "610074_T9")
+            if (gameCode == "610074_T9" || gameCode == "610075_T9")
             {
                 settingPage.skipPlayWnd.Visibility = Visibility.Visible;
 
@@ -1210,7 +1210,7 @@ namespace Beanfun
             }
             accountList.m_GetEmail.Visibility = visable;
 
-            if (gameCode == "610074_T9" || gameCode == "610096_TE")
+            if (gameCode == "610074_T9" || gameCode == "610075_T9" || gameCode == "610096_TE")
                 accountList.btn_Tools.Visibility = Visibility.Visible;
             else
                 accountList.btn_Tools.Visibility = Visibility.Collapsed;
@@ -1967,7 +1967,10 @@ namespace Beanfun
                             var tcpClient = new System.Net.Sockets.TcpClient();
                             tcpClient.SendTimeout = 6000;
                             tcpClient.ReceiveTimeout = 6000;
-                            tcpClient.Connect("tw.login.maplestory.gamania.com", 8484);
+                            string WvsLoginServerDomain = "tw.login.maplestory.gamania.com";
+                            if ("610075_T9".Equals(service_code + "_" + service_region))
+                                WvsLoginServerDomain = "tw.loginT.maplestory.gamania.com";
+                            tcpClient.Connect(WvsLoginServerDomain, 8484);
 
                             if (tcpClient.Connected)
                             {

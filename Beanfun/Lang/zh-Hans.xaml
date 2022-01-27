@@ -131,11 +131,11 @@
     <system:String x:Key="DataRecovery">账密恢复</system:String>
     <system:String x:Key="Password">密码</system:String>
     <system:String x:Key="Data">资料</system:String>
-    <system:String x:Key="Export">汇出</system:String>
+    <system:String x:Key="Export">导出</system:String>
     <system:String x:Key="Recovery">恢复</system:String>
-    <system:String x:Key="ExportDone">汇出完成</system:String>
-    <system:String x:Key="RecoveryFailed">汇入失败</system:String>
-    <system:String x:Key="RecoverySuccess">汇入成功</system:String>
+    <system:String x:Key="ExportDone">导出完成</system:String>
+    <system:String x:Key="RecoveryFailed">导入失败</system:String>
+    <system:String x:Key="RecoverySuccess">导入成功</system:String>
     <system:String x:Key="MsgDecryptFailed">密码或资料错误，解密失败</system:String>
     <system:String x:Key="AddAccount">增加账号</system:String>
     <system:String x:Key="tbBeanfunAccount">请输入Beanfun账号</system:String>
@@ -172,6 +172,7 @@
     <system:String x:Key="StarForce">适用</system:String>
     <system:String x:Key="StarForceSplit">星强化（最高</system:String>
     <system:String x:Key="StarsInFused">星）</system:String>
+    <system:String x:Key="ScrollDestiny">命运卷</system:String>
     <system:String x:Key="ScrollGlory">荣耀卷</system:String>
     <system:String x:Key="ScrollJiDian">极电卷</system:String>
     <system:String x:Key="ScrollChuanShuo">传说卷</system:String>

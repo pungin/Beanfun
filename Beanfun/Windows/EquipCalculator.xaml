@@ -197,6 +197,7 @@
             <DockPanel Margin="5">
                 <StackPanel>
                     <Image Source="/Beanfun;component/Resources/Scroll_Glory.png" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Height="32"/>
+                    <Image Source="/Beanfun;component/Resources/Scroll_Glory.png" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Height="32"/>
                     <Image Source="/Beanfun;component/Resources/Scroll_Black.png" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Height="32"/>
                     <Image Source="/Beanfun;component/Resources/Scroll_V.png" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Height="32"/>
                     <Image Source="/Beanfun;component/Resources/Scroll_X.png" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Height="32"/>
@@ -207,6 +208,7 @@
                     <Image Source="/Beanfun;component/Resources/Scroll_Other.png" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Height="32"/>
                 </StackPanel>
                 <StackPanel>
+                    <Label Content="{DynamicResource ScrollDestiny}" Height="32"/>
                     <Label Content="{DynamicResource ScrollGlory}" Height="32"/>
                     <Label Content="{DynamicResource ScrollBlack}" Height="32"/>
                     <Label Content="{DynamicResource ScrollV}" Height="32"/>
@@ -218,6 +220,36 @@
                     <Label Content="{DynamicResource ScrollOthers}" Height="32"/>
                 </StackPanel>
                 <StackPanel>
+                    <DockPanel>
+                        <TextBox x:Name="t_DestinyNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_DestinyNum_GotFocus">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Background" Value="{x:Null}" />
+                                    <Style.Triggers>
+                                        <MultiTrigger>
+                                            <MultiTrigger.Conditions>
+                                                <Condition Property="IsFocused" Value="False"></Condition>
+                                                <Condition Property="Text" Value=""></Condition>
+                                            </MultiTrigger.Conditions>
+                                            <Setter Property="Background">
+                                                <Setter.Value>
+                                                    <VisualBrush AlignmentX="Left" Stretch="None">
+                                                        <VisualBrush.Visual>
+                                                            <TextBlock Padding="2,0" Background="Transparent">0</TextBlock>
+                                                        </VisualBrush.Visual>
+                                                    </VisualBrush>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </MultiTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <Label Content="{DynamicResource Sheet}" Height="32"/>
+                        <RadioButton VerticalAlignment="Center" x:Name="rb_DestinyMin" Content="{DynamicResource GloryMin}" GroupName="rb_DestinyType" Checked="rb_DestinyType_IsCheckedChanged"/>
+                        <RadioButton VerticalAlignment="Center" x:Name="rb_DestinyAverage" Content="{DynamicResource GloryAverage}" GroupName="rb_DestinyType" Checked="rb_DestinyType_IsCheckedChanged" IsChecked="True"/>
+                        <RadioButton VerticalAlignment="Center" x:Name="rb_DestinyMax" Content="{DynamicResource GloryMax}" GroupName="rb_DestinyType" Checked="rb_DestinyType_IsCheckedChanged"/>
+                    </DockPanel>
                     <DockPanel>
                         <TextBox x:Name="t_GloryNum" MinWidth="30" TextChanged="calcStat_TextChanged" VerticalAlignment="Center" GotFocus="t_GloryNum_GotFocus">
                             <TextBox.Style>

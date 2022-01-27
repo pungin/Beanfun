@@ -49,6 +49,7 @@ namespace Beanfun
 
         static class Scrolls
         {
+            public static Scroll Destiny = new Scroll();
             public static Scroll Glory = new Scroll();
             public static Scroll Black = new Scroll();
             public static Scroll V = new Scroll();
@@ -58,13 +59,21 @@ namespace Beanfun
             public static Scroll SM = new Scroll();
             public static Scroll BM = new Scroll();
 
-            static Scrolls() {
+            static Scrolls()
+            {
+                Destiny.Weapon = new ScrollStat(14, 20, 14, 20);
+                Destiny.Armor = new ScrollStat(0, 0, 9, 15);
+                Destiny.Accessory = new ScrollStat(0, 0, 9, 15);
+                Destiny.Weapon.RandomType = 1;
+                Destiny.Accessory.RandomType = Destiny.Weapon.RandomType;
+                Destiny.Armor.RandomType = Destiny.Weapon.RandomType;
+
                 Glory.Weapon = new ScrollStat(10, 20, 10, 20);
                 Glory.Armor = new ScrollStat(0, 0, 5, 15);
                 Glory.Accessory = new ScrollStat(0, 0, 5, 15);
-                Scrolls.Glory.Weapon.RandomType = 1;
-                Scrolls.Glory.Accessory.RandomType = Scrolls.Glory.Weapon.RandomType;
-                Scrolls.Glory.Armor.RandomType = Scrolls.Glory.Weapon.RandomType;
+                Glory.Weapon.RandomType = 1;
+                Glory.Accessory.RandomType = Glory.Weapon.RandomType;
+                Glory.Armor.RandomType = Glory.Weapon.RandomType;
 
                 Black.Weapon = new ScrollStat(14, 14);
                 Black.Armor = new ScrollStat(2, 9);
@@ -129,6 +138,15 @@ namespace Beanfun
             calcStat();
         }
 
+        private void rb_DestinyType_IsCheckedChanged(object sender, RoutedEventArgs e)
+        {
+            if (!InitFinish) return;
+            Scrolls.Destiny.Weapon.RandomType = (byte)((bool)rb_DestinyMin.IsChecked ? 0 : (bool)rb_DestinyAverage.IsChecked ? 1 : 2);
+            Scrolls.Destiny.Accessory.RandomType = Scrolls.Destiny.Weapon.RandomType;
+            Scrolls.Destiny.Armor.RandomType = Scrolls.Destiny.Weapon.RandomType;
+            calcStat();
+        }
+
         private void rb_GloryType_IsCheckedChanged(object sender, RoutedEventArgs e)
         {
             if (!InitFinish) return;
@@ -188,6 +206,11 @@ namespace Beanfun
         private void t_StarForce_GotFocus(object sender, RoutedEventArgs e)
         {
             t_StarForce.Text = "";
+        }
+
+        private void t_DestinyNum_GotFocus(object sender, RoutedEventArgs e)
+        {
+            t_DestinyNum.Text = "";
         }
 
         private void t_GloryNum_GotFocus(object sender, RoutedEventArgs e)
@@ -297,6 +320,16 @@ namespace Beanfun
                 starForce = 0;
             }
 
+            byte destinyNum;
+            try
+            {
+                destinyNum = byte.Parse(t_DestinyNum.Text);
+            }
+            catch
+            {
+                destinyNum = 0;
+            }
+
             byte gloryNum;
             try
             {
@@ -398,6 +431,7 @@ namespace Beanfun
             }
             
             int atk = baseATK
+            + destinyNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Destiny.Weapon.Atk : (eqpTyp == 3 ? Scrolls.Destiny.Accessory.Atk : Scrolls.Destiny.Armor.Atk))
             + gloryNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Glory.Weapon.Atk : (eqpTyp == 3 ? Scrolls.Glory.Accessory.Atk : Scrolls.Glory.Armor.Atk))
             + blackNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Black.Weapon.Atk : (eqpTyp == 3 ? Scrolls.Black.Accessory.Atk : Scrolls.Black.Armor.Atk))
             + vNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.V.Weapon.Atk : (eqpTyp == 3 ? Scrolls.V.Accessory.Atk : Scrolls.V.Armor.Atk))
@@ -410,6 +444,7 @@ namespace Beanfun
             ;
 
             int stat = baseStat
+            + destinyNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Destiny.Weapon.Stat : (eqpTyp == 3 ? Scrolls.Destiny.Accessory.Stat : Scrolls.Destiny.Armor.Stat))
             + gloryNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Glory.Weapon.Stat : (eqpTyp == 3 ? Scrolls.Glory.Accessory.Stat : Scrolls.Glory.Armor.Stat))
             + blackNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Black.Weapon.Stat : (eqpTyp == 3 ? Scrolls.Black.Accessory.Stat : Scrolls.Black.Armor.Stat))
             + vNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.V.Weapon.Stat : (eqpTyp == 3 ? Scrolls.V.Accessory.Stat : Scrolls.V.Armor.Stat))

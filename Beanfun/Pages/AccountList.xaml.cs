@@ -194,6 +194,7 @@ namespace Beanfun
             switch (gameCode)
             {
                 case "610074_T9":
+                case "610075_T9":
                     new MapleTools().Show();
                     break;
                 case "610096_TE":
