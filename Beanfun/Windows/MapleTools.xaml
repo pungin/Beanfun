@@ -16,6 +16,7 @@
             <Button Content="{DynamicResource PlayerReport}" Margin="5" Click="btn_PlayerReport_Click"/>
             <Button Content="{DynamicResource VideoReport}" Margin="5" Click="btn_VideoReport_Click"/>
             <Button Content="{DynamicResource EquipStarForceCaculator}" Margin="5" Click="btn_EquipCalculator_Click"/>
+            <Button Content="{DynamicResource PerfectCoreCaculator}" Margin="5" Click="btn_CoreCaculator_Click"/>
         </StackPanel>
     </Grid>
 </Window>

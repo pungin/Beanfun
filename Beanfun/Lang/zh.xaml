@@ -196,6 +196,17 @@
     <system:String x:Key="Sheet">張</system:String>
     <system:String x:Key="Stat">屬性</system:String>
     <system:String x:Key="Atk_Matk">攻擊力/魔力</system:String>
+    <system:String x:Key="PerfectCoreCaculator">完美核心計算器</system:String>
+    <system:String x:Key="PerfectCoreNeedSkills">需要的技能</system:String>
+    <system:String x:Key="PerfectCoreMyCores">已有核心</system:String>
+    <system:String x:Key="PerfectCoreResult">計算結果</system:String>
+    <system:String x:Key="Caculator">計算</system:String>
+    <system:String x:Key="SkillNameIsEmpty">技能名不能為空</system:String>
+    <system:String x:Key="SkillNameIsRepeat">技能名已經添加過</system:String>
+    <system:String x:Key="CoreSkillNameIsEmpty">必須先選擇3個核心技能</system:String>
+    <system:String x:Key="CoreSkillNameIsRepeat">3個核心技能有重複</system:String>
+    <system:String x:Key="CoreIsRepeat">已經添加過相同的核心（副技能不分順序）</system:String>
+    <system:String x:Key="NotFindPerfectCore">未找到完美核心組合</system:String>
     <system:String x:Key="GameSelected">選擇遊戲</system:String>
     <system:String x:Key="ToolBox">工具箱</system:String>
     <system:String x:Key="ConvoyOperation">車隊操作</system:String>
