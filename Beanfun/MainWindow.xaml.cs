@@ -1000,7 +1000,7 @@ namespace Beanfun
                     break;
             }
 
-            MessageBox.Show(I18n.ToSimplified(msg), title);
+            MessageBox.Show(I18n.ToSimplified(msg).Replace("\\r\\n", "\r\n"), title);
             if (method == 0)
                 App.Current.Shutdown();
             else if (method == 1)
@@ -1445,11 +1445,11 @@ namespace Beanfun
             {
                 if (ret == 0xC00700C1)
                 {
-                    errexit(string.Format((TryFindResource("MsgLEError0xC00700C1") as string).Replace("\\r\n", "\r\n"), Convert.ToString(ret, 16).ToUpper()), 2);
+                    errexit(string.Format((TryFindResource("MsgLEError0xC00700C1") as string), Convert.ToString(ret, 16).ToUpper()), 2);
                 }
                 else
                 {
-                    errexit(string.Format((TryFindResource("MsgLEError") as string).Replace("\\r\n", "\r\n"), Convert.ToString(ret, 16).ToUpper(),
+                    errexit(string.Format((TryFindResource("MsgLEError") as string), Convert.ToString(ret, 16).ToUpper(),
                         string.Format($"{Environment.OSVersion} {(Is64BitOS() ? "x64" : "x86")}", Environment.OSVersion, Is64BitOS() ? "x64" : "x86"),
                         GenerateSystemDllVersionList())
                     , 2);
@@ -2027,7 +2027,7 @@ namespace Beanfun
                 }
                 bool isCanUpdate = ClientMapleMajor != 0 && SrvMapleMajor != 0 && ClientMapleMajor >= (SrvMapleMajor - 2);
                 MessageBoxResult result = MessageBox.Show(
-                    string.Format((TryFindResource("MsgKillPatcher") as string).Replace("\\r\n", "\r\n"), info,
+                    string.Format((TryFindResource("MsgKillPatcher") as string).Replace("\\r\\n", "\r\n"), info,
                         isCanUpdate && ClientMapleMajor == SrvMapleMajor ? $"V{ SrvMapleMajor }.{ SrvMapleMinor.Split(':')[0] }fix" : "",
                         isCanUpdate ? TryFindResource("UpdateByPatch") : TryFindResource("UpdateByFullClient"),
                         isCanUpdate ? TryFindResource("GamePatch") : TryFindResource("GameFullClient")), TryFindResource("WarningByBeanfun") as string, MessageBoxButton.YesNo);
