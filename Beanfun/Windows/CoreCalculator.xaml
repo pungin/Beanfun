@@ -1,0 +1,49 @@
+﻿<Window x:Class="Beanfun.CoreCalculator"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Beanfun"
+        mc:Ignorable="d"
+        Title="{DynamicResource PerfectCoreCaculator}"
+        WindowStartupLocation="CenterScreen"
+        SizeToContent="WidthAndHeight" ResizeMode="NoResize"
+        >
+    <Grid Height="404" Width="654">
+        <GroupBox Header="{DynamicResource PerfectCoreResult}" HorizontalAlignment="Left" Height="345" Margin="328,49,0,0" VerticalAlignment="Top" Width="316">
+            <TextBox x:Name="t_Result" HorizontalAlignment="Left" Text="By:LinTx" Margin="0,10,0,0" TextWrapping="Wrap" Width="306" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" IsReadOnly="True"/>
+        </GroupBox>
+        <GroupBox Header="{DynamicResource PerfectCoreNeedSkills}" HorizontalAlignment="Left" Height="145" Margin="10,10,0,0" VerticalAlignment="Top" Width="318">
+            <DockPanel HorizontalAlignment="Left" Height="113" LastChildFill="True" Margin="0,10,-2,0" VerticalAlignment="Top" Width="308">
+                <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                    <Button Content="{DynamicResource Delete}" DockPanel.Dock="Right" Width="67" Click="btn_DeleteMustSkill_Click"/>
+                    <Button Content="{DynamicResource Add}" DockPanel.Dock="Right" Width="67" Click="btn_AddMustSkill_Click"/>
+                    <TextBox x:Name="t_SkillName" Height="23" TextWrapping="Wrap" DockPanel.Dock="Right" Text="" Margin="0,0,0,0"/>
+                </DockPanel>
+                <ListBox x:Name="l_MustSkills" ItemsSource="{Binding MustSkills}" DockPanel.Dock="Top"/>
+            </DockPanel>
+        </GroupBox>
+        <GroupBox Header="{DynamicResource PerfectCoreMyCores}" HorizontalAlignment="Left" Height="234" Margin="10,160,0,0" VerticalAlignment="Top" Width="318">
+            <DockPanel HorizontalAlignment="Left" Height="213" LastChildFill="True" VerticalAlignment="Top" Width="308" Margin="0,0,-2,-1">
+                <DockPanel LastChildFill="True" DockPanel.Dock="Top">
+                    <Label Content="主"/>
+                    <ComboBox ItemsSource="{Binding MainSkillSource}" x:Name="c_Skill1"/>
+                </DockPanel>
+                <DockPanel LastChildFill="True" DockPanel.Dock="Top">
+                    <Label Content="副"/>
+                    <ComboBox ItemsSource="{Binding SecondarySkillSource}" x:Name="c_Skill2"/>
+                </DockPanel>
+                <DockPanel LastChildFill="True" DockPanel.Dock="Top">
+                    <Label Content="副"/>
+                    <ComboBox ItemsSource="{Binding SecondarySkillSource}" x:Name="c_Skill3"/>
+                </DockPanel>
+                <Grid DockPanel.Dock="Top">
+                    <Button Content="{DynamicResource Add}" HorizontalAlignment="Left" Margin="10,10,0,10" VerticalAlignment="Top" Width="75" Click="btn_AddCore_Click"/>
+                    <Button Content="{DynamicResource Delete}" HorizontalAlignment="Left" Margin="213,10,0,10" VerticalAlignment="Top" Width="75" Click="btn_DeleteCore_Click"/>
+                </Grid>
+                <ListBox ItemsSource="{Binding CoreItems}" x:Name="l_Cores" DockPanel.Dock="Top"/>
+            </DockPanel>
+        </GroupBox>
+        <Button x:Name="btn_Calculator" Content="{DynamicResource Caculator}" Margin="333,21,10,360" Click="btn_Calculator_Click"/>
+    </Grid>
+</Window>

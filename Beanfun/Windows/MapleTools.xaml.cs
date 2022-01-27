@@ -35,6 +35,11 @@ namespace Beanfun
             new EquipCalculator().Show();
         }
 
+        private void btn_CoreCaculator_Click(object sender, RoutedEventArgs e)
+        {
+            new CoreCalculator().Show();
+        }
+
         private void btn_Recycling_Click(object sender, RoutedEventArgs e)
         {
             MessageBoxResult result = MessageBox.Show(TryFindResource("MsgRecycling") as string, "", MessageBoxButton.YesNo);
