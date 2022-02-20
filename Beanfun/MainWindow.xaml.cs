@@ -19,8 +19,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Utility.ModifyRegistry;
-
-
+using LRCSharpLibrary;
+using System.Reflection;
 
 namespace Beanfun
 {
@@ -1323,25 +1323,28 @@ namespace Beanfun
                     commandLine = regex.Replace(commandLine, password, 1);
                 }
 
+                LRProfile[] profile = LRConfig.GetProfiles();
                 switch (runMode)
                 {
                     case (int)GameStartMode.LocaleEmulator:
-                        startByLE(gamePath, commandLine);
+                        //startByLE(gamePath, commandLine);
+                        CallInject(profile[0], gamePath, "x86");
                         break;
                     case (int)GameStartMode.NTLEA:
-                        if (is64BitGame)
-                        {
-                            errexit(TryFindResource("MsgLEDoNotSupport64Bit") as string, 2);
-                            return;
-                        }
-                        else if (App.OSVersion < App.WinVista && runMode != (int)GameStartMode.Normal)
-                        {
-                            errexit(TryFindResource("MsgLEDoNotSupportXP") as string, 2);
-                            return;
-                        }
-                        return;
+                        //if (is64BitGame)
+                        //{
+                        //    errexit(TryFindResource("MsgLEDoNotSupport64Bit") as string, 2);
+                        //    return;
+                        //}
+                        //else if (App.OSVersion < App.WinVista && runMode != (int)GameStartMode.Normal)
+                        //{
+                        //    errexit(TryFindResource("MsgLEDoNotSupportXP") as string, 2);
+                        //    return;
+                        //}
+                        //return;
                         //startByNTLEA(gamePath, commandLine);
-                        //break;
+                        CallInject(profile[0], gamePath, "x64");
+                        break;
                     case (int)GameStartMode.Normal:
                         ProcessStartInfo startInfo = new ProcessStartInfo(gamePath);
                         startInfo.WorkingDirectory = Path.GetDirectoryName(gamePath);
@@ -1355,6 +1358,25 @@ namespace Beanfun
             {
                 errexit((TryFindResource("MsgLERunError") as string).Replace("\\r\\n", "\r\n"), 2);
             }
+        }
+
+        private void CallInject(LRProfile profile, string gamePath, string x64orx86)
+        {
+            string currentpath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            var proc = new Process();
+            var filepath = gamePath;
+            var filedirectory = Path.GetDirectoryName(filepath);
+            var LRPath = currentpath;
+            if (x64orx86 == "x64")
+                LRPath = currentpath + @"\Release";
+            else if (x64orx86 == "x86")
+                LRPath = currentpath + @"\x64\Release";
+            proc.StartInfo.FileName = LRPath + @"\LRProc.exe";
+            proc.StartInfo.Arguments = "\"" + filepath + "\" " + profile.Guid + " \"" + LRPath + "\\LRHook.dll\" \"" + currentpath + "\\LRConfig.xml\"";
+            proc.StartInfo.WorkingDirectory = filedirectory;
+            if (profile.RunAsAdmin) proc.StartInfo.Verb = "runas";
+            //MessageBox.Show(currentpath);
+            proc.Start();
         }
 
         private int releaseResource(byte[] data, string path, string md5)

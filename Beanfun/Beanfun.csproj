@@ -121,6 +121,8 @@
     <Compile Include="LEProc\LERegistryRedirector.cs" />
     <Compile Include="LEProc\LoaderWrapper.cs" />
     <Compile Include="Helper\WindowAccentCompositor.cs" />
+    <Compile Include="LRConfig.cs" />
+    <Compile Include="LRProfile.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
