@@ -158,10 +158,25 @@
     <value>..\Resources\QRCode_QQPay.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="LoaderDll" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\loaderdll.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    <value>..\LocaleEmulator\loaderdll.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>
   <data name="LocaleEmulator" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\localeemulator.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    <value>..\LocaleEmulator\localeemulator.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="LRProc" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\LocaleRemulator\LRProc.exe;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="LRHook" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\LocaleRemulator\LRHook.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="LRSubMenus" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\LocaleRemulator\LRSubMenus.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="SharpShell" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\LocaleRemulator\SharpShell.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </data>
+  <data name="LRConfig" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\LocaleRemulator\LRConfig.xml;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>
   <data name="Scroll_Glory" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\Scroll_Glory.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>

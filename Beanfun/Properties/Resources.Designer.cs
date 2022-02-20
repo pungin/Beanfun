@@ -89,7 +89,67 @@ namespace Beanfun.Properties {
                 return ((byte[])(obj));
             }
         }
-        
+
+        /// <summary>
+        ///   查找 System.Byte[] 类型的本地化资源。
+        /// </summary>
+        internal static byte[] LRProc
+        {
+            get
+            {
+                object obj = ResourceManager.GetObject("LRProc", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+
+        /// <summary>
+        ///   查找 System.Byte[] 类型的本地化资源。
+        /// </summary>
+        internal static byte[] LRHook
+        {
+            get
+            {
+                object obj = ResourceManager.GetObject("LRHook", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+
+        /// <summary>
+        ///   查找 System.Byte[] 类型的本地化资源。
+        /// </summary>
+        internal static byte[] LRSubMenus
+        {
+            get
+            {
+                object obj = ResourceManager.GetObject("LRSubMenus", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+
+        /// <summary>
+        ///   查找 System.Byte[] 类型的本地化资源。
+        /// </summary>
+        internal static byte[] SharpShell
+        {
+            get
+            {
+                object obj = ResourceManager.GetObject("SharpShell", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+
+        /// <summary>
+        ///   查找 System.Byte[] 类型的本地化资源。
+        /// </summary>
+        internal static byte[] LRConfig
+        {
+            get
+            {
+                object obj = ResourceManager.GetObject("LRConfig", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+
         /// <summary>
         ///   查找 System.Drawing.Bitmap 类型的本地化资源。
         /// </summary>

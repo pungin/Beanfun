@@ -34,7 +34,7 @@ namespace Beanfun
         Auto = 0,
         Normal = 1,
         LocaleEmulator = 2,
-        NTLEA = 3
+        LocaleRemulator = 3
     };
     /// <summary>
     /// MainWindow.xaml 的交互逻辑
@@ -1300,9 +1300,14 @@ namespace Beanfun
                             {
                                 is64BitGame = bt == WindowsAPI.BinaryType.SCS_64BIT_BINARY;
                             }
-                            if (App.OSVersion < App.WinVista || is64BitGame)
+                            if (App.OSVersion < App.WinVista)
                             {
-                                runMode = (int)GameStartMode.NTLEA;
+                                errexit(TryFindResource("MsgLEDoNotSupportXP") as string, 2);
+                                return;
+                            }
+                            else if (is64BitGame)
+                            {
+                                runMode = (int)GameStartMode.LocaleRemulator;
                             }
                             else
                             {
@@ -1312,7 +1317,7 @@ namespace Beanfun
                     }
                 }
 
-                if (runMode > (int)GameStartMode.NTLEA) runMode = (int)GameStartMode.NTLEA;
+                if (runMode > (int)GameStartMode.LocaleRemulator) runMode = (int)GameStartMode.LocaleRemulator;
 
                 string commandLine = "";
                 if (account != null && password != null && account != "" && password != "" && game_commandLine != "")
@@ -1328,20 +1333,14 @@ namespace Beanfun
                     case (int)GameStartMode.LocaleEmulator:
                         startByLE(gamePath, commandLine);
                         break;
-                    case (int)GameStartMode.NTLEA:
-                        if (is64BitGame)
+                    case (int)GameStartMode.LocaleRemulator:
+                        if (commandLine != string.Empty)
                         {
-                            errexit(TryFindResource("MsgLEDoNotSupport64Bit") as string, 2);
+                            errexit(TryFindResource("MsgLRDoNotSupportCmd") as string, 2);
                             return;
                         }
-                        else if (App.OSVersion < App.WinVista && runMode != (int)GameStartMode.Normal)
-                        {
-                            errexit(TryFindResource("MsgLEDoNotSupportXP") as string, 2);
-                            return;
-                        }
-                        return;
-                        //startByNTLEA(gamePath, commandLine);
-                        //break;
+                        startByLR(gamePath, commandLine);
+                        break;
                     case (int)GameStartMode.Normal:
                         ProcessStartInfo startInfo = new ProcessStartInfo(gamePath);
                         startInfo.WorkingDirectory = Path.GetDirectoryName(gamePath);
@@ -1353,7 +1352,7 @@ namespace Beanfun
             }
             catch
             {
-                errexit((TryFindResource("MsgLERunError") as string).Replace("\\r\\n", "\r\n"), 2);
+                errexit((TryFindResource("MsgLocalePluginRunError") as string).Replace("\\r\\n", "\r\n"), 2);
             }
         }
 
@@ -1373,6 +1372,11 @@ namespace Beanfun
                     }
                     catch { return -1; }
                 }
+            }
+            string dir = Path.GetDirectoryName(path);
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
             }
             FileStream fsObj = new FileStream(path, FileMode.CreateNew);
             fsObj.Write(data, 0, data.Length);
@@ -1506,10 +1510,43 @@ namespace Beanfun
             return result.ToString();
         }
 
-        private void startByNTLEA(string path, string command)
+        private void startByLR(string path, string command)
         {
-            ProcessStartInfo startInfo = new ProcessStartInfo(string.Format("{0}\\ntleas.exe", System.Environment.CurrentDirectory));
-            startInfo.Arguments = string.Format("{0} C950 L3076 P1 {1}", path.StartsWith("\"") ? path : string.Format("\"{0}\"", path), command == string.Empty ? command : string.Format(" \"A{0}\"", command));
+            if (releaseResource(
+                    global::Beanfun.Properties.Resources.LRProc,
+                    string.Format("{0}\\LocaleRemulator\\LRProc.exe", System.Environment.CurrentDirectory),
+                    "A96774C9BB3B8C6B2495FA5B31EAC913"
+                ) == -1
+                || releaseResource(
+                    global::Beanfun.Properties.Resources.LRHook,
+                    string.Format("{0}\\LocaleRemulator\\LRHook.dll", System.Environment.CurrentDirectory),
+                    "6CAC300CD217259A76D9EB496220AE9B"
+                ) == -1
+                || releaseResource(
+                    global::Beanfun.Properties.Resources.LRSubMenus,
+                    string.Format("{0}\\LocaleRemulator\\LRSubMenus.dll", System.Environment.CurrentDirectory),
+                    "E6BFB2C0051F78042BAD0F4BE548751D"
+                ) == -1
+                || releaseResource(
+                    global::Beanfun.Properties.Resources.SharpShell,
+                    string.Format("{0}\\LocaleRemulator\\SharpShell.dll", System.Environment.CurrentDirectory),
+                    "70125553EDFF4465DCE49B2EEECB9BB0"
+                ) == -1
+                || releaseResource(
+                    global::Beanfun.Properties.Resources.LRConfig,
+                    string.Format("{0}\\LocaleRemulator\\LRConfig.xml", System.Environment.CurrentDirectory),
+                    "7FD33078FB6B3867CC22C8765AB962AC"
+                ) == -1)
+            {
+                MessageBox.Show(TryFindResource("MsgLEReleaseError") as string);
+            }
+
+            ProcessStartInfo startInfo = new ProcessStartInfo(string.Format("{0}\\LocaleRemulator\\LRProc.exe", System.Environment.CurrentDirectory));
+            startInfo.Arguments = string.Format("{0} tw \"{1}\" \"{2}\"",
+                path.StartsWith("\"") ? path : string.Format("\"{0}\"", path),
+                string.Format("{0}\\LocaleRemulator\\LRHook.dll", System.Environment.CurrentDirectory),
+                string.Format("{0}\\LocaleRemulator\\LRConfig.xml", System.Environment.CurrentDirectory)
+            );
             Process.Start(startInfo);
         }
 
