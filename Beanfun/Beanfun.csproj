@@ -117,9 +117,6 @@
     <Compile Include="Helper\I18n.cs" />
     <Compile Include="Helper\PacketReader.cs" />
     <Compile Include="Helper\TextBlockHelper.cs" />
-    <Compile Include="LEProc\Amemiya.Extensions.ArrayExtensions.cs" />
-    <Compile Include="LEProc\LERegistryRedirector.cs" />
-    <Compile Include="LEProc\LoaderWrapper.cs" />
     <Compile Include="Helper\WindowAccentCompositor.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
@@ -450,31 +447,6 @@
     <Resource Include="Resources\QRCode_Alipay.png" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="LocaleEmulator\LocaleEmulator.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="LocaleEmulator\LoaderDll.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Resource>
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="LocaleRemulator\LRProc.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="LocaleRemulator\LRHook.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="LocaleRemulator\LRSubMenus.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="LocaleRemulator\SharpShell.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="LocaleRemulator\LRConfig.xml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Resource>
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Resources\Scroll_Black.png" />
   </ItemGroup>
   <ItemGroup>
@@ -503,6 +475,15 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\QRCode_Tip.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="LocaleRemulator\LRHookx32.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="LocaleRemulator\LRHookx64.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="LocaleRemulator\LRProc.dll" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="AfterResolveReferences">

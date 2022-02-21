@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -33,8 +34,7 @@ namespace Beanfun
     {
         Auto = 0,
         Normal = 1,
-        LocaleEmulator = 2,
-        LocaleRemulator = 3
+        LocaleRemulator = 2
     };
     /// <summary>
     /// MainWindow.xaml 的交互逻辑
@@ -1305,15 +1305,11 @@ namespace Beanfun
                                 errexit(TryFindResource("MsgLEDoNotSupportXP") as string, 2);
                                 return;
                             }
-                            else if (is64BitGame)
-                            {
-                                runMode = (int)GameStartMode.LocaleRemulator;
-                            }
                             else
                             {
-                                runMode = (int)GameStartMode.LocaleEmulator;
+                                runMode = (int)GameStartMode.LocaleRemulator;
+                                break;
                             }
-                            break;
                     }
                 }
 
@@ -1330,16 +1326,8 @@ namespace Beanfun
 
                 switch (runMode)
                 {
-                    case (int)GameStartMode.LocaleEmulator:
-                        startByLE(gamePath, commandLine);
-                        break;
                     case (int)GameStartMode.LocaleRemulator:
-                        if (commandLine != string.Empty)
-                        {
-                            errexit(TryFindResource("MsgLRDoNotSupportCmd") as string, 2);
-                            return;
-                        }
-                        startByLR(gamePath, commandLine);
+                        startByLR(gamePath, commandLine, is64BitGame);
                         break;
                     case (int)GameStartMode.Normal:
                         ProcessStartInfo startInfo = new ProcessStartInfo(gamePath);
@@ -1350,8 +1338,9 @@ namespace Beanfun
                 }
                 Console.WriteLine("try open game done");
             }
-            catch
+            catch(Exception ex)
             {
+                Console.WriteLine(ex.ToString());
                 errexit((TryFindResource("MsgLocalePluginRunError") as string).Replace("\\r\\n", "\r\n"), 2);
             }
         }
@@ -1405,62 +1394,6 @@ namespace Beanfun
             }
         }
 
-        private void startByLE(string path, string command)
-        {
-            if (releaseResource(
-                    global::Beanfun.Properties.Resources.LocaleEmulator, 
-                    string.Format("{0}\\LocaleEmulator.dll", System.Environment.CurrentDirectory),
-                    "3434299884D61FFF4AB71460ECC03C0A"
-                ) ==  -1
-                || releaseResource(
-                    global::Beanfun.Properties.Resources.LoaderDll, 
-                    string.Format("{0}\\LoaderDll.dll", System.Environment.CurrentDirectory),
-                    "4C9D31A794E5930708CD4622431C8E04"
-                ) == -1)
-            {
-                MessageBox.Show(TryFindResource("MsgLEReleaseError") as string);
-            }
-
-            int CHINESEBIG5_CHARSET = 136;
-            var commandLine = string.Empty;
-            commandLine = path.StartsWith("\"")
-                ? $"{path} "
-                : $"\"{path}\" ";
-            commandLine += command;
-            System.Globalization.TextInfo culInfo = System.Globalization.CultureInfo.GetCultureInfo("zh-HK").TextInfo;
-
-            var l = new LEProc.LoaderWrapper
-            {
-                ApplicationName = path,
-                CommandLine = commandLine,
-                CurrentDirectory = Path.GetDirectoryName(path),
-                AnsiCodePage = (uint)culInfo.ANSICodePage,
-                OemCodePage = (uint)culInfo.OEMCodePage,
-                LocaleID = (uint)culInfo.LCID,
-                DefaultCharset = (uint) CHINESEBIG5_CHARSET,
-                HookUILanguageAPI = (uint)0,
-                Timezone = "China Standard Time",
-                NumberOfRegistryRedirectionEntries = 0,
-                DebugMode = false
-            };
-
-            uint ret;
-            if ((ret = l.Start()) != 0)
-            {
-                if (ret == 0xC00700C1)
-                {
-                    errexit(string.Format((TryFindResource("MsgLEError0xC00700C1") as string), Convert.ToString(ret, 16).ToUpper()), 2);
-                }
-                else
-                {
-                    errexit(string.Format((TryFindResource("MsgLEError") as string), Convert.ToString(ret, 16).ToUpper(),
-                        string.Format($"{Environment.OSVersion} {(Is64BitOS() ? "x64" : "x86")}", Environment.OSVersion, Is64BitOS() ? "x64" : "x86"),
-                        GenerateSystemDllVersionList())
-                    , 2);
-                }
-            }
-        }
-
         public static bool Is64BitOS()
         {
             if (IntPtr.Size == 8) // 64-bit programs run only on Win64
@@ -1510,45 +1443,60 @@ namespace Beanfun
             return result.ToString();
         }
 
-        private void startByLR(string path, string command)
+        private string releaseLRResource(bool is64BitGame)
         {
+            if (is64BitGame)
+            {
+                if (releaseResource(
+                    global::Beanfun.Properties.Resources.LRHookx64,
+                    string.Format("{0}\\LRHookx64.dll", System.Environment.CurrentDirectory),
+                    "D4EBE84B75219A10E5FA258881E11960"
+                ) == -1)
+                {
+                    return "";
+                }
+                return "LRHookx64.dll";
+            }
+            else
+            {
+                if (releaseResource(
+                    global::Beanfun.Properties.Resources.LRHookx32,
+                    string.Format("{0}\\LRHookx32.dll", System.Environment.CurrentDirectory),
+                    "8B4FACC43905A9331DEA0D4D4EC580AC"
+                ) == -1)
+                {
+                    return "";
+                }
+                return "LRHookx32.dll";
+            }
+        }
+        private void startByLR(string path, string command, bool is64BitGame)
+        {
+            string dllName = releaseLRResource(is64BitGame);
             if (releaseResource(
                     global::Beanfun.Properties.Resources.LRProc,
-                    string.Format("{0}\\LocaleRemulator\\LRProc.exe", System.Environment.CurrentDirectory),
-                    "A96774C9BB3B8C6B2495FA5B31EAC913"
-                ) == -1
-                || releaseResource(
-                    global::Beanfun.Properties.Resources.LRHook,
-                    string.Format("{0}\\LocaleRemulator\\LRHook.dll", System.Environment.CurrentDirectory),
-                    "6CAC300CD217259A76D9EB496220AE9B"
-                ) == -1
-                || releaseResource(
-                    global::Beanfun.Properties.Resources.LRSubMenus,
-                    string.Format("{0}\\LocaleRemulator\\LRSubMenus.dll", System.Environment.CurrentDirectory),
-                    "E6BFB2C0051F78042BAD0F4BE548751D"
-                ) == -1
-                || releaseResource(
-                    global::Beanfun.Properties.Resources.SharpShell,
-                    string.Format("{0}\\LocaleRemulator\\SharpShell.dll", System.Environment.CurrentDirectory),
-                    "70125553EDFF4465DCE49B2EEECB9BB0"
-                ) == -1
-                || releaseResource(
-                    global::Beanfun.Properties.Resources.LRConfig,
-                    string.Format("{0}\\LocaleRemulator\\LRConfig.xml", System.Environment.CurrentDirectory),
-                    "7FD33078FB6B3867CC22C8765AB962AC"
-                ) == -1)
+                    string.Format("{0}\\LRProc.dll", System.Environment.CurrentDirectory),
+                    "AC44B89FAAA583C896792A19F1674460"
+                ) == -1 || dllName == "")
             {
                 MessageBox.Show(TryFindResource("MsgLEReleaseError") as string);
             }
+            string dllPath = string.Format("{0}\\{1}", System.Environment.CurrentDirectory, dllName);
 
-            ProcessStartInfo startInfo = new ProcessStartInfo(string.Format("{0}\\LocaleRemulator\\LRProc.exe", System.Environment.CurrentDirectory));
-            startInfo.Arguments = string.Format("{0} tw \"{1}\" \"{2}\"",
-                path.StartsWith("\"") ? path : string.Format("\"{0}\"", path),
-                string.Format("{0}\\LocaleRemulator\\LRHook.dll", System.Environment.CurrentDirectory),
-                string.Format("{0}\\LocaleRemulator\\LRConfig.xml", System.Environment.CurrentDirectory)
-            );
-            Process.Start(startInfo);
+            var commandLine = string.Empty;
+            commandLine = path.StartsWith("\"")
+                ? $"{path} "
+                : $"\"{path}\" ";
+            commandLine += command;
+            System.Globalization.TextInfo culInfo = System.Globalization.CultureInfo.GetCultureInfo("zh-HK").TextInfo;
+
+            new Thread(new ThreadStart(() => {
+                LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage);
+            })).Start();
         }
+
+        [DllImport("LRProc.dll", EntryPoint = "LRInject", CharSet = CharSet.Ansi ,CallingConvention = CallingConvention.Cdecl)]
+        public static extern int LRInject(string application, string workpath, string commandline, string dllpath, uint CodePage);
 
         public bool AddServiceAccount(string name)
         {
