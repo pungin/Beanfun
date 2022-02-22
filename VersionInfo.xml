@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>4.1.8025.31419</Version>
+  <Version>4.2.8087.26618</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2021-12-21</Date>
+  <Date>2022-02-22</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>v4.1(2112211727)
-| 楓之谷V238更改任務字體大小所以移除更改字體功能
-| 更正偶爾會造成自動輸入選項消失的問題
-| 更正Win10有時無法開啟程式的問題
+  <Note>| 增加支援中文(简体)語言
+| 增加完美核心計算器
+| 捲軸計算器增加命運卷
+| 將區域模擬插件從Locale Emulator替換成Locale_Remulator(支援64 bit遊戲)
   </Note>
 </VersionInfo>
