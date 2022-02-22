@@ -295,7 +295,10 @@ namespace Beanfun
                     }
                 }
 
-                if ((bool)settingPage.ask_update.IsChecked) CheckUpdates(false);
+                if ((bool)settingPage.ask_update.IsChecked)
+                {
+                    new Thread(() => CheckUpdates(false)).Start();
+                }
 
                 this.accountManager = new AccountManager();
 
