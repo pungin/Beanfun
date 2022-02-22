@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>4.0.0.1</Version>
+  <Version>4.2.8087.26618</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2021-09-23</Date>
+  <Date>2022-02-22</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>- 轉區啟動遊戲現在會比對轉區檔案MD5值進行更換
-- 非繁中系統轉碼支援Windows11
-- 修復自動輸入、斷線問題
-- 窗口在Win7上使用Aero效果 在Win10上使用模糊效果 在Win11上使用亞克力效果
-- 更正不同系統下對Tls1.2的設定
-- 修復台灣Beanfun絕對武力和爆爆王無法獲取密碼的問題
-- 調整外觀
-- 增加楓之谷更正任務字體模糊的工具
+  <Note>| 楓之谷V238更改任務字體大小所以移除更改字體功能
+| 更正偶爾會造成自動輸入選項消失的問題
+| 更正Win10有時無法開啟程式的問題
+| 增加支援中文(简体)語言
+| 增加完美核心計算器
+| 捲軸計算器增加命運卷
+| 將區域模擬插件從Locale Emulator替換成Locale_Remulator(支援64 bit遊戲)
   </Note>
 </VersionInfo>
