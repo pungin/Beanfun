@@ -159,7 +159,7 @@
     <system:String x:Key="Copy">复制</system:String>
     <system:String x:Key="CopyFinished">复制完成</system:String>
     <system:String x:Key="CopyFailed">复制失败</system:String>
-    <system:String x:Key="DonateText">&lt;R&gt;感谢使用 缤放！&lt;L/&gt;&lt;L/&gt;缤放 目前是免费开源软件，没有广告，也没有任何功能限制。&lt;L/&gt;&lt;L/&gt;如果 缤放 帮主您改善了游戏体验，请考虑捐赠。&lt;L/&gt;&lt;L/&gt;您的捐赠会支持我不断地改进它，让它成为更游戏有效率的工具。&lt;L/&gt;&lt;L/&gt;感谢您的支持！❤&lt;L/&gt;&lt;L/&gt;&lt;/R&gt;</system:String>
+    <system:String x:Key="DonateText">&lt;R&gt;感谢使用 缤放！&lt;L/&gt;&lt;L/&gt;缤放 目前是免费开源软件，没有广告，也没有任何功能限制。&lt;L/&gt;&lt;L/&gt;如果 缤放 帮助您改善了游戏体验，请考虑捐赠。&lt;L/&gt;&lt;L/&gt;您的捐赠会支持我不断地改进它，让它成为更游戏有效率的工具。&lt;L/&gt;&lt;L/&gt;感谢您的支持！❤&lt;L/&gt;&lt;L/&gt;&lt;/R&gt;</system:String>
     <system:String x:Key="Alipay">支付宝</system:String>
     <system:String x:Key="EquipStarForceCaculator">装备卷轴星力计算器</system:String>
     <system:String x:Key="EquipType">装备分类:</system:String>
