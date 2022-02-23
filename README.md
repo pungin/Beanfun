@@ -33,4 +33,8 @@ Download available at <https://github.com/pungin/Beanfun/releases/latest>.
 
 ## Built With
 
+* [ini-parser](hhttps://github.com/rickyah/ini-parser) - ini元件
+* [log4net](https://logging.apache.org/log4net/) - 日誌元件
+* [Newtonsoft.Json](https://www.newtonsoft.com/json) - JSON元件
+* [Detours](https://github.com/microsoft/Detours) - Used to hook ANSI/Unicode functions
 * [Locale_Remulator](https://github.com/InWILL/Locale_Remulator) - 區域模擬元件
