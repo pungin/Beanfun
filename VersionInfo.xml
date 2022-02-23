@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>4.2.8087.26618</Version>
+  <Version>4.3.8089.23616</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2022-02-22</Date>
+  <Date>2022-02-23</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
   <Note>| 增加支援中文(简体)語言
 | 增加完美核心計算器
