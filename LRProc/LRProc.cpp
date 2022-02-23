@@ -13,7 +13,7 @@ extern "C" _declspec(dllexport) int LRInject(char* application, char* workpath, 
 {
 	LRProfile beta;
 	beta.CodePage = CodePage;
-	beta.HookIME = false;
+	beta.HookIME = true;
 	strcpy(beta.DllPath, dllpath);
 	LRConfigFileMap filemap;
 	filemap.WrtieConfigFileMap(&beta);
