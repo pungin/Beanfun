@@ -1479,7 +1479,7 @@ namespace Beanfun
             if (releaseResource(
                     global::Beanfun.Properties.Resources.LRProc,
                     string.Format("{0}\\LRProc.dll", System.Environment.CurrentDirectory),
-                    "AC44B89FAAA583C896792A19F1674460"
+                    "55442BEAEEEB4EB8C571AB3E1D12228D"
                 ) == -1 || dllName == "")
             {
                 MessageBox.Show(TryFindResource("MsgLEReleaseError") as string);
