@@ -1453,7 +1453,7 @@ namespace Beanfun
                 if (releaseResource(
                     global::Beanfun.Properties.Resources.LRHookx64,
                     string.Format("{0}\\LRHookx64.dll", System.Environment.CurrentDirectory),
-                    "D4EBE84B75219A10E5FA258881E11960"
+                    "315DEC28F1B2BCA93FD50AB1FF463476"
                 ) == -1)
                 {
                     return "";
@@ -1485,6 +1485,8 @@ namespace Beanfun
                 MessageBox.Show(TryFindResource("MsgLEReleaseError") as string);
             }
             string dllPath = string.Format("{0}\\{1}", System.Environment.CurrentDirectory, dllName);
+            Debug.WriteLine("dllpath:"+dllPath);
+            Debug.WriteLine("dllname:" + dllName);
 
             var commandLine = string.Empty;
             commandLine = path.StartsWith("\"")

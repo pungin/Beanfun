@@ -69,6 +69,7 @@
                             <CheckBox x:Name="ask_update" Margin="2" Content="{DynamicResource AutoCheckUpdate}" Checked="ask_update_CheckedChanged" Unchecked="ask_update_CheckedChanged" IsChecked="True"/>
                             <CheckBox x:Name="autoStartGame" Margin="2" Content="{DynamicResource RunAfterLogin}" Checked="autoStartGame_CheckedChanged" Unchecked="autoStartGame_CheckedChanged"/>
                             <CheckBox x:Name="minimize_to_tray" Margin="2" Content="{DynamicResource MinimizeToTaskbar}" Checked="minimize_to_tray_CheckedChanged" Unchecked="minimize_to_tray_CheckedChanged"/>
+                            <CheckBox x:Name="lr_hook_ime" Margin="2" Content="{DynamicResource LRHookIME}" Checked="lr_hook_ime_CheckedChanged" Unchecked="lr_hook_ime_CheckedChanged"/>
                         </StackPanel>
                     </StackPanel>
                     <DockPanel Margin="0,3">

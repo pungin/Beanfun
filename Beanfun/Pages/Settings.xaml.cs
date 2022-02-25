@@ -56,6 +56,7 @@ namespace Beanfun
             autoStartGame.IsChecked = bool.Parse(ConfigAppSettings.GetValue("autoStartGame", "false"));
             ask_update.IsChecked = bool.Parse(ConfigAppSettings.GetValue("ask_update", "true"));
             minimize_to_tray.IsChecked = bool.Parse(ConfigAppSettings.GetValue("minimize_to_tray", "false"));
+            lr_hook_ime.IsChecked = bool.Parse(ConfigAppSettings.GetValue("lr_hook_ime", "true"));
 
             tradLogin.IsChecked = bool.Parse(ConfigAppSettings.GetValue("tradLogin", "true"));
             skipPlayWnd.IsChecked = bool.Parse(ConfigAppSettings.GetValue("skipPlayWnd", "true"));
@@ -131,6 +132,13 @@ namespace Beanfun
             if (App.MainWnd == null || App.MainWnd.settingPage == null || minimize_to_tray.IsChecked == bool.Parse(ConfigAppSettings.GetValue("minimize_to_tray", "false")))
                 return;
             ConfigAppSettings.SetValue("minimize_to_tray", Convert.ToString((bool)minimize_to_tray.IsChecked));
+        }
+
+        private void lr_hook_ime_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            if (App.MainWnd == null || App.MainWnd.settingPage == null || lr_hook_ime.IsChecked == bool.Parse(ConfigAppSettings.GetValue("lr_hook_ime", "true")))
+                return;
+            ConfigAppSettings.SetValue("lr_hook_ime", Convert.ToString((bool)lr_hook_ime.IsChecked));
         }
 
         private void cb_UpdateChannel_SelectionChanged(object sender, SelectionChangedEventArgs e)
