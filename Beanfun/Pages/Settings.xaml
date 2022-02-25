@@ -86,6 +86,7 @@
                         </StackPanel>
                         <StackPanel>
                             <CheckBox x:Name="skipPlayWnd" Margin="2" Content="{DynamicResource SkipPlayWindow}" Checked="skipPlayWnd_CheckedChanged" Unchecked="skipPlayWnd_CheckedChanged" IsChecked="True" ToolTip="{DynamicResource SkipPlayWindowTip}" Cursor="Help"/>
+                            <CheckBox x:Name="lr_hook_ime" Margin="2" Content="{DynamicResource LRHookIME}" Checked="lr_hook_ime_CheckedChanged" Unchecked="lr_hook_ime_CheckedChanged"  ToolTip="{DynamicResource LRHookIMETip}" Cursor="Help"/>
                             <Button x:Name="btn_Tools" Content="{DynamicResource Tools}" Margin="2" Click="btn_Tools_Click"/>
                         </StackPanel>
                     </StackPanel>
