@@ -1404,7 +1404,7 @@ namespace Beanfun
                 if (releaseResource(
                     global::Beanfun.Properties.Resources.LRHookx64,
                     string.Format("{0}\\LRHookx64.dll", System.Environment.CurrentDirectory),
-                    "315DEC28F1B2BCA93FD50AB1FF463476"
+                    "4ADC1BB7BC2F33542A5989F33D6CA0C5"
                 ) == -1)
                 {
                     return "";
@@ -1416,7 +1416,7 @@ namespace Beanfun
                 if (releaseResource(
                     global::Beanfun.Properties.Resources.LRHookx32,
                     string.Format("{0}\\LRHookx32.dll", System.Environment.CurrentDirectory),
-                    "8B4FACC43905A9331DEA0D4D4EC580AC"
+                    "A709CC71658236B4965937E50B071E62"
                 ) == -1)
                 {
                     return "";
@@ -1431,14 +1431,12 @@ namespace Beanfun
             if (releaseResource(
                     global::Beanfun.Properties.Resources.LRProc,
                     string.Format("{0}\\LRProc.dll", System.Environment.CurrentDirectory),
-                    "55442BEAEEEB4EB8C571AB3E1D12228D"
+                    "8509C53EDDB2EBC62443DB152862F630"
                 ) == -1 || dllName == "")
             {
                 MessageBox.Show(TryFindResource("MsgLocalePluginReleaseError") as string);
             }
             string dllPath = string.Format("{0}\\{1}", System.Environment.CurrentDirectory, dllName);
-            Debug.WriteLine("dllpath:"+dllPath);
-            Debug.WriteLine("dllname:" + dllName);
 
             var commandLine = string.Empty;
             commandLine = path.StartsWith("\"")
@@ -1446,14 +1444,15 @@ namespace Beanfun
                 : $"\"{path}\" ";
             commandLine += command;
             System.Globalization.TextInfo culInfo = System.Globalization.CultureInfo.GetCultureInfo("zh-HK").TextInfo;
+            bool hookIME = (bool)settingPage.lr_hook_ime.IsChecked;
 
             new Thread(new ThreadStart(() => {
-                LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage);
+                LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage, hookIME);
             })).Start();
         }
 
         [DllImport("LRProc.dll", EntryPoint = "LRInject", CharSet = CharSet.Ansi ,CallingConvention = CallingConvention.Cdecl)]
-        public static extern int LRInject(string application, string workpath, string commandline, string dllpath, uint CodePage);
+        public static extern int LRInject(string application, string workpath, string commandline, string dllpath, uint CodePage, bool HookIME);
 
         public bool AddServiceAccount(string name)
         {

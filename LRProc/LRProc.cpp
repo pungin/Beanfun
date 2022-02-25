@@ -9,12 +9,13 @@
 //extern "C" __declspec(dllexport) int LRInject(char* filepath, char* dllpath, UINT CodePage)
 //int main(int argc,char* argv[])
 //int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int nCmdShow)
-extern "C" _declspec(dllexport) int LRInject(char* application, char* workpath, char* commandline, char* dllpath, UINT CodePage)
+extern "C" _declspec(dllexport) int LRInject(char* application, char* workpath, char* commandline, char* dllpath, UINT CodePage, bool HookIME)
 {
 	LRProfile beta;
 	beta.CodePage = CodePage;
-	beta.HookIME = true;
+	beta.HookIME = HookIME;
 	strcpy(beta.DllPath, dllpath);
+
 	LRConfigFileMap filemap;
 	filemap.WrtieConfigFileMap(&beta);
 	
@@ -28,9 +29,9 @@ extern "C" _declspec(dllexport) int LRInject(char* application, char* workpath, 
 	DetourCreateProcessWithDllExA(application, commandline, NULL,
 		NULL, FALSE, CREATE_DEFAULT_ERROR_MODE, NULL, workpath,
 		&si, &pi, dllpath, NULL);
-    
+
+	Sleep(5000);
 	WaitForSingleObject(pi.hProcess, INFINITE);
-    Sleep(5000);
 	filemap.FreeConfigFileMap();
 	return 0;
 }

@@ -113,6 +113,7 @@
     <system:String x:Key="RunAfterLogin">登录完成后运行游戏</system:String>
     <system:String x:Key="MinimizeToTaskbar">最小化到任务栏</system:String>
     <system:String x:Key="LRHookIME">LR:Hook IME</system:String>
+    <system:String x:Key="LRHookIMETip">调用LR时Hook IME，Windows 8以上操作系统可以防止输入法乱码</system:String>
     <system:String x:Key="Game">游戏</system:String>
     <system:String x:Key="GamePath">游戏路径</system:String>
     <system:String x:Key="TraditionalLoginMode">传统登录模式</system:String>
