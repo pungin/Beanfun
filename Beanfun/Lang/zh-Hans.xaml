@@ -295,7 +295,7 @@
     <system:String x:Key="MsgLRDoNotSupportCmd">以非繁体区域设置的系统启动64位游戏的方式不支持非传统登录模式。</system:String>
     <system:String x:Key="MsgLEDoNotSupportXP">以非繁体区域设置的系统启动游戏的方式不支持Windows XP。</system:String>
     <system:String x:Key="MsgLocalePluginRunError">启动失败，请尝试从桌面快捷方式直接启动游戏。\r\n\r\n若您系统为非繁体区域设置，可能是区域模拟插件不支持您的系统或是游戏自动更新导致游戏损坏了(可以尝试重新安装游戏)。</system:String>
-    <system:String x:Key="MsgLEReleaseError">释放转区软件错误，请重新启动电脑后再次尝试。</system:String>
+    <system:String x:Key="MsgLocalePluginReleaseError">释放区域模拟插件错误，请重新启动电脑后再次尝试。</system:String>
     <system:String x:Key="MsgLEError0xC00700C1">非繁体区域设置系统的方式启动游戏失败\r\n错误码: {0}\r\n导致这个错误的原因可能是因为使用了游戏的自动更新，导致游戏损坏了。\r\n\r\n解决方案:\r\n- 如果官方有fix更新补丁请下载下来手动覆盖一下游戏\r\n- 如果官方没有fix更新补丁或上面方法无法解决请尝试重新安装游戏\r\n</system:String>
     <system:String x:Key="MsgLEError">非繁体区域设置系统的方式启动游戏失败\r\n错误码: {0}\r\n{1}\r\n{2}\r\n如果你有运行任何杀毒软件, 请关闭后再次尝试。\r\n如果仍然显示此窗口, 请尝试以「安全模式」启动程序。如果你进行了以上的尝试仍然没有一个有效，请随时在后面的连接提交问题\r\nhttps://github.com/xupefei/Locale-Emulator/issues\r\n\r\n\r\n你可以按 CTRL+C 将此信息复制到你的剪切板。\r\n</system:String>
     <system:String x:Key="MsgBeanfunRejectLogin">您的登录要求已被beanfun! App拒绝。</system:String>

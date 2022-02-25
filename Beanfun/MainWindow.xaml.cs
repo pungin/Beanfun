@@ -1397,55 +1397,6 @@ namespace Beanfun
             }
         }
 
-        public static bool Is64BitOS()
-        {
-            if (IntPtr.Size == 8) // 64-bit programs run only on Win64
-            {
-                return true;
-            }
-            // Detect whether the current process is a 32-bit process 
-            // running on a 64-bit system.
-            bool flag;
-            return DoesWin32MethodExist("kernel32.dll", "IsWow64Process") &&
-                   WindowsAPI.IsWow64Process(WindowsAPI.GetCurrentProcess(), out flag) && flag;
-        }
-
-        private static bool DoesWin32MethodExist(string moduleName, string methodName)
-        {
-            var moduleHandle = WindowsAPI.GetModuleHandle(moduleName);
-            if (moduleHandle == IntPtr.Zero)
-            {
-                return false;
-            }
-            return WindowsAPI.GetProcAddress(moduleHandle, methodName) != IntPtr.Zero;
-        }
-
-        private static string GenerateSystemDllVersionList()
-        {
-            string[] dlls = { "NTDLL.DLL", "KERNELBASE.DLL", "KERNEL32.DLL", "USER32.DLL", "GDI32.DLL" };
-
-            var result = new StringBuilder();
-
-            foreach (var dll in dlls)
-            {
-                var version = FileVersionInfo.GetVersionInfo(
-                                                             Path.Combine(
-                                                                          Path.GetPathRoot(Environment.SystemDirectory),
-                                                                          Is64BitOS()
-                                                                              ? @"Windows\SysWOW64\"
-                                                                              : @"Windows\System32\",
-                                                                          dll));
-
-                result.Append(dll);
-                result.Append(": ");
-                result.Append(
-                              $"{version.FileMajorPart}.{version.FileMinorPart}.{version.FileBuildPart}.{version.FilePrivatePart}");
-                result.Append("\r\n");
-            }
-
-            return result.ToString();
-        }
-
         private string releaseLRResource(bool is64BitGame)
         {
             if (is64BitGame)
@@ -1473,6 +1424,7 @@ namespace Beanfun
                 return "LRHookx32.dll";
             }
         }
+
         private void startByLR(string path, string command, bool is64BitGame)
         {
             string dllName = releaseLRResource(is64BitGame);
@@ -1482,7 +1434,7 @@ namespace Beanfun
                     "55442BEAEEEB4EB8C571AB3E1D12228D"
                 ) == -1 || dllName == "")
             {
-                MessageBox.Show(TryFindResource("MsgLEReleaseError") as string);
+                MessageBox.Show(TryFindResource("MsgLocalePluginReleaseError") as string);
             }
             string dllPath = string.Format("{0}\\{1}", System.Environment.CurrentDirectory, dllName);
             Debug.WriteLine("dllpath:"+dllPath);
