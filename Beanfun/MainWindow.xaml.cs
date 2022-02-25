@@ -1446,7 +1446,7 @@ namespace Beanfun
             System.Globalization.TextInfo culInfo = System.Globalization.CultureInfo.GetCultureInfo("zh-HK").TextInfo;
 
             new Thread(new ThreadStart(() => {
-                LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage, App.OSVersion > App.Win7);
+                LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage, App.OSVersion >= App.Win8);
             })).Start();
         }
 

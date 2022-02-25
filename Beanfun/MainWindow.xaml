@@ -12,6 +12,7 @@
         Activated="Window_Activated"
         Deactivated="Window_Activated"
         StateChanged="Window_StateChanged"
+        Title="{DynamicResource AppName}"
     >
     <Window.Resources>
         <Style x:Key="TitleBarButton" TargetType="{x:Type Button}">
