@@ -1444,10 +1444,9 @@ namespace Beanfun
                 : $"\"{path}\" ";
             commandLine += command;
             System.Globalization.TextInfo culInfo = System.Globalization.CultureInfo.GetCultureInfo("zh-HK").TextInfo;
-            bool hookIME = (bool)settingPage.lr_hook_ime.IsChecked;
 
             new Thread(new ThreadStart(() => {
-                LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage, hookIME);
+                LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage, App.OSVersion > App.Win7);
             })).Start();
         }
 

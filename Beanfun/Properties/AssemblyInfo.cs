@@ -11,7 +11,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Pungin")]
 [assembly: AssemblyProduct("Beanfun")]
-[assembly: AssemblyCopyright("Copyright © Pungin  2017-2021")]
+[assembly: AssemblyCopyright("Copyright © Pungin  2017-2022")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

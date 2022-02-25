@@ -115,8 +115,6 @@
     <system:String x:Key="AutoCheckUpdate">有新版本時提示更新</system:String>
     <system:String x:Key="RunAfterLogin">登入完成後開啟遊戲</system:String>
     <system:String x:Key="MinimizeToTaskbar">最小化到工具列</system:String>
-    <system:String x:Key="LRHookIME">LR:Hook IME</system:String>
-    <system:String x:Key="LRHookIMETip">調用LR時Hook IME，Windows 8以上作業系統可以防止輸入法亂碼</system:String>
     <system:String x:Key="Game">遊戲</system:String>
     <system:String x:Key="GamePath">遊戲路徑</system:String>
     <system:String x:Key="TraditionalLoginMode">傳統登入模式</system:String>
