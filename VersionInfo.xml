@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>4.3.8089.23616</Version>
+  <Version>4.4.8093.39045</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2022-02-23</Date>
+  <Date>2022-02-27</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>| 增加支援中文(简体)語言
-| 增加完美核心計算器
-| 捲軸計算器增加命運卷
-| 將區域模擬插件從Locale Emulator替換成Locale_Remulator(支援64 bit遊戲)
+  <Note>| 更新Locale Remulator核心到1.4.2(修復粘貼板亂碼；非簡體中文系統運行時輸入文字亂碼)
+| 更正任務欄裡繽放只有圖標沒有名字的問題
   </Note>
 </VersionInfo>
