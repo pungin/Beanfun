@@ -1420,7 +1420,7 @@ namespace Beanfun
                 if (releaseResource(
                     global::Beanfun.Properties.Resources.LRHookx64,
                     string.Format("{0}\\LRHookx64.dll", System.Environment.CurrentDirectory),
-                    "D4EBE84B75219A10E5FA258881E11960"
+                    "6FD5DD07BED2A72AB6B8A7A1B2014FF4"
                 ) == -1)
                 {
                     return "";
@@ -1432,7 +1432,7 @@ namespace Beanfun
                 if (releaseResource(
                     global::Beanfun.Properties.Resources.LRHookx32,
                     string.Format("{0}\\LRHookx32.dll", System.Environment.CurrentDirectory),
-                    "8B4FACC43905A9331DEA0D4D4EC580AC"
+                    "5425BEC59110A25D6D645FD9BE06528A"
                 ) == -1)
                 {
                     return "";
@@ -1447,7 +1447,7 @@ namespace Beanfun
             if (releaseResource(
                     global::Beanfun.Properties.Resources.LRProc,
                     string.Format("{0}\\LRProc.dll", System.Environment.CurrentDirectory),
-                    "AC44B89FAAA583C896792A19F1674460"
+                    "EBE8C4458A0C8F72E868C7CE0E038EC8"
                 ) == -1 || dllName == "")
             {
                 MessageBox.Show(TryFindResource("MsgLocalePluginReleaseError") as string);
