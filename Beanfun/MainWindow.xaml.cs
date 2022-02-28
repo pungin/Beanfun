@@ -1267,15 +1267,15 @@ namespace Beanfun
                             if (gamePath == objects.Cast<ManagementBaseObject>().SingleOrDefault()?["executablepath"]?.ToString())
                             {
                                 processIds.Add(process.Id);
+                                continue;
                             }
                         }
                     }
                     catch { }
-                    if (processIds.Contains(process.Id)) { continue; }
                     try
                     {
                         if (process.MainModule.FileName == gamePath)
-                        { processIds.Add(process.Id); break; }
+                        { processIds.Add(process.Id); continue; }
                     }
                     catch { }
                 }
