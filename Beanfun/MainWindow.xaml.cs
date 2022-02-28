@@ -9,6 +9,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Management;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -1246,7 +1247,7 @@ namespace Beanfun
             {
                 return;
             }
-            bool findGame = false;
+            List<int> processIds = new List<int>();
 
             Regex regexx = new Regex("(.*).exe");
             string gameProcessName = "";
@@ -1256,26 +1257,41 @@ namespace Beanfun
             {
                 foreach (Process process in Process.GetProcessesByName(gameProcessName))
                 {
+                    if (processIds.Contains(process.Id)) { continue; }
+                    try
+                    {
+
+                        using (ManagementObjectSearcher searcher = new ManagementObjectSearcher("select * from Win32_Process where ProcessId = " + process.Id))
+                        using (ManagementObjectCollection objects = searcher.Get())
+                        {
+                            if (gamePath == objects.Cast<ManagementBaseObject>().SingleOrDefault()?["executablepath"]?.ToString())
+                            {
+                                processIds.Add(process.Id);
+                            }
+                        }
+                    }
+                    catch { }
+                    if (processIds.Contains(process.Id)) { continue; }
                     try
                     {
                         if (process.MainModule.FileName == gamePath)
-                        { findGame = true; break; }
+                        { processIds.Add(process.Id); break; }
                     }
                     catch { }
                 }
             }
 
-            if (findGame)
+            if (processIds.Count > 0)
             {
                 MessageBoxResult result = MessageBox.Show(TryFindResource("MsgGameAlreadyRun") as string, "", MessageBoxButton.YesNo);
                 if (result == MessageBoxResult.Yes)
                 {
-                    foreach (Process process in Process.GetProcessesByName(gameProcessName))
+                    foreach(int processId in processIds)
                     {
                         try
                         {
-                            if (process.MainModule.FileName == gamePath)
-                                process.Kill();
+                            Process process = Process.GetProcessById(processId);
+                            process.Kill();
                         }
                         catch { }
                     }
