@@ -1413,46 +1413,27 @@ namespace Beanfun
             }
         }
 
-        private string releaseLRResource(bool is64BitGame)
-        {
-            if (is64BitGame)
-            {
-                if (releaseResource(
-                    global::Beanfun.Properties.Resources.LRHookx64,
-                    string.Format("{0}\\LRHookx64.dll", System.Environment.CurrentDirectory),
-                    global::Beanfun.Properties.Resources.LRHookx64_md5
-                ) == -1)
-                {
-                    return "";
-                }
-                return "LRHookx64.dll";
-            }
-            else
-            {
-                if (releaseResource(
-                    global::Beanfun.Properties.Resources.LRHookx32,
-                    string.Format("{0}\\LRHookx32.dll", System.Environment.CurrentDirectory),
-                    global::Beanfun.Properties.Resources.LRHookx32_md5
-                ) == -1)
-                {
-                    return "";
-                }
-                return "LRHookx32.dll";
-            }
-        }
-
         private void startByLR(string path, string command, bool is64BitGame)
         {
-            string dllName = releaseLRResource(is64BitGame);
             if (releaseResource(
                     global::Beanfun.Properties.Resources.LRProc,
                     string.Format("{0}\\LRProc.dll", System.Environment.CurrentDirectory),
                     global::Beanfun.Properties.Resources.LRProc_md5
-                ) == -1 || dllName == "")
+                ) == -1
+                || releaseResource(
+                    global::Beanfun.Properties.Resources.LRHookx32,
+                    string.Format("{0}\\LRHookx32.dll", System.Environment.CurrentDirectory),
+                    global::Beanfun.Properties.Resources.LRHookx32_md5
+                ) == -1
+                || releaseResource(
+                    global::Beanfun.Properties.Resources.LRHookx64,
+                    string.Format("{0}\\LRHookx64.dll", System.Environment.CurrentDirectory),
+                    global::Beanfun.Properties.Resources.LRHookx64_md5
+                ) == -1)
             {
                 MessageBox.Show(TryFindResource("MsgLocalePluginReleaseError") as string);
             }
-            string dllPath = string.Format("{0}\\{1}", System.Environment.CurrentDirectory, dllName);
+            string dllPath = string.Format("{0}\\{1}", System.Environment.CurrentDirectory, is64BitGame ? "LRHookx64.dll" : "LRHookx32.dll");
 
             var commandLine = string.Empty;
             commandLine = path.StartsWith("\"")
