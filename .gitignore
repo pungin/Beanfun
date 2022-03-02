@@ -261,3 +261,5 @@ __pycache__/
 *.pyc
 /Dotfuscated
 /Build/Test
+/Build/Tools
+/Beanfun/LocaleRemulator/LRProc.dll

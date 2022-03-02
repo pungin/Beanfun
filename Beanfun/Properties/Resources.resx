@@ -175,4 +175,13 @@
   <data name="LRProc" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\LocaleRemulator\LRProc.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>
+  <data name="LRHookx32_md5" xml:space="preserve">
+    <value>5425BEC59110A25D6D645FD9BE06528A</value>
+  </data>
+  <data name="LRHookx64_md5" xml:space="preserve">
+    <value>6FD5DD07BED2A72AB6B8A7A1B2014FF4</value>
+  </data>
+  <data name="LRProc_md5" xml:space="preserve">
+    <value>E988C867CC39869D377B77C24EB15298</value>
+  </data>
 </root>

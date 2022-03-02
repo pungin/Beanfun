@@ -494,4 +494,10 @@
       </EmbeddedResource>
     </ItemGroup>
   </Target>
+  <PropertyGroup>
+    <PreBuildEvent>echo copy LRProc.dll
+copy $(SolutionDir)Build\$(Configuration)\LRProc.dll $(SolutionDir)Beanfun\LocaleRemulator\LRProc.dll /y
+echo RUN: $(SolutionDir)Build\Tools\ResourcesManager.exe "$(ProjectDir)Properties\Resources.resx"
+$(SolutionDir)Build\Tools\ResourcesManager.exe "$(ProjectDir)Properties\Resources.resx"</PreBuildEvent>
+  </PropertyGroup>
 </Project>
