@@ -314,6 +314,7 @@
     <system:String x:Key="MsgNeedAuth">為確保您的帳號安全，需請您協助進行資料驗證，以利保障您的權益。</system:String>
     <system:String x:Key="MsgNeedBeanfunAuth">此帳號需透過beanfun! 遊戲授權登入。\r\n請使用beanfun! 遊戲授權登入。</system:String>
     <system:String x:Key="MsgCantFindGame">無法正確偵測遊戲安裝狀態。請按一下&lt;是&gt;來重新偵測。若未安裝遊戲，請按一下&lt;否&gt;開始下載。</system:String>
+    <system:String x:Key="MsgGamePathHaveWChar">遊戲路徑有中文，可能無法正常運行。</system:String>
     <system:String x:Key="MsgGameAlreadyRun">遊戲已經運行,可能是客戶端問題導致未完全結束程序,是否要結束遊戲?</system:String>
     <system:String x:Key="MsgLRDoNotSupportCmd">以非繁體語係系統啟動64-Bit遊戲的方式不支援非傳統登入模式。</system:String>
     <system:String x:Key="MsgLEDoNotSupportXP">以非繁體語係系統啟動遊戲的方式不支援Windows XP。</system:String>

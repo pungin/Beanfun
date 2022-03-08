@@ -290,6 +290,7 @@
     <system:String x:Key="MsgNeedAuth">为确保您的账号安全，需请您协助进行资料验证，以利保障您的权益。</system:String>
     <system:String x:Key="MsgNeedBeanfunAuth">此账号需透过beanfun! 游戏授权登录。\r\n请使用beanfun! 游戏授权登录。</system:String>
     <system:String x:Key="MsgCantFindGame">无法正确检测游戏安装状态。请按一下&lt;是&gt;来重新检测。若未安装游戏，请按一下&lt;否&gt;开始下载。</system:String>
+    <system:String x:Key="MsgGamePathHaveWChar">游戏路径有中文，可能无法正常运行。</system:String>
     <system:String x:Key="MsgGameAlreadyRun">游戏已经运行,可能是客户端问题导致未完全结束程序,是否要结束游戏?</system:String>
     <system:String x:Key="MsgLRDoNotSupportCmd">以非繁体区域设置的系统启动64位游戏的方式不支持非传统登录模式。</system:String>
     <system:String x:Key="MsgLEDoNotSupportXP">以非繁体区域设置的系统启动游戏的方式不支持Windows XP。</system:String>

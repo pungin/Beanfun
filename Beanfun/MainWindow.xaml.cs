@@ -1247,6 +1247,16 @@ namespace Beanfun
             {
                 return;
             }
+
+            for (int i = 0; i < gamePath.Length; i++)
+            {
+                if (Convert.ToInt32(Convert.ToChar(gamePath.Substring(i, 1))) > Convert.ToInt32(Convert.ToChar(128)))
+                {
+                    MessageBox.Show(TryFindResource("MsgGamePathHaveWChar") as string);
+                    break;
+                }
+            }
+
             List<int> processIds = new List<int>();
 
             Regex regexx = new Regex("(.*).exe");
