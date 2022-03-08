@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>4.4.8093.39045</Version>
+  <Version>4.4.8102.35258</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2022-02-27</Date>
+  <Date>2022-03-08</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>| 更新Locale Remulator核心到1.4.2(修復粘貼板亂碼；非簡體中文系統運行時輸入文字亂碼)
+  <Note>v4.4 Beta1:
+| 更新Locale Remulator核心到1.4.2(修復粘貼板亂碼；非簡體中文系統運行時輸入文字亂碼)
 | 更正任務欄裡繽放只有圖標沒有名字的問題
+v4.4 Beta2:
+| 更正模擬64位元程式有時會提示找不到模塊的問題
+| 運行遊戲時檢測路徑, 若有中文會給予提示
+| 修復錯誤提示「釋放區域模擬插件錯誤」的提示
   </Note>
 </VersionInfo>
