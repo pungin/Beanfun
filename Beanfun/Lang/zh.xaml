@@ -335,6 +335,6 @@
     <system:String x:Key="WrongAuthInfo">資料錯誤，請重新輸入</system:String>
     <system:String x:Key="UpdateCheck">更新檢測</system:String>
     <system:String x:Key="NoUpdatesDetected">未檢測到有更新。</system:String>
-    <system:String x:Key="NewVersionDetected">檢測到新版本 {0} 當前: {1}\r\n\r\n{2}\r\n" + "\r\n" + "是否打開下載頁面？</system:String>
+    <system:String x:Key="NewVersionDetected">檢測到新版本 {0} 當前: {1}\r\n\r\n{2}\r\n\r\n是否打開下載頁面？</system:String>
     <system:String x:Key="Language">程式語言</system:String>
 </ResourceDictionary>

@@ -311,6 +311,6 @@
     <system:String x:Key="WrongAuthInfo">资料错误，请重新输入</system:String>
     <system:String x:Key="UpdateCheck">更新检测</system:String>
     <system:String x:Key="NoUpdatesDetected">未检测到有更新。</system:String>
-    <system:String x:Key="NewVersionDetected">检测到新版本 {0} 当前: {1}\r\n\r\n{2}\r\n" + "\r\n" + "是否打开下载页面？</system:String>
+    <system:String x:Key="NewVersionDetected">检测到新版本 {0} 当前: {1}\r\n\r\n{2}\r\n\r\n是否打开下载页面？</system:String>
     <system:String x:Key="Language">程序语言</system:String>
 </ResourceDictionary>
