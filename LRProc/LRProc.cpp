@@ -14,7 +14,6 @@ extern "C" _declspec(dllexport) int LRInject(char* application, char* workpath, 
 	LRProfile beta;
 	beta.CodePage = CodePage;
 	beta.HookIME = HookIME;
-	strcpy(beta.DllPath, dllpath);
 
 	LRConfigFileMap filemap;
 	filemap.WrtieConfigFileMap(&beta);
@@ -30,8 +29,8 @@ extern "C" _declspec(dllexport) int LRInject(char* application, char* workpath, 
 		NULL, FALSE, CREATE_DEFAULT_ERROR_MODE, NULL, workpath,
 		&si, &pi, dllpath, NULL);
 
-	Sleep(5000);
-	WaitForSingleObject(pi.hProcess, INFINITE);
-	filemap.FreeConfigFileMap();
+	//Sleep(5000);
+	//WaitForSingleObject(pi.hProcess, INFINITE);
+	//filemap.FreeConfigFileMap();
 	return 0;
 }

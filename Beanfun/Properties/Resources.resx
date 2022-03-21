@@ -176,12 +176,12 @@
     <value>..\LocaleRemulator\LRProc.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>
   <data name="LRHookx32_md5" xml:space="preserve">
-    <value>A4A2ABBDC8CB3DB08EC2FE9252893B0E</value>
+    <value>1D3EB2A4EF43213FDA799E9141213572</value>
   </data>
   <data name="LRHookx64_md5" xml:space="preserve">
-    <value>0AFB03DE29C93B2C85058C50C2BD9E4A</value>
+    <value>B355C0B2F51AF3218849CCCBF29A6C4B</value>
   </data>
   <data name="LRProc_md5" xml:space="preserve">
-    <value>99F52C3E9EA78AFADA2CD54683E62CA1</value>
+    <value>7FDE12C2C3048180F94D093B11D552A6</value>
   </data>
 </root>

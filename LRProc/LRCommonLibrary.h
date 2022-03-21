@@ -13,9 +13,8 @@ const TCHAR szConfigFileMap[] = TEXT("LRConfigFileMap");
 struct LRProfile
 {
 	UINT CodePage;
-	bool HookIME;
+	int HookIME;
 	char lfFaceName[LF_FACESIZE] = "None";
-	char DllPath[300];
 };
 
 const int BUF_SIZE = sizeof(LRProfile);

@@ -325,7 +325,7 @@
     <system:String x:Key="MsgBeanfunRejectLogin">您的登入要求已被beanfun! App拒絕。</system:String>
     <system:String x:Key="ClientVersion">客戶端版本:</system:String>
     <system:String x:Key="ServerVersion">伺服器版本:</system:String>
-    <system:String x:Key="MsgKillPatcher">遊戲自動更新有可能會造成遊戲程式損毀，已被阻止。{0}\r\n建議下載{1}.{2}{3}，如需要使用自動更新功能請到設定頁面取消阻止。\r\n是否前往下載{4}頁面？</system:String>
+    <system:String x:Key="MsgKillPatcher">遊戲自動更新有可能會造成遊戲程式損毀，已被阻止。{0}\r\n建議下載{1}{2}，如需要使用自動更新功能請到設定頁面取消阻止。\r\n是否前往下載{3}頁面？</system:String>
     <system:String x:Key="UpdateByPatch">手動更新檔來更新</system:String>
     <system:String x:Key="UpdateByFullClient">完整檔重新安裝遊戲</system:String>
     <system:String x:Key="GamePatch">手動更新檔</system:String>
