@@ -191,6 +191,11 @@ namespace Beanfun
         {
             frame.Content = loginPage;
 
+            if (App.LoginMethod == (int)LoginMethod.Regular && (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked)
+            {
+                do_Login();
+            }
+
             base.OnContentRendered(e);
         }
 
@@ -331,11 +336,6 @@ namespace Beanfun
                 };
 
                 frame.Content = loginPage;
-
-                if (loginMethod == (int)LoginMethod.Regular && (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked)
-                {
-                    do_Login();
-                }
             }
             catch (Exception ex)
             {
