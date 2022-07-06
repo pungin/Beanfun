@@ -968,8 +968,10 @@ namespace Beanfun
                     method = 0;
                     break;
                 case "LoginNoAkey":
-                case "LoginNoProcessLoginV2JSON":
                     msg = $"{ TryFindResource("LoginNoAkey") as string }({ msg })";
+                    break;
+                case "LoginNoProcessLoginV2JSON":
+                    msg = $"{ TryFindResource("LoginNoProcessLoginV2JSON") as string }({ msg })";
                     break;
                 case "LoginNoAccountMatch":
                 case "LoginGetAccountErr":

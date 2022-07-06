@@ -296,6 +296,7 @@
     <system:String x:Key="LoginNoViewstateGenerator">登入失敗，未找到ViewstateGenerator訊息，請檢查網絡連線。</system:String>
     <system:String x:Key="LoginNoSamplecaptcha">登入失敗，未找到Samplecaptcha訊息，請檢查網絡連線。</system:String>
     <system:String x:Key="LoginNoAkey">登入失敗，帳號或密碼錯誤。</system:String>
+    <system:String x:Key="LoginNoProcessLoginV2JSON">登錄失敗，沒有正確的獲取到賬號信息，可能是賬號或密碼錯誤，也有可能是ip地址被鎖定（這很有可能是因為多個人共同使用同一個加速器ip地址造成的，請更換加速器節點）</system:String>
     <system:String x:Key="LoginNoAccountMatch">登入失敗，無法取得帳號列表。</system:String>
     <system:String x:Key="LoginNoWebtoken">登入失敗，登入後無法取得bfWebToken Cookie。</system:String>
     <system:String x:Key="LoginUnknown">登入失敗，請稍後再試</system:String>

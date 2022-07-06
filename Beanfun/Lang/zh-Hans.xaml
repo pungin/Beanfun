@@ -272,6 +272,7 @@
     <system:String x:Key="LoginNoViewstateGenerator">登录失败，未找到ViewstateGenerator信息，请检查网络连接。</system:String>
     <system:String x:Key="LoginNoSamplecaptcha">登录失败，未找到Samplecaptcha信息，请检查网络连接。</system:String>
     <system:String x:Key="LoginNoAkey">登录失败，账号或密码错误。</system:String>
+    <system:String x:Key="LoginNoProcessLoginV2JSON">登录失败，没有正确的获取到账号信息，可能是账号或密码错误，也有可能是ip地址被锁定（这很有可能是因为多个人共同使用同一个加速器ip地址造成的，请更换加速器节点）</system:String>
     <system:String x:Key="LoginNoAccountMatch">登录失败，无法获取账号列表。</system:String>
     <system:String x:Key="LoginNoWebtoken">登录失败，登录后无法获取bfWebToken Cookie。</system:String>
     <system:String x:Key="LoginUnknown">登录失败，请稍后再试</system:String>
