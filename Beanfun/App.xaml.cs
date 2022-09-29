@@ -94,16 +94,6 @@ namespace Beanfun
         private void Application_Exit(object sender, ExitEventArgs e)
         {
             if (MainWnd != null && MainWnd.bfClient != null) try { MainWnd.bfClient.Logout(); } catch { }
-
-            Process[] processes = Process.GetProcessesByName("BFWidgetKernel");
-            foreach (Process process in processes)
-            {
-                try
-                {
-                    process.Kill();
-                }
-                catch { }
-            }
         }
 
         public static string ConvertVersion(Version version)
