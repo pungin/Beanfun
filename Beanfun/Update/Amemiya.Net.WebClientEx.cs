@@ -26,7 +26,6 @@ namespace Amemiya.Net
 
         public MemoryStream DownloadDataStream(string address)
         {
-            address += "?random=" + (new Random()).Next(0, int.MaxValue);
             var buffer = DownloadData(address);
 
             return new MemoryStream(buffer);
