@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Net;
-using System.Diagnostics;
 using System.Collections.Specialized;
 using System.IO;
 
@@ -10,7 +9,6 @@ namespace Beanfun
 {
     public partial class BeanfunClient : WebClient
     {
-        private BFServiceX bfServ = null;
         private System.Net.CookieContainer CookieContainer;
         private Uri ResponseUri;
         public string errmsg;
@@ -28,11 +26,6 @@ namespace Beanfun
         public string WebToken
         {
             get { return webtoken; }
-        }
-
-        public BFServiceX BFServ
-        {
-            get { return bfServ; }
         }
 
         public BeanfunClient()
@@ -117,7 +110,7 @@ namespace Beanfun
 
         public CookieCollection GetCookies()
         {
-            return this.CookieContainer.GetCookies(new Uri("https://" + App.LoginRegion.ToLower() + ".beanfun.com/"));
+            return this.CookieContainer.GetCookies(new Uri("https://" + (App.LoginRegion == "TW" ? "tw" : "bfweb.hk") + ".beanfun.com/"));
         }
 
         private string GetCookie(string cookieName)
@@ -148,20 +141,14 @@ namespace Beanfun
 
         public void Ping()
         {
-            string ret;
-
             try
             {
+                string url = "https://";
                 if (App.LoginRegion == "TW")
-                {
-                    ret = Encoding.GetString(this.DownloadData("https://tw.beanfun.com/beanfun_block/generic_handlers/echo_token.ashx?webtoken=1"));
-                }
+                    url += "tw";
                 else
-                {
-                    if (bfServ == null)
-                        return;
-                    ret = this.DownloadString("http://hk.beanfun.com/beanfun_block/generic_handlers/echo_token.ashx?token=" + bfServ.Token);
-                }
+                    url += "bfweb.hk";
+                string ret = Encoding.GetString(this.DownloadData(url + ".beanfun.com/beanfun_block/generic_handlers/echo_token.ashx?webtoken=1"));
 
                 Console.WriteLine(GetCurrentTime() + " @ " + ret);
             } catch {
@@ -173,10 +160,12 @@ namespace Beanfun
             string response = null;
             System.Text.RegularExpressions.Regex regex;
 
-            string url = "https://tw.beanfun.com/beanfun_block/generic_handlers/get_remain_point.ashx?webtoken=1";
-            if (App.LoginRegion == "HK")
-                url = "http://hk.beanfun.com/beanfun_block/generic_handlers/get_remain_point.ashx?token=" + bfServ.Token;
-            response = this.DownloadString(url);
+            string url = "https://";
+            if (App.LoginRegion == "TW")
+                url += "tw";
+            else
+                url += "bfweb.hk";
+            response = this.DownloadString(url += ".beanfun.com/beanfun_block/generic_handlers/get_remain_point.ashx?webtoken=1");
 
             try
             {

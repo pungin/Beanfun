@@ -539,10 +539,7 @@ namespace Beanfun
 
             if (this.bfClient != null && !loginWorker.IsBusy && !getOtpWorker.IsBusy)
             {
-                if (App.LoginRegion == "TW")
-                    this.bfClient.GetAccounts(service_code, service_region);
-                else
-                    this.bfClient.GetAccounts_HK(service_code, service_region);
+                this.bfClient.GetAccounts(service_code, service_region);
                 redrawSAccountList();
                 if (this.bfClient.errmsg != null)
                 {
@@ -968,23 +965,13 @@ namespace Beanfun
                     method = 0;
                     break;
                 case "LoginNoAkey":
-                case "LoginNoProcessLoginV2JSON":
                     msg = $"{ TryFindResource("LoginNoAkey") as string }({ msg })";
                     break;
                 case "LoginNoAccountMatch":
                 case "LoginGetAccountErr":
                 case "LoginUpdateAccountListErr":
-                case "LoginAuthErr":
                     msg = $"{ TryFindResource("LoginNoAccountMatch") as string }({ msg })";
                     break;
-                case "BFServiceXNotFound":
-                    MessageBoxResult result = MessageBox.Show((TryFindResource("BFServiceXNotFound") as string).Replace("\\r\\n", "\r\n"), "", MessageBoxButton.YesNo);
-
-                    if (result == MessageBoxResult.Yes)
-                        Process.Start("http://hk.download.beanfun.com/beanfun20/beanfun_2_0_93_170_hk.exe");
-
-                    NavigateLoginPage();
-                    return false;
                 case "MainAccount_Not_Exist":
                     msg = string.Format(TryFindResource("MainAccount_Not_Exist") as string, App.LoginRegion == "TW" ? TryFindResource("Taiwan") : TryFindResource("HongKong"));
                     break;
@@ -998,7 +985,11 @@ namespace Beanfun
                     }
                     else
                     {
-                        string res = TryFindResource(msg) as string;
+                        string res = null;
+                        try
+                        {
+                            res = TryFindResource(msg) as string;
+                        } catch {}
                         if (res != null) msg = res;
                     }
                     break;
@@ -1108,7 +1099,6 @@ namespace Beanfun
                     }
                     loginWaitPage.t_Info.Content = (TryFindResource("MsgNeedBeanfunAuth") as string).Replace("\\r\\n", "\r\n");
                     bfAPPAutoLogin.IsEnabled = true;
-                    beanfunApp.Main(new string[] { args[1] });
                 }
                 else
                 {
@@ -1374,76 +1364,11 @@ namespace Beanfun
             }
         }
 
-        private int releaseResource(byte[] data, string path, string md5)
-        {
-            if (File.Exists(path))
-            {
-                if (md5.ToUpper().Equals(GetMD5HashFromFile(path).ToUpper()))
-                {
-                    return 0;
-                }
-                else
-                {
-                    try
-                    {
-                        File.Delete(path);
-                    }
-                    catch { return -1; }
-                }
-            }
-            string dir = Path.GetDirectoryName(path);
-            if (!Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-            FileStream fsObj = new FileStream(path, FileMode.CreateNew);
-            fsObj.Write(data, 0, data.Length);
-            fsObj.Close();
-            return 1;
-        }
-
-        private string GetMD5HashFromFile(string fileName)
-        {
-            try
-            {
-                FileStream file = new FileStream(fileName, System.IO.FileMode.Open, System.IO.FileAccess.Read, FileShare.ReadWrite);
-                System.Security.Cryptography.MD5 md5 = new System.Security.Cryptography.MD5CryptoServiceProvider();
-                byte[] retVal = md5.ComputeHash(file);
-                file.Close();
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < retVal.Length; i++)
-                {
-                    sb.Append(retVal[i].ToString("x2"));
-                }
-                return sb.ToString();
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("GetMD5HashFromFile() fail,error:" + ex.Message);
-            }
-        }
-
         private void startByLR(string path, string command, bool is64BitGame)
         {
-            if (releaseResource(
-                    global::Beanfun.Properties.Resources.LRProc,
-                    string.Format("{0}\\LRProc.dll", System.Environment.CurrentDirectory),
-                    global::Beanfun.Properties.Resources.LRProc_md5
-                ) == -1
-                || releaseResource(
-                    global::Beanfun.Properties.Resources.LRHookx32,
-                    string.Format("{0}\\LRHookx32.dll", System.Environment.CurrentDirectory),
-                    global::Beanfun.Properties.Resources.LRHookx32_md5
-                ) == -1
-                || releaseResource(
-                    global::Beanfun.Properties.Resources.LRHookx64,
-                    string.Format("{0}\\LRHookx64.dll", System.Environment.CurrentDirectory),
-                    global::Beanfun.Properties.Resources.LRHookx64_md5
-                ) == -1)
-            {
+            if (App.ReleaseResource("LRProc.dll") == -1 || App.ReleaseResource("LRHookx32.dll") == -1 || App.ReleaseResource("LRHookx64.dll") == -1)
                 MessageBox.Show(TryFindResource("MsgLocalePluginReleaseError") as string);
-            }
-            string dllPath = string.Format("{0}\\{1}", System.Environment.CurrentDirectory, is64BitGame ? "LRHookx64.dll" : "LRHookx32.dll");
+            string dllPath = string.Format("{0}\\{1}", System.Environment.CurrentDirectory, "LRHookx32.dll");
 
             var commandLine = string.Empty;
             commandLine = path.StartsWith("\"")
@@ -1453,7 +1378,15 @@ namespace Beanfun
             System.Globalization.TextInfo culInfo = System.Globalization.CultureInfo.GetCultureInfo("zh-HK").TextInfo;
 
             new Thread(new ThreadStart(() => {
-                LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage, App.OSVersion >= App.Win8 && is64BitGame);
+                try
+                {
+                    LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage, App.OSVersion >= App.Win8 && is64BitGame);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                    errexit((TryFindResource("MsgLocalePluginRunError") as string).Replace("\\r\\n", "\r\n"), 2);
+                }
             })).Start();
         }
 
@@ -1469,8 +1402,7 @@ namespace Beanfun
 
             if (this.bfClient.AddServiceAccount(name, service_code, service_region))
             {
-                if (App.LoginRegion == "TW") this.bfClient.GetAccounts(service_code, service_region);
-                else this.bfClient.GetAccounts_HK(service_code, service_region);
+                this.bfClient.GetAccounts(service_code, service_region);
                 int index = accountList.list_Account.SelectedIndex;
                 redrawSAccountList();
                 accountList.list_Account.SelectedIndex = index;
@@ -1493,8 +1425,7 @@ namespace Beanfun
             string result = this.bfClient.UnconnectedGame_AddAccount(service_code, service_region, name, txtNewPwd, txtNewPwd2, txtServiceAccountDN, payload);
             if (result == "")
             {
-                if (App.LoginRegion == "TW") this.bfClient.GetAccounts(service_code, service_region);
-                else this.bfClient.GetAccounts_HK(service_code, service_region);
+                this.bfClient.GetAccounts(service_code, service_region);
                 int index = accountList.list_Account.SelectedIndex;
                 redrawSAccountList();
                 accountList.list_Account.SelectedIndex = index;

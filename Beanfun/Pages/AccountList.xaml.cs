@@ -122,12 +122,13 @@ namespace Beanfun
             string url;
             if (App.LoginRegion == "TW")
             {
-                url = $"https://tw.beanfun.com/TW/auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={ App.MainWnd.bfClient.WebToken }";
+                url = "https://tw.beanfun.com/TW/";
             }
             else
             {
-                url = $"https://hk.beanfun.com/beanfun_web_ap/auth.aspx?channel=gash&page_and_query=default.aspx%3fservice_code%3d999999%26service_region%3dT0&token={ App.MainWnd.bfClient.BFServ.Token }";
+                url = "https://bfweb.hk.beanfun.com/HK/";
             }
+            url += $"auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={App.MainWnd.bfClient.WebToken}";
             new WebBrowser(url).Show();
         }
 
@@ -136,12 +137,13 @@ namespace Beanfun
             string url;
             if (App.LoginRegion == "TW")
             {
-                url = $"https://tw.beanfun.com/TW/auth.aspx?channel=member&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={ App.MainWnd.bfClient.WebToken }";
+                url = "https://tw.beanfun.com/TW/";
             }
             else
             {
-                url = $"https://hk.beanfun.com/beanfun_web_ap/auth.aspx?channel=member&page_and_query=default.aspx%3fservice_code%3d999999%26service_region%3dT0&token={ App.MainWnd.bfClient.BFServ.Token }";
+                url = "https://bfweb.hk.beanfun.com/HK/";
             }
+            url += $"auth.aspx?channel=member&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={App.MainWnd.bfClient.WebToken}";
             new WebBrowser(url).Show();
         }
 
@@ -154,7 +156,7 @@ namespace Beanfun
             }
             else
             {
-                url = "http://hk.games.beanfun.com/faq/service.asp";
+                url = "https://bfweb.hk.beanfun.com/newfaq/service_newBF.aspx";
             }
             new WebBrowser(url).Show();
         }

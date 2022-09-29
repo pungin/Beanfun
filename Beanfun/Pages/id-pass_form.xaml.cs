@@ -40,7 +40,7 @@ namespace Beanfun
             }
             else
             {
-                url = "http://hk.beanfun.com/beanfun_web_ap/signup/preregistration.aspx?service=999999_T0";
+                url = "https://bfweb.hk.beanfun.com/beanfun_web_ap/signup/preregistration.aspx?service=999999_T0";
             }
             new WebBrowser(url).Show();
         }
@@ -54,7 +54,7 @@ namespace Beanfun
             }
             else
             {
-                url = "http://hk.beanfun.com/member/forgot_pwd.aspx";
+                url = "https://bfweb.hk.beanfun.com/member/forgot_pwd.aspx";
             }
             new WebBrowser(url).Show();
         }
@@ -71,7 +71,7 @@ namespace Beanfun
                 MessageBox.Show(TryFindResource("PasswordNeed") as string);
                 return;
             }
-            System.Console.WriteLine("PW" + t_Password.Password);
+            //System.Console.WriteLine("PW" + t_Password.Password);
             App.MainWnd.do_Login();
         }
 

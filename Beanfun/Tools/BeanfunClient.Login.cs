@@ -8,65 +8,23 @@ using System.Diagnostics;
 using System.IO;
 using Newtonsoft.Json.Linq;
 using System.Windows.Media.Imaging;
+using System.Windows;
 
 namespace Beanfun
 {
     public partial class BeanfunClient : WebClient
     {
-
-        private string RegularLogin_HK(string id, string pass, string otp1)
-        {
-            try
-            {
-                string response = this.DownloadString($"http://hk.beanfun.com/beanfun_block/login/id-pass_form.aspx?otp1={ otp1 }&seed=0");
-                Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoViewstate"; return null; }
-                string viewstate = regex.Match(response).Groups[1].Value;
-
-                regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoEventvalidation"; return null; }
-                string eventvalidation = regex.Match(response).Groups[1].Value;
-                regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoViewstateGenerator"; return null; }
-                string viewstateGenerator = regex.Match(response).Groups[1].Value;
-
-                NameValueCollection payload = new NameValueCollection();
-                payload.Add("__EVENTTARGET", "");
-                payload.Add("__EVENTARGUMENT", "");
-                payload.Add("__VIEWSTATE", viewstate);
-                payload.Add("__VIEWSTATEGENERATOR", viewstateGenerator);
-                payload.Add("__EVENTVALIDATION", eventvalidation);
-                payload.Add("t_AccountID", id);
-                payload.Add("t_Password", pass);
-                payload.Add("btn_login.x", "0");
-                payload.Add("btn_login.y", "0");
-                payload.Add("recaptcha_response_field", "manual_challenge");
-
-                response = this.UploadString($"http://hk.beanfun.com/beanfun_block/login/id-pass_form.aspx?otp1={ otp1 }&seed=0", payload);
-
-                regex = new Regex("ProcessLoginV2\\((.*)\\);\\\"");
-                if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoProcessLoginV2JSON"; return null; }
-                string json = regex.Match(response).Groups[1].Value.Replace("\\", "");
-                bfServ.Token = (string)JObject.Parse(json)["token"];
-                Debug.WriteLine(json);
-                return "true";
-            }
-            catch (Exception e)
-            {
-                this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
-                return null;
-            }
-        }
-
         private string RegularLogin(string id, string pass, string skey)
         {
+            string loginHost;
+            if (App.LoginRegion == "TW")
+                loginHost = "tw.newlogin.beanfun.com";
+            else
+                loginHost = "login.hk.beanfun.com";
+
             try
             {
-                string response = this.DownloadString("https://tw.newlogin.beanfun.com/login/id-pass_form.aspx?skey=" + skey);
+                string response = this.DownloadString($"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}");
                 Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
                     {this.errmsg = "LoginNoViewstate"; return null;}
@@ -102,15 +60,17 @@ namespace Beanfun
                 payload.Add("__EVENTARGUMENT", "");
                 payload.Add("__VIEWSTATE", viewstate);
                 payload.Add("__VIEWSTATEGENERATOR", viewstateGenerator);
+                if (App.LoginRegion == "HK") payload.Add("__VIEWSTATEENCRYPTED", "");
                 payload.Add("__EVENTVALIDATION", eventvalidation);
                 payload.Add("t_AccountID", id);
                 payload.Add("t_Password", pass);
                 //payload.Add("CodeTextBox", Captcha);
                 //payload.Add("LBD_VCID_c_login_idpass_form_samplecaptcha", samplecaptcha);
                 //payload.Add("g-recaptcha-response", samplecaptcha);
+                //payload.Add("token1", "");
                 payload.Add("btn_login", "登入");
 
-                response = this.UploadString("https://tw.newlogin.beanfun.com/login/id-pass_form.aspx?skey=" + skey, payload);
+                response = this.UploadString($"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}", payload);
                 if (response.Contains("RELOAD_CAPTCHA_CODE") && response.Contains("alert"))
                 { this.errmsg = "LoginAdvanceCheck"; return null; }
 
@@ -328,18 +288,13 @@ namespace Beanfun
             }
             else
             {
-                string response = this.DownloadString("http://hk.beanfun.com/beanfun_block/login/index.aspx?service=999999_T0");
+                string response = this.DownloadString("https://bfweb.hk.beanfun.com/beanfun_block/bflogin/default.aspx?service=999999_T0");
                 if (response == null)
                 { this.errmsg = "LoginNoResponse"; return null; }
-                Regex regex = new Regex("otp1 = \"(.*)\";");
+                Regex regex = new Regex("<span id=\"ctl00_ContentPlaceHolder1_lblOtp1\">(.*)</span>");
                 if (!regex.IsMatch(response))
                 { this.errmsg = "LoginNoOTP1"; return null; }
-                string opt1 = regex.Match(response).Groups[1].Value;
-                //regex = new Regex("seed = \"(.*)\";");
-                //if (!regex.IsMatch(response))
-                //{ this.errmsg = "LoginNoSeed"; return null; }
-                //bfServ.Seed = regex.Match(response).Groups[1].Value;
-                return opt1;
+                return regex.Match(response).Groups[1].Value;
             }
         }
 
@@ -356,25 +311,13 @@ namespace Beanfun
                 }
                 else
                 {
-                    if (App.LoginRegion == "HK")
-                    {
-                        if (this.bfServ == null)
-                        {
-                            try { bfServ = new BFServiceX(); }
-                            catch { this.errmsg = "BFServiceXNotFound"; return; }
-                        }
-                        bfServ.Initialize2();
-                    }
                     SessionKey = GetSessionkey();
                 }
                 
                 switch (loginMethod)
                 {
                     case (int)LoginMethod.Regular:
-                        if (App.LoginRegion == "TW")
-                            akey = RegularLogin(id, pass, SessionKey);
-                        else
-                            akey = RegularLogin_HK(id, pass, SessionKey);
+                        akey = RegularLogin(id, pass, SessionKey);
                         break;
                     case (int)LoginMethod.QRCode:
                         akey = QRCodeLogin(qrcodeClass);
@@ -405,34 +348,30 @@ namespace Beanfun
             if (this.SessionKey == null || akey == null)
                 return;
 
+            string host;
             if (App.LoginRegion == "TW")
-            {
-                NameValueCollection payload = new NameValueCollection();
-                payload.Add("SessionKey", this.SessionKey);
-                payload.Add("AuthKey", akey);
-                payload.Add("ServiceCode", "");
-                payload.Add("ServiceRegion", "");
-                payload.Add("ServiceAccountSN", "0");
-                Debug.WriteLine(this.SessionKey);
-                Debug.WriteLine(akey);
-                string response = this.UploadString("https://tw.beanfun.com/beanfun_block/bflogin/return.aspx", payload);
-                Debug.WriteLine(response);
-                response = this.DownloadString("https://tw.beanfun.com/" + this.ResponseHeaders["Location"]);
-                Debug.WriteLine(response);
-                Debug.WriteLine(this.ResponseHeaders);
-
-                this.webtoken = this.GetCookie("bfWebToken");
-                if (this.webtoken == "")
-                { this.errmsg = "LoginNoWebtoken"; return; }
-                GetAccounts(service_code, service_region, false);
-            }
+                host = "tw.beanfun.com";
             else
-            {
-                string response = this.DownloadString("http://hk.beanfun.com/beanfun_block/auth.aspx?channel=game_zone&page_and_query=game_start.aspx%3Fservice_code_and_region%3D" + service_code + "_" + service_region + "&token=" + bfServ.Token);
-                if (!response.Contains("document.location = \"http://hk.beanfun.com/beanfun_block/game_zone/game_server_account_list.aspx"))
-                { this.errmsg = "LoginAuthErr"; return; }
-                GetAccounts_HK(service_code, service_region, false);
-            }
+                host = "bfweb.hk.beanfun.com";
+
+            NameValueCollection payload = new NameValueCollection();
+            payload.Add("SessionKey", this.SessionKey);
+            payload.Add("AuthKey", akey);
+            payload.Add("ServiceCode", "");
+            payload.Add("ServiceRegion", "");
+            payload.Add("ServiceAccountSN", "0");
+            Debug.WriteLine(this.SessionKey);
+            Debug.WriteLine(akey);
+            string response = this.UploadString($"https://{host}/beanfun_block/bflogin/return.aspx", payload);
+            //Debug.WriteLine(response);
+            response = this.DownloadString($"https://{host}/{this.ResponseHeaders["Location"]}");
+            //Debug.WriteLine(response);
+            Debug.WriteLine(this.ResponseHeaders);
+
+            this.webtoken = this.GetCookie("bfWebToken");
+            if (this.webtoken == "")
+            { this.errmsg = "LoginNoWebtoken"; return; }
+            GetAccounts(service_code, service_region, false);
 
             if (this.errmsg != null) return;
 
@@ -443,20 +382,25 @@ namespace Beanfun
 
         public void Logout()
         {
-            string response;
+            string host;
+            string loginHost;
             if (App.LoginRegion == "TW")
             {
-                response = this.DownloadString("https://tw.beanfun.com/generic_handlers/remove_bflogin_session.ashx");
-                //response = this.DownloadString("https://tw.newlogin.beanfun.com/logout.aspx?service=999999_T0");
-                NameValueCollection payload = new NameValueCollection();
-                payload.Add("web_token", "1");
-                response = this.UploadString("https://tw.newlogin.beanfun.com/generic_handlers/erase_token.ashx", payload);
+                host = "tw.beanfun.com";
+                loginHost = "tw.newlogin.beanfun.com";
             }
             else
             {
-                response = this.DownloadString("http://hk.beanfun.com/beanfun_block/generic_handlers/remove_login_session.ashx");
-                response = this.DownloadString("http://hk.beanfun.com/beanfun_web_ap/remove_login_session.ashx");
-                if (bfServ != null) response = this.DownloadString("http://hk.beanfun.com/beanfun_block/generic_handlers/erase_token.ashx?token=" + bfServ.Token);
+                host = "bfweb.hk.beanfun.com";
+                loginHost = "login.hk.beanfun.com";
+            }
+            this.DownloadString($"https://{host}/generic_handlers/remove_bflogin_session.ashx");
+            this.DownloadString($"https://{loginHost}/logout.aspx?service=999999_T0");
+            if (App.LoginRegion == "TW")
+            {
+                NameValueCollection payload = new NameValueCollection();
+                payload.Add("web_token", "1");
+                this.UploadString("https://tw.newlogin.beanfun.com/generic_handlers/erase_token.ashx", payload);
             }
         }
     }

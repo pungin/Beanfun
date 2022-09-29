@@ -71,63 +71,6 @@ namespace Beanfun.Properties {
         }
         
         /// <summary>
-        ///   查找 System.Byte[] 类型的本地化资源。
-        /// </summary>
-        internal static byte[] LRHookx32 {
-            get {
-                object obj = ResourceManager.GetObject("LRHookx32", resourceCulture);
-                return ((byte[])(obj));
-            }
-        }
-        
-        /// <summary>
-        ///   查找类似  的本地化字符串。
-        /// </summary>
-        internal static string LRHookx32_md5 {
-            get {
-                return ResourceManager.GetString("LRHookx32_md5", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   查找 System.Byte[] 类型的本地化资源。
-        /// </summary>
-        internal static byte[] LRHookx64 {
-            get {
-                object obj = ResourceManager.GetObject("LRHookx64", resourceCulture);
-                return ((byte[])(obj));
-            }
-        }
-        
-        /// <summary>
-        ///   查找类似  的本地化字符串。
-        /// </summary>
-        internal static string LRHookx64_md5 {
-            get {
-                return ResourceManager.GetString("LRHookx64_md5", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   查找 System.Byte[] 类型的本地化资源。
-        /// </summary>
-        internal static byte[] LRProc {
-            get {
-                object obj = ResourceManager.GetObject("LRProc", resourceCulture);
-                return ((byte[])(obj));
-            }
-        }
-        
-        /// <summary>
-        ///   查找类似  的本地化字符串。
-        /// </summary>
-        internal static string LRProc_md5 {
-            get {
-                return ResourceManager.GetString("LRProc_md5", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   查找 System.Drawing.Bitmap 类型的本地化资源。
         /// </summary>
         internal static System.Drawing.Bitmap QRCode_Alipay {

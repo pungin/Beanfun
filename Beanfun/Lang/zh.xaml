@@ -299,12 +299,10 @@
     <system:String x:Key="LoginNoAccountMatch">登入失敗，無法取得帳號列表。</system:String>
     <system:String x:Key="LoginNoWebtoken">登入失敗，登入後無法取得bfWebToken Cookie。</system:String>
     <system:String x:Key="LoginUnknown">登入失敗，請稍後再試</system:String>
-    <system:String x:Key="BFServiceXNotFound">調用或初始化BFService元件失敗，有如下可能：\r\n1.未安裝BFService元件\r\n2.BFService元件默認會安裝到「文檔」資料夾，請確認真實路徑是否與當前語係的字元集支援的文字並且能正常訪問\r\n\r\n是否前往下載元件？</system:String>
     <system:String x:Key="LoginNoMethod">登入出錯，選擇了不存在的登入方式。</system:String>
     <system:String x:Key="OTPUnknown">獲取密碼失敗，請嘗試重新登入。</system:String>
     <system:String x:Key="OTPNoCreateTime">獲取帳號創建時間失敗。</system:String>
     <system:String x:Key="OTPNoSecretCode">獲取密碼失敗，未找到SecretCode訊息，請檢查網絡連線。</system:String>
-    <system:String x:Key="OTPNoMyAccountData">獲取密碼失敗，未找到MyAccountData訊息，請檢查網絡連線。</system:String>
     <system:String x:Key="DecryptOTPError">解密密碼失敗。</system:String>
     <system:String x:Key="MainAccount_Not_Exist">此Beanfun帳號不存在，請確認您的Beanfun帳號是否成功註冊，或者確認帳號是否是所在區域為{0}的Beanfun帳號。</system:String>
     <system:String x:Key="LoginInitCaptcha">載入圖形驗證碼失敗。</system:String>

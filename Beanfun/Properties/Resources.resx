@@ -166,22 +166,4 @@
   <data name="QRCode_Tip" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\QRCode_Tip.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
-  <data name="LRHookx32" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\LocaleRemulator\LRHookx32.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="LRHookx64" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\LocaleRemulator\LRHookx64.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="LRProc" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\LocaleRemulator\LRProc.dll;System.Byte[], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-  </data>
-  <data name="LRHookx32_md5" xml:space="preserve">
-    <value>1D3EB2A4EF43213FDA799E9141213572</value>
-  </data>
-  <data name="LRHookx64_md5" xml:space="preserve">
-    <value>B355C0B2F51AF3218849CCCBF29A6C4B</value>
-  </data>
-  <data name="LRProc_md5" xml:space="preserve">
-    <value>7FDE12C2C3048180F94D093B11D552A6</value>
-  </data>
 </root>

@@ -48,13 +48,19 @@ namespace Beanfun
 
         public void GetAccounts(string service_code, string service_region, bool fatal = true)
         {
-            if (this.webtoken == null) return;
+            if (this.WebToken == null) return;
+
+            string host;
+            if (App.LoginRegion == "TW")
+                host = "tw.beanfun.com";
+            else
+                host = "bfweb.hk.beanfun.com";
 
             Regex regex;
 
-            this.DownloadString("https://tw.beanfun.com/beanfun_block/auth.aspx?channel=game_zone&page_and_query=game_start.aspx%3Fservice_code_and_region%3D" + service_code + "_" + service_region + "&web_token=" + webtoken);
+            this.DownloadString($"https://{host}/beanfun_block/auth.aspx?channel=game_zone&page_and_query=game_start.aspx%3Fservice_code_and_region%3D{service_code}_{service_region}&web_token={WebToken}");
 
-            string response = this.DownloadString("https://tw.beanfun.com/beanfun_block/game_zone/game_server_account_list.aspx?sc=" + service_code + "&sr=" + service_region + "&dt=" + GetCurrentTime(2));
+            string response = this.DownloadString($"https://{host}/beanfun_block/game_zone/game_server_account_list.aspx?sc={service_code}&sr={service_region}&dt={GetCurrentTime(2)}");
 
             // Add account list to ListView.
             regex = new Regex("onclick=\"([^\"]*)\"><div id=\"(\\w+)\" sn=\"(\\d+)\" name=\"([^\"]+)\"");
@@ -86,7 +92,7 @@ namespace Beanfun
         {
             try
             {
-                string response = this.DownloadString("https://tw.beanfun.com/beanfun_block/game_zone/game_start_step2.aspx?service_code=" + service_code + "&service_region=" + service_region + "&sotp=" + sn + "&dt=" + GetCurrentTime(2));
+                string response = this.DownloadString("https://" + (App.LoginRegion == "TW" ? "tw.beanfun.com" : "bfweb.hk.beanfun.com") + "/beanfun_block/game_zone/game_start_step2.aspx?service_code=" + service_code + "&service_region=" + service_region + "&sotp=" + sn + "&dt=" + GetCurrentTime(2));
                 Regex regex = new Regex("ServiceAccountCreateTime: \"([^\"]+)\"");
                 if (!regex.IsMatch(response))
                 { return null; }
@@ -98,50 +104,15 @@ namespace Beanfun
             }
         }
 
-        public void GetAccounts_HK(string service_code, string service_region, bool fatal = true)
-        {
-            if (this.bfServ == null) return;
-
-            this.DownloadString("https://hk.beanfun.com/beanfun_block/auth.aspx?channel=game_zone&page_and_query=game_start.aspx%3Fservice_code_and_region%3D" + service_code + "_" + service_region + "&token=" + this.bfServ.Token);
-
-            string response = this.DownloadString("https://hk.beanfun.com/beanfun_block/game_zone/game_server_account_list.aspx?service_code=" + service_code + "&service_region=" + service_region);
-
-            // Add account list to ListView.
-            Regex regex = new Regex(@"<li class=""([^""]*)"" title=""([^""]*)"" onclick=""StartGame\('" + service_code + "', '" + service_region + @"', '(\w+)', '(\d+)', '([^""]*)', '(\w+)', '([^""]+)'\)");
-            this.accountList.Clear();
-            foreach (Match match in regex.Matches(response))
-            {
-                if (match.Groups[3].Value == "" || match.Groups[4].Value == "" || match.Groups[5].Value == "" || match.Groups[7].Value == "")
-                { continue; }
-                Match mTime = new Regex(@"(\d+)/(\d+)/(\d+) (.*)").Match(match.Groups[7].Value);
-                this.accountList.Add(new ServiceAccount(!match.Groups[1].Value.ToLower().Equals("stop"), match.Groups[3].Value, match.Groups[4].Value, WebUtility.HtmlDecode(match.Groups[5].Value), $"{mTime.Groups[3].Value}-{mTime.Groups[2].Value}-{mTime.Groups[1].Value} {mTime.Groups[4].Value}"));
-            }
-
-            regex = new Regex("<div id=\"divServiceAccountAmountLimitNotice\" class=\"InnerContent\">(.*)</div>");
-            if (regex.IsMatch(response))
-                accountAmountLimitNotice = I18n.ToSimplified(regex.Match(response).Groups[1].Value);
-            else
-                accountAmountLimitNotice = "";
-
-            if (this.accountList.Count > 0) this.accountList.Sort((x, y) => { return x.ssn.CompareTo(y.ssn); });
-
-            this.errmsg = null;
-        }
-
         private NameValueCollection UnconnectedGame_InitAccountPayload(string service_code, string service_region)
         {
-            string strUrl;
+            string strUrl = "https://";
             string response;
             if (App.LoginRegion == "TW")
-            {
-                strUrl = "https://tw.beanfun.com/TW/auth.aspx?channel=accounts_management&page_and_query=01.aspx%3FServiceCode%3D" + service_code + "%26ServiceRegion%3D" + service_region + "&web_token=" + webtoken;
-                response = this.DownloadString(strUrl);
-            }
+                strUrl += "tw.beanfun.com/TW/";
             else
-            {
-                strUrl = "http://hk.beanfun.com/beanfun_web_ap/auth.aspx?channel=accounts_management&page_and_query=01.aspx%3FServiceCode%3D" + service_code + "%26ServiceRegion%3D" + service_region + "&token=" + this.bfServ.Token;
-                response = this.DownloadString(strUrl);
-            }
+                strUrl += "bfweb.hk.beanfun.com/HK/";
+            response = this.DownloadString($"{strUrl}auth.aspx?channel=accounts_management&page_and_query=01.aspx%3FServiceCode%3D{service_code}%26ServiceRegion%3D{service_region}&web_token={WebToken}");
 
             Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
             if (!regex.IsMatch(response))
@@ -171,7 +142,7 @@ namespace Beanfun
             if (App.LoginRegion == "TW")
                 response = this.UploadString("https://tw.beanfun.com/TW/accounts_management/02.aspx", payload);
             else
-                response = this.UploadString("http://hk.beanfun.com/beanfun_web_ap/accounts_management/02.aspx", payload);
+                response = this.UploadString("https://bfweb.hk.beanfun.com/HK/accounts_management/02.aspx", payload);
 
             Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
             if (!regex.IsMatch(response))
@@ -189,6 +160,7 @@ namespace Beanfun
             payload.Clear();
             payload.Add("__VIEWSTATE", viewstate);
             payload.Add("__VIEWSTATEGENERATOR", viewstategenerator);
+            if (App.LoginRegion == "HK") payload.Add("__VIEWSTATEENCRYPTED", "");
             payload.Add("__EVENTVALIDATION", eventvalidation);
 
             regex = new Regex("<span id=\"lblGameName\">(.*)</span>");
@@ -220,7 +192,7 @@ namespace Beanfun
             payload.Add("txtNewPwd2", "");
             string response;
             if (App.LoginRegion == "TW") response = this.UploadString("https://tw.beanfun.com/TW/accounts_management/02.aspx", payload);
-            else response = this.UploadString("http://hk.beanfun.com/beanfun_web_ap/accounts_management/02.aspx", payload);
+            else response = this.UploadString("https://bfweb.hk.beanfun.com/HK/accounts_management/02.aspx", payload);
 
             Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
             if (!regex.IsMatch(response))
@@ -238,6 +210,7 @@ namespace Beanfun
             payload.Clear();
             payload.Add("__VIEWSTATE", viewstate);
             payload.Add("__VIEWSTATEGENERATOR", viewstategenerator);
+            if (App.LoginRegion == "HK") payload.Add("__VIEWSTATEENCRYPTED", "");
             payload.Add("__EVENTVALIDATION", eventvalidation);
 
             regex = new Regex("<span id=\"lblErrorMessage\" style=\"color:Red;\">(.*)</span>");
@@ -261,7 +234,7 @@ namespace Beanfun
             payload.Add("txtNewPwd2", "");
             string response;
             if (App.LoginRegion == "TW") response = this.UploadString("https://tw.beanfun.com/TW/accounts_management/02.aspx", payload);
-            else response = this.UploadString("http://hk.beanfun.com/beanfun_web_ap/accounts_management/02.aspx", payload);
+            else response = this.UploadString("https://bfweb.hk.beanfun.com/HK/accounts_management/02.aspx", payload);
 
             Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
             if (!regex.IsMatch(response))
@@ -279,6 +252,7 @@ namespace Beanfun
             payload.Clear();
             payload.Add("__VIEWSTATE", viewstate);
             payload.Add("__VIEWSTATEGENERATOR", viewstategenerator);
+            if (App.LoginRegion == "HK") payload.Add("__VIEWSTATEENCRYPTED", "");
             payload.Add("__EVENTVALIDATION", eventvalidation);
 
             regex = new Regex("<span id=\"lblErrorMessage\" style=\"color:Red;\">(.*)</span>");
@@ -313,7 +287,7 @@ namespace Beanfun
 
             string response;
             if (App.LoginRegion == "TW") response = this.UploadString("https://tw.beanfun.com/TW/accounts_management/02.aspx", payload);
-            else response = this.UploadString("http://hk.beanfun.com/beanfun_web_ap/accounts_management/02.aspx", payload);
+            else response = this.UploadString("https://bfweb.hk.beanfun.com/HK/accounts_management/02.aspx", payload);
             Regex regex = new Regex("<span id=\"lblErrorMessage\" style=\"color:Red;\">(.*)</span>");
 
             return regex.IsMatch(response) ? regex.Match(response).Groups[1].Value : "";
@@ -325,7 +299,7 @@ namespace Beanfun
 
             string response;
             if (App.LoginRegion == "TW") response = this.DownloadString("https://tw.beanfun.com/TW/accounts_management/01Accounts.aspx");
-            else response = this.DownloadString("http://hk.beanfun.com/beanfun_web_ap/accounts_management/01Accounts.aspx");
+            else response = this.DownloadString("https://bfweb.hk.beanfun.com/HK/accounts_management/01Accounts.aspx");
 
             Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
             if (!regex.IsMatch(response))
@@ -343,6 +317,7 @@ namespace Beanfun
             NameValueCollection payload = new NameValueCollection();
             payload.Add("__VIEWSTATE", viewstate);
             payload.Add("__VIEWSTATEGENERATOR", viewstategenerator);
+            if (App.LoginRegion == "HK") payload.Add("__VIEWSTATEENCRYPTED", "");
             payload.Add("__EVENTVALIDATION", eventvalidation);
             payload.Add("__EVENTTARGET", "gvServiceAccountList");
             payload.Add("__EVENTARGUMENT", "ChangePassword$" + num);
@@ -356,8 +331,8 @@ namespace Beanfun
             }
             else
             {
-                response = this.UploadString("http://hk.beanfun.com/beanfun_web_ap/accounts_management/01Accounts.aspx", payload);
-                response = this.DownloadString("http://hk.beanfun.com/beanfun_web_ap/accounts_management/03.aspx");
+                response = this.UploadString("http://bfweb.hk.beanfun.com/HK/accounts_management/01Accounts.aspx", payload);
+                response = this.DownloadString("http://bfweb.hk.beanfun.com/HK/accounts_management/03.aspx");
             }
 
             regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
@@ -376,32 +351,23 @@ namespace Beanfun
             payload.Clear();
             payload.Add("__VIEWSTATE", viewstate);
             payload.Add("__VIEWSTATEGENERATOR", viewstategenerator);
+            if (App.LoginRegion == "HK") payload.Add("__VIEWSTATEENCRYPTED", "");
             payload.Add("__EVENTVALIDATION", eventvalidation);
             payload.Add("txtEmail", txtEmail);
-            payload.Add("imgbtn_Submit.x", "0");
+            payload.Add("imgbtn_Submit.x", "0"); //12
             payload.Add("imgbtn_Submit.y", "0");
 
             regex = new Regex("<span id=\"lblErrorMessage\" style=\"color:Red;\">(.*)</span>");
             if (App.LoginRegion == "TW")
-            {
                 response = this.UploadString("https://tw.beanfun.com/TW/accounts_management/03.aspx", payload);
-
-                string lblErrorMessage = regex.IsMatch(response) ? regex.Match(response).Groups[1].Value : "";
-                if (lblErrorMessage != "") return lblErrorMessage;
-
-                regex = new Regex("verify_code=(.*)");
-                return regex.IsMatch(this.ResponseUri.ToString()) ? ("verify_code" + regex.Match(this.ResponseUri.ToString()).Groups[1].Value) : null;
-            }
             else
-            {
-                response = this.UploadString("http://hk.beanfun.com/beanfun_web_ap/accounts_management/03.aspx", payload);
+                response = this.UploadString("http://bfweb.hk.beanfun.com/HK/accounts_management/03.aspx", payload);
 
-                string lblErrorMessage = regex.IsMatch(response) ? regex.Match(response).Groups[1].Value : null;
-                if (lblErrorMessage == null || lblErrorMessage == "") return null;
+            string lblErrorMessage = regex.IsMatch(response) ? regex.Match(response).Groups[1].Value : "";
+            if (lblErrorMessage != "") return lblErrorMessage;
 
-                regex = new Regex("確認碼：(.*)");
-                return regex.IsMatch(lblErrorMessage) ? ("verify_code" + regex.Match(lblErrorMessage).Groups[1].Value) : lblErrorMessage;
-            }
+            regex = new Regex("verify_code=(.*)");
+            return regex.IsMatch(this.ResponseUri.ToString()) ? ("verify_code" + regex.Match(this.ResponseUri.ToString()).Groups[1].Value) : null;
         }
 
         public bool AddServiceAccount(string name, string service_code, string service_region)
@@ -417,7 +383,7 @@ namespace Beanfun
             payload.Add("sadn", name);
             payload.Add("sag", "");
 
-            string response = this.UploadString($"https://{ App.LoginRegion.ToLower() }.beanfun.com/{ (App.LoginRegion == "HK" ? "beanfun_block/" : "") }generic_handlers/gamezone.ashx", payload);
+            string response = this.UploadString($"https://{(App.LoginRegion == "TW" ? "tw" : "bfweb.hk")}.beanfun.com/generic_handlers/gamezone.ashx", payload);
             if (response == "") return false;
             JObject jsonData = JObject.Parse(response);
             if (jsonData["intResult"] == null || (int)jsonData["intResult"] != 1)
@@ -438,7 +404,7 @@ namespace Beanfun
             payload.Add("said", account.sid);
             payload.Add("nsadn", newName);
 
-            string response = this.UploadString($"https://{ App.LoginRegion.ToLower() }.beanfun.com/{ (App.LoginRegion == "HK" ? "beanfun_block/" : "") }generic_handlers/gamezone.ashx", payload);
+            string response = this.UploadString($"https://{(App.LoginRegion == "TW" ? "tw" : "bfweb.hk")}.beanfun.com/generic_handlers/gamezone.ashx", payload);
             if (response == "") return false;
             JObject jsonData = JObject.Parse(response);
             if (jsonData["intResult"] == null || (int)jsonData["intResult"] != 1)
@@ -453,7 +419,7 @@ namespace Beanfun
             payload.Add("strFunction", "GetServiceContract");
             payload.Add("sc", service_code);
             payload.Add("sr", service_region);
-            string response = this.UploadStringGZip($"https://{ App.LoginRegion.ToLower() }.beanfun.com/{ (App.LoginRegion == "HK" ? "beanfun_block/" : "") }generic_handlers/gamezone.ashx", payload);
+            string response = this.UploadStringGZip($"https://{(App.LoginRegion == "TW" ? "tw" : "bfweb.hk")}.beanfun.com/generic_handlers/gamezone.ashx", payload);
             if (response == "") return "";
             JObject jsonData = JObject.Parse(response);
             if (jsonData["intResult"] == null || (int)jsonData["intResult"] != 1)

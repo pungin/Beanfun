@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Windows;
 
 namespace Beanfun
@@ -21,6 +23,12 @@ namespace Beanfun
 
                 if (assemblyName.Name.EndsWith(".resources")) return null;
 
+                if ("Microsoft.Web.WebView2.Wpf" == assemblyName.Name)
+                {
+                    if (ReleaseResource("Microsoft.Web.WebView2.Core.dll") == -1 || ReleaseResource("WebView2Loader.dll") == -1)
+                        MessageBox.Show("Release WebView2 Resource Error");
+                }
+
                 string path = assemblyName.Name + ".dll";
                 if (assemblyName.CultureInfo.Equals(CultureInfo.InvariantCulture) == false)
                 {
@@ -31,10 +39,7 @@ namespace Beanfun
                 {
                     if (stream == null)
                         return null;
-
-                    byte[] assemblyRawBytes = new byte[stream.Length];
-                    stream.Read(assemblyRawBytes, 0, assemblyRawBytes.Length);
-                    return Assembly.Load(assemblyRawBytes);
+                    return Assembly.Load(new BinaryReader(stream).ReadBytes((int)stream.Length));
                 }
             };
         }
@@ -114,6 +119,77 @@ namespace Beanfun
             get
             {
                 return ConvertVersion(Assembly.GetExecutingAssembly().GetName().Version);
+            }
+        }
+
+        public static int ReleaseResource(string file)
+        {
+            string path = string.Format("{0}\\{1}", Environment.CurrentDirectory, file);
+            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(file))
+            {
+                if (stream != null)
+                {
+                    string md5 = GetMD5HashFromStream(stream);
+                    if (File.Exists(path))
+                    {
+                        if (md5.ToUpper().Equals(GetMD5HashFromFile(path).ToUpper()))
+                        {
+                            return 0;
+                        }
+                        else
+                        {
+                            try
+                            {
+                                File.Delete(path);
+                            }
+                            catch { return -1; }
+                        }
+                    }
+                    string dir = Path.GetDirectoryName(path);
+                    if (!Directory.Exists(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+
+                    stream.Position = 0;
+                    File.WriteAllBytes(path, new BinaryReader(stream).ReadBytes((int)stream.Length));
+                    return 1;
+                }
+            }
+            return -1;
+        }
+
+        public static string GetMD5HashFromFile(string fileName)
+        {
+            try
+            {
+                FileStream file = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                string md5 = GetMD5HashFromStream(file);
+                file.Close();
+                return md5;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("GetMD5HashFromFile() fail,error:" + ex.Message);
+            }
+        }
+
+        public static string GetMD5HashFromStream(Stream stream)
+        {
+            try
+            {
+                MD5 md5 = new MD5CryptoServiceProvider();
+                byte[] retVal = md5.ComputeHash(stream);
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < retVal.Length; i++)
+                {
+                    sb.Append(retVal[i].ToString("x2"));
+                }
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("GetMD5HashFromStream() fail,error:" + ex.Message);
             }
         }
     }
