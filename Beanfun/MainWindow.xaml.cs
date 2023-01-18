@@ -271,15 +271,12 @@ namespace Beanfun
         {
             try
             {
-                if (App.LoginRegion == "TW")
+                if (App.OSVersion < App.Win11)
                 {
-                    if (App.OSVersion < App.Win11)
-                    {
-                        if (App.OSVersion >= App.Win8_1)
-                            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Ssl3;
-                        ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                        ServicePointManager.ServerCertificateValidationCallback = (sender, certificate, chain, errors) => true;
-                    }
+                    if (App.OSVersion >= App.Win8_1)
+                        ServicePointManager.SecurityProtocol |= SecurityProtocolType.Ssl3;
+                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                    ServicePointManager.ServerCertificateValidationCallback = (sender, certificate, chain, errors) => true;
                 }
                 if (settingPage.tradLogin != null && !(bool)settingPage.tradLogin.IsChecked)
                     accountList.panel_GetOtp.Visibility = Visibility.Collapsed;
