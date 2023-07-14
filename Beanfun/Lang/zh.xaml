@@ -335,4 +335,5 @@
     <system:String x:Key="NoUpdatesDetected">未檢測到有更新。</system:String>
     <system:String x:Key="NewVersionDetected">檢測到新版本 {0} 當前: {1}\r\n\r\n{2}\r\n\r\n是否打開下載頁面？</system:String>
     <system:String x:Key="Language">程式語言</system:String>
+    <system:String x:Key="InputTotp">輸入應用程式內顯示的雙重驗證碼</system:String>
 </ResourceDictionary>

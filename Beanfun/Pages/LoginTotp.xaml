@@ -1,0 +1,88 @@
+﻿<Page x:Class="Beanfun.LoginTotp"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      mc:Ignorable="d" 
+      Title="LoginTotp">
+
+    <Page.Resources>
+        <ResourceDictionary>
+            <Style TargetType="{x:Type Button}">
+                <Setter Property="Background" Value="#7FF5F5F5"/>
+                <Setter Property="Foreground" Value="Black"/>
+            </Style>
+
+            <SolidColorBrush x:Key="Button.Static.Default" Color="#848484"/>
+            <SolidColorBrush x:Key="Button.Static.MouseOver" Color="#484848"/>
+            <SolidColorBrush x:Key="Button.Static.Pressed" Color="#3AC3F7"/>
+            <Style x:Key="TextButton" TargetType="{x:Type Button}">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="{x:Null}"/>
+                <Setter Property="HorizontalAlignment" Value="Center"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="Foreground" Value="{StaticResource Button.Static.Default}"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type Button}">
+                            <Border BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                                <ContentPresenter ContentTemplate="{TemplateBinding ContentTemplate}" Content="{TemplateBinding Content}" ContentStringFormat="{TemplateBinding ContentStringFormat}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Button.Static.MouseOver}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Button.Static.Pressed}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Page.Resources>
+
+    <Grid Margin="0 20 0 0">
+        <StackPanel Margin="0 50 0 0" Background="#AAFFFFFF"/>
+        <DockPanel>
+            <Grid x:Name="SideBarLeft" MinWidth="90">
+            </Grid>
+            <Grid MinWidth="250" >
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"></RowDefinition>
+                    <RowDefinition Height="Auto"></RowDefinition>
+                    <RowDefinition Height="Auto"></RowDefinition>
+                </Grid.RowDefinitions>
+                <Label Content="{DynamicResource InputTotp}" Margin="0 50 0 20" HorizontalAlignment="Center"></Label>
+                <Grid Grid.Row="1" Height="30">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"></ColumnDefinition>
+                        <ColumnDefinition Width="10"></ColumnDefinition>
+                        <ColumnDefinition Width="*"></ColumnDefinition>
+                        <ColumnDefinition Width="10"></ColumnDefinition>
+                        <ColumnDefinition Width="*"></ColumnDefinition>
+                        <ColumnDefinition Width="10"></ColumnDefinition>
+                        <ColumnDefinition Width="*"></ColumnDefinition>
+                        <ColumnDefinition Width="10"></ColumnDefinition>
+                        <ColumnDefinition Width="*"></ColumnDefinition>
+                        <ColumnDefinition Width="10"></ColumnDefinition>
+                        <ColumnDefinition Width="*"></ColumnDefinition>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="otp1" GotFocus="otp_GotFocus" PreviewKeyUp="otp1_PreviewKeyUp" Grid.Column="0" TextAlignment="Center" VerticalContentAlignment="Center" FontSize="20" MaxLength="1"></TextBox>
+                    <TextBox x:Name="otp2" GotFocus="otp_GotFocus" PreviewKeyUp="otp2_PreviewKeyUp" Grid.Column="2" TextAlignment="Center" VerticalContentAlignment="Center" FontSize="20" MaxLength="1"></TextBox>
+                    <TextBox x:Name="otp3" GotFocus="otp_GotFocus" PreviewKeyUp="otp3_PreviewKeyUp" Grid.Column="4" TextAlignment="Center" VerticalContentAlignment="Center" FontSize="20" MaxLength="1"></TextBox>
+                    <TextBox x:Name="otp4" GotFocus="otp_GotFocus" PreviewKeyUp="otp4_PreviewKeyUp" Grid.Column="6" TextAlignment="Center" VerticalContentAlignment="Center" FontSize="20" MaxLength="1"></TextBox>
+                    <TextBox x:Name="otp5" GotFocus="otp_GotFocus" PreviewKeyUp="otp5_PreviewKeyUp" Grid.Column="8" TextAlignment="Center" VerticalContentAlignment="Center" FontSize="20" MaxLength="1"></TextBox>
+                    <TextBox x:Name="otp6" GotFocus="otp_GotFocus" PreviewKeyUp="otp6_PreviewKeyUp" Grid.Column="10" TextAlignment="Center" VerticalContentAlignment="Center" FontSize="20" MaxLength="1"></TextBox>
+                </Grid>
+                <Button Grid.Row="2" x:Name="btn_login" Content="{DynamicResource Login}" Height="30" FontWeight="Bold" Margin="0 20 0 20" Click="btn_login_Click" IsDefault="True" Background="#7FF5F5F5" Foreground="Black"/>
+            </Grid>
+            <Grid MinWidth="{Binding MinWidth, ElementName=SideBarLeft}"></Grid>
+        </DockPanel>
+    </Grid>
+</Page>
