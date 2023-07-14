@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>5.0.8418.19949</Version>
+  <Version>5.1.8595.35889</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2023-02-15</Date>
+  <Date>2022-07-14</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>v5.0 Beta2:
-| 修復Windows7系統下香港Beanfun無法開啟軟件的問題
-v5.0 Beta1:
-| 更改調用瀏覽器的內核
-| 更新新版香港Beanfun(現在不需要額外安裝元件了)
+  <Note>| 支援香港樂豆號雙重驗證功能
   </Note>
 </VersionInfo>
