@@ -160,6 +160,9 @@
     <Compile Include="Helper\PacketReader.cs" />
     <Compile Include="Helper\TextBlockHelper.cs" />
     <Compile Include="Helper\WindowAccentCompositor.cs" />
+    <Compile Include="Pages\LoginTotp.xaml.cs">
+      <DependentUpon>LoginTotp.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -267,6 +270,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Lang\zh.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Pages\LoginTotp.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

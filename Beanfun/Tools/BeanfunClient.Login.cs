@@ -74,6 +74,14 @@ namespace Beanfun
                 if (response.Contains("RELOAD_CAPTCHA_CODE") && response.Contains("alert"))
                 { this.errmsg = "LoginAdvanceCheck"; return null; }
 
+                if (response.Contains("totpLoginBtn"))
+                {
+                    this.totpResponse = response;
+                    this.totpUrl = $"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}";
+                    this.errmsg = "need_totp";
+                    return null;
+                }
+
                 regex = new Regex("akey=(.*)");
                 if (!regex.IsMatch(this.ResponseUri.ToString()))
                 {
@@ -97,6 +105,74 @@ namespace Beanfun
             {
                 this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
                 return null;
+            }
+        }
+
+        public void TotpLogin(string otp1,string otp2,string otp3,string otp4,string otp5,string otp6, string service_code = "610074", string service_region = "T9")
+        {
+            string loginHost = this.totpUrl;
+            
+
+            try
+            {
+                string response = this.totpResponse;
+                Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
+                if (!regex.IsMatch(response))
+                { this.errmsg = "LoginNoViewstate"; return; }
+                string viewstate = regex.Match(response).Groups[1].Value;
+
+                regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
+                if (!regex.IsMatch(response))
+                { this.errmsg = "LoginNoEventvalidation"; return; }
+                string eventvalidation = regex.Match(response).Groups[1].Value;
+                regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
+                if (!regex.IsMatch(response))
+                { this.errmsg = "LoginNoViewstateGenerator"; return; }
+                string viewstateGenerator = regex.Match(response).Groups[1].Value;
+
+
+                NameValueCollection payload = new NameValueCollection();
+                payload.Add("__EVENTTARGET", "");
+                payload.Add("__EVENTARGUMENT", "");
+                payload.Add("__VIEWSTATE", viewstate);
+                payload.Add("__VIEWSTATEGENERATOR", viewstateGenerator);
+                if (App.LoginRegion == "HK") payload.Add("__VIEWSTATEENCRYPTED", "");
+                payload.Add("__EVENTVALIDATION", eventvalidation);
+                payload.Add("otpCode1", otp1);
+                payload.Add("otpCode2", otp2);
+                payload.Add("otpCode3", otp3);
+                payload.Add("otpCode4", otp4);
+                payload.Add("otpCode5", otp5);
+                payload.Add("otpCode6", otp6);
+                payload.Add("totpLoginBtn", "登入");
+
+                response = this.UploadString(loginHost, payload);
+                if (response.Contains("RELOAD_CAPTCHA_CODE") && response.Contains("alert"))
+                { this.errmsg = "LoginAdvanceCheck"; return; }
+
+                regex = new Regex("akey=(.*)");
+                if (!regex.IsMatch(this.ResponseUri.ToString()))
+                {
+                    this.errmsg = "LoginNoAkey";
+                    regex = new Regex("<script type=\"text/javascript\">\\$\\(function\\(\\){MsgBox.Show\\('(.*)'\\);}\\);</script>");
+                    if (regex.IsMatch(response))
+                    { this.errmsg = regex.Match(response).Groups[1].Value; }
+                    else
+                    {
+                        regex = new Regex("pollRequest\\(\"([^\"]*)\",\"(\\w+)\",\"([^\"]+)\"\\);");
+                        if (regex.IsMatch(response))
+                        { this.errmsg = regex.Match(response).Groups[1].Value + "\",\"" + regex.Match(response).Groups[3].Value; LoginToken = regex.Match(response).Groups[2].Value; }
+                    }
+                    return;
+                }
+                string akey = regex.Match(this.ResponseUri.ToString()).Groups[1].Value;
+
+                LoginCompleted(akey, service_code, service_region);
+            }
+            catch (Exception e)
+            {
+                this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
+                return;
             }
         }
 

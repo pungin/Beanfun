@@ -49,9 +49,11 @@ namespace Beanfun
         public VerifyPage verifyPage;
         public Settings settingPage;
         public About aboutPage;
+        public LoginTotp loginTotp;
 
         public System.ComponentModel.BackgroundWorker getOtpWorker;
         public System.ComponentModel.BackgroundWorker loginWorker;
+        public System.ComponentModel.BackgroundWorker totpWorker;
         public System.ComponentModel.BackgroundWorker pingWorker;
         public System.ComponentModel.BackgroundWorker qrWorker;
         public System.ComponentModel.BackgroundWorker verifyWorker;
@@ -98,6 +100,7 @@ namespace Beanfun
 
             this.getOtpWorker = new System.ComponentModel.BackgroundWorker();
             this.loginWorker = new System.ComponentModel.BackgroundWorker();
+            this.totpWorker = new System.ComponentModel.BackgroundWorker();
             this.pingWorker = new System.ComponentModel.BackgroundWorker();
             this.qrWorker = new System.ComponentModel.BackgroundWorker();
             this.verifyWorker = new System.ComponentModel.BackgroundWorker();
@@ -119,6 +122,13 @@ namespace Beanfun
             this.loginWorker.WorkerSupportsCancellation = true;
             this.loginWorker.DoWork += this.loginWorker_DoWork;
             this.loginWorker.RunWorkerCompleted += this.loginWorker_RunWorkerCompleted;
+            //
+            // totpWorker
+            //
+            this.totpWorker.WorkerReportsProgress = true;
+            this.totpWorker.WorkerSupportsCancellation = true;
+            this.totpWorker.DoWork += this.totpWorker_DoWork;
+            this.totpWorker.RunWorkerCompleted += this.totpWorker_RunWorkerCompleted;
             // 
             // pingWorker
             // 
@@ -167,6 +177,7 @@ namespace Beanfun
             accountList = new AccountList();
             settingPage = new Settings();
             aboutPage = new About();
+            loginTotp = new LoginTotp();
 
             Initialize();
 
@@ -190,6 +201,7 @@ namespace Beanfun
         protected override void OnContentRendered(EventArgs e)
         {
             frame.Content = loginPage;
+            //frame.Content = loginTotp;
 
             if (App.LoginMethod == (int)LoginMethod.Regular && (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked)
             {
@@ -943,6 +955,13 @@ namespace Beanfun
             frame.Content = loginWaitPage;
         }
 
+        public void do_Totp()
+        {
+            btn_Region.Visibility = Visibility.Collapsed;
+            this.totpWorker.RunWorkerAsync();
+            frame.Content = loginWaitPage;
+        }
+
         public bool errexit(string msg, int method, string title = null)
         {
             string originalMsg = msg;
@@ -1056,6 +1075,148 @@ namespace Beanfun
 
         // Login completed.
         private void loginWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            Console.WriteLine("loginWorker end");
+            if (e != null && e.Error != null)
+            {
+
+                errexit(e.Error.Message, 1);
+                NavigateLoginPage();
+                return;
+            }
+            if (e != null && (string)e.Result != null)
+            {
+                if ((string)e.Result == "need_totp")
+                {
+                    frame.Content = loginTotp;
+                    loginTotp.otp1.Text = "";
+                    loginTotp.otp2.Text = "";
+                    loginTotp.otp3.Text = "";
+                    loginTotp.otp4.Text = "";
+                    loginTotp.otp5.Text = "";
+                    loginTotp.otp6.Text = "";
+                    loginTotp.otp1.Focus();
+                    return;
+                }
+                else if ((string)e.Result == "LoginAdvanceCheck")
+                {
+                    MessageBox.Show(TryFindResource("MsgNeedAuth") as string);
+
+                    // Handle panel switching.
+                    frame.Content = verifyPage;
+                    if ((bool)verifyPage.checkBoxRememberVerify.IsChecked)
+                        verifyPage.t_Code.Focus();
+                    else
+                        verifyPage.t_Verify.Focus();
+                    verifyPage.t_Verify.Text = accountManager.getVerifyByAccount(App.LoginRegion, loginPage.id_pass.t_AccountID.Text);
+                    verifyPage.checkBoxRememberVerify.IsChecked = verifyPage.t_Verify.Text != null && verifyPage.t_Verify.Text != "";
+                    verifyPage.t_Code.Text = "";
+                    string response = this.bfClient.getVerifyPageInfo();
+                    if (response == null)
+                    { MessageBox.Show(I18n.ToSimplified(this.bfClient.errmsg)); NavigateLoginPage(); }
+                    string errmsg = reLoadVerifyPage(response);
+                    if (errmsg != null)
+                    { MessageBox.Show(I18n.ToSimplified(errmsg)); NavigateLoginPage(); }
+                }
+                else if (((string)e.Result).StartsWith("bfAPPAutoLogin.ashx"))
+                {
+                    string[] args = Regex.Split((string)e.Result, "\",\"");
+                    if (args.Length < 2)
+                    {
+                        errexit("LoginUnknown", 1);
+                        return;
+                    }
+                    loginWaitPage.t_Info.Content = (TryFindResource("MsgNeedBeanfunAuth") as string).Replace("\\r\\n", "\r\n");
+                    bfAPPAutoLogin.IsEnabled = true;
+                }
+                else
+                {
+                    errexit((string)e.Result, 1);
+                }
+                return;
+            }
+            
+            ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
+            if (App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode)
+            {
+                LastLoginAccountID = loginPage.id_pass.t_AccountID.Text;
+                ConfigAppSettings.SetValue("AccountID", LastLoginAccountID);
+                accountManager.addAccount(
+                    App.LoginRegion,
+                    loginPage.id_pass.t_AccountID.Text,
+                    "",
+                    loginPage.id_pass.checkBox_RememberPWD.IsEnabled && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked ? loginPage.id_pass.t_Password.Password : "",
+                    (bool)verifyPage.checkBoxRememberVerify.IsChecked ? verifyPage.t_Verify.Text : "",
+                    App.LoginMethod,
+                    (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked
+                );
+
+                loginMethodInit();
+            }
+            else ConfigAppSettings.SetValue("AccountID", null);
+
+            try
+            {
+                frame.Content = accountList;
+                btn_Region.Visibility = Visibility.Collapsed;
+
+                redrawSAccountList();
+
+                if (!this.pingWorker.IsBusy) this.pingWorker.RunWorkerAsync();
+
+                updateRemainPoint(this.bfClient.remainPoint);
+
+                accountList.list_Account.Focus();
+                if ((bool)settingPage.autoStartGame.IsChecked && this.bfClient.accountList.Count() > 0)
+                {
+                    if (((bool)settingPage.tradLogin.IsChecked && login_action_type == 1) || login_action_type == 0)
+                        runGame();
+                    accountList.btnGetOtp_Click(null, null);
+                }
+            }
+            catch
+            {
+                errexit(TryFindResource("LoginNoAccountMatch") as string, 1);
+            }
+        }
+
+
+        // totp do work.
+        private void totpWorker_DoWork(object sender, DoWorkEventArgs e)
+        {
+            //if (this.pingWorker.IsBusy) this.pingWorker.CancelAsync();
+            // while (this.pingWorker.IsBusy)
+            //    Thread.Sleep(137);
+            CancelWork();
+
+            Console.WriteLine("loginWorker starting");
+            Thread.CurrentThread.Name = "Totp Worker";
+            e.Result = "";
+            try
+            {
+                loginWaitPage.Dispatcher.Invoke(
+                    new Action(
+                        delegate
+                        {
+                            this.bfClient.TotpLogin(loginTotp.otp1.Text,loginTotp.otp2.Text,loginTotp.otp3.Text,loginTotp.otp4.Text,loginTotp.otp5.Text,loginTotp.otp6.Text,this.service_code, this.service_region);
+                        }
+                    )
+                );
+                if (this.bfClient.errmsg != null)
+                    e.Result = this.bfClient.errmsg;
+                else
+                    e.Result = null;
+            }
+            catch (Exception ex)
+            {
+                e.Result = TryFindResource("LoginErrorUnknown") as string + "\n\n" + ex.Message + "\n" + ex.StackTrace;
+            }
+
+            ResumeWork();
+        }
+
+        // Login completed.
+        private void totpWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
             Console.WriteLine("loginWorker end");
             if (e != null && e.Error != null)
@@ -1668,7 +1829,7 @@ namespace Beanfun
                     break;
                 }
 
-                if (this.getOtpWorker.IsBusy || this.loginWorker.IsBusy)
+                if (this.getOtpWorker.IsBusy || this.loginWorker.IsBusy || this.totpWorker.IsBusy)
                 {
                     Console.WriteLine("ping.busy sleep 1s");
                     System.Threading.Thread.Sleep(1000 * 1);
