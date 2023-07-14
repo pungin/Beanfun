@@ -1,18 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>4.4.8102.35258</Version>
+  <Version>5.1.8595.35889</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2022-03-22</Date>
+  <Date>2022-07-14</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>| 更新Locale Remulator核心到1.4.3-beta.2
-    - 修復粘貼板亂碼
-    - 非簡體中文系統運行時輸入文字亂碼
-| 更正任務欄裡繽放只有圖標沒有名字的問題
-| 修復無法檢測64位遊戲是否正在運行的問題
-| 更正非繁體系統運行遊戲win7在v4.2的時候輸入正常而在v4.3卻亂碼
-| 更正非繁體系統運行楓之谷當楓之谷有更新時提示缺失LRHookx32.dll的問題
-| 運行遊戲時檢測路徑, 若有中文會給予提示
-| 修復勾自動登入後會閃回登入頁面的問題
-| 修復語言文件導致阻止楓之谷自動更新提示的時候程序崩潰
+  <Note>| 支援香港樂豆號雙重驗證功能
   </Note>
 </VersionInfo>
