@@ -1,4 +1,4 @@
-﻿using Amemiya.Net;
+using Amemiya.Net;
 using IniParser;
 using IniParser.Model;
 using Microsoft.Win32;
@@ -591,15 +591,20 @@ namespace Beanfun
         {
             if (!GameList.ContainsKey(App.LoginRegion.ToLower()))
             {
+                string nloc = "";
+                if (App.LoginRegion.ToLower() == "hk")
+                {
+                    nloc = "bfweb.";
+                }
                 List<GameService> gameList = new List<GameService>();
                 WebClient wc = new WebClientEx();
 
-                string res = Encoding.UTF8.GetString(wc.DownloadData("https://" + App.LoginRegion.ToLower() + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"));
+                string res = Encoding.UTF8.GetString(wc.DownloadData("https://"+ nloc + App.LoginRegion.ToLower() + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"));
 
                 StringIniParser sip = new StringIniParser();
                 INIData = sip.ParseString(res);
 
-                res = Encoding.UTF8.GetString(wc.DownloadData("https://" + App.LoginRegion.ToLower() + ".beanfun.com/game_zone/"));
+                res = Encoding.UTF8.GetString(wc.DownloadData("https://" + nloc + App.LoginRegion.ToLower() + ".beanfun.com/game_zone/"));
                 Regex reg = new Regex("Services.ServiceList = (.*);");
                 if (reg.IsMatch(res))
                 {
