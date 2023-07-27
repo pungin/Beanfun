@@ -348,6 +348,7 @@ namespace Beanfun
             }
             catch (Exception ex)
             {
+                Console.WriteLine(ex.StackTrace);
                 MessageBox.Show(string.Format((TryFindResource("LoadDataError") as string).Replace("\\r\\n", "\r\n"), ex.Message)/* + "\r\n\r\n" + ex.StackTrace*/);
 
                 new LoginRegionSelection().ShowDialog();
@@ -594,12 +595,12 @@ namespace Beanfun
                 List<GameService> gameList = new List<GameService>();
                 WebClient wc = new WebClientEx();
 
-                string res = Encoding.UTF8.GetString(wc.DownloadData("https://" + App.LoginRegion.ToLower() + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"));
+                string res = Encoding.UTF8.GetString(wc.DownloadData("https://" + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw") + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"));
 
                 StringIniParser sip = new StringIniParser();
                 INIData = sip.ParseString(res);
 
-                res = Encoding.UTF8.GetString(wc.DownloadData("https://" + App.LoginRegion.ToLower() + ".beanfun.com/game_zone/"));
+                res = Encoding.UTF8.GetString(wc.DownloadData("https://" + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw") + ".beanfun.com/game_zone/"));
                 Regex reg = new Regex("Services.ServiceList = (.*);");
                 if (reg.IsMatch(res))
                 {
@@ -958,8 +959,8 @@ namespace Beanfun
         public void do_Totp()
         {
             btn_Region.Visibility = Visibility.Collapsed;
-            this.totpWorker.RunWorkerAsync();
             frame.Content = loginWaitPage;
+            this.totpWorker.RunWorkerAsync();
         }
 
         public bool errexit(string msg, int method, string title = null)
@@ -1089,6 +1090,8 @@ namespace Beanfun
                 if ((string)e.Result == "need_totp")
                 {
                     frame.Content = loginTotp;
+                    loginTotp.btn_login.IsEnabled = true;
+                    loginTotp.btn_cancel.IsEnabled = true;
                     loginTotp.otp1.Text = "";
                     loginTotp.otp2.Text = "";
                     loginTotp.otp3.Text = "";
