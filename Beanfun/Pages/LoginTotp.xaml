@@ -57,6 +57,7 @@
                     <RowDefinition Height="Auto"></RowDefinition>
                     <RowDefinition Height="Auto"></RowDefinition>
                     <RowDefinition Height="Auto"></RowDefinition>
+                    <RowDefinition Height="Auto"></RowDefinition>
                 </Grid.RowDefinitions>
                 <Label Content="{DynamicResource InputTotp}" Margin="0 50 0 20" HorizontalAlignment="Center"></Label>
                 <Grid Grid.Row="1" Height="30">
@@ -80,7 +81,8 @@
                     <TextBox x:Name="otp5" GotFocus="otp_GotFocus" PreviewKeyUp="otp5_PreviewKeyUp" Grid.Column="8" TextAlignment="Center" VerticalContentAlignment="Center" FontSize="20" MaxLength="1"></TextBox>
                     <TextBox x:Name="otp6" GotFocus="otp_GotFocus" PreviewKeyUp="otp6_PreviewKeyUp" Grid.Column="10" TextAlignment="Center" VerticalContentAlignment="Center" FontSize="20" MaxLength="1"></TextBox>
                 </Grid>
-                <Button Grid.Row="2" x:Name="btn_login" Content="{DynamicResource Login}" Height="30" FontWeight="Bold" Margin="0 20 0 20" Click="btn_login_Click" IsDefault="True" Background="#7FF5F5F5" Foreground="Black"/>
+                <Button Grid.Row="2" x:Name="btn_login" Content="{DynamicResource Login}" Height="30" FontWeight="Bold" Margin="0 20 0 0" Click="btn_login_Click" IsDefault="True" Background="#7FF5F5F5" Foreground="Black"/>
+                <Button Grid.Row="3" x:Name="btn_cancel" Content="{DynamicResource Cancel}" Height="24" FontWeight="Bold" Margin="0 10 0 20" Click="btn_back_Click" IsDefault="True" Background="#7FF5F5F5" Foreground="Black"/>
             </Grid>
             <Grid MinWidth="{Binding MinWidth, ElementName=SideBarLeft}"></Grid>
         </DockPanel>

@@ -27,7 +27,14 @@ namespace Beanfun
 
         private void btn_login_Click(object sender, RoutedEventArgs e)
         {
+            btn_login.IsEnabled = false;
+            btn_cancel.IsEnabled = false;
             App.MainWnd.do_Totp();
+        }
+
+        private void btn_back_Click(object sender, RoutedEventArgs e)
+        {
+            App.MainWnd.frame.Content = App.MainWnd.loginPage;
         }
 
         private void otp1_PreviewKeyUp(object sender, KeyEventArgs e)
@@ -72,7 +79,10 @@ namespace Beanfun
 
         private void otp6_PreviewKeyUp(object sender, KeyEventArgs e)
         {
-            
+            if (otp1.Text.Length > 0 && otp2.Text.Length > 0 && otp3.Text.Length > 0 && otp4.Text.Length > 0 && otp5.Text.Length > 0 && otp6.Text.Length > 0)
+            {
+                btn_login.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }
         }
 
         private void otp_GotFocus(object sender, RoutedEventArgs e)
