@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>5.1.8595.35889</Version>
+  <Version>5.2.8608.34065</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2022-07-14</Date>
+  <Date>2022-07-27</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>| 支援香港樂豆號雙重驗證功能
+  <Note>| 修復港號無法獲取遊戲設置和遊戲名的問題
+| 二次認證界面增加取消按鈕
+| 二次認證輸入最後一位數字時直接登錄無需點按鈕
   </Note>
 </VersionInfo>
