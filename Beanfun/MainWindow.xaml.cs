@@ -74,7 +74,7 @@ namespace Beanfun
         public string dir_value_name = "Path";
         public string win_class_name = "MapleStoryClass";
         public short login_action_type = 1;
-        public string game_commandLine = "tw.login.maplestory.gamania.com 8484 BeanFun %s %s";
+        public string game_commandLine = "tw.login.maplestory.beanfun.com 8484 BeanFun %s %s";
         private string otp;
         private BitmapImage qr_default;
         private static readonly System.Windows.Forms.NotifyIcon _trayNotifyIcon = new System.Windows.Forms.NotifyIcon
@@ -2006,9 +2006,9 @@ namespace Beanfun
                             var tcpClient = new System.Net.Sockets.TcpClient();
                             tcpClient.SendTimeout = 6000;
                             tcpClient.ReceiveTimeout = 6000;
-                            string WvsLoginServerDomain = "tw.login.maplestory.gamania.com";
+                            string WvsLoginServerDomain = "tw.login.maplestory.beanfun.com";
                             if ("610075_T9".Equals(service_code + "_" + service_region))
-                                WvsLoginServerDomain = "tw.loginT.maplestory.gamania.com";
+                                WvsLoginServerDomain = "tw.loginT.maplestory.beanfun.com";
                             tcpClient.Connect(WvsLoginServerDomain, 8484);
 
                             if (tcpClient.Connected)
