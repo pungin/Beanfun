@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <VersionInfo>
-  <Version>5.2.8608.34065</Version>
+  <Version>5.3.8768.31320</Version>
   <UpdaterVersion>1.2.3.0</UpdaterVersion>
-  <Date>2022-07-27</Date>
+  <Date>2024-01-03</Date>
   <Url>https://raw.githubusercontent.com/pungin/Beanfun/master/Beanfun.zip</Url>
-  <Note>| 修復港號無法獲取遊戲設置和遊戲名的問題
-| 二次認證界面增加取消按鈕
-| 二次認證輸入最後一位數字時直接登錄無需點按鈕
+  <Note>| 更正官網改版導致無法開啟繽放的問題
   </Note>
 </VersionInfo>
