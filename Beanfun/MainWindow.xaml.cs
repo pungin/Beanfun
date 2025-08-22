@@ -1479,7 +1479,6 @@ namespace Beanfun
             {
                 Console.WriteLine("try open game");
                 int runMode = int.Parse(ConfigAppSettings.GetValue("startGameMode", "0"));
-                bool is64BitGame = false;
                 if (runMode == (int)GameStartMode.Auto)
                 {
                     switch (WindowsAPI.GetSystemDefaultLocaleName())
@@ -1492,11 +1491,6 @@ namespace Beanfun
                             runMode = (int)GameStartMode.Normal;
                             break;
                         default:
-                            WindowsAPI.BinaryType bt;
-                            if (WindowsAPI.GetBinaryType(gamePath, out bt))
-                            {
-                                is64BitGame = bt == WindowsAPI.BinaryType.SCS_64BIT_BINARY;
-                            }
                             if (App.OSVersion < App.WinVista)
                             {
                                 errexit(TryFindResource("MsgLEDoNotSupportXP") as string, 2);
@@ -1524,7 +1518,7 @@ namespace Beanfun
                 switch (runMode)
                 {
                     case (int)GameStartMode.LocaleRemulator:
-                        startByLR(gamePath, commandLine, is64BitGame);
+                        startByLR(gamePath, commandLine);
                         break;
                     case (int)GameStartMode.Normal:
                         ProcessStartInfo startInfo = new ProcessStartInfo(gamePath);
@@ -1542,11 +1536,12 @@ namespace Beanfun
             }
         }
 
-        private void startByLR(string path, string command, bool is64BitGame)
+        private void startByLR(string path, string command)
         {
-            if (App.ReleaseResource("LRProc.dll") == -1 || App.ReleaseResource("LRHookx32.dll") == -1 || App.ReleaseResource("LRHookx64.dll") == -1)
+            if (App.ReleaseResource("LRConfig.xml") == -1 || App.ReleaseResource("LRHookx32.dll") == -1 ||
+                App.ReleaseResource("LRHookx64.dll") == -1 || App.ReleaseResource("LRProc.exe") == -1 ||
+                App.ReleaseResource("LRSubMenus.dll") == -1)
                 MessageBox.Show(TryFindResource("MsgLocalePluginReleaseError") as string);
-            string dllPath = string.Format("{0}\\{1}", System.Environment.CurrentDirectory, "LRHookx32.dll");
 
             var commandLine = string.Empty;
             commandLine = path.StartsWith("\"")
@@ -1558,7 +1553,13 @@ namespace Beanfun
             new Thread(new ThreadStart(() => {
                 try
                 {
-                    LRInject(path, Path.GetDirectoryName(path), commandLine, dllPath, (uint)culInfo.ANSICodePage, App.OSVersion >= App.Win8 && is64BitGame);
+                    var proc = new Process();
+                    proc.StartInfo.FileName = System.Environment.CurrentDirectory + "\\LRProc.exe";
+                    proc.StartInfo.Arguments = "ef3e7b42-a87c-4c07-ae3e-eeebeef12762 " + commandLine;
+                    proc.StartInfo.WorkingDirectory = Path.GetDirectoryName(path);
+                    proc.StartInfo.UseShellExecute = true;
+                    proc.StartInfo.Verb = "runas";
+                    proc.Start();
                 }
                 catch (Exception ex)
                 {
@@ -1567,9 +1568,6 @@ namespace Beanfun
                 }
             })).Start();
         }
-
-        [DllImport("LRProc.dll", EntryPoint = "LRInject", CharSet = CharSet.Ansi ,CallingConvention = CallingConvention.Cdecl)]
-        public static extern int LRInject(string application, string workpath, string commandline, string dllpath, uint CodePage, bool HookIME);
 
         public bool AddServiceAccount(string name)
         {

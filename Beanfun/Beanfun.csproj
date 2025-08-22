@@ -510,6 +510,11 @@
     <Resource Include="Resources\QRCode_Tip.png" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="LocaleRemulator\LRConfig.xml">
+      <LogicalName>LRConfig.xml</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="LocaleRemulator\LRHookx32.dll">
       <LogicalName>LRHookx32.dll</LogicalName>
     </EmbeddedResource>
@@ -520,8 +525,13 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="LocaleRemulator\LRProc.dll">
-      <LogicalName>LRProc.dll</LogicalName>
+    <EmbeddedResource Include="LocaleRemulator\LRProc.exe">
+      <LogicalName>LRProc.exe</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="LocaleRemulator\LRSubMenus.dll">
+      <LogicalName>LRSubMenus.dll</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
@@ -537,10 +547,6 @@
       </EmbeddedResource>
     </ItemGroup>
   </Target>
-  <PropertyGroup>
-    <PreBuildEvent>echo copy LRProc.dll
-copy $(SolutionDir)Build\$(Configuration)\LRProc.dll $(SolutionDir)Beanfun\LocaleRemulator\LRProc.dll /y</PreBuildEvent>
-  </PropertyGroup>
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.1343.22\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.1343.22\build\Microsoft.Web.WebView2.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
