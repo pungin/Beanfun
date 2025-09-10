@@ -1780,7 +1780,7 @@ namespace Beanfun
                                     WindowsAPI.GetCursorPos(ref oldPoint);
                                     System.Drawing.Point point = new System.Drawing.Point(0, 0);
                                     WindowsAPI.ClientToScreen(hWnd, ref point);
-                                    System.Drawing.Point textBoxPoint = new System.Drawing.Point((int)(500 * dpixRatio), (int)(310 * dpixRatio));
+                                    System.Drawing.Point textBoxPoint = new System.Drawing.Point((int)(680 * dpixRatio), (int)(310 * dpixRatio));
                                     WindowsAPI.SetCursorPos(point.X + textBoxPoint.X, point.Y + textBoxPoint.Y);
                                     int pos = (textBoxPoint.X & 0xFFFF) | (textBoxPoint.Y << 16);
                                     WindowsAPI.PostMessage(hWnd, WM_LBUTTONDOWN, 1, pos);
