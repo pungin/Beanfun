@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -53,6 +54,33 @@ namespace Beanfun
 
         [DllImport("user32.dll")]
         public static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+        public static Size GetClientAreaSize(IntPtr hWnd)
+        {
+            if (hWnd == IntPtr.Zero)
+                throw new ArgumentException();
+
+            if (GetClientRect(hWnd, out RECT clientRect))
+            {
+                int width = clientRect.Right - clientRect.Left;
+                int height = clientRect.Bottom - clientRect.Top;
+                return new Size(width, height);
+            }
+
+            return Size.Empty;
+        }
 
         public enum AccentState
         {

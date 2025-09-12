@@ -1754,59 +1754,61 @@ namespace Beanfun
                             }
                             else
                             {
-                                double dpixRatio = 1.0;
+                                System.Drawing.Size wndSize = System.Drawing.Size.Empty;
                                 if (hWnd != IntPtr.Zero)
                                 {
-                                    System.Drawing.Graphics currentGraphics = System.Drawing.Graphics.FromHwnd(hWnd);
-                                    dpixRatio = currentGraphics.DpiX / 96.0;
+                                    wndSize = WindowsAPI.GetClientAreaSize(hWnd);
                                 }
 
-                                const int WM_KEYDOWN = 0X100;
-                                const int WM_LBUTTONDOWN = 0x0201;
-                                const byte VK_BACK = 0x0008;
-                                const byte VK_TAB = 0x0009;
-                                const byte VK_ENTER = 0x000D;
-                                const byte VK_ESCAPE = 0x001B;
-                                const byte VK_END = 0x0023;
-                                WindowsAPI.SetForegroundWindow(hWnd);
-                                Thread.Sleep(100);
-                                if  ("610074".Equals(service_code) && "T9".Equals(service_region))
+                                if (wndSize != System.Drawing.Size.Empty)
                                 {
-                                    // 按下ESC關閉提示框
-                                    WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_ESCAPE);
+                                    const int WM_KEYDOWN = 0X100;
+                                    const int WM_LBUTTONDOWN = 0x0201;
+                                    const byte VK_BACK = 0x0008;
+                                    const byte VK_TAB = 0x0009;
+                                    const byte VK_ENTER = 0x000D;
+                                    const byte VK_ESCAPE = 0x001B;
+                                    const byte VK_END = 0x0023;
+                                    WindowsAPI.SetForegroundWindow(hWnd);
                                     Thread.Sleep(100);
-                                    // 選中帳號欄
-                                    System.Drawing.Point oldPoint = new System.Drawing.Point(0, 0);
-                                    WindowsAPI.GetCursorPos(ref oldPoint);
-                                    System.Drawing.Point point = new System.Drawing.Point(0, 0);
-                                    WindowsAPI.ClientToScreen(hWnd, ref point);
-                                    System.Drawing.Point textBoxPoint = new System.Drawing.Point((int)(680 * dpixRatio), (int)(310 * dpixRatio));
-                                    WindowsAPI.SetCursorPos(point.X + textBoxPoint.X, point.Y + textBoxPoint.Y);
-                                    int pos = (textBoxPoint.X & 0xFFFF) | (textBoxPoint.Y << 16);
-                                    WindowsAPI.PostMessage(hWnd, WM_LBUTTONDOWN, 1, pos);
-                                    Thread.Sleep(200);
-                                    WindowsAPI.SetCursorPos(oldPoint.X, oldPoint.Y);
+                                    if ("610074".Equals(service_code) && "T9".Equals(service_region))
+                                    {
+                                        // 按下ESC關閉提示框
+                                        WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_ESCAPE);
+                                        Thread.Sleep(100);
+                                        // 選中帳號欄
+                                        System.Drawing.Point oldPoint = new System.Drawing.Point(0, 0);
+                                        WindowsAPI.GetCursorPos(ref oldPoint);
+                                        System.Drawing.Point point = new System.Drawing.Point(0, 0);
+                                        WindowsAPI.ClientToScreen(hWnd, ref point);
+                                        System.Drawing.Point textBoxPoint = new System.Drawing.Point((int)(wndSize.Width * 0.5), (int)(wndSize.Height * 0.4));
+                                        WindowsAPI.SetCursorPos(point.X + textBoxPoint.X, point.Y + textBoxPoint.Y);
+                                        int pos = (textBoxPoint.X & 0xFFFF) | (textBoxPoint.Y << 16);
+                                        WindowsAPI.PostMessage(hWnd, WM_LBUTTONDOWN, 1, pos);
+                                        Thread.Sleep(200);
+                                        WindowsAPI.SetCursorPos(oldPoint.X, oldPoint.Y);
+                                    }
+                                    // 清空帳號欄內容
+                                    WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_END);
+                                    for (int i = 0; i < 64; i++)
+                                    {
+                                        WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_BACK);
+                                    }
+                                    // 輸入帳號
+                                    WindowsAPI.PostString(hWnd, acc);
+                                    // 切換到密碼欄
+                                    WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_TAB);
+                                    // 清空密碼欄內容
+                                    WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_END);
+                                    for (int i = 0; i < 20; i++)
+                                    {
+                                        WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_BACK);
+                                    }
+                                    // 輸入密碼
+                                    WindowsAPI.PostString(hWnd, accountList.t_Password.Text);
+                                    // 按登入
+                                    WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_ENTER);
                                 }
-                                // 清空帳號欄內容
-                                WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_END);
-                                for (int i = 0; i < 64; i++)
-                                {
-                                    WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_BACK);
-                                }
-                                // 輸入帳號
-                                WindowsAPI.PostString(hWnd, acc);
-                                // 切換到密碼欄
-                                WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_TAB);
-                                // 清空密碼欄內容
-                                WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_END);
-                                for (int i = 0; i < 20; i++)
-                                {
-                                    WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_BACK);
-                                }
-                                // 輸入密碼
-                                WindowsAPI.PostString(hWnd, accountList.t_Password.Text);
-                                // 按登入
-                                WindowsAPI.PostKey(hWnd, WM_KEYDOWN, VK_ENTER);
                             }
                         }
                     }
