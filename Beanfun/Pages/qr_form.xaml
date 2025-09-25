@@ -68,9 +68,6 @@
                     </Button>
                 </DockPanel>
                 </TextBlock>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0 10 0 0">
-                    <CheckBox Margin="5,0" Content="{DynamicResource RunLastGame}" IsEnabled="False"/>
-                </StackPanel>
                 <Button x:Name="btn_back" Content="{DynamicResource BackRegularLogin}" Height="30" Width="250" FontWeight="Bold" Margin="0 10 0 20" IsDefault="True" Background="#7FF5F5F5" Foreground="Black" Click="btn_back_Click"/>
             </StackPanel>
             <Grid MinWidth="{Binding MinWidth, ElementName=SideBarLeft}"/>

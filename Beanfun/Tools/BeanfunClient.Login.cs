@@ -200,7 +200,7 @@ namespace Beanfun
 
             //Thread.Sleep(3000);
 
-            regex = new Regex("\\$\\(\"#theQrCodeImg\"\\).attr\\(\"src\", \"../(.*)\" \\+ obj.strEncryptData\\);");
+            regex = new Regex("\\$\\(\"#theQrCodeImg\"\\)\\.attr\\(\"src\", \"\\.\\./(.*)\"");
             if (!regex.IsMatch(response))
             { this.errmsg = "LoginNoHash"; return null; }
             string value = regex.Match(response).Groups[1].Value;
