@@ -84,11 +84,13 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="{x:Type ToggleButton}">
-                                                        <Border x:Name="templateRoot" BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}" BorderThickness="0 0 0 1" SnapsToDevicePixels="true">
-                                                            <TextBlock x:Name="splitBorder" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0">
-                                                                <Path x:Name="arrow" Data="F1 M 0,0 L 4.667,4.66665 L 9.3334,0 L 9.3334,-1.78168 L 4.6667,2.88501 L0,-1.78168 L0,0 Z" Fill="{Binding Background, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}" HorizontalAlignment="Center" VerticalAlignment="Center" SnapsToDevicePixels="true" Width="{DynamicResource {x:Static SystemParameters.VerticalScrollBarWidthKey}}"/>
-                                                            </TextBlock>
-                                                        </Border>
+                                                        <Grid Background="Transparent">
+                                                            <Border x:Name="templateRoot" BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}" BorderThickness="0 0 0 1">
+                                                                <Grid x:Name="splitBorder" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="{DynamicResource {x:Static SystemParameters.VerticalScrollBarWidthKey}}" Margin="0">
+                                                                    <Path x:Name="arrow" Data="F1 M 0,0 L 4.667,4.66665 L 9.3334,0 L 9.3334,-1.78168 L 4.6667,2.88501 L0,-1.78168 L0,0 Z" Fill="{Binding Background, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}" HorizontalAlignment="Center" VerticalAlignment="Center" Width="{DynamicResource {x:Static SystemParameters.VerticalScrollBarWidthKey}}"/>
+                                                                </Grid>
+                                                            </Border>
+                                                        </Grid>
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsPressed" Value="true">
                                                                 <Setter Property="Fill" TargetName="arrow" Value="{StaticResource Button.Static.Pressed}"/>
