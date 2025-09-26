@@ -5,6 +5,7 @@ using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 
 namespace Beanfun
@@ -94,6 +95,37 @@ namespace Beanfun
         private void Application_Exit(object sender, ExitEventArgs e)
         {
             if (MainWnd != null && MainWnd.bfClient != null) try { MainWnd.bfClient.Logout(); } catch { }
+        }
+
+        public static Version ParseVersion(string version)
+        {
+            var oldFormatMatch = Regex.Match(version, @"^(\d+)\.(\d+)\.(\d+)\((\d+)\)$");
+            if (oldFormatMatch.Success)
+            {
+                return new Version(
+                    int.Parse(oldFormatMatch.Groups[1].Value),
+                    int.Parse(oldFormatMatch.Groups[2].Value),
+                    int.Parse(oldFormatMatch.Groups[3].Value),
+                    int.Parse(oldFormatMatch.Groups[4].Value));
+            }
+            var newFormatMatch = Regex.Match(version, @"^(\d+)\.(\d+)\((\d{10})\)$");
+            if (newFormatMatch.Success)
+            {
+                var dateStr = newFormatMatch.Groups[3].Value;
+                var buildDate = DateTime.ParseExact(dateStr, "yyMMddHHmm", CultureInfo.InvariantCulture);
+
+                var baseDate = new DateTime(2000, 1, 1);
+                var build = (int)(buildDate - baseDate).TotalDays;
+                var revision = (int)(buildDate.TimeOfDay.TotalSeconds / 2);
+
+                return new Version(
+                    int.Parse(newFormatMatch.Groups[1].Value),
+                    int.Parse(newFormatMatch.Groups[2].Value),
+                    build,
+                    revision);
+            }
+
+            throw new FormatException();
         }
 
         public static string ConvertVersion(Version version)

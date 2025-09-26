@@ -1,5 +1,4 @@
-﻿using Amemiya.Net;
-using IniParser;
+﻿using IniParser;
 using IniParser.Model;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
@@ -11,7 +10,6 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -349,7 +347,7 @@ namespace Beanfun
             catch (Exception ex)
             {
                 Console.WriteLine(ex.StackTrace);
-                MessageBox.Show(string.Format((TryFindResource("LoadDataError") as string).Replace("\\r\\n", "\r\n"), ex.Message)/* + "\r\n\r\n" + ex.StackTrace*/);
+                MessageBox.Show(string.Format(Regex.Unescape(TryFindResource("LoadDataError") as string), ex.Message)/* + "\r\n\r\n" + ex.StackTrace*/);
 
                 new LoginRegionSelection().ShowDialog();
             }
@@ -426,7 +424,7 @@ namespace Beanfun
                 BitmapImage image;
                 try
                 {
-                    byte[] buffer = new WebClientEx().DownloadData(url);
+                    byte[] buffer = new WebClient().DownloadData(url);
                     image = new BitmapImage();
                     image.BeginInit();
                     image.StreamSource = new MemoryStream(buffer);
@@ -597,7 +595,7 @@ namespace Beanfun
             if (!GameList.ContainsKey(App.LoginRegion.ToLower()))
             {
                 List<GameService> gameList = new List<GameService>();
-                WebClient wc = new WebClientEx();
+                WebClient wc = new WebClient();
 
                 string res = Encoding.UTF8.GetString(wc.DownloadData("https://" + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw") + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"));
 
@@ -1029,7 +1027,7 @@ namespace Beanfun
                     break;
             }
 
-            MessageBox.Show(I18n.ToSimplified(msg).Replace("\\r\\n", "\r\n"), title);
+            MessageBox.Show(Regex.Unescape(I18n.ToSimplified(msg)), title);
             if (method == 0)
                 App.Current.Shutdown();
             else if (method == 1)
@@ -1146,7 +1144,7 @@ namespace Beanfun
                         errexit("LoginUnknown", 1);
                         return;
                     }
-                    loginWaitPage.t_Info.Content = (TryFindResource("MsgNeedBeanfunAuth") as string).Replace("\\r\\n", "\r\n");
+                    loginWaitPage.t_Info.Content = Regex.Unescape(TryFindResource("MsgNeedBeanfunAuth") as string);
                     bfAPPAutoLogin.IsEnabled = true;
                 }
                 else
@@ -1275,7 +1273,7 @@ namespace Beanfun
                         errexit("LoginUnknown", 1);
                         return;
                     }
-                    loginWaitPage.t_Info.Content = (TryFindResource("MsgNeedBeanfunAuth") as string).Replace("\\r\\n", "\r\n");
+                    loginWaitPage.t_Info.Content = Regex.Unescape(TryFindResource("MsgNeedBeanfunAuth") as string);
                     bfAPPAutoLogin.IsEnabled = true;
                 }
                 else
@@ -1532,7 +1530,7 @@ namespace Beanfun
             catch(Exception ex)
             {
                 Console.WriteLine(ex.ToString());
-                errexit((TryFindResource("MsgLocalePluginRunError") as string).Replace("\\r\\n", "\r\n"), 2);
+                errexit(Regex.Unescape(TryFindResource("MsgLocalePluginRunError") as string), 2);
             }
         }
 
@@ -1564,7 +1562,7 @@ namespace Beanfun
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex.ToString());
-                    errexit((TryFindResource("MsgLocalePluginRunError") as string).Replace("\\r\\n", "\r\n"), 2);
+                    errexit(Regex.Unescape(TryFindResource("MsgLocalePluginRunError") as string), 2);
                 }
             })).Start();
         }
@@ -2080,7 +2078,7 @@ namespace Beanfun
                 }
                 bool isCanUpdate = ClientMapleMajor != 0 && SrvMapleMajor != 0 && ClientMapleMajor >= (SrvMapleMajor - 2);
                 MessageBoxResult result = MessageBox.Show(
-                    string.Format((TryFindResource("MsgKillPatcher") as string).Replace("\\r\\n", "\r\n"), info,
+                    string.Format(Regex.Unescape(TryFindResource("MsgKillPatcher") as string), info,
                         isCanUpdate && ClientMapleMajor == SrvMapleMajor ? $"V{ SrvMapleMajor }.{ SrvMapleMinor.Split(':')[0] }fix" : "",
                         isCanUpdate ? TryFindResource("UpdateByPatch") : TryFindResource("UpdateByFullClient"),
                         isCanUpdate ? TryFindResource("GamePatch") : TryFindResource("GameFullClient")), TryFindResource("WarningByBeanfun") as string, MessageBoxButton.YesNo);

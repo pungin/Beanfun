@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Text.RegularExpressions;
+using System.Windows;
 using System.Windows.Input;
 
 namespace Beanfun
@@ -24,7 +25,7 @@ namespace Beanfun
             if (result == null) MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
             else if (result.StartsWith("verify_code"))
             {
-                MessageBox.Show(string.Format((TryFindResource("MsgChangePassword") as string).Replace("\\r\\n", "\r\n"), result.Replace("verify_code", "")), TryFindResource("DataSended") as string);
+                MessageBox.Show(string.Format(Regex.Unescape(TryFindResource("MsgChangePassword") as string), result.Replace("verify_code", "")), TryFindResource("DataSended") as string);
                 this.Close();
             }
             else

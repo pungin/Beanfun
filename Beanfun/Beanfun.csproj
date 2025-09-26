@@ -247,9 +247,6 @@
     <Compile Include="Pages\Settings.xaml.cs">
       <DependentUpon>Settings.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Update\Amemiya.Net.WebClientEx.cs">
-      <SubType>Component</SubType>
-    </Compile>
     <Compile Include="Update\ApplicationUpdater.cs" />
     <Compile Include="Pages\VerifyPage.xaml.cs">
       <DependentUpon>VerifyPage.xaml</DependentUpon>
