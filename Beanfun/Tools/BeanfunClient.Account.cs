@@ -85,10 +85,10 @@ namespace Beanfun
 
             if (this.accountList.Count > 0)
             {
-                // 先按 ssn 排序作為默認順序
+                // sort by ssn as default order
                 this.accountList.Sort((x, y) => { return x.ssn.CompareTo(y.ssn); });
                 
-                // 然後應用用戶自定義的順序
+                // then apply the user-defined order
                 string gameCode = service_code + "_" + service_region;
                 AccountList.ApplyAccountOrder(this.accountList, gameCode);
             }
