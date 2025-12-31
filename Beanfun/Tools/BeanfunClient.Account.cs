@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Linq;
 using System.Collections.Specialized;
 using System.Net;
 using System.Text.RegularExpressions;
@@ -83,7 +83,15 @@ namespace Beanfun
             }
             else accountAmountLimitNotice = "";
 
-            if (this.accountList.Count > 0) this.accountList.Sort((x, y) => { return x.ssn.CompareTo(y.ssn); });
+            if (this.accountList.Count > 0)
+            {
+                // 先按 ssn 排序作為默認順序
+                this.accountList.Sort((x, y) => { return x.ssn.CompareTo(y.ssn); });
+                
+                // 然後應用用戶自定義的順序
+                string gameCode = service_code + "_" + service_region;
+                AccountList.ApplyAccountOrder(this.accountList, gameCode);
+            }
 
             this.errmsg = null;
         }

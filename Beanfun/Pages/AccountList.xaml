@@ -70,14 +70,45 @@
                             <MenuItem x:Name="btn_Customerservice" Header="{DynamicResource CustomerService}" Click="btn_Customerservice_Click"/>
                         </Menu>
                     </StackPanel>
-                    <ListBox x:Name="list_Account" Margin="0,10,0,0" Height="130" MinWidth="290" ToolTip="{DynamicResource RightClickMenu}" SelectionMode="Single" FocusVisualStyle="{x:Null}">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding sname}"/>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                        <ListBox.Resources>
-                            <Style TargetType="{x:Type ListBoxItem}" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                    <ListBox x:Name="list_Account" Margin="0,10,0,0" Height="130" MinWidth="290" ToolTip="{DynamicResource RightClickMenu}" SelectionMode="Single" FocusVisualStyle="{x:Null}"
+                             AllowDrop="True"
+                             PreviewMouseLeftButtonDown="ListBox_PreviewMouseLeftButtonDown"
+                             PreviewMouseMove="ListBox_PreviewMouseMove"
+                             DragOver="ListBox_DragOver"
+                             Drop="ListBox_Drop">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Padding" Value="2"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Bd" Background="{TemplateBinding Background}" 
+                                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeColorBrush}"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#20000000"/>
+                                                </Trigger>
+                                                <MultiTrigger>
+                                                    <MultiTrigger.Conditions>
+                                                        <Condition Property="IsSelected" Value="True"/>
+                                                        <Condition Property="IsMouseOver" Value="True"/>
+                                                    </MultiTrigger.Conditions>
+                                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeColorBrush}"/>
+                                                </MultiTrigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
                                 <EventSetter Event="MouseDoubleClick" Handler="list_Account_MouseDoubleClick"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding isEnable}" Value="false">
@@ -89,6 +120,23 @@
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding sname}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="≡" FontSize="16" FontWeight="Bold" 
+                                               Foreground="Gray" Cursor="SizeAll" Margin="10,0,0,0"
+                                               VerticalAlignment="Center" ToolTip="拖動排序"
+                                               Tag="DragHandle" MouseLeftButtonDown="DragHandle_MouseLeftButtonDown"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                        <ListBox.Resources>
                             <Style TargetType="{x:Type GridViewColumnHeader}">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                             </Style>
