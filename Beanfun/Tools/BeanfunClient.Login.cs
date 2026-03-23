@@ -348,7 +348,7 @@ namespace Beanfun
             }
             catch (Exception e)
             {
-                this.errmsg = "QRCodeLogin Error: " + e.Message;
+                this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
                 return null;
             }
         }
