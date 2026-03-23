@@ -1,14 +1,15 @@
 ﻿using System;
-using System.Linq;
-using System.Text;
-using System.Net;
-using System.Text.RegularExpressions;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
-using Newtonsoft.Json.Linq;
-using System.Windows.Media.Imaging;
+using System.Linq;
+using System.Net;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media.Imaging;
+using Newtonsoft.Json.Linq;
 
 namespace Beanfun
 {
@@ -179,72 +180,88 @@ namespace Beanfun
         public class QRCodeClass
         {
             public string skey;
-            public string value;
-            public string viewstate;
-            public string eventvalidation;
-            public string bitmapUrl;
+            public string bitmapBase64;
         }
 
         public QRCodeClass GetQRCodeValue(string skey)
         {
-            string response = this.DownloadString("https://tw.newlogin.beanfun.com/login/qr_form.aspx?skey=" + skey );
-            Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            { this.errmsg = "LoginNoViewstate"; return null; }
-            string viewstate = regex.Match(response).Groups[1].Value;
+            this.Headers.Clear();
+            this.Headers.Add("User-Agent", "Mozilla/5.0");
+            this.Headers.Add("Accept", "text/html");
 
-            regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            { this.errmsg = "LoginNoEventvalidation"; return null; }
-            string eventvalidation = regex.Match(response).Groups[1].Value;
+            string url = $"https://login.beanfun.com/Login/Index?pSKey={skey}";
+            string response = this.DownloadString(url);
+            //Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
+            //if (!regex.IsMatch(response))
+            //{ this.errmsg = "LoginNoViewstate"; return null; }
+            //string viewstate = regex.Match(response).Groups[1].Value;
+
+            //regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
+            //if (!regex.IsMatch(response))
+            //{ this.errmsg = "LoginNoEventvalidation"; return null; }
+            //string eventvalidation = regex.Match(response).Groups[1].Value;
 
             //Thread.Sleep(3000);
 
-            regex = new Regex("\\$\\(\"#theQrCodeImg\"\\)\\.attr\\(\"src\", \"\\.\\./(.*)\"");
-            if (!regex.IsMatch(response))
-            { this.errmsg = "LoginNoHash"; return null; }
-            string value = regex.Match(response).Groups[1].Value;
+            //regex = new Regex("\\$\\(\"#theQrCodeImg\"\\)\\.attr\\(\"src\", \"\\.\\./(.*)\"");
+            //if (!regex.IsMatch(response))
+            //{ this.errmsg = "LoginNoHash"; return null; }
+            //string value = regex.Match(response).Groups[1].Value;
 
-            string strEncryptData = this.getQRCodeStrEncryptData(skey);
-            if (strEncryptData == null || strEncryptData == "")
+            JObject strEncryptData = this.getQRCodeStrEncryptData(skey);
+            if (strEncryptData == null)
             { this.errmsg = "LoginIntResultError"; return null; }
 
-            QRCodeClass res = new QRCodeClass();
-            res.skey = skey;
-            res.viewstate = viewstate;
-            res.eventvalidation = eventvalidation;
-            res.value = strEncryptData;
-            res.bitmapUrl = "https://tw.newlogin.beanfun.com/" + value;
-
-            return res;
+            return new QRCodeClass
+            {
+                skey = skey,
+                bitmapBase64 = "data:image/png;base64," +  (string)strEncryptData["ResultData"]["QRImage"]
+            };
         }
 
-        public string getQRCodeStrEncryptData(string skey)
+        public JObject getQRCodeStrEncryptData(string skey)
         {
-            string response = this.DownloadString("https://tw.newlogin.beanfun.com/generic_handlers/get_qrcodeData.ashx?skey=" + skey);
-            JObject jsonData = JObject.Parse(response);
-            if (jsonData["intResult"] == null || (int)jsonData["intResult"] != 1)
-            { this.errmsg = "LoginIntResultError"; return null; }
+            this.Headers.Clear();
+            this.Headers.Add("User-Agent", "Mozilla/5.0");
+            this.Headers.Add("Accept", "application/json, text/plain, */*");
+            this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
+            this.Headers.Add("Origin", "https://login.beanfun.com");
 
-            return (string)jsonData["strEncryptData"];
+            string response = this.DownloadString($"https://login.beanfun.com/Login/InitLogin?pSKey={skey}");
+            JObject jsonData = JObject.Parse(response);
+
+            if (jsonData["Result"] == null || (int)jsonData["Result"] != 0)
+            {
+                this.errmsg = "LoginIntResultError";
+                return null;
+            }
+
+            return jsonData;
         }
+
 
         public BitmapImage getQRCodeImage(QRCodeClass qrcodeclass)
         {
-            BitmapImage result;
             try
             {
-                byte[] buffer = this.DownloadData(qrcodeclass.bitmapUrl + qrcodeclass.value);
-                result = new BitmapImage();
-                result.BeginInit();
-                result.StreamSource = new MemoryStream(buffer);
-                result.EndInit();
+                byte[] bytes = Convert.FromBase64String(
+                    qrcodeclass.bitmapBase64.Replace("data:image/png;base64,", "")
+                );
+
+                BitmapImage image = new BitmapImage();
+                using (var ms = new MemoryStream(bytes))
+                {
+                    image.BeginInit();
+                    image.CacheOption = BitmapCacheOption.OnLoad;
+                    image.StreamSource = ms;
+                    image.EndInit();
+                }
+                return image;
             }
-            catch (Exception)
+            catch
             {
-                result = null;
+                return null;
             }
-            return result;
         }
 
         private string QRCodeLogin(QRCodeClass qrcodeclass)
@@ -252,29 +269,86 @@ namespace Beanfun
             try
             {
                 string skey = qrcodeclass.skey;
-                
-                this.Headers.Set("Referer", @"https://tw.newlogin.beanfun.com/login/qr_form.aspx?skey=" + skey);
-                this.redirect = false;
-                byte[] tmp2 = this.DownloadData("https://tw.newlogin.beanfun.com/login/qr_step2.aspx?skey=" + skey);
-                this.redirect = true;
-                string response2 = Encoding.UTF8.GetString(tmp2);
-                Debug.Write(response2);
-                Regex regex2 = new Regex("akey=(.*)&authkey");
-                if (!regex2.IsMatch(response2))
-                { this.errmsg = "AKeyParseFailed"; return null; }
-                string akey = regex2.Match(response2).Groups[1].Value;
 
-                regex2 = new Regex("authkey=(.*)&");
-                if (!regex2.IsMatch(response2))
-                { this.errmsg = "authkeyParseFailed"; return null; }
-                string authkey = regex2.Match(response2).Groups[1].Value;
-                Debug.WriteLine(authkey);
-                string test = this.DownloadString("https://tw.newlogin.beanfun.com/login/final_step.aspx?akey="+akey+"&authkey="+ authkey+"&bfapp=1");
-                return akey;
+                this.Headers.Clear();
+                this.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
+                this.Headers.Add("Accept", "application/json, text/plain, */*");
+                this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
+                this.Headers.Add("Origin", "https://login.beanfun.com");
+
+                string response = this.DownloadString("https://login.beanfun.com/QRLogin/QRLogin");
+                Debug.WriteLine("QRLogin response: " + response);
+
+                this.Headers.Clear();
+                this.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
+                this.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
+                this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
+
+                string sendLoginHtml = this.DownloadString("https://login.beanfun.com/Login/SendLogin");
+
+                NameValueCollection payload = new NameValueCollection();
+                MatchCollection inputTags = Regex.Matches(sendLoginHtml, @"<input[^>]+>");
+                foreach (Match tag in inputTags)
+                {
+                    string tagStr = tag.Value;
+                    Match nameMatch = Regex.Match(tagStr, @"name\s*=\s*['""]([^'""]+)['""]", RegexOptions.IgnoreCase);
+                    Match valMatch = Regex.Match(tagStr, @"value\s*=\s*['""]([^'""]*)['""]", RegexOptions.IgnoreCase);
+
+                    if (nameMatch.Success && valMatch.Success && tagStr.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase) == -1)
+                    {
+                        payload.Add(nameMatch.Groups[1].Value, valMatch.Groups[1].Value);
+                    }
+                }
+
+                if (payload.Count == 0)
+                {
+                    this.errmsg = "SendLoginNoFormData: Not Found";
+                    return null;
+                }
+
+                string host = "tw.beanfun.com";
+                string returnUrl = $"https://{host}/beanfun_block/bflogin/return.aspx";
+
+                this.Headers.Clear();
+                this.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                this.Headers.Add("Referer", "https://login.beanfun.com/");
+
+                this.redirect = false;
+                string returnResponse = this.UploadString(returnUrl, payload);
+
+                string setCookieHeader = this.ResponseHeaders != null ? this.ResponseHeaders["Set-Cookie"] : "";
+                if (!string.IsNullOrEmpty(setCookieHeader))
+                {
+                    Regex tokenRegex = new Regex(@"bfWebToken=([^;]+)");
+                    Match tokenMatch = tokenRegex.Match(setCookieHeader);
+                    if (tokenMatch.Success)
+                    {
+                        this.webtoken = tokenMatch.Groups[1].Value;
+                    }
+                }
+
+                this.redirect = true;
+                if (this.ResponseHeaders != null && this.ResponseHeaders["Location"] != null)
+                {
+                    string location = this.ResponseHeaders["Location"];
+                    this.DownloadString(location.StartsWith("http") ? location : $"https://{host}{location}");
+                }
+                else
+                {
+                    this.DownloadString($"https://{host}/");
+                }
+
+                if (string.IsNullOrEmpty(this.webtoken))
+                {
+                    this.errmsg = "LoginNoWebtoken";
+                    return null;
+                }
+
+                return "OK";
             }
             catch (Exception e)
             {
-                this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
+                this.errmsg = "QRCodeLogin Error: " + e.Message;
                 return null;
             }
         }
@@ -286,20 +360,22 @@ namespace Beanfun
                 string skey = qrcodeclass.skey;
                 //int errorCount = 0;
                 string result;
-                this.Headers.Set("Referer", @"https://tw.newlogin.beanfun.com/login/qr_form.aspx?skey=" + skey);
-
-                NameValueCollection payload = new NameValueCollection();
-                payload.Add("status", qrcodeclass.value);
+                this.Headers.Add("User-Agent", "Mozilla/5.0");
+                this.Headers.Add("Accept", "application/json, text/plain, */*");
+                this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
+                this.Headers.Add("Origin", "https://login.beanfun.com");
                 //Debug.WriteLine(qrcodeclass.value);
-                
-                string response = this.UploadString("https://tw.newlogin.beanfun.com/generic_handlers/CheckLoginStatus.ashx", payload);
+
+                string response = this.DownloadString(
+                    $"https://login.beanfun.com/QRLogin/CheckLoginStatus?pSKey={skey}"
+                );
                 JObject jsonData;
                 try { jsonData = JObject.Parse(response); }
                 catch { this.errmsg = "LoginJsonParseFailed"; return -1; }
 
                 result = (string) jsonData["ResultMessage"];
                 Console.WriteLine(result);
-                if (result == "Failed")
+                if (result == "Failed" || result == "Wait Login")
                     return 0;
                 else if (result == "Token Expired")
                 {
