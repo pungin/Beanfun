@@ -327,21 +327,17 @@ namespace Beanfun
                     }
                 }
 
+                if (string.IsNullOrEmpty(this.webtoken))
+                {
+                    this.errmsg = "LoginNoWebtoken";
+                    return null;
+                }
+
                 this.redirect = true;
                 if (this.ResponseHeaders != null && this.ResponseHeaders["Location"] != null)
                 {
                     string location = this.ResponseHeaders["Location"];
                     this.DownloadString(location.StartsWith("http") ? location : $"https://{host}{location}");
-                }
-                else
-                {
-                    this.DownloadString($"https://{host}/");
-                }
-
-                if (string.IsNullOrEmpty(this.webtoken))
-                {
-                    this.errmsg = "LoginNoWebtoken";
-                    return null;
                 }
 
                 return "OK";
