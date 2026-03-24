@@ -198,18 +198,67 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ steps.get_exe_version.outputs.tag_name }}"
+          $repo = "${{ github.repository }}"
+          
+          Write-Host "Checking if tag '$tag' exists in repository '$repo'"
+          
+          $tagExists = $false
           try {
-            $exists = gh api repos/${{ github.repository }}/git/ref/tags/$tag 2>$null
-            if ($exists) {
-              echo "exists=true" >> $env:GITHUB_OUTPUT
-              Write-Host "Tag $tag already exists"
-            } else {
-              echo "exists=false" >> $env:GITHUB_OUTPUT
-              Write-Host "Tag $tag does not exist"
+            # 获取所有远程tags
+            $remoteTags = git ls-remote --tags origin
+            if ($remoteTags -match "refs/tags/$tag$") {
+              $tagExists = $true
+              Write-Host "Tag found via git ls-remote: $tag"
             }
           } catch {
-            echo "exists=false" >> $env:GITHUB_OUTPUT
+            Write-Host "Git ls-remote failed: $_"
           }
+          
+          if (-not $tagExists) {
+            try {
+              $apiUrl = "https://api.github.com/repos/$repo/git/refs/tags/$tag"
+              $response = Invoke-RestMethod -Uri $apiUrl -Headers @{
+                "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+                "Accept" = "application/vnd.github.v3+json"
+              } -ErrorAction SilentlyContinue
+              
+              if ($response -and $response.ref) {
+                $tagExists = $true
+                Write-Host "Tag found via GitHub API: $tag"
+              }
+            } catch {
+              if ($_.Exception.Response.StatusCode -eq 404) {
+                Write-Host "Tag not found via GitHub API (404)"
+              } else {
+                Write-Host "GitHub API error: $_"
+              }
+            }
+          }
+          
+          try {
+            git fetch --tags
+            $localTags = git tag -l
+            if ($localTags -contains $tag) {
+              $tagExists = $true
+              Write-Host "Tag found locally: $tag"
+            }
+          } catch {
+            Write-Host "Git fetch tags failed: $_"
+          }
+          
+          if ($tagExists) {
+            echo "exists=true" >> $env:GITHUB_OUTPUT
+            echo "tag=$tag" >> $env:GITHUB_OUTPUT
+            Write-Host "Tag $tag exists - will skip release creation"
+          } else {
+            echo "exists=false" >> $env:GITHUB_OUTPUT
+            echo "tag=$tag" >> $env:GITHUB_OUTPUT
+            Write-Host "Tag $tag does not exist - will create release"
+          }
+          
+          Write-Host "Existing tags in repository:"
+          git ls-remote --tags origin | ForEach-Object { Write-Host "  $_" }
+    
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
