@@ -204,7 +204,6 @@ jobs:
           
           $tagExists = $false
           try {
-            # 获取所有远程tags
             $remoteTags = git ls-remote --tags origin
             if ($remoteTags -match "refs/tags/$tag$") {
               $tagExists = $true
@@ -262,12 +261,209 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get Last Release Tag (including prereleases)
+        id: get_last_release
+        shell: pwsh
+        run: |
+          try {
+            $allReleases = gh api repos/${{ github.repository }}/releases --paginate 2>$null
+            
+            if ($allReleases) {
+              $releases = $allReleases | ConvertFrom-Json
+              
+              if ($releases.Count -gt 0) {
+                $latestRelease = $releases | Sort-Object -Property created_at -Descending | Select-Object -First 1
+                
+                $lastTag = $latestRelease.tag_name
+                $lastReleaseName = $latestRelease.name
+                $lastReleaseType = if ($latestRelease.prerelease) { "Pre-Release" } else { "Release" }
+                $lastReleaseDate = $latestRelease.created_at
+                
+                Write-Host "Last release found:"
+                Write-Host "  Tag: $lastTag"
+                Write-Host "  Name: $lastReleaseName"
+                Write-Host "  Type: $lastReleaseType"
+                Write-Host "  Date: $lastReleaseDate"
+                
+                echo "last_tag=$lastTag" >> $env:GITHUB_OUTPUT
+                echo "last_release_name=$lastReleaseName" >> $env:GITHUB_OUTPUT
+                echo "last_release_type=$lastReleaseType" >> $env:GITHUB_OUTPUT
+                echo "last_release_date=$lastReleaseDate" >> $env:GITHUB_OUTPUT
+                echo "has_last_release=true" >> $env:GITHUB_OUTPUT
+              } else {
+                Write-Host "No releases found"
+                echo "has_last_release=false" >> $env:GITHUB_OUTPUT
+              }
+            } else {
+              Write-Host "No releases found"
+              echo "has_last_release=false" >> $env:GITHUB_OUTPUT
+            }
+          } catch {
+            Write-Host "Error getting releases: $_"
+            echo "has_last_release=false" >> $env:GITHUB_OUTPUT
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Commits Since Last Release
+        id: get_commits
+        shell: pwsh
+        run: |
+          $hasLastRelease = "${{ steps.get_last_release.outputs.has_last_release }}" -eq 'true'
+          $commitsList = @()
+          $commitCount = 0
+          
+          if ($hasLastRelease) {
+            $lastTag = "${{ steps.get_last_release.outputs.last_tag }}"
+            Write-Host "Getting commits since last release: $lastTag"
+            
+            try {
+              $tagExists = git rev-parse --verify "$lastTag" 2>$null
+              if ($LASTEXITCODE -eq 0) {
+                $commits = git log $lastTag..HEAD --pretty=format:"%h|%s|%an|%ad" --date=short --no-merges
+                
+                if ($commits) {
+                  foreach ($commit in $commits) {
+                    $parts = $commit -split '\|'
+                    $hash = $parts[0]
+                    $message = $parts[1]
+                    $author = $parts[2]
+                    $date = $parts[3]
+                    
+                    if ($message.Length -gt 80) {
+                      $message = $message.Substring(0, 77) + "..."
+                    }
+                    
+                    $commitsList += "- **[$hash]** $message - *$author* ($date)"
+                    $commitCount++
+                  }
+                  
+                  $commitsText = $commitsList -join "`n"
+                  Write-Host "Found $commitCount commits since last release"
+                  echo "commits_text=$commitsText" >> $env:GITHUB_OUTPUT
+                  echo "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
+                } else {
+                  Write-Host "No new commits since last release"
+                  echo "commits_text=No new commits since last release" >> $env:GITHUB_OUTPUT
+                  echo "commit_count=0" >> $env:GITHUB_OUTPUT
+                }
+              } else {
+                Write-Host "Tag $lastTag not found locally, fetching tags..."
+                git fetch --tags
+                
+                $tagExists = git rev-parse --verify "$lastTag" 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                  $commits = git log $lastTag..HEAD --pretty=format:"%h|%s|%an|%ad" --date=short --no-merges
+                  
+                  if ($commits) {
+                    foreach ($commit in $commits) {
+                      $parts = $commit -split '\|'
+                      $hash = $parts[0]
+                      $message = $parts[1]
+                      $author = $parts[2]
+                      $date = $parts[3]
+                      
+                      if ($message.Length -gt 80) {
+                        $message = $message.Substring(0, 77) + "..."
+                      }
+                      
+                      $commitsList += "- **[$hash]** $message - *$author* ($date)"
+                      $commitCount++
+                    }
+                    
+                    $commitsText = $commitsList -join "`n"
+                    echo "commits_text=$commitsText" >> $env:GITHUB_OUTPUT
+                    echo "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
+                  } else {
+                    echo "commits_text=No new commits since last release" >> $env:GITHUB_OUTPUT
+                    echo "commit_count=0" >> $env:GITHUB_OUTPUT
+                  }
+                } else {
+                  Write-Host "Tag $lastTag not found in repository"
+                  echo "commits_text=Previous release tag not found. Showing recent commits instead." >> $env:GITHUB_OUTPUT
+                  echo "commit_count=0" >> $env:GITHUB_OUTPUT
+                }
+              }
+            } catch {
+              Write-Host "Error getting commits: $_"
+              echo "commits_text=Error retrieving commits since last release" >> $env:GITHUB_OUTPUT
+              echo "commit_count=0" >> $env:GITHUB_OUTPUT
+            }
+          } else {
+            Write-Host "No previous release, getting last 30 commits"
+            try {
+              $commits = git log --pretty=format:"%h|%s|%an|%ad" --date=short --no-merges -n 30
+              
+              if ($commits) {
+                foreach ($commit in $commits) {
+                  $parts = $commit -split '\|'
+                  $hash = $parts[0]
+                  $message = $parts[1]
+                  $author = $parts[2]
+                  $date = $parts[3]
+                  
+                  if ($message.Length -gt 80) {
+                    $message = $message.Substring(0, 77) + "..."
+                  }
+                  
+                  $commitsList += "- **[$hash]** $message - *$author* ($date)"
+                  $commitCount++
+                }
+                
+                $commitsText = $commitsList -join "`n"
+                Write-Host "Showing last $commitCount commits"
+                echo "commits_text=$commitsText" >> $env:GITHUB_OUTPUT
+                echo "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
+                echo "first_release=true" >> $env:GITHUB_OUTPUT
+              } else {
+                echo "commits_text=No commits found" >> $env:GITHUB_OUTPUT
+                echo "commit_count=0" >> $env:GITHUB_OUTPUT
+              }
+            } catch {
+              Write-Host "Error getting commits: $_"
+              echo "commits_text=Error retrieving commits" >> $env:GITHUB_OUTPUT
+              echo "commit_count=0" >> $env:GITHUB_OUTPUT
+            }
+          }
+
       - name: Create Release
         if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_exe_version.outputs.tag_name }}
           name: ${{ github.event.inputs.release_name }}
+          body: |
+            ## ${{ github.event.inputs.release_type == 'release' && 'Release' || 'Pre-Release' }} ${{ steps.get_exe_version.outputs.tag_version }}
+            
+            ### Version Information
+            - **Full Version:** ${{ steps.get_exe_version.outputs.full_version }}
+            - **Version Format:** ${{ steps.get_exe_version.outputs.major }}.${{ steps.get_exe_version.outputs.minor }}.${{ steps.get_exe_version.outputs.timestamp }}
+            - **Build Date/Time:** ${{ steps.get_exe_version.outputs.build_datetime }}
+            - **Release Type:** ${{ github.event.inputs.release_type }}
+            ${{ github.event.inputs.release_type == 'release' && format('- **Version Change:** {0} -> {1}', steps.get_current_version.outputs.current_version, steps.update_version.outputs.new_version) || format('- **Based on Version:** {0}', steps.get_current_version.outputs.current_version) }}
+            
+            ---
+            
+            ### 📝 Commits in this Release
+            ${{ steps.get_commits.outputs.commits_text }}
+            
+            **Total commits:** ${{ steps.get_commits.outputs.commit_count }}
+            
+            ---
+            
+            ### 🔧 Build Details
+            - **Build Number (Days since 2000-01-01):** ${{ steps.get_exe_version.outputs.build }}
+            - **Revision (Seconds since midnight / 2):** ${{ steps.get_exe_version.outputs.revision }}
+            - **Actual Build Time:** ${{ steps.get_exe_version.outputs.build_datetime }}
+            - **Git Commit:** [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            
+            ### 📦 Download
+            - [Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.get_exe_version.outputs.tag_name }}/Beanfun.exe)
+            
+            ### 🚀 Installation
+            1. Download `Beanfun.exe`
+            2. Run the executable
+            ${{ github.event.inputs.release_type == 'prerelease' && '3. ⚠️ This is a pre-release version - use with caution' || '' }}
           files: Build/Release/Beanfun.exe
           draft: false
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
