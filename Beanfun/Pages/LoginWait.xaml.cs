@@ -19,7 +19,8 @@ namespace Beanfun
             App.MainWnd.totpWorker.CancelAsync();
             App.MainWnd.bfAPPAutoLogin.IsEnabled = false;
             t_Info.Content = TryFindResource("MsgLogging") as string;
-            if (App.LoginMethod == (int)LoginMethod.QRCode) App.MainWnd.loginMethodChanged();
+            if (App.LoginMethod == (int)LoginMethod.QRCode)
+                App.MainWnd.loginMethodChanged();
             App.MainWnd.return_page = App.MainWnd.loginPage;
         }
     }

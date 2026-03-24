@@ -13,21 +13,29 @@ namespace Beanfun
             InitializeComponent();
         }
 
-        private void Window_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void Window_MouseLeftButtonDown(
+            object sender,
+            System.Windows.Input.MouseButtonEventArgs e
+        )
         {
             this.DragMove();
         }
 
         private void btn_PlayerReport_Click(object sender, RoutedEventArgs e)
         {
-            if (App.LoginRegion == "HK") MessageBox.Show(TryFindResource("MsgPlayerReport") as string);
+            if (App.LoginRegion == "HK")
+                MessageBox.Show(TryFindResource("MsgPlayerReport") as string);
             //new WebBrowser("https://event.beanfun.com/customerservice/PluginReporting/PluginBoard/PluginBoardJQ.aspx").Show();
-            new WebBrowser("https://event.beanfun.com/customerservice/PluginReporting/PlayerReport.aspx").Show();
+            new WebBrowser(
+                "https://event.beanfun.com/customerservice/PluginReporting/PlayerReport.aspx"
+            ).Show();
         }
 
         private void btn_VideoReport_Click(object sender, RoutedEventArgs e)
         {
-            new WebBrowser("https://event.beanfun.com/MapleStory/eventad/EventAD.aspx?EventADID=3453").Show();
+            new WebBrowser(
+                "https://event.beanfun.com/MapleStory/eventad/EventAD.aspx?EventADID=3453"
+            ).Show();
         }
 
         private void btn_EquipCalculator_Click(object sender, RoutedEventArgs e)
@@ -42,13 +50,21 @@ namespace Beanfun
 
         private void btn_Recycling_Click(object sender, RoutedEventArgs e)
         {
-            MessageBoxResult result = MessageBox.Show(TryFindResource("MsgRecycling") as string, "", MessageBoxButton.YesNo);
+            MessageBoxResult result = MessageBox.Show(
+                TryFindResource("MsgRecycling") as string,
+                "",
+                MessageBoxButton.YesNo
+            );
 
-            if (result != MessageBoxResult.Yes) return;
+            if (result != MessageBoxResult.Yes)
+                return;
 
-            DirectoryInfo gameDir = new DirectoryInfo(Path.GetDirectoryName(App.MainWnd.settingPage.t_GamePath.Text));
+            DirectoryInfo gameDir = new DirectoryInfo(
+                Path.GetDirectoryName(App.MainWnd.settingPage.t_GamePath.Text)
+            );
 
-            string[] dirList = new string[] {
+            string[] dirList = new string[]
+            {
                 "blob_storage",
                 "GPUCache",
                 "VideoDecodeStats",
@@ -57,10 +73,11 @@ namespace Beanfun
 
             foreach (string dir in dirList)
             {
-                if (!Directory.Exists($"{ gameDir.FullName }\\{ dir }")) continue;
+                if (!Directory.Exists($"{gameDir.FullName}\\{dir}"))
+                    continue;
                 try
                 {
-                    Directory.Delete($"{ gameDir.FullName }\\{ dir }", true);
+                    Directory.Delete($"{gameDir.FullName}\\{dir}", true);
                 }
                 catch { }
             }
@@ -70,7 +87,8 @@ namespace Beanfun
             {
                 try
                 {
-                    if (di.Name.EndsWith(".$$$")) di.Delete(true);
+                    if (di.Name.EndsWith(".$$$"))
+                        di.Delete(true);
                 }
                 catch { }
             }
@@ -80,8 +98,14 @@ namespace Beanfun
             {
                 try
                 {
-                    if (fi.Name.ToLower().EndsWith(".dmp") || fi.Name.ToLower().Equals("localeemulator.dll") || fi.Name.ToLower().Equals("loaderdll.dll")) fi.Delete();
-                } catch { }
+                    if (
+                        fi.Name.ToLower().EndsWith(".dmp")
+                        || fi.Name.ToLower().Equals("localeemulator.dll")
+                        || fi.Name.ToLower().Equals("loaderdll.dll")
+                    )
+                        fi.Delete();
+                }
+                catch { }
             }
 
             MessageBox.Show(TryFindResource("MsgRecyclingDone") as string);

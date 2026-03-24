@@ -32,7 +32,9 @@ namespace Beanfun
             InitializeComponent();
 
             foreach (MainWindow.GameService game in App.MainWnd.GameList[App.LoginRegion.ToLower()])
-                l_GameList.Items.Add(new Game(game.Large_image, game.name, game.service_code, game.service_region));
+                l_GameList.Items.Add(
+                    new Game(game.Large_image, game.name, game.service_code, game.service_region)
+                );
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -44,7 +46,10 @@ namespace Beanfun
         {
             if (l_GameList.SelectedIndex < 0)
                 return;
-            if (App.MainWnd.service_code != ((Game)l_GameList.SelectedItem).service_code || App.MainWnd.service_region != ((Game)l_GameList.SelectedItem).service_region)
+            if (
+                App.MainWnd.service_code != ((Game)l_GameList.SelectedItem).service_code
+                || App.MainWnd.service_region != ((Game)l_GameList.SelectedItem).service_region
+            )
             {
                 App.MainWnd.service_code = ((Game)l_GameList.SelectedItem).service_code;
                 App.MainWnd.service_region = ((Game)l_GameList.SelectedItem).service_region;

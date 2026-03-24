@@ -21,12 +21,17 @@ namespace Beanfun
         }
 
         public static readonly DependencyProperty FormattedTextProperty =
-            DependencyProperty.RegisterAttached("FormattedText",
-            typeof(string),
-            typeof(TextBlockHelper),
-            new UIPropertyMetadata("", FormattedTextChanged));
+            DependencyProperty.RegisterAttached(
+                "FormattedText",
+                typeof(string),
+                typeof(TextBlockHelper),
+                new UIPropertyMetadata("", FormattedTextChanged)
+            );
 
-        private static void FormattedTextChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e)
+        private static void FormattedTextChanged(
+            DependencyObject sender,
+            DependencyPropertyChangedEventArgs e
+        )
         {
             string value = e.NewValue as string;
 
@@ -57,7 +62,8 @@ namespace Beanfun
             foreach (XmlNode child in xmlNode)
             {
                 Span spanItem = new Span();
-                if (child is XmlElement) InternalProcess(spanItem, child);
+                if (child is XmlElement)
+                    InternalProcess(spanItem, child);
                 switch (child.Name.ToUpper())
                 {
                     case "B":
@@ -88,17 +94,22 @@ namespace Beanfun
                                 switch (att.Name.ToUpper())
                                 {
                                     case "FOREGROUND":
-                                        run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(att.Value));
+                                        run.Foreground = new SolidColorBrush(
+                                            (Color)ColorConverter.ConvertFromString(att.Value)
+                                        );
                                         break;
                                     case "BACKGROUND":
-                                        run.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(att.Value));
+                                        run.Background = new SolidColorBrush(
+                                            (Color)ColorConverter.ConvertFromString(att.Value)
+                                        );
                                         break;
                                 }
                             }
                         span.Inlines.Add(run);
                         break;
                     default:
-                        if (child is XmlText) span.Inlines.Add(new Run(child.InnerText));
+                        if (child is XmlText)
+                            span.Inlines.Add(new Run(child.InnerText));
                         break;
                 }
             }

@@ -12,7 +12,10 @@ namespace Beanfun
             InitializeComponent();
         }
 
-        private void Window_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void Window_MouseLeftButtonDown(
+            object sender,
+            System.Windows.Input.MouseButtonEventArgs e
+        )
         {
             this.DragMove();
         }

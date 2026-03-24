@@ -1,16 +1,19 @@
 ﻿using System;
-using System.Text;
-using System.Net;
-using System.Text.RegularExpressions;
 using System.Collections.Specialized;
+using System.Net;
+using System.Text;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 
 namespace Beanfun
 {
     public partial class BeanfunClient : WebClient
     {
-
-        public string GetOTP(ServiceAccount acc, string service_code="610074", string service_region="T9")
+        public string GetOTP(
+            ServiceAccount acc,
+            string service_code = "610074",
+            string service_region = "T9"
+        )
         {
             try
             {
@@ -27,10 +30,15 @@ namespace Beanfun
                     host = "bfweb.hk.beanfun.com";
                     loginHost = "login.hk.beanfun.com";
                 }
-                response = this.DownloadString($"https://{host}/beanfun_block/game_zone/game_start_step2.aspx?service_code={service_code}&service_region={service_region}&sotp={acc.ssn}&dt={GetCurrentTime(2)}");
+                response = this.DownloadString(
+                    $"https://{host}/beanfun_block/game_zone/game_start_step2.aspx?service_code={service_code}&service_region={service_region}&sotp={acc.ssn}&dt={GetCurrentTime(2)}"
+                );
                 Regex regex = new Regex("GetResultByLongPolling&key=(.*)\"");
                 if (!regex.IsMatch(response))
-                { this.errmsg = "OTPNoLongPollingKey:" + response; return null; }
+                {
+                    this.errmsg = "OTPNoLongPollingKey:" + response;
+                    return null;
+                }
                 string longPollingKey = regex.Match(response).Groups[1].Value;
                 string unkKey = null;
                 string unkValue = null;
@@ -38,7 +46,10 @@ namespace Beanfun
                 {
                     regex = new Regex("MyAccountData.ServiceAccountCreateTime \\+ \"(.*)=(.*)\";");
                     if (!regex.IsMatch(response))
-                    { this.errmsg = "OTPNoUnkData"; return null; }
+                    {
+                        this.errmsg = "OTPNoUnkData";
+                        return null;
+                    }
                     unkKey = Uri.UnescapeDataString(regex.Match(response).Groups[1].Value);
                     unkValue = Uri.UnescapeDataString(regex.Match(response).Groups[2].Value);
                 }
@@ -46,14 +57,22 @@ namespace Beanfun
                 {
                     regex = new Regex("ServiceAccountCreateTime: \"([^\"]+)\"");
                     if (!regex.IsMatch(response))
-                    { this.errmsg = "OTPNoCreateTime"; return null; }
+                    {
+                        this.errmsg = "OTPNoCreateTime";
+                        return null;
+                    }
                     acc.screatetime = regex.Match(response).Groups[1].Value;
                 }
-                response = this.DownloadString($"https://{loginHost}/generic_handlers/get_cookies.ashx");
+                response = this.DownloadString(
+                    $"https://{loginHost}/generic_handlers/get_cookies.ashx"
+                );
 
                 regex = new Regex("var m_strSecretCode = '(.*)';");
                 if (!regex.IsMatch(response))
-                { this.errmsg = "OTPNoSecretCode"; return null; }
+                {
+                    this.errmsg = "OTPNoSecretCode";
+                    return null;
+                }
                 string secretCode = regex.Match(response).Groups[1].Value;
 
                 NameValueCollection payload = new NameValueCollection();
@@ -69,19 +88,38 @@ namespace Beanfun
                 }
                 // testing...
                 System.Net.ServicePointManager.Expect100Continue = false;
-                this.UploadString($"https://{host}/beanfun_block/generic_handlers/record_service_start.ashx", payload);
-                response = this.DownloadString($"https://{host}/generic_handlers/get_result.ashx?meth=GetResultByLongPolling&key={longPollingKey}&_={GetCurrentTime()}");
+                this.UploadString(
+                    $"https://{host}/beanfun_block/generic_handlers/record_service_start.ashx",
+                    payload
+                );
+                response = this.DownloadString(
+                    $"https://{host}/generic_handlers/get_result.ashx?meth=GetResultByLongPolling&key={longPollingKey}&_={GetCurrentTime()}"
+                );
                 //Thread.Sleep(5000);
                 //Console.WriteLine(Environment.TickCount);
-                response = this.DownloadString($"https://{host}/beanfun_block/generic_handlers/get_webstart_otp.ashx?SN={longPollingKey}&WebToken={this.WebToken}&SecretCode={secretCode}&ppppp=1F552AEAFF976018F942B13690C990F60ED01510DDF89165F1658CCE7BC21DBA&ServiceCode={service_code}&ServiceRegion={service_region}&ServiceAccount={acc.sid}&CreateTime={acc.screatetime.Replace(" ", "%20")}&d={Environment.TickCount}");
+                response = this.DownloadString(
+                    $"https://{host}/beanfun_block/generic_handlers/get_webstart_otp.ashx?SN={longPollingKey}&WebToken={this.WebToken}&SecretCode={secretCode}&ppppp=1F552AEAFF976018F942B13690C990F60ED01510DDF89165F1658CCE7BC21DBA&ServiceCode={service_code}&ServiceRegion={service_region}&ServiceAccount={acc.sid}&CreateTime={acc.screatetime.Replace(" ", "%20")}&d={Environment.TickCount}"
+                );
                 if (response == null || response == "")
-                { this.errmsg = "OTPNoResponse"; return null; }
+                {
+                    this.errmsg = "OTPNoResponse";
+                    return null;
+                }
                 string[] responses = response.Split(';');
                 if (responses.Length < 2)
-                { this.errmsg = "OTPNoResponse"; return null; }
+                {
+                    this.errmsg = "OTPNoResponse";
+                    return null;
+                }
                 response = responses[1];
                 if (responses[0] != "1")
-                { this.errmsg = System.Windows.Application.Current.TryFindResource("GetOtpError") as string + "\r\n" + response; return null; }
+                {
+                    this.errmsg =
+                        System.Windows.Application.Current.TryFindResource("GetOtpError") as string
+                        + "\r\n"
+                        + response;
+                    return null;
+                }
                 string key = response.Substring(0, 8);
                 string plain = response.Substring(8);
                 string otp = WCDESComp.DecryStrHex(plain, key);
@@ -94,15 +132,19 @@ namespace Beanfun
                 {
                     this.errmsg = "DecryptOTPError";
                 }
-           
+
                 return otp;
             }
             catch (Exception e)
             {
-                this.errmsg = System.Windows.Application.Current.TryFindResource("GetOtpError") as string + "\n\n" + e.Message + "\n" + e.StackTrace;
+                this.errmsg =
+                    System.Windows.Application.Current.TryFindResource("GetOtpError") as string
+                    + "\n\n"
+                    + e.Message
+                    + "\n"
+                    + e.StackTrace;
                 return null;
             }
         }
-
     }
 }

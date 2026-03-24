@@ -8,7 +8,8 @@ namespace Beanfun
     /// </summary>
     public partial class ChangeAccount : Window
     {
-        string region, account;
+        string region,
+            account;
         int changedIndex;
 
         public ChangeAccount(int changedIndex, string region, string account)
@@ -38,7 +39,16 @@ namespace Beanfun
             string verify = App.MainWnd.accountManager.getVerifyByAccount(region, account);
             int method = App.MainWnd.accountManager.getMethodByAccount(region, account);
             App.MainWnd.accountManager.removeAccount(region, account);
-            App.MainWnd.accountManager.addAccount(changedIndex, region, t_AccountID.Text, t_AccountName.Text, pwd, verify, method, (bool)autoLogin.IsChecked);
+            App.MainWnd.accountManager.addAccount(
+                changedIndex,
+                region,
+                t_AccountID.Text,
+                t_AccountName.Text,
+                pwd,
+                verify,
+                method,
+                (bool)autoLogin.IsChecked
+            );
             App.MainWnd.loginMethodInit();
             this.Close();
         }

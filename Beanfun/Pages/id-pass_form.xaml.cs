@@ -16,8 +16,13 @@ namespace Beanfun
 
             this.Loaded += (sender, e) =>
             {
-                var tb = t_AccountID.Template.FindName("PART_EditableTextBox", t_AccountID) as TextBox;
-                if (tb != null) System.Windows.Input.InputMethod.SetPreferredImeState(tb, System.Windows.Input.InputMethodState.Off);
+                var tb =
+                    t_AccountID.Template.FindName("PART_EditableTextBox", t_AccountID) as TextBox;
+                if (tb != null)
+                    System.Windows.Input.InputMethod.SetPreferredImeState(
+                        tb,
+                        System.Windows.Input.InputMethodState.Off
+                    );
             };
         }
 
@@ -40,7 +45,8 @@ namespace Beanfun
             }
             else
             {
-                url = "https://bfweb.hk.beanfun.com/beanfun_web_ap/signup/preregistration.aspx?service=999999_T0";
+                url =
+                    "https://bfweb.hk.beanfun.com/beanfun_web_ap/signup/preregistration.aspx?service=999999_T0";
             }
             new WebBrowser(url).Show();
         }
@@ -82,9 +88,11 @@ namespace Beanfun
 
         private void t_AccountID_TextChanged(object sender, System.EventArgs e)
         {
-            TextBox tb = t_AccountID.Template.FindName("PART_EditableTextBox", t_AccountID) as TextBox;
+            TextBox tb =
+                t_AccountID.Template.FindName("PART_EditableTextBox", t_AccountID) as TextBox;
             int caretIndex = 0;
-            if (tb != null) caretIndex = tb.CaretIndex;
+            if (tb != null)
+                caretIndex = tb.CaretIndex;
 
             string tbAccount = t_AccountID.Text;
 
@@ -109,21 +117,33 @@ namespace Beanfun
                 accList.Add(s);
             }
 
-            searches = accList.FindAll(delegate (string s) { return s.Contains(t_AccountID.Text.Trim()); });
+            searches = accList.FindAll(
+                delegate(string s)
+                {
+                    return s.Contains(t_AccountID.Text.Trim());
+                }
+            );
 
             for (int i = 0; i < accList.Count; i++)
             {
-                string name = App.MainWnd.accountManager.getNameByAccount(App.LoginRegion, accList[i]);
+                string name = App.MainWnd.accountManager.getNameByAccount(
+                    App.LoginRegion,
+                    accList[i]
+                );
                 if (name != null && name != "")
                 {
-                    if (tbAccount == accList[i]) tbAccount = name + "(" + accList[i] + ")";
+                    if (tbAccount == accList[i])
+                        tbAccount = name + "(" + accList[i] + ")";
                     accList[i] = name + "(" + accList[i] + ")";
                 }
             }
 
             for (int i = 0; i < searches.Count; i++)
             {
-                string name = App.MainWnd.accountManager.getNameByAccount(App.LoginRegion, searches[i]);
+                string name = App.MainWnd.accountManager.getNameByAccount(
+                    App.LoginRegion,
+                    searches[i]
+                );
                 if (name != null && name != "")
                 {
                     searches[i] = name + "(" + searches[i] + ")";
@@ -151,19 +171,24 @@ namespace Beanfun
 
                 if (IsFind)
                 {
-                    if (accList.Count > 0) t_AccountID.SelectedItem = tbAccount;
+                    if (accList.Count > 0)
+                        t_AccountID.SelectedItem = tbAccount;
 
                     t_Password.Password = "";
                     checkBox_RememberPWD.IsChecked = false;
 
-                    int loginMethod = App.MainWnd.accountManager.getMethodByAccount(App.LoginRegion, t_AccountID.Text);
+                    int loginMethod = App.MainWnd.accountManager.getMethodByAccount(
+                        App.LoginRegion,
+                        t_AccountID.Text
+                    );
                     if (loginMethod > -1)
                         App.LoginMethod = loginMethod;
                     App.MainWnd.loginMethodChanged();
                 }
             }
 
-            if (tb != null) tb.CaretIndex = caretIndex;
+            if (tb != null)
+                tb.CaretIndex = caretIndex;
         }
 
         private void t_AccountID_GotFocus(object sender, RoutedEventArgs e)
@@ -181,9 +206,22 @@ namespace Beanfun
             if (tb != null)
             {
                 string tbAccount = t_AccountID.Text;
-                string name = App.MainWnd.accountManager.getNameByAccount(App.LoginRegion, tbAccount);
-                if (name != null && name != "") tbAccount = name + "(" + tbAccount + ")";
-                if ((t_AccountID.ItemsSource as List<string>).FindAll(delegate (string s) { return s.Equals(tbAccount.Trim()); }).Count <= 0)
+                string name = App.MainWnd.accountManager.getNameByAccount(
+                    App.LoginRegion,
+                    tbAccount
+                );
+                if (name != null && name != "")
+                    tbAccount = name + "(" + tbAccount + ")";
+                if (
+                    (t_AccountID.ItemsSource as List<string>)
+                        .FindAll(
+                            delegate(string s)
+                            {
+                                return s.Equals(tbAccount.Trim());
+                            }
+                        )
+                        .Count <= 0
+                )
                     tb.SelectionLength = 0;
                 else
                     tb.CaretIndex = tb.Text.Length;
@@ -197,9 +235,14 @@ namespace Beanfun
             string t_AccID_toDelete = (string)closeButton.Tag;
 
             Regex regex = new Regex(@"\((.*)\)");
-            if (regex.IsMatch(t_AccID_toDelete)) t_AccID_toDelete = regex.Match(t_AccID_toDelete).Groups[1].Value;
+            if (regex.IsMatch(t_AccID_toDelete))
+                t_AccID_toDelete = regex.Match(t_AccID_toDelete).Groups[1].Value;
 
-            MessageBoxResult result = MessageBox.Show(string.Format(TryFindResource("MsgDeleteAccount") as string, t_AccID_toDelete), TryFindResource("DeleteAccount") as string, MessageBoxButton.YesNo);
+            MessageBoxResult result = MessageBox.Show(
+                string.Format(TryFindResource("MsgDeleteAccount") as string, t_AccID_toDelete),
+                TryFindResource("DeleteAccount") as string,
+                MessageBoxButton.YesNo
+            );
 
             if (result == MessageBoxResult.Yes)
             {
@@ -209,7 +252,8 @@ namespace Beanfun
                 foreach (string s in t_AccountID.Items)
                 {
                     string str = s;
-                    if (regex.IsMatch(str)) str = regex.Match(str).Groups[1].Value;
+                    if (regex.IsMatch(str))
+                        str = regex.Match(str).Groups[1].Value;
                     if (t_AccID == str)
                     {
                         t_AccountID.SelectedItem = str;

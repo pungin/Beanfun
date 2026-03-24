@@ -18,7 +18,9 @@ namespace Beanfun
 
         public void initThemeColor(bool isLightMode)
         {
-            Brush brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(isLightMode ? "Black" : "White"));
+            Brush brush = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString(isLightMode ? "Black" : "White")
+            );
             t_AppName.Foreground = brush;
             t_Author.Foreground = brush;
             t_Version.Foreground = brush;
@@ -27,9 +29,12 @@ namespace Beanfun
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            if (App.MainWnd == null) return;
-            if (App.MainWnd.return_page == null || App.MainWnd.return_page == App.MainWnd.loginPage) App.MainWnd.NavigateLoginPage();
-            else App.MainWnd.frame.Content = App.MainWnd.return_page;
+            if (App.MainWnd == null)
+                return;
+            if (App.MainWnd.return_page == null || App.MainWnd.return_page == App.MainWnd.loginPage)
+                App.MainWnd.NavigateLoginPage();
+            else
+                App.MainWnd.frame.Content = App.MainWnd.return_page;
             App.MainWnd.return_page = null;
         }
 

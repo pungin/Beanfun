@@ -1,7 +1,3 @@
-using IniParser;
-using IniParser.Model;
-using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -18,23 +14,27 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using IniParser;
+using IniParser.Model;
+using Microsoft.Win32;
+using Newtonsoft.Json.Linq;
 using Utility.ModifyRegistry;
-
-
 
 namespace Beanfun
 {
     enum LoginMethod : int
     {
         Regular = 0,
-        QRCode = 1
+        QRCode = 1,
     };
+
     enum GameStartMode : int
     {
         Auto = 0,
         Normal = 1,
-        LocaleRemulator = 2
+        LocaleRemulator = 2,
     };
+
     /// <summary>
     /// MainWindow.xaml 的交互逻辑
     /// </summary>
@@ -65,9 +65,10 @@ namespace Beanfun
         public BeanfunClient bfClient;
 
         public BeanfunClient.QRCodeClass qrcodeClass;
-        
+
         public string LastLoginAccountID = "";
-        public string service_code = "610074", service_region = "T9";
+        public string service_code = "610074",
+            service_region = "T9";
         public string game_exe = "MapleStory.exe";
         public string dir_value_name = "Path";
         public string win_class_name = "MapleStoryClass";
@@ -75,17 +76,21 @@ namespace Beanfun
         public string game_commandLine = "tw.login.maplestory.beanfun.com 8484 BeanFun %s %s";
         private string otp;
         private BitmapImage qr_default;
-        private static readonly System.Windows.Forms.NotifyIcon _trayNotifyIcon = new System.Windows.Forms.NotifyIcon
-        {
-            Icon = Properties.Resources.icon,
-            Text = Application.Current.TryFindResource("AppName") as string
-        };
+        private static readonly System.Windows.Forms.NotifyIcon _trayNotifyIcon =
+            new System.Windows.Forms.NotifyIcon
+            {
+                Icon = Properties.Resources.icon,
+                Text = Application.Current.TryFindResource("AppName") as string,
+            };
 
-        public Dictionary<string, List<GameService>> GameList = new Dictionary<string, List<GameService>>();
+        public Dictionary<string, List<GameService>> GameList =
+            new Dictionary<string, List<GameService>>();
         public GameService SelectedGame = null;
         public bool UnconnectedGame = false;
 
-        public string viewstate, eventvalidation, samplecaptcha;
+        public string viewstate,
+            eventvalidation,
+            samplecaptcha;
 
         public Page return_page = null;
         public IniData INIData = null;
@@ -106,16 +111,16 @@ namespace Beanfun
             this.checkPlayPage = new System.Windows.Threading.DispatcherTimer();
             this.checkPatcher = new System.Windows.Threading.DispatcherTimer();
             this.bfAPPAutoLogin = new System.Windows.Threading.DispatcherTimer();
-            // 
+            //
             // getOtpWorker
-            // 
+            //
             this.getOtpWorker.WorkerReportsProgress = true;
             this.getOtpWorker.WorkerSupportsCancellation = true;
             this.getOtpWorker.DoWork += this.getOtpWorker_DoWork;
             this.getOtpWorker.RunWorkerCompleted += this.getOtpWorker_RunWorkerCompleted;
-            // 
+            //
             // loginWorker
-            // 
+            //
             this.loginWorker.WorkerReportsProgress = true;
             this.loginWorker.WorkerSupportsCancellation = true;
             this.loginWorker.DoWork += this.loginWorker_DoWork;
@@ -127,45 +132,45 @@ namespace Beanfun
             this.totpWorker.WorkerSupportsCancellation = true;
             this.totpWorker.DoWork += this.totpWorker_DoWork;
             this.totpWorker.RunWorkerCompleted += this.totpWorker_RunWorkerCompleted;
-            // 
+            //
             // pingWorker
-            // 
+            //
             this.pingWorker.WorkerReportsProgress = true;
             this.pingWorker.WorkerSupportsCancellation = true;
             this.pingWorker.DoWork += this.pingWorker_DoWork;
             this.pingWorker.RunWorkerCompleted += this.pingWorker_RunWorkerCompleted;
-            // 
+            //
             // qrWorker
-            // 
+            //
             this.qrWorker.WorkerReportsProgress = true;
             this.qrWorker.WorkerSupportsCancellation = true;
             this.qrWorker.DoWork += this.qrWorker_DoWork;
             this.qrWorker.RunWorkerCompleted += this.qrWorker_RunWorkerCompleted;
-            // 
+            //
             // verifyWorker
-            // 
+            //
             this.verifyWorker.WorkerReportsProgress = true;
             this.verifyWorker.WorkerSupportsCancellation = true;
             this.verifyWorker.DoWork += this.verifyWorker_DoWork;
             this.verifyWorker.RunWorkerCompleted += this.verifyWorker_RunWorkerCompleted;
-            // 
+            //
             // qrCheckLogin
-            // 
+            //
             this.qrCheckLogin.Interval = TimeSpan.FromSeconds(2);
             this.qrCheckLogin.Tick += this.qrCheckLogin_Tick;
-            // 
+            //
             // checkPlayPage
-            // 
+            //
             this.checkPlayPage.Interval = TimeSpan.FromMilliseconds(100);
             this.checkPlayPage.Tick += this.checkPlayPage_Tick;
-            // 
+            //
             // checkPatcher
-            // 
+            //
             this.checkPatcher.Interval = TimeSpan.FromMilliseconds(100);
             this.checkPatcher.Tick += this.checkPatcher_Tick;
-            // 
+            //
             // bfAPPAutoLogin
-            // 
+            //
             this.bfAPPAutoLogin.Interval = TimeSpan.FromSeconds(2);
             this.bfAPPAutoLogin.Tick += this.bfAPPAutoLogin_Tick;
 
@@ -179,7 +184,10 @@ namespace Beanfun
 
             Initialize();
 
-            if ((App.OSVersion >= App.Win7 && App.OSVersion < App.Win8) || App.OSVersion >= App.Win10)
+            if (
+                (App.OSVersion >= App.Win7 && App.OSVersion < App.Win8)
+                || App.OSVersion >= App.Win10
+            )
             {
                 compositor = new WindowAccentCompositor(this);
                 if (App.OSVersion >= App.Win7 && App.OSVersion < App.Win8)
@@ -189,9 +197,15 @@ namespace Beanfun
                     const int GWL_STYLE = -16;
                     const int WS_SYSMENU = 0x80000;
                     var hwnd = new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
-                    WindowsAPI.SetWindowLong(hwnd, GWL_STYLE, WindowsAPI.GetWindowLong(hwnd, GWL_STYLE) & ~WS_SYSMENU);
+                    WindowsAPI.SetWindowLong(
+                        hwnd,
+                        GWL_STYLE,
+                        WindowsAPI.GetWindowLong(hwnd, GWL_STYLE) & ~WS_SYSMENU
+                    );
                 }
-            } else frame.Content = loginWaitPage;
+            }
+            else
+                frame.Content = loginWaitPage;
 
             changeThemeColor(null);
         }
@@ -201,7 +215,10 @@ namespace Beanfun
             frame.Content = loginPage;
             //frame.Content = loginTotp;
 
-            if (App.LoginMethod == (int)LoginMethod.Regular && (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked)
+            if (
+                App.LoginMethod == (int)LoginMethod.Regular
+                && (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked
+            )
             {
                 do_Login();
             }
@@ -217,13 +234,16 @@ namespace Beanfun
 
             try
             {
-                if (bfClient != null) bfClient.Logout();
-            } catch { }
+                if (bfClient != null)
+                    bfClient.Logout();
+            }
+            catch { }
         }
 
         public void changeThemeColor(string sColor)
         {
-            if (sColor == null) sColor = ConfigAppSettings.GetValue("ThemeColor", "#FF8201");
+            if (sColor == null)
+                sColor = ConfigAppSettings.GetValue("ThemeColor", "#FF8201");
             Color color = (Color)ColorConverter.ConvertFromString(sColor);
             bool oldIsLightColor = isLightColor();
             Background = new SolidColorBrush(color);
@@ -232,28 +252,38 @@ namespace Beanfun
             color.B = (byte)Math.Max(color.B - 50, 0);
             color.A = 0xFF;
             this.BorderBrush = new SolidColorBrush(color);
-            
+
             // Update theme color resource for ListBox selection
             Application.Current.Resources["ThemeColorBrush"] = new SolidColorBrush(color);
             bool isLightMode = isLightColor();
-            if (compositor !=  null)
+            if (compositor != null)
             {
                 int bgA = -1;
                 if (!this.IsActive)
                 {
                     compositor.IsEnabled = false;
-                    if (App.OSVersion >= App.Win7 && App.OSVersion < App.Win8) bgA = 0;
+                    if (App.OSVersion >= App.Win7 && App.OSVersion < App.Win8)
+                        bgA = 0;
                 }
                 else
                 {
-                    bgA = App.OSVersion < App.Win8 ? 0x4C : App.OSVersion < App.Win11 ? 0xCC : 0x99;
-                    compositor.Color = (Color)ColorConverter.ConvertFromString(isLightMode || ((SolidColorBrush)Background).Color == Colors.Black ? "#00FFFFFF" : "#00000000");
-                    if (!compositor.IsEnabled) compositor.IsEnabled = true;
+                    bgA =
+                        App.OSVersion < App.Win8 ? 0x4C
+                        : App.OSVersion < App.Win11 ? 0xCC
+                        : 0x99;
+                    compositor.Color = (Color)
+                        ColorConverter.ConvertFromString(
+                            isLightMode || ((SolidColorBrush)Background).Color == Colors.Black
+                                ? "#00FFFFFF"
+                                : "#00000000"
+                        );
+                    if (!compositor.IsEnabled)
+                        compositor.IsEnabled = true;
                 }
                 if (bgA != -1)
                 {
                     Color bg = ((SolidColorBrush)Background).Color;
-                    bg.A = (byte) bgA;
+                    bg.A = (byte)bgA;
                     Background = new SolidColorBrush(bg);
                 }
             }
@@ -265,10 +295,11 @@ namespace Beanfun
                 btn_Min_MouseLeave(null, null);
                 btn_Close_MouseLeave(null, null);
                 LogoIcon.Fill = new SolidColorBrush(isLightMode ? Colors.Black : Colors.White);
-                if (aboutPage != null) aboutPage.initThemeColor(isLightMode);
+                if (aboutPage != null)
+                    aboutPage.initThemeColor(isLightMode);
             }
         }
-        
+
         public bool isLightColor()
         {
             Color color = ((SolidColorBrush)Background).Color;
@@ -289,7 +320,12 @@ namespace Beanfun
                     if (App.OSVersion >= App.Win8_1)
                         ServicePointManager.SecurityProtocol |= SecurityProtocolType.Ssl3;
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                    ServicePointManager.ServerCertificateValidationCallback = (sender, certificate, chain, errors) => true;
+                    ServicePointManager.ServerCertificateValidationCallback = (
+                        sender,
+                        certificate,
+                        chain,
+                        errors
+                    ) => true;
                 }
                 if (settingPage.tradLogin != null && !(bool)settingPage.tradLogin.IsChecked)
                     accountList.panel_GetOtp.Visibility = Visibility.Collapsed;
@@ -324,7 +360,10 @@ namespace Beanfun
 
                 settingPage.t_GamePath.PreviewMouseLeftButtonDown += this.btn_SetGamePath_Click;
                 LastLoginAccountID = ConfigAppSettings.GetValue("AccountID", LastLoginAccountID);
-                int loginMethod = accountManager.getMethodByAccount(App.LoginRegion, LastLoginAccountID);
+                int loginMethod = accountManager.getMethodByAccount(
+                    App.LoginRegion,
+                    LastLoginAccountID
+                );
                 if (loginMethod < (int)LoginMethod.Regular)
                     loginMethod = int.Parse(ConfigAppSettings.GetValue("loginMethod", "0"));
                 if (loginMethod > (int)LoginMethod.QRCode)
@@ -350,7 +389,12 @@ namespace Beanfun
             catch (Exception ex)
             {
                 Console.WriteLine(ex.StackTrace);
-                MessageBox.Show(string.Format(Regex.Unescape(TryFindResource("LoadDataError") as string), ex.Message)/* + "\r\n\r\n" + ex.StackTrace*/);
+                MessageBox.Show(
+                    string.Format(
+                        Regex.Unescape(TryFindResource("LoadDataError") as string),
+                        ex.Message
+                    ) /* + "\r\n\r\n" + ex.StackTrace*/
+                );
 
                 new LoginRegionSelection().ShowDialog();
             }
@@ -371,7 +415,9 @@ namespace Beanfun
             {
                 get
                 {
-                    return App.LoginRegion == "TW" ? "https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/" : "http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/";
+                    return App.LoginRegion == "TW"
+                        ? "https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/"
+                        : "http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/";
                 }
             }
 
@@ -387,8 +433,10 @@ namespace Beanfun
             }
 
             private BitmapImage large_image;
-            public BitmapImage Large_image {
-                get {
+            public BitmapImage Large_image
+            {
+                get
+                {
                     if (large_image == null)
                         large_image = loadImage(large_image_name);
                     return large_image;
@@ -406,7 +454,16 @@ namespace Beanfun
                 }
             }
 
-            public GameService(string name, string service_code, string service_region, string website_url, string xlarge_image_name, string large_image_name, string small_image_name, string download_url)
+            public GameService(
+                string name,
+                string service_code,
+                string service_region,
+                string website_url,
+                string xlarge_image_name,
+                string large_image_name,
+                string small_image_name,
+                string download_url
+            )
             {
                 this.name = I18n.ToSimplified(name);
                 this.service_code = service_code;
@@ -420,7 +477,10 @@ namespace Beanfun
 
             private BitmapImage loadImage(string url)
             {
-                if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                if (
+                    !url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                    && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                )
                 {
                     url = $"{imageBaseUrl}{url}";
                 }
@@ -510,7 +570,10 @@ namespace Beanfun
                         myRegistry.SubKey = dir_reg;
                         if (myRegistry.Read(dir_value_name) != "")
                         {
-                            ConfigAppSettings.SetValue(dir_value_name + "." + gameCode, myRegistry.Read(dir_value_name));
+                            ConfigAppSettings.SetValue(
+                                dir_value_name + "." + gameCode,
+                                myRegistry.Read(dir_value_name)
+                            );
                             settingPage.t_GamePath.Text = myRegistry.Read(dir_value_name);
                         }
                     }
@@ -522,7 +585,9 @@ namespace Beanfun
             }
             else
             {
-                settingPage.t_GamePath.Text = ConfigAppSettings.GetValue(dir_value_name + "." + gameCode);
+                settingPage.t_GamePath.Text = ConfigAppSettings.GetValue(
+                    dir_value_name + "." + gameCode
+                );
             }
 
             if (gameCode == "610074_T9" || gameCode == "610075_T9")
@@ -579,7 +644,10 @@ namespace Beanfun
                 {
                     foreach (GameService gs in GameList[App.LoginRegion.ToLower()])
                     {
-                        if (gs.service_region == this.service_region && gs.service_code == this.service_code)
+                        if (
+                            gs.service_region == this.service_region
+                            && gs.service_code == this.service_code
+                        )
                         {
                             loginPage.id_pass.imageGame.ImageSource = gs.Large_image;
                             accountList.imageGame.Source = gs.Small_image;
@@ -590,7 +658,9 @@ namespace Beanfun
                     }
                 }
             }
-            catch { /* ignore out of range */ }
+            catch
+            { /* ignore out of range */
+            }
         }
 
         public void reLoadGameInfo()
@@ -600,12 +670,24 @@ namespace Beanfun
                 List<GameService> gameList = new List<GameService>();
                 WebClient wc = new WebClient();
 
-                string res = Encoding.UTF8.GetString(wc.DownloadData("https://" + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw") + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"));
+                string res = Encoding.UTF8.GetString(
+                    wc.DownloadData(
+                        "https://"
+                            + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
+                            + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"
+                    )
+                );
 
                 StringIniParser sip = new StringIniParser();
                 INIData = sip.ParseString(res);
 
-                res = Encoding.UTF8.GetString(wc.DownloadData("https://" + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw") + ".beanfun.com/game_zone/"));
+                res = Encoding.UTF8.GetString(
+                    wc.DownloadData(
+                        "https://"
+                            + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
+                            + ".beanfun.com/game_zone/"
+                    )
+                );
                 Regex reg = new Regex("Services\\.ServiceList = (.*);");
                 if (reg.IsMatch(res))
                 {
@@ -632,7 +714,16 @@ namespace Beanfun
 
         private void AddGameServiceFromJson(List<GameService> gameList, JObject game)
         {
-            GameService gs = new GameService((string)game["ServiceFamilyName"], (string)game["ServiceCode"], (string)game["ServiceRegion"], (string)game["ServiceWebsiteURL"], (string)game["ServiceXLargeImageName"], (string)game["ServiceLargeImageName"], (string)game["ServiceSmallImageName"], (string)game["ServiceDownloadURL"]);
+            GameService gs = new GameService(
+                (string)game["ServiceFamilyName"],
+                (string)game["ServiceCode"],
+                (string)game["ServiceRegion"],
+                (string)game["ServiceWebsiteURL"],
+                (string)game["ServiceXLargeImageName"],
+                (string)game["ServiceLargeImageName"],
+                (string)game["ServiceSmallImageName"],
+                (string)game["ServiceDownloadURL"]
+            );
             gameList.Add(gs);
             if (gs.service_code == service_code && gs.service_region == service_region)
                 SelectedGame = gs;
@@ -647,15 +738,23 @@ namespace Beanfun
         {
             Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\"");
             if (!regex.IsMatch(response))
-            { return "VerifyNoViewstate"; }
+            {
+                return "VerifyNoViewstate";
+            }
             this.viewstate = regex.Match(response).Groups[1].Value;
             regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\"");
             if (!regex.IsMatch(response))
-            { return "VerifyNoEventvalidation"; }
+            {
+                return "VerifyNoEventvalidation";
+            }
             this.eventvalidation = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"LBD_VCID_c_logincheck_advancecheck_samplecaptcha\" value=\"(.*)\"");
+            regex = new Regex(
+                "id=\"LBD_VCID_c_logincheck_advancecheck_samplecaptcha\" value=\"(.*)\""
+            );
             if (!regex.IsMatch(response))
-            { return "VerifyNoSamplecaptcha"; }
+            {
+                return "VerifyNoSamplecaptcha";
+            }
             this.samplecaptcha = regex.Match(response).Groups[1].Value;
             /*regex = new Regex("\\<span id=\"lblVerify\"\\>(.*)\\<\\/span\\>");
             if (!regex.IsMatch(response))
@@ -663,11 +762,15 @@ namespace Beanfun
             verifyPage.t_Verify.MaskText = regex.Match(response).Groups[1].Value;*/
             regex = new Regex("\\<span id=\"lblAuthType\"\\>(.*)\\<\\/span\\>");
             if (!regex.IsMatch(response))
-            { return "VerifyNoLblAuthType"; }
+            {
+                return "VerifyNoLblAuthType";
+            }
             verifyPage.labelAuthType.Content = regex.Match(response).Groups[1].Value;
             regex = new Regex("alert\\('(.*)'\\);");
             if (regex.IsMatch(response))
-            { return regex.Match(response).Groups[1].Value; }
+            {
+                return regex.Match(response).Groups[1].Value;
+            }
             verifyPage.imageCaptcha.Source = this.bfClient.getVerifyCaptcha(this.samplecaptcha);
             return null;
         }
@@ -677,7 +780,8 @@ namespace Beanfun
             try
             {
                 this.DragMove();
-            } catch {}
+            }
+            catch { }
         }
 
         private void Window_Activated(object sender, EventArgs e)
@@ -694,13 +798,20 @@ namespace Beanfun
             else
             {
                 changeThemeColor("#F3F3F3");
-                this.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("Gray"));
+                this.BorderBrush = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("Gray")
+                );
             }
         }
 
         private void Window_StateChanged(object sender, EventArgs e)
         {
-            if (settingPage != null && settingPage.minimize_to_tray != null && (bool)settingPage.minimize_to_tray.IsChecked && this.WindowState == WindowState.Minimized)
+            if (
+                settingPage != null
+                && settingPage.minimize_to_tray != null
+                && (bool)settingPage.minimize_to_tray.IsChecked
+                && this.WindowState == WindowState.Minimized
+            )
             {
                 this.WindowState = WindowState.Normal;
                 this.Visibility = Visibility.Hidden;
@@ -713,12 +824,18 @@ namespace Beanfun
             if (this.IsActive)
                 btn_About.Foreground = new SolidColorBrush(getTitleButtonColor());
             else
-                btn_About.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("Gray"));
+                btn_About.Foreground = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("Gray")
+                );
         }
 
-        private void btn_About_IsKeyboardFocusedChanged(object sender, DependencyPropertyChangedEventArgs e)
+        private void btn_About_IsKeyboardFocusedChanged(
+            object sender,
+            DependencyPropertyChangedEventArgs e
+        )
         {
-            if (btn_About.IsKeyboardFocused) frame.Focus();
+            if (btn_About.IsKeyboardFocused)
+                frame.Focus();
         }
 
         private void btn_Setting_MouseLeave(object sender, MouseEventArgs e)
@@ -726,12 +843,18 @@ namespace Beanfun
             if (this.IsActive)
                 btn_Setting.Foreground = new SolidColorBrush(getTitleButtonColor());
             else
-                btn_Setting.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("Gray"));
+                btn_Setting.Foreground = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("Gray")
+                );
         }
 
-        private void btn_Setting_IsKeyboardFocusedChanged(object sender, DependencyPropertyChangedEventArgs e)
+        private void btn_Setting_IsKeyboardFocusedChanged(
+            object sender,
+            DependencyPropertyChangedEventArgs e
+        )
         {
-            if (btn_Setting.IsKeyboardFocused) frame.Focus();
+            if (btn_Setting.IsKeyboardFocused)
+                frame.Focus();
         }
 
         private void btn_Region_Click(object sender, RoutedEventArgs e)
@@ -747,12 +870,18 @@ namespace Beanfun
             if (this.IsActive)
                 btn_Region.Foreground = new SolidColorBrush(getTitleButtonColor());
             else
-                btn_Region.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("Gray"));
+                btn_Region.Foreground = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("Gray")
+                );
         }
 
-        private void btn_Region_IsKeyboardFocusedChanged(object sender, DependencyPropertyChangedEventArgs e)
+        private void btn_Region_IsKeyboardFocusedChanged(
+            object sender,
+            DependencyPropertyChangedEventArgs e
+        )
         {
-            if (btn_Region.IsKeyboardFocused) frame.Focus();
+            if (btn_Region.IsKeyboardFocused)
+                frame.Focus();
         }
 
         private void btn_Min_MouseLeave(object sender, MouseEventArgs e)
@@ -760,17 +889,25 @@ namespace Beanfun
             if (this.IsActive)
                 btn_Min.Foreground = new SolidColorBrush(getTitleButtonColor());
             else
-                btn_Min.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("Gray"));
+                btn_Min.Foreground = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("Gray")
+                );
         }
 
-        private void btn_Min_IsKeyboardFocusedChanged(object sender, DependencyPropertyChangedEventArgs e)
+        private void btn_Min_IsKeyboardFocusedChanged(
+            object sender,
+            DependencyPropertyChangedEventArgs e
+        )
         {
-            if (btn_Min.IsKeyboardFocused) frame.Focus();
+            if (btn_Min.IsKeyboardFocused)
+                frame.Focus();
         }
 
         private void btn_Close_MouseEnter(object sender, MouseEventArgs e)
         {
-            btn_Close.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("White"));
+            btn_Close.Foreground = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("White")
+            );
         }
 
         private void btn_Close_MouseLeave(object sender, MouseEventArgs e)
@@ -778,25 +915,33 @@ namespace Beanfun
             if (this.IsActive)
                 btn_Close.Foreground = new SolidColorBrush(getTitleButtonColor());
             else
-                btn_Close.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("Gray"));
+                btn_Close.Foreground = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("Gray")
+                );
         }
 
-        private void btn_Close_IsKeyboardFocusedChanged(object sender, DependencyPropertyChangedEventArgs e)
+        private void btn_Close_IsKeyboardFocusedChanged(
+            object sender,
+            DependencyPropertyChangedEventArgs e
+        )
         {
-            if (btn_Close.IsKeyboardFocused) frame.Focus();
+            if (btn_Close.IsKeyboardFocused)
+                frame.Focus();
         }
 
         private void btn_About_Click(object sender, RoutedEventArgs e)
         {
             frame.Content = aboutPage;
-            if (return_page != null) return;
+            if (return_page != null)
+                return;
             return_page = (Page)frame.Content;
         }
 
         private void btn_Setting_Click(object sender, RoutedEventArgs e)
         {
             frame.Content = settingPage;
-            if (return_page != null) return;
+            if (return_page != null)
+                return;
             return_page = (Page)frame.Content;
         }
 
@@ -814,8 +959,13 @@ namespace Beanfun
         {
             string gameCode = service_code + "_" + service_region;
             OpenFileDialog openFileDialog = new OpenFileDialog();
-            openFileDialog.Filter = accountList.gameName.Content + string.Format(TryFindResource("FileDialog_Filter") as string, game_exe);
-            openFileDialog.Title = string.Format(TryFindResource("FileDialog_Title") as string, game_exe);
+            openFileDialog.Filter =
+                accountList.gameName.Content
+                + string.Format(TryFindResource("FileDialog_Filter") as string, game_exe);
+            openFileDialog.Title = string.Format(
+                TryFindResource("FileDialog_Title") as string,
+                game_exe
+            );
 
             if (openFileDialog.ShowDialog() == true)
             {
@@ -828,7 +978,7 @@ namespace Beanfun
         public void loginMethodChanged()
         {
             qrCheckLogin.IsEnabled = false;
-            
+
             if (App.LoginRegion == "TW")
             {
                 switch (App.LoginMethod)
@@ -837,7 +987,9 @@ namespace Beanfun
                         btn_Region.IsEnabled = false;
                         loginPage.qr.qr_image.Source = qr_default;
                         loginPage.login_form.Content = loginPage.qr;
-                        qrWorker.RunWorkerAsync(loginPage == null || loginPage.qr == null ? false : true);
+                        qrWorker.RunWorkerAsync(
+                            loginPage == null || loginPage.qr == null ? false : true
+                        );
                         break;
                     default:
                         loginPage.login_form.Content = loginPage.id_pass;
@@ -850,18 +1002,34 @@ namespace Beanfun
                 App.LoginMethod = (int)LoginMethod.Regular;
             }
 
-            if (App.LoginMethod == (int)Beanfun.LoginMethod.Regular && (loginPage.id_pass.t_Password.Password == "" || loginPage.id_pass.t_Password.Password == null))
+            if (
+                App.LoginMethod == (int)Beanfun.LoginMethod.Regular
+                && (
+                    loginPage.id_pass.t_Password.Password == ""
+                    || loginPage.id_pass.t_Password.Password == null
+                )
+            )
             {
-                string pwd = accountManager.getPasswordByAccount(App.LoginRegion, loginPage.id_pass.t_AccountID.Text);
+                string pwd = accountManager.getPasswordByAccount(
+                    App.LoginRegion,
+                    loginPage.id_pass.t_AccountID.Text
+                );
 
                 if (pwd != null && pwd != "")
                 {
                     loginPage.id_pass.t_Password.Password = pwd;
                     loginPage.id_pass.checkBox_RememberPWD.IsChecked = true;
-                    loginPage.id_pass.checkBox_AutoLogin.IsChecked = accountManager.getAutoLoginByAccount(App.LoginRegion, loginPage.id_pass.t_AccountID.Text);
+                    loginPage.id_pass.checkBox_AutoLogin.IsChecked =
+                        accountManager.getAutoLoginByAccount(
+                            App.LoginRegion,
+                            loginPage.id_pass.t_AccountID.Text
+                        );
                 }
 
-                string verify = accountManager.getVerifyByAccount(App.LoginRegion, loginPage.id_pass.t_AccountID.Text);
+                string verify = accountManager.getVerifyByAccount(
+                    App.LoginRegion,
+                    loginPage.id_pass.t_AccountID.Text
+                );
                 if (verify != null && verify != "")
                 {
                     verifyPage.t_Verify.Text = verify;
@@ -908,7 +1076,8 @@ namespace Beanfun
                 int i = 0;
                 foreach (string s in accountArrays)
                 {
-                    if (s == accId) selectedIndex = i;
+                    if (s == accId)
+                        selectedIndex = i;
                     string name = accountManager.getNameByAccount(App.LoginRegion, s);
                     if (name != null && name != "")
                     {
@@ -927,7 +1096,10 @@ namespace Beanfun
                 if (loginMethod < (int)LoginMethod.Regular)
                 {
                     if (accountArrays.Length > 0)
-                    { accId = accList[0]; selectedIndex = 0; }
+                    {
+                        accId = accList[0];
+                        selectedIndex = 0;
+                    }
                     loginMethod = accountManager.getMethodByAccount(App.LoginRegion, accId);
                 }
 
@@ -963,7 +1135,9 @@ namespace Beanfun
                     verifyPage.checkBoxRememberVerify.IsChecked = false;
                 }
             }
-            catch { /* ignore out of range */ }
+            catch
+            { /* ignore out of range */
+            }
             manageAccPage.setupAccList(this);
         }
 
@@ -1000,23 +1174,37 @@ namespace Beanfun
                     method = 0;
                     break;
                 case "LoginNoAkey":
-                    msg = $"{ TryFindResource("LoginNoAkey") as string }({ msg })";
+                    msg = $"{TryFindResource("LoginNoAkey") as string}({msg})";
                     break;
                 case "LoginNoAccountMatch":
                 case "LoginGetAccountErr":
                 case "LoginUpdateAccountListErr":
-                    msg = $"{ TryFindResource("LoginNoAccountMatch") as string }({ msg })";
+                    msg = $"{TryFindResource("LoginNoAccountMatch") as string}({msg})";
                     break;
                 case "MainAccount_Not_Exist":
-                    msg = string.Format(TryFindResource("MainAccount_Not_Exist") as string, App.LoginRegion == "TW" ? TryFindResource("Taiwan") : TryFindResource("HongKong"));
+                    msg = string.Format(
+                        TryFindResource("MainAccount_Not_Exist") as string,
+                        App.LoginRegion == "TW"
+                            ? TryFindResource("Taiwan")
+                            : TryFindResource("HongKong")
+                    );
                     break;
                 default:
                     if (msg.StartsWith("OTPNoLongPollingKey:"))
                     {
                         msg = msg.Replace("OTPNoLongPollingKey:", "");
-                        if (msg == "") msg = TryFindResource("GetOtpInitError") as string;
-                        else if (msg.Contains("很抱歉，需先完成進階認證")) msg = TryFindResource("NeedAuthToPlayGame") as string;
-                        else if (msg.Contains("尚未登入，請重新登入") || msg.Contains("無法認證登入狀態")) { msg = TryFindResource("DisconnectedFromServer") as string; method = 1; };
+                        if (msg == "")
+                            msg = TryFindResource("GetOtpInitError") as string;
+                        else if (msg.Contains("很抱歉，需先完成進階認證"))
+                            msg = TryFindResource("NeedAuthToPlayGame") as string;
+                        else if (
+                            msg.Contains("尚未登入，請重新登入") || msg.Contains("無法認證登入狀態")
+                        )
+                        {
+                            msg = TryFindResource("DisconnectedFromServer") as string;
+                            method = 1;
+                        }
+                        ;
                     }
                     else
                     {
@@ -1024,8 +1212,10 @@ namespace Beanfun
                         try
                         {
                             res = TryFindResource(msg) as string;
-                        } catch {}
-                        if (res != null) msg = res;
+                        }
+                        catch { }
+                        if (res != null)
+                            msg = res;
                     }
                     break;
             }
@@ -1055,7 +1245,6 @@ namespace Beanfun
             isCancelRequested = false;
         }
 
-
         // Login do work.
         private void loginWorker_DoWork(object sender, DoWorkEventArgs e)
         {
@@ -1075,7 +1264,14 @@ namespace Beanfun
                         {
                             if (App.LoginMethod != (int)LoginMethod.QRCode)
                                 this.bfClient = new BeanfunClient();
-                            this.bfClient.Login(loginPage.id_pass.t_AccountID.Text, loginPage.id_pass.t_Password.Password, App.LoginMethod, this.qrcodeClass, this.service_code, this.service_region);
+                            this.bfClient.Login(
+                                loginPage.id_pass.t_AccountID.Text,
+                                loginPage.id_pass.t_Password.Password,
+                                App.LoginMethod,
+                                this.qrcodeClass,
+                                this.service_code,
+                                this.service_region
+                            );
                         }
                     )
                 );
@@ -1086,7 +1282,12 @@ namespace Beanfun
             }
             catch (Exception ex)
             {
-                e.Result = TryFindResource("LoginErrorUnknown") as string + "\n\n" + ex.Message + "\n" + ex.StackTrace;
+                e.Result =
+                    TryFindResource("LoginErrorUnknown") as string
+                    + "\n\n"
+                    + ex.Message
+                    + "\n"
+                    + ex.StackTrace;
             }
 
             ResumeWork();
@@ -1098,7 +1299,6 @@ namespace Beanfun
             Console.WriteLine("loginWorker end");
             if (e != null && e.Error != null)
             {
-
                 errexit(e.Error.Message, 1);
                 NavigateLoginPage();
                 return;
@@ -1129,15 +1329,25 @@ namespace Beanfun
                         verifyPage.t_Code.Focus();
                     else
                         verifyPage.t_Verify.Focus();
-                    verifyPage.t_Verify.Text = accountManager.getVerifyByAccount(App.LoginRegion, loginPage.id_pass.t_AccountID.Text);
-                    verifyPage.checkBoxRememberVerify.IsChecked = verifyPage.t_Verify.Text != null && verifyPage.t_Verify.Text != "";
+                    verifyPage.t_Verify.Text = accountManager.getVerifyByAccount(
+                        App.LoginRegion,
+                        loginPage.id_pass.t_AccountID.Text
+                    );
+                    verifyPage.checkBoxRememberVerify.IsChecked =
+                        verifyPage.t_Verify.Text != null && verifyPage.t_Verify.Text != "";
                     verifyPage.t_Code.Text = "";
                     string response = this.bfClient.getVerifyPageInfo();
                     if (response == null)
-                    { MessageBox.Show(I18n.ToSimplified(this.bfClient.errmsg)); NavigateLoginPage(); }
+                    {
+                        MessageBox.Show(I18n.ToSimplified(this.bfClient.errmsg));
+                        NavigateLoginPage();
+                    }
                     string errmsg = reLoadVerifyPage(response);
                     if (errmsg != null)
-                    { MessageBox.Show(I18n.ToSimplified(errmsg)); NavigateLoginPage(); }
+                    {
+                        MessageBox.Show(I18n.ToSimplified(errmsg));
+                        NavigateLoginPage();
+                    }
                 }
                 else if (((string)e.Result).StartsWith("bfAPPAutoLogin.ashx"))
                 {
@@ -1147,7 +1357,9 @@ namespace Beanfun
                         errexit("LoginUnknown", 1);
                         return;
                     }
-                    loginWaitPage.t_Info.Content = Regex.Unescape(TryFindResource("MsgNeedBeanfunAuth") as string);
+                    loginWaitPage.t_Info.Content = Regex.Unescape(
+                        TryFindResource("MsgNeedBeanfunAuth") as string
+                    );
                     bfAPPAutoLogin.IsEnabled = true;
                 }
                 else
@@ -1156,7 +1368,7 @@ namespace Beanfun
                 }
                 return;
             }
-            
+
             ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
             if (App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode)
             {
@@ -1166,15 +1378,21 @@ namespace Beanfun
                     App.LoginRegion,
                     loginPage.id_pass.t_AccountID.Text,
                     "",
-                    loginPage.id_pass.checkBox_RememberPWD.IsEnabled && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked ? loginPage.id_pass.t_Password.Password : "",
-                    (bool)verifyPage.checkBoxRememberVerify.IsChecked ? verifyPage.t_Verify.Text : "",
+                    loginPage.id_pass.checkBox_RememberPWD.IsEnabled
+                    && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked
+                        ? loginPage.id_pass.t_Password.Password
+                        : "",
+                    (bool)verifyPage.checkBoxRememberVerify.IsChecked
+                        ? verifyPage.t_Verify.Text
+                        : "",
                     App.LoginMethod,
                     (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked
                 );
 
                 loginMethodInit();
             }
-            else ConfigAppSettings.SetValue("AccountID", null);
+            else
+                ConfigAppSettings.SetValue("AccountID", null);
 
             try
             {
@@ -1183,14 +1401,21 @@ namespace Beanfun
 
                 redrawSAccountList();
 
-                if (!this.pingWorker.IsBusy) this.pingWorker.RunWorkerAsync();
+                if (!this.pingWorker.IsBusy)
+                    this.pingWorker.RunWorkerAsync();
 
                 updateRemainPoint(this.bfClient.remainPoint);
 
                 accountList.list_Account.Focus();
-                if ((bool)settingPage.autoStartGame.IsChecked && this.bfClient.accountList.Count() > 0)
+                if (
+                    (bool)settingPage.autoStartGame.IsChecked
+                    && this.bfClient.accountList.Count() > 0
+                )
                 {
-                    if (((bool)settingPage.tradLogin.IsChecked && login_action_type == 1) || login_action_type == 0)
+                    if (
+                        ((bool)settingPage.tradLogin.IsChecked && login_action_type == 1)
+                        || login_action_type == 0
+                    )
                         runGame();
                     accountList.btnGetOtp_Click(null, null);
                 }
@@ -1200,7 +1425,6 @@ namespace Beanfun
                 errexit(TryFindResource("LoginNoAccountMatch") as string, 1);
             }
         }
-
 
         // totp do work.
         private void totpWorker_DoWork(object sender, DoWorkEventArgs e)
@@ -1219,7 +1443,16 @@ namespace Beanfun
                     new Action(
                         delegate
                         {
-                            this.bfClient.TotpLogin(loginTotp.otp1.Text,loginTotp.otp2.Text,loginTotp.otp3.Text,loginTotp.otp4.Text,loginTotp.otp5.Text,loginTotp.otp6.Text,this.service_code, this.service_region);
+                            this.bfClient.TotpLogin(
+                                loginTotp.otp1.Text,
+                                loginTotp.otp2.Text,
+                                loginTotp.otp3.Text,
+                                loginTotp.otp4.Text,
+                                loginTotp.otp5.Text,
+                                loginTotp.otp6.Text,
+                                this.service_code,
+                                this.service_region
+                            );
                         }
                     )
                 );
@@ -1230,7 +1463,12 @@ namespace Beanfun
             }
             catch (Exception ex)
             {
-                e.Result = TryFindResource("LoginErrorUnknown") as string + "\n\n" + ex.Message + "\n" + ex.StackTrace;
+                e.Result =
+                    TryFindResource("LoginErrorUnknown") as string
+                    + "\n\n"
+                    + ex.Message
+                    + "\n"
+                    + ex.StackTrace;
             }
 
             ResumeWork();
@@ -1258,15 +1496,25 @@ namespace Beanfun
                         verifyPage.t_Code.Focus();
                     else
                         verifyPage.t_Verify.Focus();
-                    verifyPage.t_Verify.Text = accountManager.getVerifyByAccount(App.LoginRegion, loginPage.id_pass.t_AccountID.Text);
-                    verifyPage.checkBoxRememberVerify.IsChecked = verifyPage.t_Verify.Text != null && verifyPage.t_Verify.Text != "";
+                    verifyPage.t_Verify.Text = accountManager.getVerifyByAccount(
+                        App.LoginRegion,
+                        loginPage.id_pass.t_AccountID.Text
+                    );
+                    verifyPage.checkBoxRememberVerify.IsChecked =
+                        verifyPage.t_Verify.Text != null && verifyPage.t_Verify.Text != "";
                     verifyPage.t_Code.Text = "";
                     string response = this.bfClient.getVerifyPageInfo();
                     if (response == null)
-                    { MessageBox.Show(I18n.ToSimplified(this.bfClient.errmsg)); NavigateLoginPage(); }
+                    {
+                        MessageBox.Show(I18n.ToSimplified(this.bfClient.errmsg));
+                        NavigateLoginPage();
+                    }
                     string errmsg = reLoadVerifyPage(response);
                     if (errmsg != null)
-                    { MessageBox.Show(I18n.ToSimplified(errmsg)); NavigateLoginPage(); }
+                    {
+                        MessageBox.Show(I18n.ToSimplified(errmsg));
+                        NavigateLoginPage();
+                    }
                 }
                 else if (((string)e.Result).StartsWith("bfAPPAutoLogin.ashx"))
                 {
@@ -1276,7 +1524,9 @@ namespace Beanfun
                         errexit("LoginUnknown", 1);
                         return;
                     }
-                    loginWaitPage.t_Info.Content = Regex.Unescape(TryFindResource("MsgNeedBeanfunAuth") as string);
+                    loginWaitPage.t_Info.Content = Regex.Unescape(
+                        TryFindResource("MsgNeedBeanfunAuth") as string
+                    );
                     bfAPPAutoLogin.IsEnabled = true;
                 }
                 else
@@ -1285,7 +1535,7 @@ namespace Beanfun
                 }
                 return;
             }
-            
+
             ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
             if (App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode)
             {
@@ -1295,15 +1545,21 @@ namespace Beanfun
                     App.LoginRegion,
                     loginPage.id_pass.t_AccountID.Text,
                     "",
-                    loginPage.id_pass.checkBox_RememberPWD.IsEnabled && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked ? loginPage.id_pass.t_Password.Password : "",
-                    (bool)verifyPage.checkBoxRememberVerify.IsChecked ? verifyPage.t_Verify.Text : "",
+                    loginPage.id_pass.checkBox_RememberPWD.IsEnabled
+                    && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked
+                        ? loginPage.id_pass.t_Password.Password
+                        : "",
+                    (bool)verifyPage.checkBoxRememberVerify.IsChecked
+                        ? verifyPage.t_Verify.Text
+                        : "",
                     App.LoginMethod,
                     (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked
                 );
 
                 loginMethodInit();
             }
-            else ConfigAppSettings.SetValue("AccountID", null);
+            else
+                ConfigAppSettings.SetValue("AccountID", null);
 
             try
             {
@@ -1312,14 +1568,21 @@ namespace Beanfun
 
                 redrawSAccountList();
 
-                if (!this.pingWorker.IsBusy) this.pingWorker.RunWorkerAsync();
+                if (!this.pingWorker.IsBusy)
+                    this.pingWorker.RunWorkerAsync();
 
                 updateRemainPoint(this.bfClient.remainPoint);
 
                 accountList.list_Account.Focus();
-                if ((bool)settingPage.autoStartGame.IsChecked && this.bfClient.accountList.Count() > 0)
+                if (
+                    (bool)settingPage.autoStartGame.IsChecked
+                    && this.bfClient.accountList.Count() > 0
+                )
                 {
-                    if (((bool)settingPage.tradLogin.IsChecked && login_action_type == 1) || login_action_type == 0)
+                    if (
+                        ((bool)settingPage.tradLogin.IsChecked && login_action_type == 1)
+                        || login_action_type == 0
+                    )
                         runGame();
                     accountList.btnGetOtp_Click(null, null);
                 }
@@ -1334,11 +1597,23 @@ namespace Beanfun
         {
             if (this.bfClient.accountAmountLimitNotice != "")
             {
-                accountList.lbl_AccountAmountLimitNotice.Content = this.bfClient.accountAmountLimitNotice;
+                accountList.lbl_AccountAmountLimitNotice.Content =
+                    this.bfClient.accountAmountLimitNotice;
                 accountList.accLimit.Visibility = Visibility.Visible;
                 int accLimit;
-                try{ accLimit = int.Parse(this.bfClient.accountAmountLimitNotice.Substring(this.bfClient.accountAmountLimitNotice.Length - 1, 1)); }
-                catch { accLimit = -1; }
+                try
+                {
+                    accLimit = int.Parse(
+                        this.bfClient.accountAmountLimitNotice.Substring(
+                            this.bfClient.accountAmountLimitNotice.Length - 1,
+                            1
+                        )
+                    );
+                }
+                catch
+                {
+                    accLimit = -1;
+                }
                 if (accLimit == -1)
                 {
                     accountList.btnAddServiceAccount.Content = TryFindResource("GoToVerify");
@@ -1348,8 +1623,12 @@ namespace Beanfun
                 else
                 {
                     accountList.btnAddServiceAccount.Content = TryFindResource("AddServiceAccount");
-                    accountList.btnAddServiceAccount.IsEnabled = this.bfClient.accountList.Count < accLimit;
-                    accountList.btnAddServiceAccount.Visibility = this.bfClient.accountList.Count < accLimit ? Visibility.Visible : Visibility.Hidden;
+                    accountList.btnAddServiceAccount.IsEnabled =
+                        this.bfClient.accountList.Count < accLimit;
+                    accountList.btnAddServiceAccount.Visibility =
+                        this.bfClient.accountList.Count < accLimit
+                            ? Visibility.Visible
+                            : Visibility.Hidden;
                 }
             }
             else
@@ -1362,14 +1641,17 @@ namespace Beanfun
             accountList.list_Account.ItemsSource = this.bfClient.accountList;
 
             string gameCode = service_code + "_" + service_region;
-            Visibility visable = App.LoginRegion == "TW" ? Visibility.Visible : Visibility.Collapsed;
+            Visibility visable =
+                App.LoginRegion == "TW" ? Visibility.Visible : Visibility.Collapsed;
             if (accountList.list_Account.Items.Count > 0)
             {
                 accountList.list_Account.SelectedIndex = 0;
-                
+
                 accountList.m_CopyAccount.Visibility = Visibility.Visible;
                 //accountList.m_ChangeAccName.Visibility = !UnconnectedGame || App.LoginRegion != "TW" ? Visibility.Visible : Visibility.Collapsed;
-                accountList.m_ChangePassword.Visibility = UnconnectedGame ? Visibility.Visible : Visibility.Collapsed;
+                accountList.m_ChangePassword.Visibility = UnconnectedGame
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
                 //accountList.m_AccInfo.Visibility = !UnconnectedGame || App.LoginRegion != "TW" ? Visibility.Visible : Visibility.Collapsed;
                 accountList.s_Account.Visibility = Visibility.Visible;
             }
@@ -1391,7 +1673,10 @@ namespace Beanfun
 
         public void updateRemainPoint(int remainPoint)
         {
-            accountList.m_RemainPoint.Header = string.Format(TryFindResource("GashRemain") as string, $"{ remainPoint }{(App.LoginRegion == "TW" || remainPoint == 0 ? "" : string.Format(TryFindResource("GashRemainInGame") as string, Math.Floor(remainPoint / 2.5)))}");
+            accountList.m_RemainPoint.Header = string.Format(
+                TryFindResource("GashRemain") as string,
+                $"{remainPoint}{(App.LoginRegion == "TW" || remainPoint == 0 ? "" : string.Format(TryFindResource("GashRemainInGame") as string, Math.Floor(remainPoint / 2.5)))}"
+            );
         }
 
         public void runGame(string account = null, string password = null)
@@ -1400,7 +1685,11 @@ namespace Beanfun
             string gamePath = settingPage.t_GamePath.Text;
             if (gamePath == "" || !File.Exists(gamePath))
             {
-                MessageBoxResult result = MessageBox.Show(TryFindResource("MsgCantFindGame") as string, "", MessageBoxButton.YesNo);
+                MessageBoxResult result = MessageBox.Show(
+                    TryFindResource("MsgCantFindGame") as string,
+                    "",
+                    MessageBoxButton.YesNo
+                );
                 if (result == MessageBoxResult.Yes || SelectedGame == null)
                 {
                     btn_SetGamePath_Click(null, null);
@@ -1419,7 +1708,10 @@ namespace Beanfun
 
             for (int i = 0; i < gamePath.Length; i++)
             {
-                if (Convert.ToInt32(Convert.ToChar(gamePath.Substring(i, 1))) > Convert.ToInt32(Convert.ToChar(128)))
+                if (
+                    Convert.ToInt32(Convert.ToChar(gamePath.Substring(i, 1)))
+                    > Convert.ToInt32(Convert.ToChar(128))
+                )
                 {
                     MessageBox.Show(TryFindResource("MsgGamePathHaveWChar") as string);
                     break;
@@ -1436,14 +1728,26 @@ namespace Beanfun
             {
                 foreach (Process process in Process.GetProcessesByName(gameProcessName))
                 {
-                    if (processIds.Contains(process.Id)) { continue; }
+                    if (processIds.Contains(process.Id))
+                    {
+                        continue;
+                    }
                     try
                     {
-
-                        using (ManagementObjectSearcher searcher = new ManagementObjectSearcher("select * from Win32_Process where ProcessId = " + process.Id))
+                        using (
+                            ManagementObjectSearcher searcher = new ManagementObjectSearcher(
+                                "select * from Win32_Process where ProcessId = " + process.Id
+                            )
+                        )
                         using (ManagementObjectCollection objects = searcher.Get())
                         {
-                            if (gamePath == objects.Cast<ManagementBaseObject>().SingleOrDefault()?["executablepath"]?.ToString())
+                            if (
+                                gamePath
+                                == objects
+                                    .Cast<ManagementBaseObject>()
+                                    .SingleOrDefault()
+                                    ?["executablepath"]?.ToString()
+                            )
                             {
                                 processIds.Add(process.Id);
                                 continue;
@@ -1454,7 +1758,10 @@ namespace Beanfun
                     try
                     {
                         if (process.MainModule.FileName == gamePath)
-                        { processIds.Add(process.Id); continue; }
+                        {
+                            processIds.Add(process.Id);
+                            continue;
+                        }
                     }
                     catch { }
                 }
@@ -1462,10 +1769,14 @@ namespace Beanfun
 
             if (processIds.Count > 0)
             {
-                MessageBoxResult result = MessageBox.Show(TryFindResource("MsgGameAlreadyRun") as string, "", MessageBoxButton.YesNo);
+                MessageBoxResult result = MessageBox.Show(
+                    TryFindResource("MsgGameAlreadyRun") as string,
+                    "",
+                    MessageBoxButton.YesNo
+                );
                 if (result == MessageBoxResult.Yes)
                 {
-                    foreach(int processId in processIds)
+                    foreach (int processId in processIds)
                     {
                         try
                         {
@@ -1505,10 +1816,17 @@ namespace Beanfun
                     }
                 }
 
-                if (runMode > (int)GameStartMode.LocaleRemulator) runMode = (int)GameStartMode.LocaleRemulator;
+                if (runMode > (int)GameStartMode.LocaleRemulator)
+                    runMode = (int)GameStartMode.LocaleRemulator;
 
                 string commandLine = "";
-                if (account != null && password != null && account != "" && password != "" && game_commandLine != "")
+                if (
+                    account != null
+                    && password != null
+                    && account != ""
+                    && password != ""
+                    && game_commandLine != ""
+                )
                 {
                     commandLine = game_commandLine;
                     Regex regex = new Regex("%s");
@@ -1530,7 +1848,7 @@ namespace Beanfun
                 }
                 Console.WriteLine("try open game done");
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Console.WriteLine(ex.ToString());
                 errexit(Regex.Unescape(TryFindResource("MsgLocalePluginRunError") as string), 2);
@@ -1539,35 +1857,47 @@ namespace Beanfun
 
         private void startByLR(string path, string command)
         {
-            if (App.ReleaseResource("LRConfig.xml") == -1 || App.ReleaseResource("LRHookx32.dll") == -1 ||
-                App.ReleaseResource("LRHookx64.dll") == -1 || App.ReleaseResource("LRProc.exe") == -1 ||
-                App.ReleaseResource("LRSubMenus.dll") == -1)
+            if (
+                App.ReleaseResource("LRConfig.xml") == -1
+                || App.ReleaseResource("LRHookx32.dll") == -1
+                || App.ReleaseResource("LRHookx64.dll") == -1
+                || App.ReleaseResource("LRProc.exe") == -1
+                || App.ReleaseResource("LRSubMenus.dll") == -1
+            )
                 MessageBox.Show(TryFindResource("MsgLocalePluginReleaseError") as string);
 
             var commandLine = string.Empty;
-            commandLine = path.StartsWith("\"")
-                ? $"{path} "
-                : $"\"{path}\" ";
+            commandLine = path.StartsWith("\"") ? $"{path} " : $"\"{path}\" ";
             commandLine += command;
-            System.Globalization.TextInfo culInfo = System.Globalization.CultureInfo.GetCultureInfo("zh-HK").TextInfo;
+            System.Globalization.TextInfo culInfo = System
+                .Globalization.CultureInfo.GetCultureInfo("zh-HK")
+                .TextInfo;
 
-            new Thread(new ThreadStart(() => {
-                try
+            new Thread(
+                new ThreadStart(() =>
                 {
-                    var proc = new Process();
-                    proc.StartInfo.FileName = System.Environment.CurrentDirectory + "\\LRProc.exe";
-                    proc.StartInfo.Arguments = "ef3e7b42-a87c-4c07-ae3e-eeebeef12762 " + commandLine;
-                    proc.StartInfo.WorkingDirectory = Path.GetDirectoryName(path);
-                    proc.StartInfo.UseShellExecute = true;
-                    proc.StartInfo.Verb = "runas";
-                    proc.Start();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.ToString());
-                    errexit(Regex.Unescape(TryFindResource("MsgLocalePluginRunError") as string), 2);
-                }
-            })).Start();
+                    try
+                    {
+                        var proc = new Process();
+                        proc.StartInfo.FileName =
+                            System.Environment.CurrentDirectory + "\\LRProc.exe";
+                        proc.StartInfo.Arguments =
+                            "ef3e7b42-a87c-4c07-ae3e-eeebeef12762 " + commandLine;
+                        proc.StartInfo.WorkingDirectory = Path.GetDirectoryName(path);
+                        proc.StartInfo.UseShellExecute = true;
+                        proc.StartInfo.Verb = "runas";
+                        proc.Start();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.ToString());
+                        errexit(
+                            Regex.Unescape(TryFindResource("MsgLocalePluginRunError") as string),
+                            2
+                        );
+                    }
+                })
+            ).Start();
         }
 
         public bool AddServiceAccount(string name)
@@ -1588,7 +1918,13 @@ namespace Beanfun
             return false;
         }
 
-        public string UnconnectedGame_AddAccount(string name, string txtNewPwd, string txtNewPwd2, string txtServiceAccountDN, System.Collections.Specialized.NameValueCollection payload)
+        public string UnconnectedGame_AddAccount(
+            string name,
+            string txtNewPwd,
+            string txtNewPwd2,
+            string txtServiceAccountDN,
+            System.Collections.Specialized.NameValueCollection payload
+        )
         {
             if (this.bfClient == null)
                 return null;
@@ -1599,7 +1935,15 @@ namespace Beanfun
             if (txtNewPwd2 == null || txtNewPwd2 == "")
                 return null;
 
-            string result = this.bfClient.UnconnectedGame_AddAccount(service_code, service_region, name, txtNewPwd, txtNewPwd2, txtServiceAccountDN, payload);
+            string result = this.bfClient.UnconnectedGame_AddAccount(
+                service_code,
+                service_region,
+                name,
+                txtNewPwd,
+                txtNewPwd2,
+                txtServiceAccountDN,
+                payload
+            );
             if (result == "")
             {
                 this.bfClient.GetAccounts(service_code, service_region);
@@ -1617,35 +1961,62 @@ namespace Beanfun
             if (txtEmail == null)
                 return null;
 
-            return this.bfClient.UnconnectedGame_ChangePassword(service_code, service_region, accountList.list_Account.SelectedIndex, txtEmail);
+            return this.bfClient.UnconnectedGame_ChangePassword(
+                service_code,
+                service_region,
+                accountList.list_Account.SelectedIndex,
+                txtEmail
+            );
         }
 
         public System.Collections.Specialized.NameValueCollection UnconnectedGame_AddAccountInit()
         {
             if (this.bfClient == null)
                 return null;
-            return this.bfClient.UnconnectedGame_InitAddAccountPayload(service_code, service_region);
+            return this.bfClient.UnconnectedGame_InitAddAccountPayload(
+                service_code,
+                service_region
+            );
         }
 
-        public System.Collections.Specialized.NameValueCollection UnconnectedGame_AddUnconnectedCheck(string name, string txtServiceAccountDN, System.Collections.Specialized.NameValueCollection payload)
+        public System.Collections.Specialized.NameValueCollection UnconnectedGame_AddUnconnectedCheck(
+            string name,
+            string txtServiceAccountDN,
+            System.Collections.Specialized.NameValueCollection payload
+        )
         {
             if (this.bfClient == null)
                 return null;
-            return this.bfClient.UnconnectedGame_AddAccountCheck(service_code, service_region, name, txtServiceAccountDN, payload);
+            return this.bfClient.UnconnectedGame_AddAccountCheck(
+                service_code,
+                service_region,
+                name,
+                txtServiceAccountDN,
+                payload
+            );
         }
 
-        public System.Collections.Specialized.NameValueCollection UnconnectedGame_AddAccountCheckNickName(string txtServiceAccountDN, System.Collections.Specialized.NameValueCollection payload)
+        public System.Collections.Specialized.NameValueCollection UnconnectedGame_AddAccountCheckNickName(
+            string txtServiceAccountDN,
+            System.Collections.Specialized.NameValueCollection payload
+        )
         {
             if (this.bfClient == null)
                 return null;
-            return this.bfClient.UnconnectedGame_AddAccountCheckNickName(service_code, service_region, txtServiceAccountDN, payload);
+            return this.bfClient.UnconnectedGame_AddAccountCheckNickName(
+                service_code,
+                service_region,
+                txtServiceAccountDN,
+                payload
+            );
         }
 
         public bool ChangeServiceAccountDisplayName(string newName)
         {
             if (this.bfClient == null)
                 return false;
-            BeanfunClient.ServiceAccount account = (BeanfunClient.ServiceAccount)accountList.list_Account.SelectedItem;
+            BeanfunClient.ServiceAccount account = (BeanfunClient.ServiceAccount)
+                accountList.list_Account.SelectedItem;
             if (newName == null || newName == "" || account == null)
                 return false;
             if (newName == account.sname)
@@ -1671,9 +2042,6 @@ namespace Beanfun
             return this.bfClient.GetServiceContract(service_code, service_region);
         }
 
-
-
-
         // getOTP do work.
         private void getOtpWorker_DoWork(object sender, DoWorkEventArgs e)
         {
@@ -1693,7 +2061,11 @@ namespace Beanfun
                 return;
             }
             Console.WriteLine("call GetOTP");
-            this.otp = this.bfClient.GetOTP(this.bfClient.accountList[index], this.service_code, this.service_region);
+            this.otp = this.bfClient.GetOTP(
+                this.bfClient.accountList[index],
+                this.service_code,
+                this.service_region
+            );
             Console.WriteLine("call GetOTP done");
             if (this.otp == null)
                 e.Result = -1;
@@ -1729,7 +2101,6 @@ namespace Beanfun
                     int accIndex = accountList.list_Account.SelectedIndex;
                     string acc = this.bfClient.accountList[index].sid;
                     accountList.t_Password.Text = this.otp;
-                    
 
                     if (!(bool)settingPage.tradLogin.IsChecked && login_action_type == 1)
                     {
@@ -1742,7 +2113,11 @@ namespace Beanfun
                         {
                             hWnd = WindowsAPI.FindWindow("MapleStoryClassTW", null);
                         }
-                        if (hWnd == IntPtr.Zero || !(bool)accountList.autoPaste.IsChecked || accountList.autoPaste.Visibility != Visibility.Visible)
+                        if (
+                            hWnd == IntPtr.Zero
+                            || !(bool)accountList.autoPaste.IsChecked
+                            || accountList.autoPaste.Visibility != Visibility.Visible
+                        )
                         {
                             try
                             {
@@ -1780,8 +2155,14 @@ namespace Beanfun
                                     WindowsAPI.GetCursorPos(ref oldPoint);
                                     System.Drawing.Point point = new System.Drawing.Point(0, 0);
                                     WindowsAPI.ClientToScreen(hWnd, ref point);
-                                    System.Drawing.Point textBoxPoint = new System.Drawing.Point((int)(wndSize.Width * 0.5), (int)(wndSize.Height * 0.4));
-                                    WindowsAPI.SetCursorPos(point.X + textBoxPoint.X, point.Y + textBoxPoint.Y);
+                                    System.Drawing.Point textBoxPoint = new System.Drawing.Point(
+                                        (int)(wndSize.Width * 0.5),
+                                        (int)(wndSize.Height * 0.4)
+                                    );
+                                    WindowsAPI.SetCursorPos(
+                                        point.X + textBoxPoint.X,
+                                        point.Y + textBoxPoint.Y
+                                    );
                                     int pos = (textBoxPoint.X & 0xFFFF) | (textBoxPoint.Y << 16);
                                     WindowsAPI.PostMessage(hWnd, WM_LBUTTONDOWN, 1, pos);
                                     Thread.Sleep(200);
@@ -1823,12 +2204,18 @@ namespace Beanfun
             accountList.btn_StartGame.IsEnabled = true;
             accountList.m_MenuList.IsEnabled = true;
             if (this.bfClient.accountAmountLimitNotice != "")
-                accountList.btnAddServiceAccount.IsEnabled = this.bfClient.accountList.Count < int.Parse(this.bfClient.accountAmountLimitNotice.Substring(this.bfClient.accountAmountLimitNotice.Length - 1, 1));
+                accountList.btnAddServiceAccount.IsEnabled =
+                    this.bfClient.accountList.Count
+                    < int.Parse(
+                        this.bfClient.accountAmountLimitNotice.Substring(
+                            this.bfClient.accountAmountLimitNotice.Length - 1,
+                            1
+                        )
+                    );
 
             //if (!this.pingWorker.IsBusy)  this.pingWorker.RunWorkerAsync();
             //this.pingWorker.RunWorkerAsync();
-
-            }
+        }
 
         // Ping to Beanfun website.
         private void pingWorker_DoWork(object sender, DoWorkEventArgs e)
@@ -1836,8 +2223,6 @@ namespace Beanfun
             Thread.CurrentThread.Name = "ping Worker";
             Console.WriteLine("pingWorker start");
             const int WaitSecs = 60; // 1min
-            
-
 
             while (!isCancelRequested)
             {
@@ -1854,7 +2239,8 @@ namespace Beanfun
                     continue;
                 }
 
-                if (this.bfClient != null) { 
+                if (this.bfClient != null)
+                {
                     this.bfClient.Ping();
                 }
 
@@ -1863,7 +2249,6 @@ namespace Beanfun
                     if (this.pingWorker.CancellationPending)
                         break;
                     System.Threading.Thread.Sleep(1000 * 1);
-                
                 }
             }
         }
@@ -1883,9 +2268,10 @@ namespace Beanfun
         private void qrWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
             btn_Region.IsEnabled = true;
-            if (updateQRCodeImage()) qrCheckLogin.IsEnabled = true;
+            if (updateQRCodeImage())
+                qrCheckLogin.IsEnabled = true;
         }
-        
+
         private void qrCheckLogin_Tick(object sender, EventArgs e)
         {
             if (this.qrcodeClass == null)
@@ -1917,7 +2303,10 @@ namespace Beanfun
 
             BitmapImage qrCodeImage;
             bool result;
-            if (this.qrcodeClass == null || (qrCodeImage = this.bfClient.getQRCodeImage(qrcodeClass)) == null)
+            if (
+                this.qrcodeClass == null
+                || (qrCodeImage = this.bfClient.getQRCodeImage(qrcodeClass)) == null
+            )
             {
                 result = false;
                 loginPage.qr.qr_image.Source = qr_default;
@@ -1979,11 +2368,13 @@ namespace Beanfun
 
         private void checkPatcher_Tick(object sender, EventArgs e)
         {
-            if (settingPage == null || settingPage.t_GamePath == null) return;
+            if (settingPage == null || settingPage.t_GamePath == null)
+                return;
             bool found = false;
             try
             {
-                string patherPath = Path.GetDirectoryName(settingPage.t_GamePath.Text) + "\\Patcher.exe";
+                string patherPath =
+                    Path.GetDirectoryName(settingPage.t_GamePath.Text) + "\\Patcher.exe";
                 foreach (Process process in Process.GetProcessesByName("Patcher"))
                 {
                     try
@@ -2007,43 +2398,49 @@ namespace Beanfun
                 try
                 {
                     // 獲取客戶端版本
-                    FileVersionInfo fileVerInfo = FileVersionInfo.GetVersionInfo(settingPage.t_GamePath.Text);
-                    ClientMapleMajor = (short) fileVerInfo.ProductPrivatePart;
+                    FileVersionInfo fileVerInfo = FileVersionInfo.GetVersionInfo(
+                        settingPage.t_GamePath.Text
+                    );
+                    ClientMapleMajor = (short)fileVerInfo.ProductPrivatePart;
 
                     // 獲取伺服器版本
                     CancellationTokenSource c = new CancellationTokenSource();
                     CancellationToken token = c.Token;
                     byte[] Data = null;
-                    System.Threading.Tasks.Task task = new System.Threading.Tasks.Task(() =>
-                    {
-                        try
+                    System.Threading.Tasks.Task task = new System.Threading.Tasks.Task(
+                        () =>
                         {
-                            var tcpClient = new System.Net.Sockets.TcpClient();
-                            tcpClient.SendTimeout = 6000;
-                            tcpClient.ReceiveTimeout = 6000;
-                            string WvsLoginServerDomain = "tw.login.maplestory.beanfun.com";
-                            if ("610075_T9".Equals(service_code + "_" + service_region))
-                                WvsLoginServerDomain = "tw.loginT.maplestory.beanfun.com";
-                            tcpClient.Connect(WvsLoginServerDomain, 8484);
-
-                            if (tcpClient.Connected)
+                            try
                             {
-                                Data = new Byte[1024];
-                                System.Net.Sockets.NetworkStream nsData = tcpClient.GetStream();
-                                Int32 bytes = nsData.Read(Data, 0, Data.Length);
-                            }
+                                var tcpClient = new System.Net.Sockets.TcpClient();
+                                tcpClient.SendTimeout = 6000;
+                                tcpClient.ReceiveTimeout = 6000;
+                                string WvsLoginServerDomain = "tw.login.maplestory.beanfun.com";
+                                if ("610075_T9".Equals(service_code + "_" + service_region))
+                                    WvsLoginServerDomain = "tw.loginT.maplestory.beanfun.com";
+                                tcpClient.Connect(WvsLoginServerDomain, 8484);
 
-                            tcpClient.Close();
-                            while (true)
-                            {
-                                if (token.IsCancellationRequested)
+                                if (tcpClient.Connected)
                                 {
-                                    throw new OperationCanceledException();
+                                    Data = new Byte[1024];
+                                    System.Net.Sockets.NetworkStream nsData = tcpClient.GetStream();
+                                    Int32 bytes = nsData.Read(Data, 0, Data.Length);
+                                }
+
+                                tcpClient.Close();
+                                while (true)
+                                {
+                                    if (token.IsCancellationRequested)
+                                    {
+                                        throw new OperationCanceledException();
+                                    }
                                 }
                             }
-                        }
-                        catch { };
-                    }, token);
+                            catch { }
+                            ;
+                        },
+                        token
+                    );
 
                     task.Start();
                     task.Wait(3000, token);
@@ -2052,16 +2449,29 @@ namespace Beanfun
                     {
                         if (accountList != null)
                         {
-                            MapleLib.PacketLib.PacketReader packet = new MapleLib.PacketLib.PacketReader(Data);
+                            MapleLib.PacketLib.PacketReader packet =
+                                new MapleLib.PacketLib.PacketReader(Data);
                             packet.ReadShort();
                             SrvMapleMajor = packet.ReadShort();
                             SrvMapleMinor = packet.ReadMapleString();
                             packet.Skip(4);
                             packet.Skip(4);
                             byte MapleRegion = packet.ReadByte();
-                            Console.WriteLine("伺服器版本: " + SrvMapleMajor + "\r\n小版本: " + SrvMapleMinor.Split(':')[0] + "\r\n區域號: " + MapleRegion);
+                            Console.WriteLine(
+                                "伺服器版本: "
+                                    + SrvMapleMajor
+                                    + "\r\n小版本: "
+                                    + SrvMapleMinor.Split(':')[0]
+                                    + "\r\n區域號: "
+                                    + MapleRegion
+                            );
 
-                            if (SrvMapleMajor == 0 || SrvMapleMinor.Split(':')[0] == "" || MapleRegion == 0) Data = null;
+                            if (
+                                SrvMapleMajor == 0
+                                || SrvMapleMinor.Split(':')[0] == ""
+                                || MapleRegion == 0
+                            )
+                                Data = null;
                         }
                     }
                     if (Data == null)
@@ -2069,24 +2479,43 @@ namespace Beanfun
                         SrvMapleMajor = 0;
                         SrvMapleMinor = "";
                     }
-                } catch {}
+                }
+                catch { }
                 string info = "";
                 if (ClientMapleMajor != 0)
                 {
-                    info += $"\r\n{ TryFindResource("ClientVersion") as string }{ ClientMapleMajor }";
+                    info += $"\r\n{TryFindResource("ClientVersion") as string}{ClientMapleMajor}";
                     if (SrvMapleMajor != 0 && SrvMapleMinor.Split(':')[0] != "")
                     {
-                        info += $"\r\n{ TryFindResource("ServerVersion") as string }{ SrvMapleMajor }.{ SrvMapleMinor.Split(':')[0] }";
+                        info +=
+                            $"\r\n{TryFindResource("ServerVersion") as string}{SrvMapleMajor}.{SrvMapleMinor.Split(':')[0]}";
                     }
                 }
-                bool isCanUpdate = ClientMapleMajor != 0 && SrvMapleMajor != 0 && ClientMapleMajor >= (SrvMapleMajor - 2);
+                bool isCanUpdate =
+                    ClientMapleMajor != 0
+                    && SrvMapleMajor != 0
+                    && ClientMapleMajor >= (SrvMapleMajor - 2);
                 MessageBoxResult result = MessageBox.Show(
-                    string.Format(Regex.Unescape(TryFindResource("MsgKillPatcher") as string), info,
-                        isCanUpdate && ClientMapleMajor == SrvMapleMajor ? $"V{ SrvMapleMajor }.{ SrvMapleMinor.Split(':')[0] }fix" : "",
-                        isCanUpdate ? TryFindResource("UpdateByPatch") : TryFindResource("UpdateByFullClient"),
-                        isCanUpdate ? TryFindResource("GamePatch") : TryFindResource("GameFullClient")), TryFindResource("WarningByBeanfun") as string, MessageBoxButton.YesNo);
+                    string.Format(
+                        Regex.Unescape(TryFindResource("MsgKillPatcher") as string),
+                        info,
+                        isCanUpdate && ClientMapleMajor == SrvMapleMajor
+                            ? $"V{SrvMapleMajor}.{SrvMapleMinor.Split(':')[0]}fix"
+                            : "",
+                        isCanUpdate
+                            ? TryFindResource("UpdateByPatch")
+                            : TryFindResource("UpdateByFullClient"),
+                        isCanUpdate
+                            ? TryFindResource("GamePatch")
+                            : TryFindResource("GameFullClient")
+                    ),
+                    TryFindResource("WarningByBeanfun") as string,
+                    MessageBoxButton.YesNo
+                );
                 if (result == MessageBoxResult.Yes)
-                    Process.Start($"https://maplestory.beanfun.com/download{ (isCanUpdate ? "?download_type=2" : "") }");
+                    Process.Start(
+                        $"https://maplestory.beanfun.com/download{(isCanUpdate ? "?download_type=2" : "")}"
+                    );
             }
         }
 
@@ -2098,14 +2527,22 @@ namespace Beanfun
                 new Action(
                     delegate
                     {
-                        response = this.bfClient.verify(viewstate, eventvalidation, samplecaptcha, verifyPage.t_Verify.Text, verifyPage.t_Code.Text);
+                        response = this.bfClient.verify(
+                            viewstate,
+                            eventvalidation,
+                            samplecaptcha,
+                            verifyPage.t_Verify.Text,
+                            verifyPage.t_Code.Text
+                        );
                     }
                 )
             );
             Regex regex = new Regex("alert\\('(.*)'\\);");
             string msg = null;
             if (regex.IsMatch(response))
-            { msg = regex.Match(response).Groups[1].Value; }
+            {
+                msg = regex.Match(response).Groups[1].Value;
+            }
             if (msg == null)
             {
                 if (response.Contains("圖形驗證碼輸入錯誤"))
@@ -2120,9 +2557,13 @@ namespace Beanfun
             else
             {
                 if (msg.Contains("資料已驗證成功"))
-                { e.Result = true; }
+                {
+                    e.Result = true;
+                }
                 else
-                { MessageBox.Show(msg.Replace("\\n", "\n").Replace("\\r", "\r")); }
+                {
+                    MessageBox.Show(msg.Replace("\\n", "\n").Replace("\\r", "\r"));
+                }
             }
             if (e.Result == null)
             {
@@ -2137,14 +2578,18 @@ namespace Beanfun
                     )
                 );
                 if (errmsg != null)
-                { MessageBox.Show(I18n.ToSimplified(errmsg)); }
+                {
+                    MessageBox.Show(I18n.ToSimplified(errmsg));
+                }
             }
         }
 
         private void verifyWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
             if (e.Result != null)
-            { do_Login(); }
+            {
+                do_Login();
+            }
         }
     }
 }

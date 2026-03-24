@@ -24,7 +24,10 @@ namespace Beanfun
             this.Close();
             if (!App.MainWnd.ChangeServiceAccountDisplayName(txtNewServiceAccountDisplayName.Text))
             {
-                MessageBox.Show(TryFindResource("MsgChangeDisplayNameError") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("MsgChangeDisplayNameError") as string,
+                    TryFindResource("SystemInfo") as string
+                );
             }
         }
 

@@ -1,6 +1,7 @@
 # Beanfun
 
 [![GitHub all releases](https://img.shields.io/github/downloads/pungin/Beanfun/total)](https://github.com/pungin/Beanfun/releases)
+[![Format Check](https://github.com/pungin/Beanfun/actions/workflows/format-check.yml/badge.svg)](https://github.com/pungin/Beanfun/actions/workflows/format-check.yml)
 
 遊戲橘子數位科技旗下遊戲的啟動器
 
@@ -38,3 +39,20 @@ Download available at <https://github.com/pungin/Beanfun/releases/latest>.
 * [Newtonsoft.Json](https://www.newtonsoft.com/json) - JSON元件
 * [Detours](https://github.com/microsoft/Detours) - Used to hook ANSI/Unicode functions
 * [Locale_Remulator](https://github.com/InWILL/Locale_Remulator) - 區域模擬元件
+
+## Development
+
+### 程式碼格式化
+
+本專案使用 [CSharpier](https://csharpier.com/) 作為程式碼格式化工具。
+
+```bash
+# 安裝還原工具
+dotnet tool restore
+
+# 格式化所有 .cs 檔案
+dotnet csharpier format .
+
+# 檢查格式（不修改檔案）
+dotnet csharpier check .
+```

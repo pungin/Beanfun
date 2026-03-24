@@ -1,21 +1,21 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
+using Newtonsoft.Json;
 
 namespace Beanfun.Update
 {
     class ApplicationUpdater
     {
-
         public class GitHubRelease
         {
             [JsonProperty("name")]
             public string Name { get; set; }
+
             [JsonProperty("tag_name")]
             public string TagName { get; set; }
 
@@ -48,26 +48,49 @@ namespace Beanfun.Update
 
                 var releases = JsonConvert.DeserializeObject<List<GitHubRelease>>(json);
                 GitHubRelease release = GetLastRelease(releases);
-                if (release == null) return;
+                if (release == null)
+                    return;
 
                 var match = Regex.Match(release.TagName, @"^v(\d+)\.(\d+)\.(\d+)$");
-                if (!match.Success) return;
-                string newVer = $"{match.Groups[1].Value}.{match.Groups[2].Value}({match.Groups[3].Value})";
-                if (CompareVersion(System.Reflection.Assembly.GetExecutingAssembly().GetName().Version, App.ParseVersion(newVer)))
+                if (!match.Success)
+                    return;
+                string newVer =
+                    $"{match.Groups[1].Value}.{match.Groups[2].Value}({match.Groups[3].Value})";
+                if (
+                    CompareVersion(
+                        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version,
+                        App.ParseVersion(newVer)
+                    )
+                )
                 {
                     try
                     {
-                        MessageBoxResult result = MessageBox.Show(string.Format(Regex.Unescape(Application.Current.TryFindResource("NewVersionDetected") as string),
-                            newVer, App.AssemblyVersion, release.Body),
-                            Application.Current.TryFindResource("UpdateCheck") as string, MessageBoxButton.OKCancel);
-                        if (result == MessageBoxResult.OK) Process.Start(release.Assets[0].BrowserDownloadUrl);
+                        MessageBoxResult result = MessageBox.Show(
+                            string.Format(
+                                Regex.Unescape(
+                                    Application.Current.TryFindResource("NewVersionDetected")
+                                        as string
+                                ),
+                                newVer,
+                                App.AssemblyVersion,
+                                release.Body
+                            ),
+                            Application.Current.TryFindResource("UpdateCheck") as string,
+                            MessageBoxButton.OKCancel
+                        );
+                        if (result == MessageBoxResult.OK)
+                            Process.Start(release.Assets[0].BrowserDownloadUrl);
                     }
                     catch (Exception) { }
                 }
                 else
                 {
-                    if (show) MessageBox.Show(Application.Current.TryFindResource("NoUpdatesDetected") as string,
-                        Application.Current.TryFindResource("UpdateCheck") as string, MessageBoxButton.OK);
+                    if (show)
+                        MessageBox.Show(
+                            Application.Current.TryFindResource("NoUpdatesDetected") as string,
+                            Application.Current.TryFindResource("UpdateCheck") as string,
+                            MessageBoxButton.OK
+                        );
                 }
             }
             catch (Exception) { }
@@ -78,8 +101,10 @@ namespace Beanfun.Update
             bool stable = ConfigAppSettings.GetValue("updateChannel", "Stable").Equals("Stable");
             foreach (var release in releases)
             {
-                if (!stable && release.Prerelease) return release;
-                else if (!release.Prerelease) return release;
+                if (!stable && release.Prerelease)
+                    return release;
+                else if (!release.Prerelease)
+                    return release;
             }
             return null;
         }

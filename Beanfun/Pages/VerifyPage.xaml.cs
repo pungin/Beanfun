@@ -16,7 +16,8 @@ namespace Beanfun
 
         private void Image_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (App.LoginMethod == (int)LoginMethod.QRCode) App.MainWnd.loginMethodChanged();
+            if (App.LoginMethod == (int)LoginMethod.QRCode)
+                App.MainWnd.loginMethodChanged();
             App.MainWnd.return_page = App.MainWnd.loginPage;
         }
 
@@ -32,7 +33,7 @@ namespace Beanfun
                 MessageBox.Show(TryFindResource("MsgCaptchaCodeEmpty") as string);
                 return;
             }
-            
+
             App.MainWnd.verifyWorker.RunWorkerAsync();
         }
 

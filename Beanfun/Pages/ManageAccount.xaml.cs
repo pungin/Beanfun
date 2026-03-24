@@ -18,9 +18,28 @@ namespace Beanfun
             public string isSaveVerify { get; set; }
 
             public BeanfunAccount()
-            { this.account = null; this.accountname = null; this.isSavePwd = null; this.isAutoLogin = null; this.isSaveVerify = null; }
-            public BeanfunAccount(string account, string accountname, string isSavePwd, string isAutoLogin, string isSaveVerify = null)
-            { this.account = account; this.accountname = accountname; this.isSavePwd = isSavePwd; this.isAutoLogin = isAutoLogin; this.isSaveVerify = isSaveVerify; }
+            {
+                this.account = null;
+                this.accountname = null;
+                this.isSavePwd = null;
+                this.isAutoLogin = null;
+                this.isSaveVerify = null;
+            }
+
+            public BeanfunAccount(
+                string account,
+                string accountname,
+                string isSavePwd,
+                string isAutoLogin,
+                string isSaveVerify = null
+            )
+            {
+                this.account = account;
+                this.accountname = accountname;
+                this.isSavePwd = isSavePwd;
+                this.isAutoLogin = isAutoLogin;
+                this.isSaveVerify = isSaveVerify;
+            }
         }
 
         public ManageAccount()
@@ -35,13 +54,21 @@ namespace Beanfun
             List<BeanfunAccount> accountList = new List<BeanfunAccount>();
             foreach (string s in accList)
             {
-                accountList.Add(new BeanfunAccount(
-                    s,
-                    MainWnd.accountManager.getNameByAccount(region, s),
-                    MainWnd.accountManager.getPasswordByAccount(region, s) != "" ? TryFindResource("Yes") as string : TryFindResource("No") as string,
-                    MainWnd.accountManager.getAutoLoginByAccount(region, s) ? TryFindResource("Yes") as string : TryFindResource("No") as string,
-                    MainWnd.accountManager.getVerifyByAccount(region, s) != "" ? TryFindResource("Yes") as string : TryFindResource("No") as string
-                ));
+                accountList.Add(
+                    new BeanfunAccount(
+                        s,
+                        MainWnd.accountManager.getNameByAccount(region, s),
+                        MainWnd.accountManager.getPasswordByAccount(region, s) != ""
+                            ? TryFindResource("Yes") as string
+                            : TryFindResource("No") as string,
+                        MainWnd.accountManager.getAutoLoginByAccount(region, s)
+                            ? TryFindResource("Yes") as string
+                            : TryFindResource("No") as string,
+                        MainWnd.accountManager.getVerifyByAccount(region, s) != ""
+                            ? TryFindResource("Yes") as string
+                            : TryFindResource("No") as string
+                    )
+                );
             }
             list_Account.ItemsSource = null;
             list_Account.ItemsSource = accountList;
@@ -74,13 +101,15 @@ namespace Beanfun
 
         private void Up_Button_Click(object sender, RoutedEventArgs e)
         {
-            if (list_Account.SelectedIndex <= 0) return;
+            if (list_Account.SelectedIndex <= 0)
+                return;
             changeAccountIndex(true);
         }
 
         private void Down_Button_Click(object sender, RoutedEventArgs e)
         {
-            if (list_Account.SelectedIndex + 1 >= list_Account.Items.Count) return;
+            if (list_Account.SelectedIndex + 1 >= list_Account.Items.Count)
+                return;
             changeAccountIndex(false);
         }
 
@@ -94,7 +123,16 @@ namespace Beanfun
             int method = App.MainWnd.accountManager.getMethodByAccount(region, account);
             bool autoLogin = App.MainWnd.accountManager.getAutoLoginByAccount(region, account);
             int changedIndex = list_Account.SelectedIndex + (up ? -1 : 1);
-            App.MainWnd.accountManager.addAccount(changedIndex, region, account, name, password, verify, method, autoLogin);
+            App.MainWnd.accountManager.addAccount(
+                changedIndex,
+                region,
+                account,
+                name,
+                password,
+                verify,
+                method,
+                autoLogin
+            );
             setupAccList(App.MainWnd);
             App.MainWnd.loginMethodInit();
             list_Account.SelectedIndex = changedIndex;
@@ -116,11 +154,21 @@ namespace Beanfun
             string t_acc_del = "";
             if (list_Account.SelectedItems.Count < 1)
                 return;
-            else if(list_Account.SelectedItems.Count > 1)
-                t_acc_del = string.Format(TryFindResource("MsgDeleteAccountMulti") as string, list_Account.SelectedItems.Count);
+            else if (list_Account.SelectedItems.Count > 1)
+                t_acc_del = string.Format(
+                    TryFindResource("MsgDeleteAccountMulti") as string,
+                    list_Account.SelectedItems.Count
+                );
             else
-                t_acc_del = string.Format(TryFindResource("MsgDeleteAccountSingle") as string, ((BeanfunAccount)list_Account.SelectedItem).account);
-            MessageBoxResult result = MessageBox.Show(string.Format(TryFindResource("MsgDeleteAccountMng") as string, t_acc_del), TryFindResource("DeleteAccount") as string, MessageBoxButton.YesNo);
+                t_acc_del = string.Format(
+                    TryFindResource("MsgDeleteAccountSingle") as string,
+                    ((BeanfunAccount)list_Account.SelectedItem).account
+                );
+            MessageBoxResult result = MessageBox.Show(
+                string.Format(TryFindResource("MsgDeleteAccountMng") as string, t_acc_del),
+                TryFindResource("DeleteAccount") as string,
+                MessageBoxButton.YesNo
+            );
 
             if (result == MessageBoxResult.Yes)
             {
@@ -164,7 +212,11 @@ namespace Beanfun
         {
             if (!btn_Change.IsEnabled)
                 return;
-            ChangeAccount wnd = new ChangeAccount(list_Account.SelectedIndex, !btn_TW.IsEnabled ? "TW" : "HK", ((BeanfunAccount)list_Account.SelectedItem).account);
+            ChangeAccount wnd = new ChangeAccount(
+                list_Account.SelectedIndex,
+                !btn_TW.IsEnabled ? "TW" : "HK",
+                ((BeanfunAccount)list_Account.SelectedItem).account
+            );
             wnd.ShowDialog();
         }
 

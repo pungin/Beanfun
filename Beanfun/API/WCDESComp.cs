@@ -40,7 +40,9 @@ namespace Beanfun
                     byteOUT[i / 2] = Convert.ToByte(hexString.Substring(i, 2), 16);
                 }
                 ICryptoTransform desdecrypt = des.CreateDecryptor();
-                return Encoding.ASCII.GetString(desdecrypt.TransformFinalBlock(byteOUT, 0, byteOUT.Length));
+                return Encoding.ASCII.GetString(
+                    desdecrypt.TransformFinalBlock(byteOUT, 0, byteOUT.Length)
+                );
             }
             catch (Exception e)
             {

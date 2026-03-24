@@ -20,19 +20,32 @@ namespace Beanfun
 
         private void ButtonOk_Click(object sender, RoutedEventArgs e)
         {
-            if (txtNewServiceAccountDisplayName.Text == null || txtNewServiceAccountDisplayName.Text == "")
+            if (
+                txtNewServiceAccountDisplayName.Text == null
+                || txtNewServiceAccountDisplayName.Text == ""
+            )
             {
-                MessageBox.Show(TryFindResource("MsgDisplayNameNeed") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("MsgDisplayNameNeed") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
-            } else if (!(bool)cbContract.IsChecked)
+            }
+            else if (!(bool)cbContract.IsChecked)
             {
-                MessageBox.Show(TryFindResource("MsgTermsOfServiceNeed") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("MsgTermsOfServiceNeed") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
             this.Close();
             if (!App.MainWnd.AddServiceAccount(txtNewServiceAccountDisplayName.Text))
             {
-                MessageBox.Show(TryFindResource("MsgCreateServiceAccountFailed") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("MsgCreateServiceAccountFailed") as string,
+                    TryFindResource("SystemInfo") as string
+                );
             }
         }
 
@@ -46,7 +59,10 @@ namespace Beanfun
             string contract = App.MainWnd.GetServiceContract();
             if (contract == "")
             {
-                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnknownError") as string,
+                    TryFindResource("SystemInfo") as string
+                );
             }
             else
             {

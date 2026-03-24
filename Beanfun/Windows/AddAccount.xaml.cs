@@ -34,7 +34,8 @@ namespace Beanfun
 
         private void region_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (t_Verify != null) initPage();
+            if (t_Verify != null)
+                initPage();
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
@@ -44,7 +45,15 @@ namespace Beanfun
                 MessageBox.Show(TryFindResource("AccountNeed") as string);
                 return;
             }
-            App.MainWnd.accountManager.addAccount(region.SelectedIndex == 0 ? "TW" : "HK", t_AccountID.Text, t_AccountName.Text, t_Password.Text, t_Verify.Text, 0, t_Password.Text == "" ? false : (bool)autoLogin.IsChecked);
+            App.MainWnd.accountManager.addAccount(
+                region.SelectedIndex == 0 ? "TW" : "HK",
+                t_AccountID.Text,
+                t_AccountName.Text,
+                t_Password.Text,
+                t_Verify.Text,
+                0,
+                t_Password.Text == "" ? false : (bool)autoLogin.IsChecked
+            );
             App.MainWnd.loginMethodInit();
             this.Close();
         }

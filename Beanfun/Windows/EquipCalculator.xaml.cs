@@ -20,13 +20,32 @@ namespace Beanfun
         {
             public byte StatMin { get; set; }
             public byte StatMax { get; set; }
-            public byte Stat { get { return RandomType == 0 ? StatMin : RandomType == 1 ? (byte)((StatMin + StatMax) / 2) : StatMax; } }
+            public byte Stat
+            {
+                get
+                {
+                    return RandomType == 0 ? StatMin
+                        : RandomType == 1 ? (byte)((StatMin + StatMax) / 2)
+                        : StatMax;
+                }
+            }
 
             public byte AtkMin { get; set; }
             public byte AtkMax { get; set; }
-            public byte Atk { get { return RandomType == 0 ? AtkMin : RandomType == 1 ? (byte)((AtkMin + AtkMax) / 2) : AtkMax; } }
+            public byte Atk
+            {
+                get
+                {
+                    return RandomType == 0 ? AtkMin
+                        : RandomType == 1 ? (byte)((AtkMin + AtkMax) / 2)
+                        : AtkMax;
+                }
+            }
 
-            public bool IsRandom { get { return StatMin == StatMax && AtkMin == AtkMax; } }
+            public bool IsRandom
+            {
+                get { return StatMin == StatMax && AtkMin == AtkMax; }
+            }
 
             public byte RandomType { get; set; }
 
@@ -106,42 +125,62 @@ namespace Beanfun
         }
 
         bool InitFinish = false;
+
         public EquipCalculator()
         {
             InitializeComponent();
             InitFinish = true;
         }
 
-        private void Window_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void Window_MouseLeftButtonDown(
+            object sender,
+            System.Windows.Input.MouseButtonEventArgs e
+        )
         {
             this.DragMove();
         }
 
         private void rb_EqpTyp_IsCheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (!InitFinish) return;
+            if (!InitFinish)
+                return;
             cb_Superior.IsChecked = false;
-            cb_Superior.Visibility = (bool)rb_Lv150.IsChecked && ((bool)rb_Glove.IsChecked || (bool)rb_Armor.IsChecked) ? Visibility.Visible : Visibility.Collapsed;
-            lbl_HeartNotice.Visibility = (bool)rb_Heart.IsChecked ? Visibility.Visible : Visibility.Collapsed;
+            cb_Superior.Visibility =
+                (bool)rb_Lv150.IsChecked && ((bool)rb_Glove.IsChecked || (bool)rb_Armor.IsChecked)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            lbl_HeartNotice.Visibility = (bool)rb_Heart.IsChecked
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             calcStat();
         }
 
         private void rb_ReqLev_IsCheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (!InitFinish) return;
-            if (!(bool)rb_Lv150.IsChecked || (!(bool)rb_Glove.IsChecked && !(bool)rb_Armor.IsChecked))
+            if (!InitFinish)
+                return;
+            if (
+                !(bool)rb_Lv150.IsChecked
+                || (!(bool)rb_Glove.IsChecked && !(bool)rb_Armor.IsChecked)
+            )
             {
                 cb_Superior.IsChecked = false;
                 cb_Superior.Visibility = Visibility.Collapsed;
             }
-            else cb_Superior.Visibility = Visibility.Visible;
+            else
+                cb_Superior.Visibility = Visibility.Visible;
             calcStat();
         }
 
         private void rb_DestinyType_IsCheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (!InitFinish) return;
-            Scrolls.Destiny.Weapon.RandomType = (byte)((bool)rb_DestinyMin.IsChecked ? 0 : (bool)rb_DestinyAverage.IsChecked ? 1 : 2);
+            if (!InitFinish)
+                return;
+            Scrolls.Destiny.Weapon.RandomType = (byte)(
+                (bool)rb_DestinyMin.IsChecked ? 0
+                : (bool)rb_DestinyAverage.IsChecked ? 1
+                : 2
+            );
             Scrolls.Destiny.Accessory.RandomType = Scrolls.Destiny.Weapon.RandomType;
             Scrolls.Destiny.Armor.RandomType = Scrolls.Destiny.Weapon.RandomType;
             calcStat();
@@ -149,8 +188,13 @@ namespace Beanfun
 
         private void rb_GloryType_IsCheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (!InitFinish) return;
-            Scrolls.Glory.Weapon.RandomType = (byte)((bool)rb_GloryMin.IsChecked ? 0 : (bool)rb_GloryAverage.IsChecked ? 1 : 2);
+            if (!InitFinish)
+                return;
+            Scrolls.Glory.Weapon.RandomType = (byte)(
+                (bool)rb_GloryMin.IsChecked ? 0
+                : (bool)rb_GloryAverage.IsChecked ? 1
+                : 2
+            );
             Scrolls.Glory.Accessory.RandomType = Scrolls.Glory.Weapon.RandomType;
             Scrolls.Glory.Armor.RandomType = Scrolls.Glory.Weapon.RandomType;
             calcStat();
@@ -158,7 +202,8 @@ namespace Beanfun
 
         private void cb_Superior_IsCheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (!InitFinish) return;
+            if (!InitFinish)
+                return;
             lbl_StarForceMax.Content = (bool)cb_Superior.IsChecked ? "15" : "25";
             if ((bool)cb_Superior.IsChecked)
             {
@@ -178,7 +223,10 @@ namespace Beanfun
             calcStat();
         }
 
-        private void calcStat_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        private void calcStat_TextChanged(
+            object sender,
+            System.Windows.Controls.TextChangedEventArgs e
+        )
         {
             calcStat();
         }
@@ -265,10 +313,22 @@ namespace Beanfun
 
         private void calcStat()
         {
-            if (!InitFinish) return;
-            byte eqpTyp = (byte)((bool)rb_Weapon.IsChecked ? 0 : (bool)rb_Glove.IsChecked ? 1 : (bool)rb_Armor.IsChecked ? 2 : (bool)rb_Accessory.IsChecked ? 3 : 4);
-            short reqLev = (short)((bool)rb_Lv200.IsChecked ? 200 : (bool)rb_Lv160.IsChecked ? 160 : 150);
-            bool superior = (bool)cb_Superior.IsChecked && cb_Superior.Visibility == Visibility.Visible;
+            if (!InitFinish)
+                return;
+            byte eqpTyp = (byte)(
+                (bool)rb_Weapon.IsChecked ? 0
+                : (bool)rb_Glove.IsChecked ? 1
+                : (bool)rb_Armor.IsChecked ? 2
+                : (bool)rb_Accessory.IsChecked ? 3
+                : 4
+            );
+            short reqLev = (short)(
+                (bool)rb_Lv200.IsChecked ? 200
+                : (bool)rb_Lv160.IsChecked ? 160
+                : 150
+            );
+            bool superior =
+                (bool)cb_Superior.IsChecked && cb_Superior.Visibility == Visibility.Visible;
 
             int baseStat;
             try
@@ -429,32 +489,138 @@ namespace Beanfun
             {
                 scrollTK = 0;
             }
-            
-            int atk = baseATK
-            + destinyNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Destiny.Weapon.Atk : (eqpTyp == 3 ? Scrolls.Destiny.Accessory.Atk : Scrolls.Destiny.Armor.Atk))
-            + gloryNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Glory.Weapon.Atk : (eqpTyp == 3 ? Scrolls.Glory.Accessory.Atk : Scrolls.Glory.Armor.Atk))
-            + blackNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Black.Weapon.Atk : (eqpTyp == 3 ? Scrolls.Black.Accessory.Atk : Scrolls.Black.Armor.Atk))
-            + vNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.V.Weapon.Atk : (eqpTyp == 3 ? Scrolls.V.Accessory.Atk : Scrolls.V.Armor.Atk))
-            + xNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.X.Weapon.Atk : (eqpTyp == 3 ? Scrolls.X.Accessory.Atk : Scrolls.X.Armor.Atk))
-            + redNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Red.Weapon.Atk : (eqpTyp == 3 ? Scrolls.Red.Accessory.Atk : Scrolls.Red.Armor.Atk))
-            + jdNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.JD.Weapon.Atk : (eqpTyp == 3 ? Scrolls.JD.Accessory.Atk : Scrolls.JD.Armor.Atk))
-            + smNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.SM.Weapon.Atk : (eqpTyp == 3 ? Scrolls.SM.Accessory.Atk : Scrolls.SM.Armor.Atk))
-            + bmNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.BM.Weapon.Atk : (eqpTyp == 3 ? Scrolls.BM.Accessory.Atk : Scrolls.BM.Armor.Atk))
-            + scrollTK
-            ;
 
-            int stat = baseStat
-            + destinyNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Destiny.Weapon.Stat : (eqpTyp == 3 ? Scrolls.Destiny.Accessory.Stat : Scrolls.Destiny.Armor.Stat))
-            + gloryNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Glory.Weapon.Stat : (eqpTyp == 3 ? Scrolls.Glory.Accessory.Stat : Scrolls.Glory.Armor.Stat))
-            + blackNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Black.Weapon.Stat : (eqpTyp == 3 ? Scrolls.Black.Accessory.Stat : Scrolls.Black.Armor.Stat))
-            + vNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.V.Weapon.Stat : (eqpTyp == 3 ? Scrolls.V.Accessory.Stat : Scrolls.V.Armor.Stat))
-            + xNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.X.Weapon.Stat : (eqpTyp == 3 ? Scrolls.X.Accessory.Stat : Scrolls.X.Armor.Stat))
-            + redNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.Red.Weapon.Stat : (eqpTyp == 3 ? Scrolls.Red.Accessory.Stat : Scrolls.Red.Armor.Stat))
-            + jdNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.JD.Weapon.Stat : (eqpTyp == 3 ? Scrolls.JD.Accessory.Stat : Scrolls.JD.Armor.Stat))
-            + smNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.SM.Weapon.Stat : (eqpTyp == 3 ? Scrolls.SM.Accessory.Stat : Scrolls.SM.Armor.Stat))
-            + bmNum * (eqpTyp == 0 || eqpTyp == 4 ? Scrolls.BM.Weapon.Stat : (eqpTyp == 3 ? Scrolls.BM.Accessory.Stat : Scrolls.BM.Armor.Stat))
-            + scrollStat
-            ;
+            int atk =
+                baseATK
+                + destinyNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.Destiny.Weapon.Atk
+                            : (
+                                eqpTyp == 3
+                                    ? Scrolls.Destiny.Accessory.Atk
+                                    : Scrolls.Destiny.Armor.Atk
+                            )
+                    )
+                + gloryNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.Glory.Weapon.Atk
+                            : (eqpTyp == 3 ? Scrolls.Glory.Accessory.Atk : Scrolls.Glory.Armor.Atk)
+                    )
+                + blackNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.Black.Weapon.Atk
+                            : (eqpTyp == 3 ? Scrolls.Black.Accessory.Atk : Scrolls.Black.Armor.Atk)
+                    )
+                + vNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.V.Weapon.Atk
+                            : (eqpTyp == 3 ? Scrolls.V.Accessory.Atk : Scrolls.V.Armor.Atk)
+                    )
+                + xNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.X.Weapon.Atk
+                            : (eqpTyp == 3 ? Scrolls.X.Accessory.Atk : Scrolls.X.Armor.Atk)
+                    )
+                + redNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.Red.Weapon.Atk
+                            : (eqpTyp == 3 ? Scrolls.Red.Accessory.Atk : Scrolls.Red.Armor.Atk)
+                    )
+                + jdNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.JD.Weapon.Atk
+                            : (eqpTyp == 3 ? Scrolls.JD.Accessory.Atk : Scrolls.JD.Armor.Atk)
+                    )
+                + smNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.SM.Weapon.Atk
+                            : (eqpTyp == 3 ? Scrolls.SM.Accessory.Atk : Scrolls.SM.Armor.Atk)
+                    )
+                + bmNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.BM.Weapon.Atk
+                            : (eqpTyp == 3 ? Scrolls.BM.Accessory.Atk : Scrolls.BM.Armor.Atk)
+                    )
+                + scrollTK;
+
+            int stat =
+                baseStat
+                + destinyNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.Destiny.Weapon.Stat
+                            : (
+                                eqpTyp == 3
+                                    ? Scrolls.Destiny.Accessory.Stat
+                                    : Scrolls.Destiny.Armor.Stat
+                            )
+                    )
+                + gloryNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.Glory.Weapon.Stat
+                            : (
+                                eqpTyp == 3
+                                    ? Scrolls.Glory.Accessory.Stat
+                                    : Scrolls.Glory.Armor.Stat
+                            )
+                    )
+                + blackNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.Black.Weapon.Stat
+                            : (
+                                eqpTyp == 3
+                                    ? Scrolls.Black.Accessory.Stat
+                                    : Scrolls.Black.Armor.Stat
+                            )
+                    )
+                + vNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.V.Weapon.Stat
+                            : (eqpTyp == 3 ? Scrolls.V.Accessory.Stat : Scrolls.V.Armor.Stat)
+                    )
+                + xNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.X.Weapon.Stat
+                            : (eqpTyp == 3 ? Scrolls.X.Accessory.Stat : Scrolls.X.Armor.Stat)
+                    )
+                + redNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.Red.Weapon.Stat
+                            : (eqpTyp == 3 ? Scrolls.Red.Accessory.Stat : Scrolls.Red.Armor.Stat)
+                    )
+                + jdNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.JD.Weapon.Stat
+                            : (eqpTyp == 3 ? Scrolls.JD.Accessory.Stat : Scrolls.JD.Armor.Stat)
+                    )
+                + smNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.SM.Weapon.Stat
+                            : (eqpTyp == 3 ? Scrolls.SM.Accessory.Stat : Scrolls.SM.Armor.Stat)
+                    )
+                + bmNum
+                    * (
+                        eqpTyp == 0 || eqpTyp == 4
+                            ? Scrolls.BM.Weapon.Stat
+                            : (eqpTyp == 3 ? Scrolls.BM.Accessory.Stat : Scrolls.BM.Armor.Stat)
+                    )
+                + scrollStat;
 
             Dictionary<int, int> echantStats;
             for (byte i = 0; i < starForce; i++)
@@ -470,7 +636,13 @@ namespace Beanfun
             lbl_TotalATK.Content = atk + flameATK;
         }
 
-        private Dictionary<int, int> getStarForceStats(bool superior, byte eqpTyp, byte starForce, int atk, short reqLev)
+        private Dictionary<int, int> getStarForceStats(
+            bool superior,
+            byte eqpTyp,
+            byte starForce,
+            int atk,
+            short reqLev
+        )
         {
             Dictionary<int, int> stats = new Dictionary<int, int>();
             stats.Add(1, 0);
@@ -532,7 +704,7 @@ namespace Beanfun
                 {
                     allStats = 3;
                 }
-                else if(starForce < 22)
+                else if (starForce < 22)
                 {
                     if (reqLev >= 200)
                         allStats = 15;
