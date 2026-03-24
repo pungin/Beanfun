@@ -1,0 +1,26 @@
+name: Format Check
+
+on:
+  push:
+    branches: [code]
+  pull_request:
+    branches: [code]
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+
+      - name: Restore Tools
+        run: dotnet tool restore
+
+      - name: Check Formatting
+        run: dotnet csharpier --check .
