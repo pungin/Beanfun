@@ -276,16 +276,28 @@ namespace Beanfun
                 return null;
             }
 
-            string base64Image = (string)strEncryptData["ResultData"]["QRImage"];
-            string decodedDeeplink = NormalizeBeanfunAppDeeplink(
-                DecodeQRCodeFromBase64(base64Image)
-            );
+            JObject result = (JObject)strEncryptData["ResultData"];
+            if (result == null)
+            {
+                this.errmsg = "LoginIntResultError";
+                return null;
+            }
+
+            string base64Image = (string)result["QRImage"];
+            if (string.IsNullOrEmpty(base64Image))
+            {
+                this.errmsg = "LoginIntResultError";
+                return null;
+            }
+
+            string deepLinkRaw = result["DeepLink"]?.Value<string>();
+            string deeplink = NormalizeBeanfunAppDeeplink(deepLinkRaw);
 
             return new QRCodeClass
             {
                 skey = skey,
                 bitmapBase64 = "data:image/png;base64," + base64Image,
-                deeplink = decodedDeeplink,
+                deeplink = deeplink,
             };
         }
 
@@ -337,25 +349,6 @@ namespace Beanfun
                 return inner;
 
             return raw;
-        }
-
-        private string DecodeQRCodeFromBase64(string base64Image)
-        {
-            try
-            {
-                byte[] bytes = Convert.FromBase64String(base64Image);
-                using (var ms = new MemoryStream(bytes))
-                using (var bitmap = new System.Drawing.Bitmap(ms))
-                {
-                    var reader = new ZXing.BarcodeReader();
-                    var result = reader.Decode(bitmap);
-                    return result?.Text;
-                }
-            }
-            catch
-            {
-                return null;
-            }
         }
 
         public BitmapImage getQRCodeImage(QRCodeClass qrcodeclass)
