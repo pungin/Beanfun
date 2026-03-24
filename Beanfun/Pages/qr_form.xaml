@@ -108,8 +108,8 @@
           </DockPanel>
         </TextBlock>
         <Button
-          x:Name="btn_back"
-          Content="{DynamicResource BackRegularLogin}"
+          x:Name="btn_copy_deepLink"
+          Content="複製DeepLink"
           Height="30"
           Width="250"
           FontWeight="Bold"
@@ -117,9 +117,20 @@
           IsDefault="True"
           Background="#7FF5F5F5"
           Foreground="Black"
-          Click="btn_back_Click"
+          Click="btn_copy_deepLink_Click"
         />
-      </StackPanel>
+                <Button
+            x:Name="btn_back"
+            Content="{DynamicResource BackRegularLogin}"
+            Height="30"
+            Width="250"
+            FontWeight="Bold"
+            IsDefault="True"
+            Background="#7FF5F5F5"
+            Foreground="Black"
+            Click="btn_back_Click" Margin="0,0,0,5"
+        />
+            </StackPanel>
       <Grid MinWidth="{Binding MinWidth, ElementName=SideBarLeft}" />
     </DockPanel>
   </Grid>

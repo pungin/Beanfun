@@ -43,6 +43,17 @@ namespace Beanfun
             }
         }
 
+        private void btn_copy_deepLink_Click(object sender, RoutedEventArgs e)
+        {
+            var deepLink = App.MainWnd.qrcodeClass?.deeplink;
+
+            if (!string.IsNullOrEmpty(deepLink))
+            {
+                Clipboard.SetText(deepLink);
+                MessageBox.Show(TryFindResource("DeepLinkCopy") as string);
+            }
+        }
+
         private void btn_back_Click(object sender, RoutedEventArgs e)
         {
             App.LoginMethod = (int)LoginMethod.Regular;

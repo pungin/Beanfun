@@ -178,7 +178,8 @@
   <system:String x:Key="UnknownError">发生未知错误</system:String>
   <system:String x:Key="CaptchaCode">图形验证码：</system:String>
   <system:String x:Key="RefreshCaptchaImage">重新载入图形验证码</system:String>
-  <system:String x:Key="Confirm">确定</system:String>
+    <system:String x:Key="DeepLinkCopy">DeepLink复制完成</system:String>
+    <system:String x:Key="Confirm">确定</system:String>
   <system:String x:Key="LoadCaptchaFailed">载入图形验证码失败</system:String>
   <system:String x:Key="EditAccount">编辑账号</system:String>
   <system:String x:Key="EditAccountSave">保存</system:String>

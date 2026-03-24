@@ -240,6 +240,7 @@ namespace Beanfun
         {
             public string skey;
             public string bitmapBase64;
+            public string deeplink;
         }
 
         public QRCodeClass GetQRCodeValue(string skey)
@@ -267,8 +268,9 @@ namespace Beanfun
             //{ this.errmsg = "LoginNoHash"; return null; }
             //string value = regex.Match(response).Groups[1].Value;
 
-            JObject strEncryptData = this.getQRCodeStrEncryptData(skey);
-            if (strEncryptData == null)
+            var encryptData = this.getQRCodeStrEncryptData(skey);
+            var result = encryptData?["ResultData"];
+            if (result == null)
             {
                 this.errmsg = "LoginIntResultError";
                 return null;
@@ -277,8 +279,8 @@ namespace Beanfun
             return new QRCodeClass
             {
                 skey = skey,
-                bitmapBase64 =
-                    "data:image/png;base64," + (string)strEncryptData["ResultData"]["QRImage"],
+                bitmapBase64 = (string)result["QRImage"],
+                deeplink = (string)result["DeepLink"]
             };
         }
 
@@ -308,9 +310,7 @@ namespace Beanfun
         {
             try
             {
-                byte[] bytes = Convert.FromBase64String(
-                    qrcodeclass.bitmapBase64.Replace("data:image/png;base64,", "")
-                );
+                byte[] bytes = Convert.FromBase64String(qrcodeclass.bitmapBase64);
 
                 BitmapImage image = new BitmapImage();
                 using (var ms = new MemoryStream(bytes))

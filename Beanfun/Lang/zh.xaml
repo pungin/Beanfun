@@ -182,6 +182,7 @@
   <system:String x:Key="UnknownError">發生未知錯誤</system:String>
   <system:String x:Key="CaptchaCode">圖形驗證碼：</system:String>
   <system:String x:Key="RefreshCaptchaImage">重新載入圖形驗證碼</system:String>
+  <system:String x:Key="DeepLinkCopy">DeepLink複製成功</system:String>
   <system:String x:Key="Confirm">確認</system:String>
   <system:String x:Key="LoadCaptchaFailed">載入圖形驗證碼失敗</system:String>
   <system:String x:Key="EditAccount">變更帳號</system:String>
