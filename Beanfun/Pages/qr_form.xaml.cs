@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -40,6 +40,31 @@ namespace Beanfun
             {
                 DockPanel.SetDock(btn_Refresh_QRCode, Dock.Top);
                 qr_Tip.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void btn_CopyDeeplink_Click(object sender, RoutedEventArgs e)
+        {
+            var qrcodeClass = App.MainWnd.qrcodeClass;
+            if (qrcodeClass != null && !string.IsNullOrEmpty(qrcodeClass.deeplink))
+            {
+                try
+                {
+                    Clipboard.SetText(qrcodeClass.deeplink);
+                    MessageBox.Show(
+                        Application.Current.TryFindResource("CopyDeeplinkSuccess") as string
+                    );
+                }
+                catch
+                {
+                    MessageBox.Show(Application.Current.TryFindResource("CopyFailed") as string);
+                }
+            }
+            else
+            {
+                MessageBox.Show(
+                    Application.Current.TryFindResource("CopyDeeplinkNotReady") as string
+                );
             }
         }
 
