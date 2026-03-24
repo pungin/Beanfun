@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Web;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
@@ -240,6 +241,7 @@ namespace Beanfun
         {
             public string skey;
             public string bitmapBase64;
+            public string deeplink;
         }
 
         public QRCodeClass GetQRCodeValue(string skey)
@@ -274,11 +276,16 @@ namespace Beanfun
                 return null;
             }
 
+            string base64Image = (string)strEncryptData["ResultData"]["QRImage"];
+            string decodedDeeplink = NormalizeBeanfunAppDeeplink(
+                DecodeQRCodeFromBase64(base64Image)
+            );
+
             return new QRCodeClass
             {
                 skey = skey,
-                bitmapBase64 =
-                    "data:image/png;base64," + (string)strEncryptData["ResultData"]["QRImage"],
+                bitmapBase64 = "data:image/png;base64," + base64Image,
+                deeplink = decodedDeeplink,
             };
         }
 
@@ -302,6 +309,53 @@ namespace Beanfun
             }
 
             return jsonData;
+        }
+
+        private string NormalizeBeanfunAppDeeplink(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return raw;
+
+            if (!Uri.TryCreate(raw.Trim(), UriKind.Absolute, out Uri uri))
+                return raw;
+
+            if (
+                !string.Equals(
+                    uri.Host,
+                    "play.games.gamania.com",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+                return raw;
+
+            if (uri.AbsolutePath.IndexOf("deeplink", StringComparison.OrdinalIgnoreCase) < 0)
+                return raw;
+
+            NameValueCollection query = HttpUtility.ParseQueryString(uri.Query);
+            string inner = query["url"];
+            if (!string.IsNullOrEmpty(inner))
+                return inner;
+
+            return raw;
+        }
+
+        private string DecodeQRCodeFromBase64(string base64Image)
+        {
+            try
+            {
+                byte[] bytes = Convert.FromBase64String(base64Image);
+                using (var ms = new MemoryStream(bytes))
+                using (var bitmap = new System.Drawing.Bitmap(ms))
+                {
+                    var reader = new ZXing.BarcodeReader();
+                    var result = reader.Decode(bitmap);
+                    return result?.Text;
+                }
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public BitmapImage getQRCodeImage(QRCodeClass qrcodeclass)
