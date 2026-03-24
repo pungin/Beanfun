@@ -1,4 +1,4 @@
-﻿using IniParser;
+using IniParser;
 using IniParser.Model;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
@@ -232,6 +232,9 @@ namespace Beanfun
             color.B = (byte)Math.Max(color.B - 50, 0);
             color.A = 0xFF;
             this.BorderBrush = new SolidColorBrush(color);
+            
+            // Update theme color resource for ListBox selection
+            Application.Current.Resources["ThemeColorBrush"] = new SolidColorBrush(color);
             bool isLightMode = isLightColor();
             if (compositor !=  null)
             {

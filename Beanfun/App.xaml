@@ -6,6 +6,7 @@
     <Application.Resources>
         <ResourceDictionary>
             <FontFamily x:Key="SegoeMDL2">Resources/#Segoe MDL2 Assets</FontFamily>
+            <SolidColorBrush x:Key="ThemeColorBrush" Color="#CD5000"/>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Lang\zh.xaml"/>
             </ResourceDictionary.MergedDictionaries>
