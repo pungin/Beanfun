@@ -27,15 +27,22 @@ namespace Beanfun
 
         private void btn_Logout_Click(object sender, RoutedEventArgs e)
         {
-            MessageBoxResult result = MessageBox.Show(TryFindResource("LogoutConfirm") as string, TryFindResource("Logout") as string, MessageBoxButton.YesNo);
-            if (result == MessageBoxResult.No) return;
-            if (App.LoginMethod == (int)LoginMethod.QRCode) App.MainWnd.loginMethodChanged();
+            MessageBoxResult result = MessageBox.Show(
+                TryFindResource("LogoutConfirm") as string,
+                TryFindResource("Logout") as string,
+                MessageBoxButton.YesNo
+            );
+            if (result == MessageBoxResult.No)
+                return;
+            if (App.LoginMethod == (int)LoginMethod.QRCode)
+                App.MainWnd.loginMethodChanged();
             App.MainWnd.NavigateLoginPage();
         }
 
         private void list_Account_MouseDoubleClick(object sender, RoutedEventArgs e)
         {
-            BeanfunClient.ServiceAccount account = (BeanfunClient.ServiceAccount)list_Account.SelectedItem;
+            BeanfunClient.ServiceAccount account = (BeanfunClient.ServiceAccount)
+                list_Account.SelectedItem;
             if (account == null)
                 return;
             try
@@ -47,7 +54,13 @@ namespace Beanfun
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            if (((bool)App.MainWnd.settingPage.tradLogin.IsChecked && App.MainWnd.login_action_type == 1) || App.MainWnd.login_action_type == 0)
+            if (
+                (
+                    (bool)App.MainWnd.settingPage.tradLogin.IsChecked
+                    && App.MainWnd.login_action_type == 1
+                )
+                || App.MainWnd.login_action_type == 0
+            )
             {
                 btn_StartGame.IsEnabled = false;
                 App.MainWnd.runGame();
@@ -89,7 +102,11 @@ namespace Beanfun
 
         private void t_Password_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (t_Password.Text == "" || (string)btnGetOtp.Content == TryFindResource("GettingOtp") as string) return;
+            if (
+                t_Password.Text == ""
+                || (string)btnGetOtp.Content == TryFindResource("GettingOtp") as string
+            )
+                return;
             try
             {
                 Clipboard.SetText(t_Password.Text);
@@ -101,14 +118,19 @@ namespace Beanfun
         {
             if (!btnAddServiceAccount.IsEnabled)
                 return;
-            if ((string) btnAddServiceAccount.Content == TryFindResource("GoToVerify") as string)
+            if ((string)btnAddServiceAccount.Content == TryFindResource("GoToVerify") as string)
             {
                 new WebBrowser("https://tw.beanfun.com/TW/member/verify_index.aspx").Show();
             }
             else
             {
-                if (App.MainWnd.service_code == "610153" && App.MainWnd.service_region == "TN" || App.MainWnd.service_code == "610085" && App.MainWnd.service_region == "TC") new UnconnectedGame_AddAccount().ShowDialog();
-                else new AddServiceAccount().ShowDialog();
+                if (
+                    App.MainWnd.service_code == "610153" && App.MainWnd.service_region == "TN"
+                    || App.MainWnd.service_code == "610085" && App.MainWnd.service_region == "TC"
+                )
+                    new UnconnectedGame_AddAccount().ShowDialog();
+                else
+                    new AddServiceAccount().ShowDialog();
             }
         }
 
@@ -119,7 +141,8 @@ namespace Beanfun
 
         private void m_ChangeAccName_Click(object sender, RoutedEventArgs e)
         {
-            BeanfunClient.ServiceAccount account = (BeanfunClient.ServiceAccount)list_Account.SelectedItem;
+            BeanfunClient.ServiceAccount account = (BeanfunClient.ServiceAccount)
+                list_Account.SelectedItem;
             if (account == null)
                 return;
             new ChangeServiceAccountDisplayName(account.sname).ShowDialog();
@@ -136,7 +159,8 @@ namespace Beanfun
             {
                 url = "https://bfweb.hk.beanfun.com/HK/";
             }
-            url += $"auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={App.MainWnd.bfClient.WebToken}";
+            url +=
+                $"auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={App.MainWnd.bfClient.WebToken}";
             new WebBrowser(url).Show();
         }
 
@@ -151,7 +175,8 @@ namespace Beanfun
             {
                 url = "https://bfweb.hk.beanfun.com/HK/";
             }
-            url += $"auth.aspx?channel=member&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={App.MainWnd.bfClient.WebToken}";
+            url +=
+                $"auth.aspx?channel=member&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={App.MainWnd.bfClient.WebToken}";
             new WebBrowser(url).Show();
         }
 
@@ -171,12 +196,16 @@ namespace Beanfun
 
         private void m_GetEmail_Click(object sender, RoutedEventArgs e)
         {
-            new CopyBox(TryFindResource("AuthEmail") as string, App.MainWnd.bfClient.getEmail()).ShowDialog();
+            new CopyBox(
+                TryFindResource("AuthEmail") as string,
+                App.MainWnd.bfClient.getEmail()
+            ).ShowDialog();
         }
 
         private void m_AccInfo_Click(object sender, RoutedEventArgs e)
         {
-            BeanfunClient.ServiceAccount account = (BeanfunClient.ServiceAccount)list_Account.SelectedItem;
+            BeanfunClient.ServiceAccount account = (BeanfunClient.ServiceAccount)
+                list_Account.SelectedItem;
             if (account == null)
                 return;
             new ServiceAccountInfo(account).ShowDialog();
@@ -224,11 +253,11 @@ namespace Beanfun
         {
             _dragStartPoint = e.GetPosition(null);
             _isHandlePressed = false;
-            
+
             // get the clicked ListBoxItem
             var listBox = sender as ListBox;
             var item = FindAncestor<ListBoxItem>((DependencyObject)e.OriginalSource);
-            
+
             if (item != null)
             {
                 _draggedItem = item;
@@ -240,10 +269,10 @@ namespace Beanfun
         {
             _isHandlePressed = true;
             _dragStartPoint = e.GetPosition(null);
-            
+
             var element = sender as FrameworkElement;
             var item = FindAncestor<ListBoxItem>(element);
-            
+
             if (item != null)
             {
                 _draggedItem = item;
@@ -253,25 +282,31 @@ namespace Beanfun
 
         private void ListBox_PreviewMouseMove(object sender, MouseEventArgs e)
         {
-            if (e.LeftButton != MouseButtonState.Pressed || _draggedItem == null || !_isHandlePressed)
+            if (
+                e.LeftButton != MouseButtonState.Pressed
+                || _draggedItem == null
+                || !_isHandlePressed
+            )
                 return;
 
             Point currentPosition = e.GetPosition(null);
             Vector diff = _dragStartPoint - currentPosition;
 
             // check if the distance is enough to start dragging
-            if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
-                Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+            if (
+                Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance
+                || Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance
+            )
             {
                 var listBox = sender as ListBox;
                 var data = listBox.ItemContainerGenerator.ItemFromContainer(_draggedItem);
-                
+
                 if (data != null)
                 {
                     DataObject dragData = new DataObject("ServiceAccount", data);
                     DragDrop.DoDragDrop(_draggedItem, dragData, DragDropEffects.Move);
                 }
-                
+
                 _isHandlePressed = false;
                 _draggedItem = null;
             }
@@ -286,19 +321,19 @@ namespace Beanfun
             }
 
             e.Effects = DragDropEffects.Move;
-            
+
             var listBox = sender as ListBox;
             Point position = e.GetPosition(listBox);
-            
+
             var targetItem = GetItemAtPosition(listBox, position);
             bool isLowerHalf = false;
-            
+
             if (targetItem != null)
             {
                 Point itemPosition = e.GetPosition(targetItem);
                 isLowerHalf = itemPosition.Y > targetItem.ActualHeight / 2;
             }
-            
+
             for (int i = 0; i < listBox.Items.Count; i++)
             {
                 var container = listBox.ItemContainerGenerator.ContainerFromIndex(i) as ListBoxItem;
@@ -308,7 +343,9 @@ namespace Beanfun
                     {
                         container.BorderBrush = new SolidColorBrush(Colors.DodgerBlue);
                         // Show border on top or bottom based on cursor position
-                        container.BorderThickness = isLowerHalf ? new Thickness(0, 0, 0, 2) : new Thickness(0, 2, 0, 0);
+                        container.BorderThickness = isLowerHalf
+                            ? new Thickness(0, 0, 0, 2)
+                            : new Thickness(0, 2, 0, 0);
                     }
                     else
                     {
@@ -326,20 +363,20 @@ namespace Beanfun
 
             var listBox = sender as ListBox;
             var droppedData = e.Data.GetData("ServiceAccount") as BeanfunClient.ServiceAccount;
-            
+
             if (droppedData == null)
                 return;
 
             Point position = e.GetPosition(listBox);
             var targetItem = GetItemAtPosition(listBox, position);
-            
+
             int targetIndex = -1;
             bool insertAfter = false;
-            
+
             if (targetItem != null)
             {
                 targetIndex = listBox.ItemContainerGenerator.IndexFromContainer(targetItem);
-                
+
                 // Check if dropping on the lower half of the item
                 Point itemPosition = e.GetPosition(targetItem);
                 if (itemPosition.Y > targetItem.ActualHeight / 2)
@@ -370,7 +407,7 @@ namespace Beanfun
                 int finalIndex = targetIndex;
                 if (insertAfter)
                     finalIndex++;
-                
+
                 // Skip if dropping at the same position
                 if (_draggedIndex == finalIndex || _draggedIndex == finalIndex - 1 && insertAfter)
                 {
@@ -378,27 +415,27 @@ namespace Beanfun
                     _draggedIndex = -1;
                     return;
                 }
-                
+
                 var accountList = App.MainWnd.bfClient.accountList;
                 var item = accountList[_draggedIndex];
                 accountList.RemoveAt(_draggedIndex);
-                
+
                 // Adjust index after removal
                 if (_draggedIndex < finalIndex)
                     finalIndex--;
-                
+
                 // Clamp to valid range
                 if (finalIndex > accountList.Count)
                     finalIndex = accountList.Count;
                 if (finalIndex < 0)
                     finalIndex = 0;
-                
+
                 accountList.Insert(finalIndex, item);
-                
+
                 listBox.ItemsSource = null;
                 listBox.ItemsSource = accountList;
                 listBox.SelectedIndex = finalIndex;
-                
+
                 SaveAccountOrder();
             }
 
@@ -411,11 +448,12 @@ namespace Beanfun
             HitTestResult hitTestResult = VisualTreeHelper.HitTest(listBox, position);
             if (hitTestResult == null)
                 return null;
-            
+
             return FindAncestor<ListBoxItem>(hitTestResult.VisualHit);
         }
 
-        private static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
+        private static T FindAncestor<T>(DependencyObject current)
+            where T : DependencyObject
         {
             while (current != null)
             {
@@ -436,7 +474,7 @@ namespace Beanfun
 
             string gameCode = App.MainWnd.service_code + "_" + App.MainWnd.service_region;
             var accountList = App.MainWnd.bfClient.accountList;
-            
+
             string orderString = string.Join(",", accountList.ConvertAll(a => a.sid));
             ConfigAppSettings.SetValue("AccountOrder_" + gameCode, orderString);
         }
@@ -444,14 +482,17 @@ namespace Beanfun
         /// <summary>
         /// Reorder the account list based on the saved order
         /// </summary>
-        public static void ApplyAccountOrder(List<BeanfunClient.ServiceAccount> accountList, string gameCode)
+        public static void ApplyAccountOrder(
+            List<BeanfunClient.ServiceAccount> accountList,
+            string gameCode
+        )
         {
             string orderString = ConfigAppSettings.GetValue("AccountOrder_" + gameCode, "");
             if (string.IsNullOrEmpty(orderString))
                 return;
 
             string[] orderArray = orderString.Split(',');
-            
+
             // create a dictionary to quickly find the account
             var accountDict = new Dictionary<string, BeanfunClient.ServiceAccount>();
             foreach (var account in accountList)

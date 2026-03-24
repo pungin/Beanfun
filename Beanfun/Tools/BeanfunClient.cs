@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Net;
 using System.Collections.Specialized;
 using System.IO;
+using System.Net;
+using System.Text;
 
 namespace Beanfun
 {
@@ -17,7 +17,8 @@ namespace Beanfun
         public int remainPoint = 0;
         public string accountAmountLimitNotice;
         bool redirect;
-        private const string userAgent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36";
+        private const string userAgent =
+            "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36";
         private string LoginToken;
         private string SessionKey;
         private string totpResponse;
@@ -55,7 +56,6 @@ namespace Beanfun
 
         public new string DownloadString(string Uri)
         {
-            
             this.Headers.Set("User-Agent", userAgent);
             this.Headers.Set("Accept-Encoding", "identity");
             var ret = base.DownloadString(Uri);
@@ -74,17 +74,23 @@ namespace Beanfun
             this.Headers.Set("User-Agent", userAgent);
             this.Headers.Set("Accept-Encoding", "gzip, deflate, br");
             byte[] byteArray = base.UploadValues(skey, payload);
-            if (byteArray.Length <= 0) return "";
+            if (byteArray.Length <= 0)
+                return "";
             if (byteArray[0] == 0x1F && byteArray[1] == 0x8B)
             {
                 MemoryStream ms = new MemoryStream(byteArray);
                 MemoryStream msTemp = new MemoryStream();
                 int count = 0;
-                System.IO.Compression.GZipStream gzip = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionMode.Decompress);
+                System.IO.Compression.GZipStream gzip = new System.IO.Compression.GZipStream(
+                    ms,
+                    System.IO.Compression.CompressionMode.Decompress
+                );
                 byte[] buf = new byte[1000];
 
                 while ((count = gzip.Read(buf, 0, buf.Length)) > 0)
-                { msTemp.Write(buf, 0, count); }
+                {
+                    msTemp.Write(buf, 0, count);
+                }
                 byteArray = msTemp.ToArray();
             }
             return Encoding.UTF8.GetString(byteArray);
@@ -112,7 +118,11 @@ namespace Beanfun
 
         public CookieCollection GetCookies()
         {
-            return this.CookieContainer.GetCookies(new Uri("https://" + (App.LoginRegion == "TW" ? "tw" : "bfweb.hk") + ".beanfun.com/"));
+            return this.CookieContainer.GetCookies(
+                new Uri(
+                    "https://" + (App.LoginRegion == "TW" ? "tw" : "bfweb.hk") + ".beanfun.com/"
+                )
+            );
         }
 
         private string GetCookie(string cookieName)
@@ -133,9 +143,13 @@ namespace Beanfun
             switch (method)
             {
                 case 1:
-                    return (date.Year - 1900).ToString() + (date.Month - 1).ToString() + date.ToString("ddHHmmssfff");
+                    return (date.Year - 1900).ToString()
+                        + (date.Month - 1).ToString()
+                        + date.ToString("ddHHmmssfff");
                 case 2:
-                    return date.Year.ToString() + (date.Month - 1).ToString() + date.ToString("ddHHmmssfff");
+                    return date.Year.ToString()
+                        + (date.Month - 1).ToString()
+                        + date.ToString("ddHHmmssfff");
                 default:
                     return date.ToString("yyyyMMddHHmmss.fff");
             }
@@ -150,11 +164,16 @@ namespace Beanfun
                     url += "tw";
                 else
                     url += "bfweb.hk";
-                string ret = Encoding.GetString(this.DownloadData(url + ".beanfun.com/beanfun_block/generic_handlers/echo_token.ashx?webtoken=1"));
+                string ret = Encoding.GetString(
+                    this.DownloadData(
+                        url
+                            + ".beanfun.com/beanfun_block/generic_handlers/echo_token.ashx?webtoken=1"
+                    )
+                );
 
                 Console.WriteLine(GetCurrentTime() + " @ " + ret);
-            } catch {
             }
+            catch { }
         }
 
         public int getRemainPoint()
@@ -167,7 +186,10 @@ namespace Beanfun
                 url += "tw";
             else
                 url += "bfweb.hk";
-            response = this.DownloadString(url += ".beanfun.com/beanfun_block/generic_handlers/get_remain_point.ashx?webtoken=1");
+            response = this.DownloadString(
+                url +=
+                    ".beanfun.com/beanfun_block/generic_handlers/get_remain_point.ashx?webtoken=1"
+            );
 
             try
             {
@@ -178,9 +200,10 @@ namespace Beanfun
                     return 0;
             }
             catch
-            { return 0; }
+            {
+                return 0;
+            }
         }
-
 
         public string getEmail()
         {
@@ -188,8 +211,12 @@ namespace Beanfun
                 return "";
 
             this.Headers.Set("Referer", @"https://tw.beanfun.com/");
-            string response = this.DownloadString("https://tw.beanfun.com/beanfun_block/loader.ashx?service_code=999999&service_region=T0");
-            System.Text.RegularExpressions.Regex regex = new System.Text.RegularExpressions.Regex("BeanFunBlock.LoggedInUserData.Email = \"(.*)\";BeanFunBlock.LoggedInUserData.MessageCount");
+            string response = this.DownloadString(
+                "https://tw.beanfun.com/beanfun_block/loader.ashx?service_code=999999&service_region=T0"
+            );
+            System.Text.RegularExpressions.Regex regex = new System.Text.RegularExpressions.Regex(
+                "BeanFunBlock.LoggedInUserData.Email = \"(.*)\";BeanFunBlock.LoggedInUserData.MessageCount"
+            );
             if (regex.IsMatch(response))
                 return regex.Match(response).Groups[1].Value;
             else

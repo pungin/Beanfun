@@ -15,7 +15,10 @@ namespace Beanfun
             payload = App.MainWnd.UnconnectedGame_AddAccountInit();
             if (payload == null)
             {
-                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnknownError") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 this.Close();
                 return;
             }
@@ -50,11 +53,18 @@ namespace Beanfun
 
         private void Hyperlink_Click(object sender, RoutedEventArgs e)
         {
-            payload = App.MainWnd.UnconnectedGame_AddUnconnectedCheck(txtServiceAccountID.Text, DNtr.Visibility == Visibility.Visible ? "" : null, payload);
+            payload = App.MainWnd.UnconnectedGame_AddUnconnectedCheck(
+                txtServiceAccountID.Text,
+                DNtr.Visibility == Visibility.Visible ? "" : null,
+                payload
+            );
             if (payload == null || payload.Get("lblErrorMessage") == "")
             {
                 payload = null;
-                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnknownError") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
             lblErrorMessage.Visibility = Visibility.Visible;
@@ -64,12 +74,19 @@ namespace Beanfun
 
         private void Hyperlink_Click_1(object sender, RoutedEventArgs e)
         {
-            if (lbtnCheckNickName.Visibility != Visibility.Visible) return;
-            payload = App.MainWnd.UnconnectedGame_AddAccountCheckNickName(txtServiceAccountDN.Text, payload);
+            if (lbtnCheckNickName.Visibility != Visibility.Visible)
+                return;
+            payload = App.MainWnd.UnconnectedGame_AddAccountCheckNickName(
+                txtServiceAccountDN.Text,
+                payload
+            );
             if (payload == null || payload.Get("lblErrorMessage") == "")
             {
                 payload = null;
-                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnknownError") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
             lblErrorMessage.Visibility = Visibility.Visible;
@@ -82,7 +99,10 @@ namespace Beanfun
             string contract = App.MainWnd.GetServiceContract();
             if (contract == "")
             {
-                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnknownError") as string,
+                    TryFindResource("SystemInfo") as string
+                );
             }
             else
             {
@@ -95,63 +115,116 @@ namespace Beanfun
             string sAccountLen = lblAccountLen.Text;
             if (sAccountLen == null || sAccountLen == "" || !sAccountLen.Contains(" - "))
             {
-                MessageBox.Show(TryFindResource("UnknownError") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnknownError") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
-            string[] aAccountLen = sAccountLen.Split(new string[] { " - " }, System.StringSplitOptions.None);
+            string[] aAccountLen = sAccountLen.Split(
+                new string[] { " - " },
+                System.StringSplitOptions.None
+            );
             byte accountLenMin = byte.Parse(aAccountLen[0]);
             byte accountLenMax = byte.Parse(aAccountLen[1]);
             if (txtServiceAccountID.Text == null || txtServiceAccountID.Text == "")
             {
-                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_18") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnconnectedGame_AddAccount_18") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
-            if (txtServiceAccountID.Text.Length < accountLenMin || txtServiceAccountID.Text.Length > accountLenMax)
+            if (
+                txtServiceAccountID.Text.Length < accountLenMin
+                || txtServiceAccountID.Text.Length > accountLenMax
+            )
             {
-                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_19") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnconnectedGame_AddAccount_19") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
             if (txtNewPwd.Password == null || txtNewPwd.Password == "")
             {
-                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_20") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnconnectedGame_AddAccount_20") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
-            if (txtNewPwd.Password.Length < accountLenMin || txtNewPwd.Password.Length > accountLenMax)
+            if (
+                txtNewPwd.Password.Length < accountLenMin
+                || txtNewPwd.Password.Length > accountLenMax
+            )
             {
-                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_21") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnconnectedGame_AddAccount_21") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
             if (txtNewPwd2.Password == null || txtNewPwd2.Password == "")
             {
-                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_22") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnconnectedGame_AddAccount_22") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
-            if (txtNewPwd2.Password.Length < accountLenMin || txtNewPwd2.Password.Length > accountLenMax)
+            if (
+                txtNewPwd2.Password.Length < accountLenMin
+                || txtNewPwd2.Password.Length > accountLenMax
+            )
             {
-                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_23") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnconnectedGame_AddAccount_23") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
             if (DNtr.Visibility == Visibility.Visible)
             {
                 if (txtServiceAccountDN.Text == null || txtServiceAccountDN.Text == "")
                 {
-                    MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_24") as string, TryFindResource("SystemInfo") as string);
+                    MessageBox.Show(
+                        TryFindResource("UnconnectedGame_AddAccount_24") as string,
+                        TryFindResource("SystemInfo") as string
+                    );
                     return;
                 }
                 if (txtServiceAccountDN.Text.Length < 2 || txtServiceAccountDN.Text.Length > 6)
                 {
-                    MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_25") as string, TryFindResource("SystemInfo") as string);
+                    MessageBox.Show(
+                        TryFindResource("UnconnectedGame_AddAccount_25") as string,
+                        TryFindResource("SystemInfo") as string
+                    );
                     return;
                 }
             }
             if (!(bool)chkBox1.IsChecked)
             {
-                MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_26") as string, TryFindResource("SystemInfo") as string);
+                MessageBox.Show(
+                    TryFindResource("UnconnectedGame_AddAccount_26") as string,
+                    TryFindResource("SystemInfo") as string
+                );
                 return;
             }
-            string result = App.MainWnd.UnconnectedGame_AddAccount(txtServiceAccountID.Text, txtNewPwd.Password, txtNewPwd2.Password, DNtr.Visibility == Visibility.Visible ? txtServiceAccountDN.Text : null, payload);
-            if (result == "") this.Close();
-            else if (result == null) MessageBox.Show(TryFindResource("UnconnectedGame_AddAccount_27") as string, TryFindResource("SystemInfo") as string);
+            string result = App.MainWnd.UnconnectedGame_AddAccount(
+                txtServiceAccountID.Text,
+                txtNewPwd.Password,
+                txtNewPwd2.Password,
+                DNtr.Visibility == Visibility.Visible ? txtServiceAccountDN.Text : null,
+                payload
+            );
+            if (result == "")
+                this.Close();
+            else if (result == null)
+                MessageBox.Show(
+                    TryFindResource("UnconnectedGame_AddAccount_27") as string,
+                    TryFindResource("SystemInfo") as string
+                );
             else
             {
                 lblErrorMessage.Visibility = Visibility.Visible;

@@ -16,8 +16,12 @@ namespace Beanfun
             t_sn.Text = account.ssn;
             t_sname.Text = account.sname;
             t_id.Text = account.sid;
-            t_status.Content = account.isEnable ? TryFindResource("Normal") : TryFindResource("Banned");
-            t_status.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(account.isEnable ? "Green" : "Red"));
+            t_status.Content = account.isEnable
+                ? TryFindResource("Normal")
+                : TryFindResource("Banned");
+            t_status.Foreground = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString(account.isEnable ? "Green" : "Red")
+            );
             if (account.sauthtype == null)
             {
                 p_sauthtype.Visibility = Visibility.Collapsed;
@@ -32,7 +36,10 @@ namespace Beanfun
             }
             else
             {
-                t_screatetime.Content = string.Format(TryFindResource("CreateDate") as string, account.screatetime);
+                t_screatetime.Content = string.Format(
+                    TryFindResource("CreateDate") as string,
+                    account.screatetime
+                );
                 t_screatedays.Content = getDays(account.screatetime);
             }
             if (account.slastusedtime == null)
@@ -41,7 +48,10 @@ namespace Beanfun
             }
             else
             {
-                t_slastusedtime.Content = string.Format(TryFindResource("LastLoginDate") as string, account.slastusedtime);
+                t_slastusedtime.Content = string.Format(
+                    TryFindResource("LastLoginDate") as string,
+                    account.slastusedtime
+                );
             }
         }
 

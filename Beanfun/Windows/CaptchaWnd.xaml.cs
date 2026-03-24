@@ -11,7 +11,10 @@ namespace Beanfun
     /// </summary>
     public partial class CaptchaWnd : Window
     {
-        public string Captcha { get { return CodeTextBox.Text; } }
+        public string Captcha
+        {
+            get { return CodeTextBox.Text; }
+        }
         private string samplecaptcha;
         private BeanfunClient Client;
 
@@ -33,7 +36,10 @@ namespace Beanfun
             BitmapImage result;
             try
             {
-                byte[] buffer = Client.DownloadData("https://tw.newlogin.beanfun.com/login/BotDetectCaptcha.ashx?get=image&c=c_login_idpass_form_samplecaptcha&t=" + samplecaptcha);
+                byte[] buffer = Client.DownloadData(
+                    "https://tw.newlogin.beanfun.com/login/BotDetectCaptcha.ashx?get=image&c=c_login_idpass_form_samplecaptcha&t="
+                        + samplecaptcha
+                );
                 result = new BitmapImage();
                 result.BeginInit();
                 result.StreamSource = new MemoryStream(buffer);

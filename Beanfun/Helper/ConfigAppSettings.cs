@@ -10,8 +10,14 @@ namespace Beanfun
             try
             {
                 ExeConfigurationFileMap map = new ExeConfigurationFileMap();
-                map.ExeConfigFilename = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData) + "\\Beanfun\\Config.xml";
-                Configuration config = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
+                map.ExeConfigFilename =
+                    System.Environment.GetFolderPath(
+                        System.Environment.SpecialFolder.ApplicationData
+                    ) + "\\Beanfun\\Config.xml";
+                Configuration config = ConfigurationManager.OpenMappedExeConfiguration(
+                    map,
+                    ConfigurationUserLevel.None
+                );
                 if (config.AppSettings.Settings[key] == null)
                 {
                     if (value != null)
@@ -31,7 +37,10 @@ namespace Beanfun
             {
                 try
                 {
-                    string filePath = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData) + "\\Beanfun";
+                    string filePath =
+                        System.Environment.GetFolderPath(
+                            System.Environment.SpecialFolder.ApplicationData
+                        ) + "\\Beanfun";
                     DirectoryInfo dir = new DirectoryInfo(filePath);
                     FileSystemInfo[] fileinfo = dir.GetFileSystemInfos("Config.xml");
                     foreach (FileSystemInfo i in fileinfo)
@@ -47,7 +56,8 @@ namespace Beanfun
                         }
                     }
                     SetValue(key, value);
-                } catch { }
+                }
+                catch { }
             }
         }
 
@@ -62,9 +72,18 @@ namespace Beanfun
             try
             {
                 ExeConfigurationFileMap map = new ExeConfigurationFileMap();
-                map.ExeConfigFilename = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData) + "\\Beanfun\\Config.xml";
-                Configuration config = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
-                value = config.AppSettings.Settings[key] == null ? def : config.AppSettings.Settings[key].Value;
+                map.ExeConfigFilename =
+                    System.Environment.GetFolderPath(
+                        System.Environment.SpecialFolder.ApplicationData
+                    ) + "\\Beanfun\\Config.xml";
+                Configuration config = ConfigurationManager.OpenMappedExeConfiguration(
+                    map,
+                    ConfigurationUserLevel.None
+                );
+                value =
+                    config.AppSettings.Settings[key] == null
+                        ? def
+                        : config.AppSettings.Settings[key].Value;
             }
             catch
             {

@@ -47,12 +47,12 @@ Download available at <https://github.com/pungin/Beanfun/releases/latest>.
 本專案使用 [CSharpier](https://csharpier.com/) 作為程式碼格式化工具。
 
 ```bash
-# 還原工具
+# 安裝還原工具
 dotnet tool restore
 
 # 格式化所有 .cs 檔案
-dotnet csharpier .
+dotnet csharpier format .
 
 # 檢查格式（不修改檔案）
-dotnet csharpier --check .
+dotnet csharpier check .
 ```

@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Text;
 using System.Collections.Specialized;
 using System.Drawing;
 using System.IO;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Media.Imaging;
 
@@ -15,7 +15,9 @@ namespace Beanfun
         {
             try
             {
-                return this.DownloadString("https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx");
+                return this.DownloadString(
+                    "https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx"
+                );
             }
             catch (Exception e)
             {
@@ -29,11 +31,14 @@ namespace Beanfun
             BitmapImage result;
             try
             {
-                byte[] buffer = this.DownloadData("https://tw.newlogin.beanfun.com/LoginCheck/BotDetectCaptcha.ashx?get=image&c=c_logincheck_advancecheck_samplecaptcha&t=" + samplecaptcha);
+                byte[] buffer = this.DownloadData(
+                    "https://tw.newlogin.beanfun.com/LoginCheck/BotDetectCaptcha.ashx?get=image&c=c_logincheck_advancecheck_samplecaptcha&t="
+                        + samplecaptcha
+                );
                 result = new BitmapImage();
-                result.BeginInit();  
+                result.BeginInit();
                 result.StreamSource = new MemoryStream(buffer);
-                result.EndInit();  
+                result.EndInit();
             }
             catch (Exception)
             {
@@ -42,7 +47,13 @@ namespace Beanfun
             return result;
         }
 
-        public string verify(string viewstate, string eventvalidation, string samplecaptcha, string verifyCode, string captchaCode)
+        public string verify(
+            string viewstate,
+            string eventvalidation,
+            string samplecaptcha,
+            string verifyCode,
+            string captchaCode
+        )
         {
             try
             {
@@ -54,7 +65,10 @@ namespace Beanfun
                 payload.Add("imgbtnSubmit.x", "19");
                 payload.Add("imgbtnSubmit.y", "23");
                 payload.Add("LBD_VCID_c_logincheck_advancecheck_samplecaptcha", samplecaptcha);
-                return this.UploadString("https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx", payload);
+                return this.UploadString(
+                    "https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx",
+                    payload
+                );
             }
             catch (Exception e)
             {

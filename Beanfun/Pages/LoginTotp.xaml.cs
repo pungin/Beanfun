@@ -39,7 +39,7 @@ namespace Beanfun
 
         private void otp1_PreviewKeyUp(object sender, KeyEventArgs e)
         {
-            if(otp1.Text.Length > 0)
+            if (otp1.Text.Length > 0)
             {
                 otp2.Focus();
             }
@@ -79,7 +79,14 @@ namespace Beanfun
 
         private void otp6_PreviewKeyUp(object sender, KeyEventArgs e)
         {
-            if (otp1.Text.Length > 0 && otp2.Text.Length > 0 && otp3.Text.Length > 0 && otp4.Text.Length > 0 && otp5.Text.Length > 0 && otp6.Text.Length > 0)
+            if (
+                otp1.Text.Length > 0
+                && otp2.Text.Length > 0
+                && otp3.Text.Length > 0
+                && otp4.Text.Length > 0
+                && otp5.Text.Length > 0
+                && otp6.Text.Length > 0
+            )
             {
                 btn_login.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }

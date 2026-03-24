@@ -25,19 +25,30 @@ namespace Beanfun
 
             try
             {
-                string response = this.DownloadString($"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}");
+                string response = this.DownloadString(
+                    $"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}"
+                );
                 Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
-                    {this.errmsg = "LoginNoViewstate"; return null;}
+                {
+                    this.errmsg = "LoginNoViewstate";
+                    return null;
+                }
                 string viewstate = regex.Match(response).Groups[1].Value;
 
                 regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
-                    { this.errmsg = "LoginNoEventvalidation"; return null; }
+                {
+                    this.errmsg = "LoginNoEventvalidation";
+                    return null;
+                }
                 string eventvalidation = regex.Match(response).Groups[1].Value;
                 regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoViewstateGenerator"; return null; }
+                {
+                    this.errmsg = "LoginNoViewstateGenerator";
+                    return null;
+                }
                 string viewstateGenerator = regex.Match(response).Groups[1].Value;
                 /*
                 regex = new Regex("id=\"LBD_VCID_c_login_idpass_form_samplecaptcha\" value=\"(.*)\" />");
@@ -61,7 +72,8 @@ namespace Beanfun
                 payload.Add("__EVENTARGUMENT", "");
                 payload.Add("__VIEWSTATE", viewstate);
                 payload.Add("__VIEWSTATEGENERATOR", viewstateGenerator);
-                if (App.LoginRegion == "HK") payload.Add("__VIEWSTATEENCRYPTED", "");
+                if (App.LoginRegion == "HK")
+                    payload.Add("__VIEWSTATEENCRYPTED", "");
                 payload.Add("__EVENTVALIDATION", eventvalidation);
                 payload.Add("t_AccountID", id);
                 payload.Add("t_Password", pass);
@@ -71,14 +83,21 @@ namespace Beanfun
                 //payload.Add("token1", "");
                 payload.Add("btn_login", "登入");
 
-                response = this.UploadString($"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}", payload);
+                response = this.UploadString(
+                    $"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}",
+                    payload
+                );
                 if (response.Contains("RELOAD_CAPTCHA_CODE") && response.Contains("alert"))
-                { this.errmsg = "LoginAdvanceCheck"; return null; }
+                {
+                    this.errmsg = "LoginAdvanceCheck";
+                    return null;
+                }
 
                 if (response.Contains("totpLoginBtn"))
                 {
                     this.totpResponse = response;
-                    this.totpUrl = $"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}";
+                    this.totpUrl =
+                        $"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}";
                     this.errmsg = "need_totp";
                     return null;
                 }
@@ -87,14 +106,24 @@ namespace Beanfun
                 if (!regex.IsMatch(this.ResponseUri.ToString()))
                 {
                     this.errmsg = "LoginNoAkey";
-                    regex = new Regex("<script type=\"text/javascript\">\\$\\(function\\(\\){MsgBox.Show\\('(.*)'\\);}\\);</script>");
+                    regex = new Regex(
+                        "<script type=\"text/javascript\">\\$\\(function\\(\\){MsgBox.Show\\('(.*)'\\);}\\);</script>"
+                    );
                     if (regex.IsMatch(response))
-                    { this.errmsg = regex.Match(response).Groups[1].Value; }
+                    {
+                        this.errmsg = regex.Match(response).Groups[1].Value;
+                    }
                     else
                     {
                         regex = new Regex("pollRequest\\(\"([^\"]*)\",\"(\\w+)\",\"([^\"]+)\"\\);");
                         if (regex.IsMatch(response))
-                        { this.errmsg = regex.Match(response).Groups[1].Value + "\",\"" + regex.Match(response).Groups[3].Value; LoginToken = regex.Match(response).Groups[2].Value; }
+                        {
+                            this.errmsg =
+                                regex.Match(response).Groups[1].Value
+                                + "\",\""
+                                + regex.Match(response).Groups[3].Value;
+                            LoginToken = regex.Match(response).Groups[2].Value;
+                        }
                     }
                     return null;
                 }
@@ -109,35 +138,52 @@ namespace Beanfun
             }
         }
 
-        public void TotpLogin(string otp1,string otp2,string otp3,string otp4,string otp5,string otp6, string service_code = "610074", string service_region = "T9")
+        public void TotpLogin(
+            string otp1,
+            string otp2,
+            string otp3,
+            string otp4,
+            string otp5,
+            string otp6,
+            string service_code = "610074",
+            string service_region = "T9"
+        )
         {
             string loginHost = this.totpUrl;
-            
 
             try
             {
                 string response = this.totpResponse;
                 Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoViewstate"; return; }
+                {
+                    this.errmsg = "LoginNoViewstate";
+                    return;
+                }
                 string viewstate = regex.Match(response).Groups[1].Value;
 
                 regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoEventvalidation"; return; }
+                {
+                    this.errmsg = "LoginNoEventvalidation";
+                    return;
+                }
                 string eventvalidation = regex.Match(response).Groups[1].Value;
                 regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoViewstateGenerator"; return; }
+                {
+                    this.errmsg = "LoginNoViewstateGenerator";
+                    return;
+                }
                 string viewstateGenerator = regex.Match(response).Groups[1].Value;
-
 
                 NameValueCollection payload = new NameValueCollection();
                 payload.Add("__EVENTTARGET", "");
                 payload.Add("__EVENTARGUMENT", "");
                 payload.Add("__VIEWSTATE", viewstate);
                 payload.Add("__VIEWSTATEGENERATOR", viewstateGenerator);
-                if (App.LoginRegion == "HK") payload.Add("__VIEWSTATEENCRYPTED", "");
+                if (App.LoginRegion == "HK")
+                    payload.Add("__VIEWSTATEENCRYPTED", "");
                 payload.Add("__EVENTVALIDATION", eventvalidation);
                 payload.Add("otpCode1", otp1);
                 payload.Add("otpCode2", otp2);
@@ -149,20 +195,33 @@ namespace Beanfun
 
                 response = this.UploadString(loginHost, payload);
                 if (response.Contains("RELOAD_CAPTCHA_CODE") && response.Contains("alert"))
-                { this.errmsg = "LoginAdvanceCheck"; return; }
+                {
+                    this.errmsg = "LoginAdvanceCheck";
+                    return;
+                }
 
                 regex = new Regex("akey=(.*)");
                 if (!regex.IsMatch(this.ResponseUri.ToString()))
                 {
                     this.errmsg = "LoginNoAkey";
-                    regex = new Regex("<script type=\"text/javascript\">\\$\\(function\\(\\){MsgBox.Show\\('(.*)'\\);}\\);</script>");
+                    regex = new Regex(
+                        "<script type=\"text/javascript\">\\$\\(function\\(\\){MsgBox.Show\\('(.*)'\\);}\\);</script>"
+                    );
                     if (regex.IsMatch(response))
-                    { this.errmsg = regex.Match(response).Groups[1].Value; }
+                    {
+                        this.errmsg = regex.Match(response).Groups[1].Value;
+                    }
                     else
                     {
                         regex = new Regex("pollRequest\\(\"([^\"]*)\",\"(\\w+)\",\"([^\"]+)\"\\);");
                         if (regex.IsMatch(response))
-                        { this.errmsg = regex.Match(response).Groups[1].Value + "\",\"" + regex.Match(response).Groups[3].Value; LoginToken = regex.Match(response).Groups[2].Value; }
+                        {
+                            this.errmsg =
+                                regex.Match(response).Groups[1].Value
+                                + "\",\""
+                                + regex.Match(response).Groups[3].Value;
+                            LoginToken = regex.Match(response).Groups[2].Value;
+                        }
                     }
                     return;
                 }
@@ -210,12 +269,16 @@ namespace Beanfun
 
             JObject strEncryptData = this.getQRCodeStrEncryptData(skey);
             if (strEncryptData == null)
-            { this.errmsg = "LoginIntResultError"; return null; }
+            {
+                this.errmsg = "LoginIntResultError";
+                return null;
+            }
 
             return new QRCodeClass
             {
                 skey = skey,
-                bitmapBase64 = "data:image/png;base64," +  (string)strEncryptData["ResultData"]["QRImage"]
+                bitmapBase64 =
+                    "data:image/png;base64," + (string)strEncryptData["ResultData"]["QRImage"],
             };
         }
 
@@ -227,7 +290,9 @@ namespace Beanfun
             this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
             this.Headers.Add("Origin", "https://login.beanfun.com");
 
-            string response = this.DownloadString($"https://login.beanfun.com/Login/InitLogin?pSKey={skey}");
+            string response = this.DownloadString(
+                $"https://login.beanfun.com/Login/InitLogin?pSKey={skey}"
+            );
             JObject jsonData = JObject.Parse(response);
 
             if (jsonData["Result"] == null || (int)jsonData["Result"] != 0)
@@ -238,7 +303,6 @@ namespace Beanfun
 
             return jsonData;
         }
-
 
         public BitmapImage getQRCodeImage(QRCodeClass qrcodeclass)
         {
@@ -271,7 +335,10 @@ namespace Beanfun
                 string skey = qrcodeclass.skey;
 
                 this.Headers.Clear();
-                this.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
+                this.Headers.Add(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+                );
                 this.Headers.Add("Accept", "application/json, text/plain, */*");
                 this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
                 this.Headers.Add("Origin", "https://login.beanfun.com");
@@ -280,21 +347,42 @@ namespace Beanfun
                 Debug.WriteLine("QRLogin response: " + response);
 
                 this.Headers.Clear();
-                this.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
-                this.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
+                this.Headers.Add(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+                );
+                this.Headers.Add(
+                    "Accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+                );
                 this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
 
-                string sendLoginHtml = this.DownloadString("https://login.beanfun.com/Login/SendLogin");
+                string sendLoginHtml = this.DownloadString(
+                    "https://login.beanfun.com/Login/SendLogin"
+                );
 
                 NameValueCollection payload = new NameValueCollection();
                 MatchCollection inputTags = Regex.Matches(sendLoginHtml, @"<input[^>]+>");
                 foreach (Match tag in inputTags)
                 {
                     string tagStr = tag.Value;
-                    Match nameMatch = Regex.Match(tagStr, @"name\s*=\s*['""]([^'""]+)['""]", RegexOptions.IgnoreCase);
-                    Match valMatch = Regex.Match(tagStr, @"value\s*=\s*['""]([^'""]*)['""]", RegexOptions.IgnoreCase);
+                    Match nameMatch = Regex.Match(
+                        tagStr,
+                        @"name\s*=\s*['""]([^'""]+)['""]",
+                        RegexOptions.IgnoreCase
+                    );
+                    Match valMatch = Regex.Match(
+                        tagStr,
+                        @"value\s*=\s*['""]([^'""]*)['""]",
+                        RegexOptions.IgnoreCase
+                    );
 
-                    if (nameMatch.Success && valMatch.Success && tagStr.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase) == -1)
+                    if (
+                        nameMatch.Success
+                        && valMatch.Success
+                        && tagStr.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase)
+                            == -1
+                    )
                     {
                         payload.Add(nameMatch.Groups[1].Value, valMatch.Groups[1].Value);
                     }
@@ -310,13 +398,17 @@ namespace Beanfun
                 string returnUrl = $"https://{host}/beanfun_block/bflogin/return.aspx";
 
                 this.Headers.Clear();
-                this.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                this.Headers.Add(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                );
                 this.Headers.Add("Referer", "https://login.beanfun.com/");
 
                 this.redirect = false;
                 string returnResponse = this.UploadString(returnUrl, payload);
 
-                string setCookieHeader = this.ResponseHeaders != null ? this.ResponseHeaders["Set-Cookie"] : "";
+                string setCookieHeader =
+                    this.ResponseHeaders != null ? this.ResponseHeaders["Set-Cookie"] : "";
                 if (!string.IsNullOrEmpty(setCookieHeader))
                 {
                     Regex tokenRegex = new Regex(@"bfWebToken=([^;]+)");
@@ -337,7 +429,9 @@ namespace Beanfun
                 if (this.ResponseHeaders != null && this.ResponseHeaders["Location"] != null)
                 {
                     string location = this.ResponseHeaders["Location"];
-                    this.DownloadString(location.StartsWith("http") ? location : $"https://{host}{location}");
+                    this.DownloadString(
+                        location.StartsWith("http") ? location : $"https://{host}{location}"
+                    );
                 }
 
                 return "OK";
@@ -366,10 +460,17 @@ namespace Beanfun
                     $"https://login.beanfun.com/QRLogin/CheckLoginStatus?pSKey={skey}"
                 );
                 JObject jsonData;
-                try { jsonData = JObject.Parse(response); }
-                catch { this.errmsg = "LoginJsonParseFailed"; return -1; }
+                try
+                {
+                    jsonData = JObject.Parse(response);
+                }
+                catch
+                {
+                    this.errmsg = "LoginJsonParseFailed";
+                    return -1;
+                }
 
-                result = (string) jsonData["ResultMessage"];
+                result = (string)jsonData["ResultMessage"];
                 Console.WriteLine(result);
                 if (result == "Failed" || result == "Wait Login")
                     return 0;
@@ -388,28 +489,43 @@ namespace Beanfun
             }
             catch (Exception e)
             {
-                this.errmsg = "Network Error on QRCode checking login status\n\n" + e.Message + "\n" + e.StackTrace;
+                this.errmsg =
+                    "Network Error on QRCode checking login status\n\n"
+                    + e.Message
+                    + "\n"
+                    + e.StackTrace;
             }
 
             return -1;
         }
 
-        public JObject CheckIsRegisteDevice(string service_code = "610074", string service_region = "T9")
+        public JObject CheckIsRegisteDevice(
+            string service_code = "610074",
+            string service_region = "T9"
+        )
         {
             NameValueCollection payload = new NameValueCollection();
             payload.Add("LT", LoginToken);
 
-            string response = this.UploadString("https://tw.newlogin.beanfun.com/login/bfAPPAutoLogin.ashx", payload);
+            string response = this.UploadString(
+                "https://tw.newlogin.beanfun.com/login/bfAPPAutoLogin.ashx",
+                payload
+            );
             JObject json = JObject.Parse(response);
             if (json == null || json["IntResult"] == null || json["StrReslut"] == null)
                 return null;
 
             if ((string)json["IntResult"] == "2")
             {
-                string test = this.DownloadString("https://tw.newlogin.beanfun.com/login/" + (string)json["StrReslut"]);
+                string test = this.DownloadString(
+                    "https://tw.newlogin.beanfun.com/login/" + (string)json["StrReslut"]
+                );
                 Regex regex = new Regex("akey=(.*)");
                 if (!regex.IsMatch((string)json["StrReslut"]))
-                { this.errmsg = "AKeyParseFailed"; return null; }
+                {
+                    this.errmsg = "AKeyParseFailed";
+                    return null;
+                }
                 string akey = regex.Match((string)json["StrReslut"]).Groups[1].Value;
 
                 LoginCompleted(akey, service_code, service_region);
@@ -422,31 +538,56 @@ namespace Beanfun
         {
             if (App.LoginRegion == "TW")
             {
-                string response = this.DownloadString("https://tw.beanfun.com/beanfun_block/bflogin/default.aspx?service=999999_T0");
+                string response = this.DownloadString(
+                    "https://tw.beanfun.com/beanfun_block/bflogin/default.aspx?service=999999_T0"
+                );
                 //this.DownloadString(this.ResponseHeaders["Location"]);
                 //this.DownloadString(this.ResponseHeaders["Location"]);
                 //response = this.ResponseHeaders["Location"];
                 response = this.ResponseUri.ToString();
                 if (response == null)
-                { this.errmsg = "LoginNoResponse"; return null; }
+                {
+                    this.errmsg = "LoginNoResponse";
+                    return null;
+                }
                 Regex regex = new Regex("skey=(.*)&display");
                 if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoSkey"; return null; }
+                {
+                    this.errmsg = "LoginNoSkey";
+                    return null;
+                }
                 return regex.Match(response).Groups[1].Value;
             }
             else
             {
-                string response = this.DownloadString("https://bfweb.hk.beanfun.com/beanfun_block/bflogin/default.aspx?service=999999_T0");
+                string response = this.DownloadString(
+                    "https://bfweb.hk.beanfun.com/beanfun_block/bflogin/default.aspx?service=999999_T0"
+                );
                 if (response == null)
-                { this.errmsg = "LoginNoResponse"; return null; }
-                Regex regex = new Regex("<span id=\"ctl00_ContentPlaceHolder1_lblOtp1\">(.*)</span>");
+                {
+                    this.errmsg = "LoginNoResponse";
+                    return null;
+                }
+                Regex regex = new Regex(
+                    "<span id=\"ctl00_ContentPlaceHolder1_lblOtp1\">(.*)</span>"
+                );
                 if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoOTP1"; return null; }
+                {
+                    this.errmsg = "LoginNoOTP1";
+                    return null;
+                }
                 return regex.Match(response).Groups[1].Value;
             }
         }
 
-        public void Login(string id, string pass, int loginMethod, QRCodeClass qrcodeClass = null, string service_code = "610074", string service_region = "T9")
+        public void Login(
+            string id,
+            string pass,
+            int loginMethod,
+            QRCodeClass qrcodeClass = null,
+            string service_code = "610074",
+            string service_region = "T9"
+        )
         {
             this.webtoken = null;
             this.SessionKey = null;
@@ -461,7 +602,7 @@ namespace Beanfun
                 {
                     SessionKey = GetSessionkey();
                 }
-                
+
                 switch (loginMethod)
                 {
                     case (int)LoginMethod.Regular:
@@ -481,7 +622,10 @@ namespace Beanfun
             {
                 if (e is WebException)
                 {
-                    this.errmsg = System.Windows.Application.Current.TryFindResource("NetworkConnectionError") as string + e.Message;
+                    this.errmsg =
+                        System.Windows.Application.Current.TryFindResource("NetworkConnectionError")
+                            as string
+                        + e.Message;
                 }
                 else
                 {
@@ -491,7 +635,11 @@ namespace Beanfun
             }
         }
 
-        private void LoginCompleted(string akey, string service_code = "610074", string service_region = "T9")
+        private void LoginCompleted(
+            string akey,
+            string service_code = "610074",
+            string service_region = "T9"
+        )
         {
             if (this.SessionKey == null || akey == null)
                 return;
@@ -510,7 +658,10 @@ namespace Beanfun
             payload.Add("ServiceAccountSN", "0");
             Debug.WriteLine(this.SessionKey);
             Debug.WriteLine(akey);
-            string response = this.UploadString($"https://{host}/beanfun_block/bflogin/return.aspx", payload);
+            string response = this.UploadString(
+                $"https://{host}/beanfun_block/bflogin/return.aspx",
+                payload
+            );
             //Debug.WriteLine(response);
             response = this.DownloadString($"https://{host}/{this.ResponseHeaders["Location"]}");
             //Debug.WriteLine(response);
@@ -518,10 +669,14 @@ namespace Beanfun
 
             this.webtoken = this.GetCookie("bfWebToken");
             if (this.webtoken == "")
-            { this.errmsg = "LoginNoWebtoken"; return; }
+            {
+                this.errmsg = "LoginNoWebtoken";
+                return;
+            }
             GetAccounts(service_code, service_region, false);
 
-            if (this.errmsg != null) return;
+            if (this.errmsg != null)
+                return;
 
             this.remainPoint = getRemainPoint();
 
@@ -548,7 +703,10 @@ namespace Beanfun
             {
                 NameValueCollection payload = new NameValueCollection();
                 payload.Add("web_token", "1");
-                this.UploadString("https://tw.newlogin.beanfun.com/generic_handlers/erase_token.ashx", payload);
+                this.UploadString(
+                    "https://tw.newlogin.beanfun.com/generic_handlers/erase_token.ashx",
+                    payload
+                );
             }
         }
     }

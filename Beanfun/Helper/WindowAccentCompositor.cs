@@ -20,7 +20,8 @@ namespace Beanfun
         /// 创建 <see cref="WindowAccentCompositor"/> 的一个新实例。
         /// </summary>
         /// <param name="window">要创建模糊特效的窗口实例。</param>
-        public WindowAccentCompositor(Window window) => _window = window ?? throw new ArgumentNullException(nameof(window));
+        public WindowAccentCompositor(Window window) =>
+            _window = window ?? throw new ArgumentNullException(nameof(window));
 
         /// <summary>
         /// 获取或设置此窗口模糊特效是否生效的一个状态。
@@ -42,24 +43,30 @@ namespace Beanfun
         /// </summary>
         public Color Color
         {
-            get => Color.FromArgb(
-                // 取出红色分量。
-                (byte)((_blurColor & 0x000000ff) >> 0),
-                // 取出绿色分量。
-                (byte)((_blurColor & 0x0000ff00) >> 8),
-                // 取出蓝色分量。
-                (byte)((_blurColor & 0x00ff0000) >> 16),
-                // 取出透明分量。
-                (byte)((_blurColor & 0xff000000) >> 24));
-            set => _blurColor =
-                // 组装红色分量。
-                value.R << 0 |
-                // 组装绿色分量。
-                value.G << 8 |
-                // 组装蓝色分量。
-                value.B << 16 |
-                // 组装透明分量。
-                value.A << 24;
+            get =>
+                Color.FromArgb(
+                    // 取出红色分量。
+                    (byte)((_blurColor & 0x000000ff) >> 0),
+                    // 取出绿色分量。
+                    (byte)((_blurColor & 0x0000ff00) >> 8),
+                    // 取出蓝色分量。
+                    (byte)((_blurColor & 0x00ff0000) >> 16),
+                    // 取出透明分量。
+                    (byte)((_blurColor & 0xff000000) >> 24)
+                );
+            set =>
+                _blurColor =
+                    // 组装红色分量。
+                    value.R << 0
+                    |
+                    // 组装绿色分量。
+                    value.G << 8
+                    |
+                    // 组装蓝色分量。
+                    value.B << 16
+                    |
+                    // 组装透明分量。
+                    value.A << 24;
         }
 
         private void OnIsEnabledChanged(bool isEnabled)

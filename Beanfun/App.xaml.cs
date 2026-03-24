@@ -22,11 +22,15 @@ namespace Beanfun
                 Assembly executingAssembly = Assembly.GetExecutingAssembly();
                 AssemblyName assemblyName = new AssemblyName(args.Name);
 
-                if (assemblyName.Name.EndsWith(".resources")) return null;
+                if (assemblyName.Name.EndsWith(".resources"))
+                    return null;
 
                 if ("Microsoft.Web.WebView2.Wpf" == assemblyName.Name)
                 {
-                    if (ReleaseResource("Microsoft.Web.WebView2.Core.dll") == -1 || ReleaseResource("WebView2Loader.dll") == -1)
+                    if (
+                        ReleaseResource("Microsoft.Web.WebView2.Core.dll") == -1
+                        || ReleaseResource("WebView2Loader.dll") == -1
+                    )
                         MessageBox.Show("Release WebView2 Resource Error");
                 }
 
@@ -56,12 +60,13 @@ namespace Beanfun
         public static readonly Version Win10 = new Version(10, 0);
         public static readonly Version Win11 = new Version(10, 0, 22000, 0);
 
-        public static MainWindow MainWnd {
+        public static MainWindow MainWnd
+        {
             get
             {
                 Window wnd = Current.MainWindow;
                 if (wnd != null && (typeof(MainWindow) == wnd.GetType()))
-                    return (MainWindow) wnd;
+                    return (MainWindow)wnd;
                 else
                     return null;
             }
@@ -69,6 +74,7 @@ namespace Beanfun
 
         public static string LoginRegion = ConfigAppSettings.GetValue("loginRegion", "TW");
         public static int LoginMethod = int.Parse(ConfigAppSettings.GetValue("loginMethod", "0"));
+
         private void Main(object sender, StartupEventArgs e)
         {
             WindowsAPI.AttachConsole(-1);
@@ -94,7 +100,12 @@ namespace Beanfun
 
         private void Application_Exit(object sender, ExitEventArgs e)
         {
-            if (MainWnd != null && MainWnd.bfClient != null) try { MainWnd.bfClient.Logout(); } catch { }
+            if (MainWnd != null && MainWnd.bfClient != null)
+                try
+                {
+                    MainWnd.bfClient.Logout();
+                }
+                catch { }
         }
 
         public static Version ParseVersion(string version)
@@ -106,13 +117,18 @@ namespace Beanfun
                     int.Parse(oldFormatMatch.Groups[1].Value),
                     int.Parse(oldFormatMatch.Groups[2].Value),
                     int.Parse(oldFormatMatch.Groups[3].Value),
-                    int.Parse(oldFormatMatch.Groups[4].Value));
+                    int.Parse(oldFormatMatch.Groups[4].Value)
+                );
             }
             var newFormatMatch = Regex.Match(version, @"^(\d+)\.(\d+)\((\d{10})\)$");
             if (newFormatMatch.Success)
             {
                 var dateStr = newFormatMatch.Groups[3].Value;
-                var buildDate = DateTime.ParseExact(dateStr, "yyMMddHHmm", CultureInfo.InvariantCulture);
+                var buildDate = DateTime.ParseExact(
+                    dateStr,
+                    "yyMMddHHmm",
+                    CultureInfo.InvariantCulture
+                );
 
                 var baseDate = new DateTime(2000, 1, 1);
                 var build = (int)(buildDate - baseDate).TotalDays;
@@ -122,7 +138,8 @@ namespace Beanfun
                     int.Parse(newFormatMatch.Groups[1].Value),
                     int.Parse(newFormatMatch.Groups[2].Value),
                     build,
-                    revision);
+                    revision
+                );
             }
 
             throw new FormatException();
@@ -130,18 +147,17 @@ namespace Beanfun
 
         public static string ConvertVersion(Version version)
         {
-            if (version < new Version(4,1))
+            if (version < new Version(4, 1))
                 return $"{version.Major}.{version.Minor}.{version.Build}({version.Revision})";
-            DateTime buildDate = new DateTime(2000, 1, 1).AddDays(version.Build).AddSeconds(version.Revision * 2);
+            DateTime buildDate = new DateTime(2000, 1, 1)
+                .AddDays(version.Build)
+                .AddSeconds(version.Revision * 2);
             return $"{version.Major}.{version.Minor}({buildDate.ToString("yyMMddHHmm")})";
         }
 
         internal static string AssemblyVersion
         {
-            get
-            {
-                return ConvertVersion(Assembly.GetExecutingAssembly().GetName().Version);
-            }
+            get { return ConvertVersion(Assembly.GetExecutingAssembly().GetName().Version); }
         }
 
         public static int ReleaseResource(string file)
@@ -164,7 +180,10 @@ namespace Beanfun
                             {
                                 File.Delete(path);
                             }
-                            catch { return -1; }
+                            catch
+                            {
+                                return -1;
+                            }
                         }
                     }
                     string dir = Path.GetDirectoryName(path);
@@ -174,7 +193,10 @@ namespace Beanfun
                     }
 
                     stream.Position = 0;
-                    File.WriteAllBytes(path, new BinaryReader(stream).ReadBytes((int)stream.Length));
+                    File.WriteAllBytes(
+                        path,
+                        new BinaryReader(stream).ReadBytes((int)stream.Length)
+                    );
                     return 1;
                 }
             }
@@ -185,7 +207,12 @@ namespace Beanfun
         {
             try
             {
-                FileStream file = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                FileStream file = new FileStream(
+                    fileName,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite
+                );
                 string md5 = GetMD5HashFromStream(file);
                 file.Close();
                 return md5;

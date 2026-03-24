@@ -1,22 +1,32 @@
-﻿<Window x:Class="Beanfun.MapleTools"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Beanfun"
-        mc:Ignorable="d"
-        Title="{DynamicResource ToolBox}"
-        WindowStartupLocation="CenterScreen"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown"
-        SizeToContent="WidthAndHeight" ResizeMode="NoResize"
+﻿<Window
+  x:Class="Beanfun.MapleTools"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:local="clr-namespace:Beanfun"
+  mc:Ignorable="d"
+  Title="{DynamicResource ToolBox}"
+  WindowStartupLocation="CenterScreen"
+  MouseLeftButtonDown="Window_MouseLeftButtonDown"
+  SizeToContent="WidthAndHeight"
+  ResizeMode="NoResize"
 >
-    <Grid>
-        <StackPanel Margin="20">
-            <Button Content="{DynamicResource Recycling}" Margin="5" Click="btn_Recycling_Click"/>
-            <Button Content="{DynamicResource PlayerReport}" Margin="5" Click="btn_PlayerReport_Click"/>
-            <Button Content="{DynamicResource VideoReport}" Margin="5" Click="btn_VideoReport_Click"/>
-            <Button Content="{DynamicResource EquipStarForceCaculator}" Margin="5" Click="btn_EquipCalculator_Click"/>
-            <Button Content="{DynamicResource PerfectCoreCaculator}" Margin="5" Click="btn_CoreCaculator_Click"/>
-        </StackPanel>
-    </Grid>
+  <Grid>
+    <StackPanel Margin="20">
+      <Button Content="{DynamicResource Recycling}" Margin="5" Click="btn_Recycling_Click" />
+      <Button Content="{DynamicResource PlayerReport}" Margin="5" Click="btn_PlayerReport_Click" />
+      <Button Content="{DynamicResource VideoReport}" Margin="5" Click="btn_VideoReport_Click" />
+      <Button
+        Content="{DynamicResource EquipStarForceCaculator}"
+        Margin="5"
+        Click="btn_EquipCalculator_Click"
+      />
+      <Button
+        Content="{DynamicResource PerfectCoreCaculator}"
+        Margin="5"
+        Click="btn_CoreCaculator_Click"
+      />
+    </StackPanel>
+  </Grid>
 </Window>

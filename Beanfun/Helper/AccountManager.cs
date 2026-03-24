@@ -5,17 +5,17 @@
  * thanks to Stackoverflow :p
  * http://stackoverflow.com/questions/5869922/c-sharp-encrypt-serialized-file-before-writing-to-disk
  * http://stackoverflow.com/questions/16352879/write-list-of-objects-to-a-file
- * 
+ *
  * Date: 2016/3/1
  * Author: 葉家郡 (a.k.a 某數)
  */
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.IO;
-using System.Security.Cryptography;
+using System.Linq;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Security.Cryptography;
+using System.Text;
 using Utility.ModifyRegistry;
 
 namespace Beanfun
@@ -23,7 +23,10 @@ namespace Beanfun
     [Serializable]
     class AccountRecords
     {
-        public List<string> regionList = null, accountList = null, passwdList = null, verifyList = null;
+        public List<string> regionList = null,
+            accountList = null,
+            passwdList = null,
+            verifyList = null;
         public List<int> methodList = null;
         public List<bool> autoLoginList = null;
     }
@@ -31,11 +34,16 @@ namespace Beanfun
     [Serializable]
     class Records
     {
-        public List<string> regionList = null, accountList = null, accountNameList = null, passwdList = null, verifyList = null;
+        public List<string> regionList = null,
+            accountList = null,
+            accountNameList = null,
+            passwdList = null,
+            verifyList = null;
         public List<int> methodList = null;
         public List<bool> autoLoginList = null;
 
-        public static Records Change(object oldRecords) {
+        public static Records Change(object oldRecords)
+        {
             Records res = new Records();
             if (oldRecords is AccountRecords)
             {
@@ -54,8 +62,9 @@ namespace Beanfun
     public class AccountManager
     {
         private Records accountRecords = null;
-        private string dataPath = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData) + "\\Beanfun\\Users.dat";
-    
+        private string dataPath =
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData)
+            + "\\Beanfun\\Users.dat";
 
         public bool init()
         {
@@ -68,57 +77,88 @@ namespace Beanfun
             if (accountRecords == null)
                 accountRecords = new Records();
 
-            if (accountRecords.accountList == null) accountRecords.accountList = new List<string>();
+            if (accountRecords.accountList == null)
+                accountRecords.accountList = new List<string>();
 
-            if (accountRecords.regionList == null) accountRecords.regionList = new List<string>();
+            if (accountRecords.regionList == null)
+                accountRecords.regionList = new List<string>();
             if (accountRecords.regionList.Count < accountRecords.accountList.Count)
             {
-                for (int i = accountRecords.regionList.Count; i < accountRecords.accountList.Count; i++)
+                for (
+                    int i = accountRecords.regionList.Count;
+                    i < accountRecords.accountList.Count;
+                    i++
+                )
                 {
                     accountRecords.regionList.Add("TW");
                 }
             }
 
-            if (accountRecords.accountNameList == null) accountRecords.accountNameList = new List<string>();
+            if (accountRecords.accountNameList == null)
+                accountRecords.accountNameList = new List<string>();
             if (accountRecords.accountNameList.Count < accountRecords.accountList.Count)
             {
-                for (int i = accountRecords.accountNameList.Count; i < accountRecords.accountList.Count; i++)
+                for (
+                    int i = accountRecords.accountNameList.Count;
+                    i < accountRecords.accountList.Count;
+                    i++
+                )
                 {
                     accountRecords.accountNameList.Add("");
                 }
             }
 
-            if (accountRecords.passwdList == null) accountRecords.passwdList = new List<string>();
+            if (accountRecords.passwdList == null)
+                accountRecords.passwdList = new List<string>();
             if (accountRecords.passwdList.Count < accountRecords.accountList.Count)
             {
-                for (int i = accountRecords.passwdList.Count; i < accountRecords.accountList.Count; i++)
+                for (
+                    int i = accountRecords.passwdList.Count;
+                    i < accountRecords.accountList.Count;
+                    i++
+                )
                 {
                     accountRecords.passwdList.Add("");
                 }
             }
 
-            if (accountRecords.verifyList == null) accountRecords.verifyList = new List<string>();
+            if (accountRecords.verifyList == null)
+                accountRecords.verifyList = new List<string>();
             if (accountRecords.verifyList.Count < accountRecords.accountList.Count)
             {
-                for (int i = accountRecords.verifyList.Count; i < accountRecords.accountList.Count; i++)
+                for (
+                    int i = accountRecords.verifyList.Count;
+                    i < accountRecords.accountList.Count;
+                    i++
+                )
                 {
                     accountRecords.verifyList.Add("");
                 }
             }
 
-            if (accountRecords.methodList == null) accountRecords.methodList = new List<int>();
+            if (accountRecords.methodList == null)
+                accountRecords.methodList = new List<int>();
             if (accountRecords.methodList.Count < accountRecords.accountList.Count)
             {
-                for (int i = accountRecords.methodList.Count; i < accountRecords.accountList.Count; i++)
+                for (
+                    int i = accountRecords.methodList.Count;
+                    i < accountRecords.accountList.Count;
+                    i++
+                )
                 {
                     accountRecords.methodList.Add(0);
                 }
             }
 
-            if (accountRecords.autoLoginList == null) accountRecords.autoLoginList = new List<bool>();
+            if (accountRecords.autoLoginList == null)
+                accountRecords.autoLoginList = new List<bool>();
             if (accountRecords.autoLoginList.Count < accountRecords.accountList.Count)
             {
-                for (int i = accountRecords.autoLoginList.Count; i < accountRecords.accountList.Count; i++)
+                for (
+                    int i = accountRecords.autoLoginList.Count;
+                    i < accountRecords.accountList.Count;
+                    i++
+                )
                 {
                     accountRecords.autoLoginList.Add(false);
                 }
@@ -134,7 +174,8 @@ namespace Beanfun
 
                 using (Stream stream = new MemoryStream(cipher))
                 {
-                    var bformatter = new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
+                    var bformatter =
+                        new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
 
                     object records = bformatter.Deserialize(stream);
                     if (records is AccountRecords)
@@ -191,7 +232,11 @@ namespace Beanfun
                         ModifyRegistry myRegistry = new ModifyRegistry();
                         myRegistry.BaseRegistryKey = Microsoft.Win32.Registry.CurrentUser;
                         string entropy = myRegistry.Read("Entropy");
-                        byte[] plaintext = ProtectedData.Unprotect(cipher, Encoding.UTF8.GetBytes(entropy), DataProtectionScope.CurrentUser);
+                        byte[] plaintext = ProtectedData.Unprotect(
+                            cipher,
+                            Encoding.UTF8.GetBytes(entropy),
+                            DataProtectionScope.CurrentUser
+                        );
                         return System.Text.Encoding.UTF8.GetString(plaintext);
                     }
                     catch
@@ -202,7 +247,10 @@ namespace Beanfun
 
                 return null;
             }
-            catch { return null; }
+            catch
+            {
+                return null;
+            }
         }
 
         /*
@@ -216,8 +264,10 @@ namespace Beanfun
                 // Create random entropy of 8 characters.
                 var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
                 var random = new Random();
-                string entropy = new string(Enumerable.Repeat(chars, 8).Select(s => s[random.Next(s.Length)]).ToArray());
-                
+                string entropy = new string(
+                    Enumerable.Repeat(chars, 8).Select(s => s[random.Next(s.Length)]).ToArray()
+                );
+
                 ModifyRegistry myRegistry = new ModifyRegistry();
                 myRegistry.BaseRegistryKey = Microsoft.Win32.Registry.CurrentUser;
                 myRegistry.Write("Entropy", entropy);
@@ -235,16 +285,33 @@ namespace Beanfun
         #endregion
 
         #region Interface
-        public bool addAccount(string region, string account, string name, string password, string verify, int method, bool autoLogin)
+        public bool addAccount(
+            string region,
+            string account,
+            string name,
+            string password,
+            string verify,
+            int method,
+            bool autoLogin
+        )
         {
             return addAccount(-1, region, account, name, password, verify, method, autoLogin);
         }
 
-        public bool addAccount(int index, string region, string account, string name, string password, string verify, int method, bool autoLogin)
+        public bool addAccount(
+            int index,
+            string region,
+            string account,
+            string name,
+            string password,
+            string verify,
+            int method,
+            bool autoLogin
+        )
         {
             bool isExists = false;
             List<int> regionIndex = new List<int>();
-            for ( int i = 0 ; i < accountRecords.accountList.Count ; ++i )
+            for (int i = 0; i < accountRecords.accountList.Count; ++i)
             {
                 if (region != accountRecords.regionList[i])
                 {
@@ -303,7 +370,10 @@ namespace Beanfun
         {
             for (int i = 0; i < accountRecords.accountList.Count; ++i)
             {
-                if (account == accountRecords.accountList[i] && region == accountRecords.regionList[i])
+                if (
+                    account == accountRecords.accountList[i]
+                    && region == accountRecords.regionList[i]
+                )
                 {
                     return accountRecords.accountNameList[i];
                 }
@@ -315,7 +385,10 @@ namespace Beanfun
         {
             for (int i = 0; i < accountRecords.accountList.Count; ++i)
             {
-                if (account == accountRecords.accountList[i] && region == accountRecords.regionList[i])
+                if (
+                    account == accountRecords.accountList[i]
+                    && region == accountRecords.regionList[i]
+                )
                 {
                     return accountRecords.passwdList[i];
                 }
@@ -327,7 +400,10 @@ namespace Beanfun
         {
             for (int i = 0; i < accountRecords.accountList.Count; ++i)
             {
-                if (account == accountRecords.accountList[i] && region == accountRecords.regionList[i])
+                if (
+                    account == accountRecords.accountList[i]
+                    && region == accountRecords.regionList[i]
+                )
                 {
                     return accountRecords.verifyList[i];
                 }
@@ -340,7 +416,10 @@ namespace Beanfun
         {
             for (int i = 0; i < accountRecords.accountList.Count; ++i)
             {
-                if (account == accountRecords.accountList[i] && region == accountRecords.regionList[i])
+                if (
+                    account == accountRecords.accountList[i]
+                    && region == accountRecords.regionList[i]
+                )
                 {
                     return accountRecords.methodList[i];
                 }
@@ -353,7 +432,10 @@ namespace Beanfun
         {
             for (int i = 0; i < accountRecords.accountList.Count; ++i)
             {
-                if (account == accountRecords.accountList[i] && region == accountRecords.regionList[i])
+                if (
+                    account == accountRecords.accountList[i]
+                    && region == accountRecords.regionList[i]
+                )
                 {
                     return accountRecords.autoLoginList[i];
                 }
@@ -366,7 +448,10 @@ namespace Beanfun
         {
             for (int i = 0; i < accountRecords.accountList.Count; ++i)
             {
-                if (account == accountRecords.accountList[i] && region == accountRecords.regionList[i])
+                if (
+                    account == accountRecords.accountList[i]
+                    && region == accountRecords.regionList[i]
+                )
                 {
                     accountRecords.regionList.RemoveAt(i);
                     accountRecords.accountList.RemoveAt(i);
@@ -410,7 +495,8 @@ namespace Beanfun
 
                 using (Stream stream = new MemoryStream(cipher))
                 {
-                    var bformatter = new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
+                    var bformatter =
+                        new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
 
                     object records = bformatter.Deserialize(stream);
                     if (records is AccountRecords)

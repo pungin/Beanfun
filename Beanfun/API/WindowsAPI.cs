@@ -53,7 +53,10 @@ namespace Beanfun
         public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
         [DllImport("user32.dll")]
-        public static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+        public static extern int SetWindowCompositionAttribute(
+            IntPtr hwnd,
+            ref WindowCompositionAttributeData data
+        );
 
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT
@@ -116,8 +119,13 @@ namespace Beanfun
         }
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
-        private static extern Int32 GetSystemDefaultLocaleName([Out] StringBuilder lpLocaleName, Int32 cchLocaleName);
+        private static extern Int32 GetSystemDefaultLocaleName(
+            [Out] StringBuilder lpLocaleName,
+            Int32 cchLocaleName
+        );
+
         public const Int32 LOCALE_NAME_MAX_LENGTH = 85;
+
         public static String GetSystemDefaultLocaleName()
         {
             StringBuilder lpLocaleName = new StringBuilder(LOCALE_NAME_MAX_LENGTH);
@@ -136,7 +144,10 @@ namespace Beanfun
         public static extern IntPtr GetModuleHandle(string moduleName);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        public static extern IntPtr GetProcAddress(IntPtr hModule, [MarshalAs(UnmanagedType.LPStr)] string procName);
+        public static extern IntPtr GetProcAddress(
+            IntPtr hModule,
+            [MarshalAs(UnmanagedType.LPStr)] string procName
+        );
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -147,17 +158,20 @@ namespace Beanfun
 
         public enum BinaryType : uint
         {
-            SCS_32BIT_BINARY = 0,   // A 32-bit Windows-based application
-            SCS_64BIT_BINARY = 6,   // A 64-bit Windows-based application.
-            SCS_DOS_BINARY = 1,     // An MS-DOS � based application
-            SCS_OS216_BINARY = 5,   // A 16-bit OS/2-based application
-            SCS_PIF_BINARY = 3,     // A PIF file that executes an MS-DOS � based application
-            SCS_POSIX_BINARY = 4,   // A POSIX � based application
-            SCS_WOW_BINARY = 2      // A 16-bit Windows-based application
+            SCS_32BIT_BINARY = 0, // A 32-bit Windows-based application
+            SCS_64BIT_BINARY = 6, // A 64-bit Windows-based application.
+            SCS_DOS_BINARY = 1, // An MS-DOS � based application
+            SCS_OS216_BINARY = 5, // A 16-bit OS/2-based application
+            SCS_PIF_BINARY = 3, // A PIF file that executes an MS-DOS � based application
+            SCS_POSIX_BINARY = 4, // A POSIX � based application
+            SCS_WOW_BINARY = 2, // A 16-bit Windows-based application
         }
 
         [DllImport("kernel32.dll")]
-        public static extern bool GetBinaryType(string lpApplicationName, out BinaryType lpBinaryType);
+        public static extern bool GetBinaryType(
+            string lpApplicationName,
+            out BinaryType lpBinaryType
+        );
 
         public enum dwMapFlags : uint
         {
@@ -181,8 +195,13 @@ namespace Beanfun
         }
 
         [DllImport("kernel32.dll")]
-        public static extern int LCMapStringW(int Locale, uint dwMapFlags,
-            [MarshalAs(UnmanagedType.LPWStr)] string lpSrcStr, int cchSrc,
-            [MarshalAs(UnmanagedType.LPWStr)] string lpDestStr, int cchDest);
+        public static extern int LCMapStringW(
+            int Locale,
+            uint dwMapFlags,
+            [MarshalAs(UnmanagedType.LPWStr)] string lpSrcStr,
+            int cchSrc,
+            [MarshalAs(UnmanagedType.LPWStr)] string lpDestStr,
+            int cchDest
+        );
     }
 }
