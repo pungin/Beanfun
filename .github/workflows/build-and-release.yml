@@ -34,17 +34,12 @@ jobs:
       - name: Build Solution
         run: msbuild Beanfun.sln /p:Configuration=Release /p:Platform="Any CPU"
 
-      - name: Create Zip Archive
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "Build/Release/*" -DestinationPath "Beanfun-${{ github.event.inputs.tag_name }}.zip"
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name }}
           name: ${{ github.event.inputs.release_name || github.event.inputs.tag_name }}
-          files: Beanfun-${{ github.event.inputs.tag_name }}.zip
+          files: Build/Release/Beanfun.exe
           draft: false
           prerelease: false
         env:
