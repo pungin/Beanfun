@@ -1,4 +1,4 @@
-﻿<Page
+<Page
   x:Class="Beanfun.Settings"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -121,6 +121,18 @@
                 Checked="minimize_to_tray_CheckedChanged"
                 Unchecked="minimize_to_tray_CheckedChanged"
               />
+              <CheckBox
+                x:Name="disableHardwareAcceleration"
+                Margin="2"
+                Content="{DynamicResource DisableHardwareAcceleration}"
+                Checked="disableHardwareAcceleration_CheckedChanged"
+                Unchecked="disableHardwareAcceleration_CheckedChanged"
+                Cursor="Help"
+              >
+                <CheckBox.ToolTip>
+                  <ContentControl Content="{DynamicResource DisableHardwareAccelerationTip}" />
+                </CheckBox.ToolTip>
+              </CheckBox>
             </StackPanel>
           </StackPanel>
           <DockPanel Margin="0,3">

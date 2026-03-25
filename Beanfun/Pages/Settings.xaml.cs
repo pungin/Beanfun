@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -59,6 +59,9 @@ namespace Beanfun
             ask_update.IsChecked = bool.Parse(ConfigAppSettings.GetValue("ask_update", "true"));
             minimize_to_tray.IsChecked = bool.Parse(
                 ConfigAppSettings.GetValue("minimize_to_tray", "false")
+            );
+            disableHardwareAcceleration.IsChecked = bool.Parse(
+                ConfigAppSettings.GetValue("disableHardwareAcceleration", "false")
             );
 
             tradLogin.IsChecked = bool.Parse(ConfigAppSettings.GetValue("tradLogin", "true"));
@@ -190,6 +193,29 @@ namespace Beanfun
             ConfigAppSettings.SetValue(
                 "minimize_to_tray",
                 Convert.ToString((bool)minimize_to_tray.IsChecked)
+            );
+        }
+
+        private void disableHardwareAcceleration_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            if (
+                App.MainWnd == null
+                || App.MainWnd.settingPage == null
+                || disableHardwareAcceleration.IsChecked
+                    == bool.Parse(
+                        ConfigAppSettings.GetValue("disableHardwareAcceleration", "false")
+                    )
+            )
+                return;
+            ConfigAppSettings.SetValue(
+                "disableHardwareAcceleration",
+                Convert.ToString((bool)disableHardwareAcceleration.IsChecked)
+            );
+            MessageBox.Show(
+                TryFindResource("MsgRestartForHardwareAccel") as string,
+                TryFindResource("MsgRestartForHardwareAccelTitle") as string,
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
             );
         }
 

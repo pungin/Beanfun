@@ -125,6 +125,14 @@
   <system:String x:Key="AutoCheckUpdate">有新版本时提示更新</system:String>
   <system:String x:Key="RunAfterLogin">登录完成后运行游戏</system:String>
   <system:String x:Key="MinimizeToTaskbar">最小化到任务栏</system:String>
+  <system:String x:Key="DisableHardwareAcceleration">关闭硬件加速（降低 GPU 使用）</system:String>
+  <TextBlock x:Key="DisableHardwareAccelerationTip" TextWrapping="Wrap">
+    <Run Text="以软件渲染界面与内嵌网页，可减轻显卡负载与待机功耗；画面可能较不流畅、较耗 CPU。" />
+    <LineBreak />
+    <Run Text="变更后请重新启动程序，主窗口设置才会完全生效。" />
+  </TextBlock>
+  <system:String x:Key="MsgRestartForHardwareAccelTitle">需要重新启动</system:String>
+  <system:String x:Key="MsgRestartForHardwareAccel">已变更硬件加速相关设置。请完全关闭 Beanfun 后再打开，主窗口才会套用 WPF 软件渲染。</system:String>
   <system:String x:Key="Game">游戏</system:String>
   <system:String x:Key="GamePath">游戏路径</system:String>
   <system:String x:Key="TraditionalLoginMode">传统登录模式</system:String>
