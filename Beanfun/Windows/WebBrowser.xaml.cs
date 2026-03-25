@@ -30,17 +30,9 @@ namespace Beanfun
             wb_Main.CoreWebView2InitializationCompleted +=
                 Wb_Main_CoreWebView2InitializationCompleted;
 
-            if (
-                bool.Parse(
-                    ConfigAppSettings.GetValue("disableHardwareAcceleration", "false")
-                )
-            )
+            if (bool.Parse(ConfigAppSettings.GetValue("disableHardwareAcceleration", "false")))
             {
-                string userDataFolder = Path.Combine(
-                    Path.GetTempPath(),
-                    "Beanfun",
-                    "WebView2"
-                );
+                string userDataFolder = Path.Combine(Path.GetTempPath(), "Beanfun", "WebView2");
                 var options = new CoreWebView2EnvironmentOptions();
                 options.AdditionalBrowserArguments = "--disable-gpu";
                 CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(
