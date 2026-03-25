@@ -53,4 +53,16 @@
   <system:String x:Key="CopyDeeplinkNotReady"
     >Deeplink is not ready yet. Please wait for the QR Code to load.</system:String
   >
+  <system:String x:Key="DisableHardwareAcceleration"
+    >Disable hardware acceleration (lower GPU usage)</system:String
+  >
+  <TextBlock x:Key="DisableHardwareAccelerationTip" TextWrapping="Wrap">
+    <Run Text="Renders the UI and embedded web content in software to reduce GPU load and idle power use; the UI may feel less smooth and use more CPU." />
+    <LineBreak />
+    <Run Text="Restart the app for main-window changes to take full effect." />
+  </TextBlock>
+  <system:String x:Key="MsgRestartForHardwareAccelTitle">Restart required</system:String>
+  <system:String x:Key="MsgRestartForHardwareAccel"
+    >Hardware acceleration settings have changed. Fully exit Beanfun and start it again for the main window to use WPF software rendering.</system:String
+  >
 </ResourceDictionary>
