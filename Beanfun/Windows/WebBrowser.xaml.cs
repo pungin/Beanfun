@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.IO;
 using System.Net;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
@@ -10,16 +11,47 @@ namespace Beanfun
     /// </summary>
     public partial class WebBrowser : Window
     {
+        private readonly string _initialUri;
+
         public WebBrowser(string uri)
         {
             InitializeComponent();
+            _initialUri = uri;
             Environment.SetEnvironmentVariable(
                 "WEBVIEW2_USER_DATA_FOLDER",
-                System.IO.Path.GetTempPath() + "\\Beanfun\\WebView2\\"
+                Path.GetTempPath() + "\\Beanfun\\WebView2\\"
             );
+            Loaded += WebBrowser_Loaded;
+        }
+
+        private async void WebBrowser_Loaded(object sender, RoutedEventArgs e)
+        {
+            Loaded -= WebBrowser_Loaded;
             wb_Main.CoreWebView2InitializationCompleted +=
                 Wb_Main_CoreWebView2InitializationCompleted;
-            wb_Main.Source = new Uri(uri);
+
+            if (
+                bool.Parse(
+                    ConfigAppSettings.GetValue("disableHardwareAcceleration", "false")
+                )
+            )
+            {
+                string userDataFolder = Path.Combine(
+                    Path.GetTempPath(),
+                    "Beanfun",
+                    "WebView2"
+                );
+                var options = new CoreWebView2EnvironmentOptions();
+                options.AdditionalBrowserArguments = "--disable-gpu";
+                CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(
+                    null,
+                    userDataFolder,
+                    options
+                );
+                await wb_Main.EnsureCoreWebView2Async(env);
+            }
+
+            wb_Main.Source = new Uri(_initialUri);
         }
 
         private void Wb_Main_CoreWebView2InitializationCompleted(

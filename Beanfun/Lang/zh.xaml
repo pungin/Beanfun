@@ -128,6 +128,14 @@
   <system:String x:Key="AutoCheckUpdate">有新版本時提示更新</system:String>
   <system:String x:Key="RunAfterLogin">登入完成後開啟遊戲</system:String>
   <system:String x:Key="MinimizeToTaskbar">最小化到工具列</system:String>
+  <system:String x:Key="DisableHardwareAcceleration">關閉硬體加速（降低 GPU 使用）</system:String>
+  <TextBlock x:Key="DisableHardwareAccelerationTip" TextWrapping="Wrap">
+    <Run Text="以軟體渲染介面與內嵌網頁，可減輕顯示卡負載與待機功耗；畫面可能較不流暢、較耗 CPU。" />
+    <LineBreak />
+    <Run Text="變更後請重新啟動程式，主視窗設定才會完全生效。" />
+  </TextBlock>
+  <system:String x:Key="MsgRestartForHardwareAccelTitle">需要重新啟動</system:String>
+  <system:String x:Key="MsgRestartForHardwareAccel">已變更硬體加速相關設定。請完全關閉 Beanfun 後再開啟，主視窗才會套用 WPF 軟體渲染。</system:String>
   <system:String x:Key="Game">遊戲</system:String>
   <system:String x:Key="GamePath">遊戲路徑</system:String>
   <system:String x:Key="TraditionalLoginMode">傳統登入模式</system:String>

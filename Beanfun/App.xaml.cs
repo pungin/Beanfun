@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -7,6 +7,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace Beanfun
 {
@@ -78,6 +80,13 @@ namespace Beanfun
         private void Main(object sender, StartupEventArgs e)
         {
             WindowsAPI.AttachConsole(-1);
+
+            if (
+                bool.Parse(
+                    ConfigAppSettings.GetValue("disableHardwareAcceleration", "false")
+                )
+            )
+                RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
 
             I18n.LoadLanguage(ConfigAppSettings.GetValue("Language", null));
 
