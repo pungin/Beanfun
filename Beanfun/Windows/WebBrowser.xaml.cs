@@ -34,7 +34,7 @@ namespace Beanfun
             {
                 string userDataFolder = Path.Combine(Path.GetTempPath(), "Beanfun", "WebView2");
                 var options = new CoreWebView2EnvironmentOptions();
-                options.AdditionalBrowserArguments = "--disable-gpu";
+                options.AdditionalBrowserArguments = "--disable-gpu --disable-gpu-compositing";
                 CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(
                     null,
                     userDataFolder,
