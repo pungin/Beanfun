@@ -180,8 +180,9 @@ namespace Beanfun
                 pageQuery = "default.aspx%3Fservice_code%3D999999%26service_region%3DT0";
             }
 
-            string url = baseUrl +
-                $"auth.aspx?channel=member&page_and_query={pageQuery}&web_token={App.MainWnd.bfClient.WebToken}";
+            string url =
+                baseUrl
+                + $"auth.aspx?channel=member&page_and_query={pageQuery}&web_token={App.MainWnd.bfClient.WebToken}";
 
             new WebBrowser(url).Show();
         }
