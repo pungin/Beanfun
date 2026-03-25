@@ -132,7 +132,9 @@
     <Run Text="变更后请重新启动程序，主窗口设置才会完全生效。" />
   </TextBlock>
   <system:String x:Key="MsgRestartForHardwareAccelTitle">需要重新启动</system:String>
-  <system:String x:Key="MsgRestartForHardwareAccel">已变更硬件加速相关设置。请完全关闭 Beanfun 后再打开，主窗口才会套用 WPF 软件渲染。</system:String>
+  <system:String x:Key="MsgRestartForHardwareAccel"
+    >已变更硬件加速相关设置。请完全关闭 Beanfun 后再打开，主窗口才会套用 WPF 软件渲染。</system:String
+  >
   <system:String x:Key="Game">游戏</system:String>
   <system:String x:Key="GamePath">游戏路径</system:String>
   <system:String x:Key="TraditionalLoginMode">传统登录模式</system:String>

@@ -81,11 +81,7 @@ namespace Beanfun
         {
             WindowsAPI.AttachConsole(-1);
 
-            if (
-                bool.Parse(
-                    ConfigAppSettings.GetValue("disableHardwareAcceleration", "false")
-                )
-            )
+            if (bool.Parse(ConfigAppSettings.GetValue("disableHardwareAcceleration", "false")))
                 RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
 
             I18n.LoadLanguage(ConfigAppSettings.GetValue("Language", null));
