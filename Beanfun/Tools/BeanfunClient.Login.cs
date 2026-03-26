@@ -296,8 +296,11 @@ namespace Beanfun
 
         public JObject getQRCodeStrEncryptData(string skey)
         {
-            SetBaseHeaders(true, "application/json, text/plain, */*",
-                  $"https://login.beanfun.com/Login/Index?pSKey={skey}");
+            SetBaseHeaders(
+                true,
+                "application/json, text/plain, */*",
+                $"https://login.beanfun.com/Login/Index?pSKey={skey}"
+            );
             this.Headers.Add("X-Requested-With", "XMLHttpRequest");
             this.Headers.Add("Origin", "https://login.beanfun.com");
             string response = this.DownloadString(
@@ -404,7 +407,11 @@ namespace Beanfun
 
                 // Get bfWebToken Data 
                 this.redirect = false;
-                SetBaseHeaders(true, null, "https://login.beanfun.com/");
+                SetBaseHeaders(
+                    true, 
+                    null, 
+                    "https://login.beanfun.com/"
+                );
                 string returnUrl = "https://tw.beanfun.com/beanfun_block/bflogin/return.aspx";
                 string returnResponse = this.UploadString(returnUrl, payload);
                 string setCookieHeader = this.ResponseHeaders?["Set-Cookie"];
