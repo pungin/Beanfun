@@ -2,13 +2,9 @@ using System;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
-using System.Windows;
-using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Newtonsoft.Json.Linq;
 
@@ -246,10 +242,7 @@ namespace Beanfun
 
         public QRCodeClass GetQRCodeValue(string skey)
         {
-            this.Headers.Clear();
-            this.Headers.Add("User-Agent", "Mozilla/5.0");
-            this.Headers.Add("Accept", "text/html");
-
+            SetBaseHeaders(false, "text/html");
             string url = $"https://login.beanfun.com/Login/Index?pSKey={skey}";
             string response = this.DownloadString(url);
             //Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
@@ -303,12 +296,13 @@ namespace Beanfun
 
         public JObject getQRCodeStrEncryptData(string skey)
         {
-            this.Headers.Clear();
-            this.Headers.Add("User-Agent", "Mozilla/5.0");
-            this.Headers.Add("Accept", "application/json, text/plain, */*");
-            this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
+            SetBaseHeaders(
+                true,
+                "application/json, text/plain, */*",
+                $"https://login.beanfun.com/Login/Index?pSKey={skey}"
+            );
+            this.Headers.Add("X-Requested-With", "XMLHttpRequest");
             this.Headers.Add("Origin", "https://login.beanfun.com");
-
             string response = this.DownloadString(
                 $"https://login.beanfun.com/Login/InitLogin?pSKey={skey}"
             );
@@ -380,37 +374,33 @@ namespace Beanfun
             try
             {
                 string skey = qrcodeclass.skey;
-
-                this.Headers.Clear();
-                this.Headers.Add(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+                // QRLogin
+                SetBaseHeaders(
+                    true,
+                    "application/json, text/plain, */*",
+                    $"https://login.beanfun.com/Login/Index?pSKey={skey}"
                 );
-                this.Headers.Add("Accept", "application/json, text/plain, */*");
-                this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
-                this.Headers.Add("Origin", "https://login.beanfun.com");
-
                 string response = this.DownloadString("https://login.beanfun.com/QRLogin/QRLogin");
                 Debug.WriteLine("QRLogin response: " + response);
 
-                this.Headers.Clear();
-                this.Headers.Add(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+                // SendLogin
+                SetBaseHeaders(
+                    true,
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    $"https://login.beanfun.com/Login/Index?pSKey={skey}"
                 );
-                this.Headers.Add(
-                    "Accept",
-                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
-                );
-                this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
-
                 string sendLoginHtml = this.DownloadString(
                     "https://login.beanfun.com/Login/SendLogin"
                 );
 
                 NameValueCollection payload = new NameValueCollection();
-                MatchCollection inputTags = Regex.Matches(sendLoginHtml, @"<input[^>]+>");
-                foreach (Match tag in inputTags)
+                foreach (
+                    Match tag in Regex.Matches(
+                        sendLoginHtml,
+                        @"<input[^>]+>",
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline
+                    )
+                )
                 {
                     string tagStr = tag.Value;
                     Match nameMatch = Regex.Match(
@@ -418,69 +408,40 @@ namespace Beanfun
                         @"name\s*=\s*['""]([^'""]+)['""]",
                         RegexOptions.IgnoreCase
                     );
+
                     Match valMatch = Regex.Match(
                         tagStr,
                         @"value\s*=\s*['""]([^'""]*)['""]",
                         RegexOptions.IgnoreCase
                     );
-
                     if (
                         nameMatch.Success
                         && valMatch.Success
                         && tagStr.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase)
                             == -1
                     )
-                    {
                         payload.Add(nameMatch.Groups[1].Value, valMatch.Groups[1].Value);
-                    }
                 }
 
                 if (payload.Count == 0)
                 {
-                    this.errmsg = "SendLoginNoFormData: Not Found";
+                    errmsg = "SendLoginNoFormData";
                     return null;
                 }
 
-                string host = "tw.beanfun.com";
-                string returnUrl = $"https://{host}/beanfun_block/bflogin/return.aspx";
-
-                this.Headers.Clear();
-                this.Headers.Add(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                );
-                this.Headers.Add("Referer", "https://login.beanfun.com/");
-
+                // Get bfWebToken Data
                 this.redirect = false;
+                SetBaseHeaders(true, null, "https://login.beanfun.com/");
+                string returnUrl = "https://tw.beanfun.com/beanfun_block/bflogin/return.aspx";
                 string returnResponse = this.UploadString(returnUrl, payload);
-
-                string setCookieHeader =
-                    this.ResponseHeaders != null ? this.ResponseHeaders["Set-Cookie"] : "";
+                string setCookieHeader = this.ResponseHeaders?["Set-Cookie"];
                 if (!string.IsNullOrEmpty(setCookieHeader))
                 {
-                    Regex tokenRegex = new Regex(@"bfWebToken=([^;]+)");
-                    Match tokenMatch = tokenRegex.Match(setCookieHeader);
+                    Match tokenMatch = Regex.Match(setCookieHeader, @"bfWebToken=([^;]+)");
                     if (tokenMatch.Success)
-                    {
                         this.webtoken = tokenMatch.Groups[1].Value;
-                    }
                 }
-
-                if (string.IsNullOrEmpty(this.webtoken))
-                {
-                    this.errmsg = "LoginNoWebtoken";
-                    return null;
-                }
-
                 this.redirect = true;
-                if (this.ResponseHeaders != null && this.ResponseHeaders["Location"] != null)
-                {
-                    string location = this.ResponseHeaders["Location"];
-                    this.DownloadString(
-                        location.StartsWith("http") ? location : $"https://{host}{location}"
-                    );
-                }
-
                 return "OK";
             }
             catch (Exception e)
@@ -755,6 +716,23 @@ namespace Beanfun
                     payload
                 );
             }
+        }
+
+        private void SetBaseHeaders(
+            bool withReferer = false,
+            string accept = null,
+            string referer = null
+        )
+        {
+            this.Headers.Clear();
+            this.Headers.Add(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            );
+            if (accept != null)
+                this.Headers.Add("Accept", accept);
+            if (withReferer && referer != null)
+                this.Headers.Add("Referer", referer);
         }
     }
 }
