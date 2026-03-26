@@ -394,7 +394,13 @@ namespace Beanfun
                 );
 
                 NameValueCollection payload = new NameValueCollection();
-                foreach (Match tag in Regex.Matches(sendLoginHtml, @"<input[^>]+>", RegexOptions.IgnoreCase | RegexOptions.Singleline))
+                foreach (
+                    Match tag in Regex.Matches(
+                        sendLoginHtml,
+                        @"<input[^>]+>",
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline
+                    )
+                )
                 {
                     string tagStr = tag.Value;
                     Match nameMatch = Regex.Match(tagStr, @"name\s*=\s*['""]([^'""]+)['""]", RegexOptions.IgnoreCase);
