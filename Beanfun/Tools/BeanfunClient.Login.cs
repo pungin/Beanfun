@@ -403,28 +403,43 @@ namespace Beanfun
                 )
                 {
                     string tagStr = tag.Value;
-                    Match nameMatch = Regex.Match(tagStr, @"name\s*=\s*['""]([^'""]+)['""]", RegexOptions.IgnoreCase);
-                    Match valMatch = Regex.Match(tagStr, @"value\s*=\s*['""]([^'""]*)['""]", RegexOptions.IgnoreCase);
-                    if (nameMatch.Success && valMatch.Success && tagStr.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase) == -1)
+                    Match nameMatch = Regex.Match(
+                        tagStr,
+                        @"name\s*=\s*['""]([^'""]+)['""]",
+                        RegexOptions.IgnoreCase
+                    );
+
+                    Match valMatch = Regex.Match(
+                        tagStr,
+                        @"value\s*=\s*['""]([^'""]*)['""]",
+                        RegexOptions.IgnoreCase
+                    );
+                    if (
+                        nameMatch.Success
+                        && valMatch.Success
+                        && tagStr.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase)
+                            == -1
+                    )
                         payload.Add(nameMatch.Groups[1].Value, valMatch.Groups[1].Value);
                 }
 
-                if (payload.Count == 0) { errmsg = "SendLoginNoFormData"; return null; }
+                if (payload.Count == 0)
+                {
+                    errmsg = "SendLoginNoFormData";
+                    return null;
+                }
 
-                // Get bfWebToken Data 
+                // Get bfWebToken Data
                 this.redirect = false;
-                SetBaseHeaders(
-                    true, 
-                    null, 
-                    "https://login.beanfun.com/"
-                );
+                SetBaseHeaders(true, null, "https://login.beanfun.com/");
                 string returnUrl = "https://tw.beanfun.com/beanfun_block/bflogin/return.aspx";
                 string returnResponse = this.UploadString(returnUrl, payload);
                 string setCookieHeader = this.ResponseHeaders?["Set-Cookie"];
                 if (!string.IsNullOrEmpty(setCookieHeader))
                 {
                     Match tokenMatch = Regex.Match(setCookieHeader, @"bfWebToken=([^;]+)");
-                    if (tokenMatch.Success) this.webtoken = tokenMatch.Groups[1].Value;
+                    if (tokenMatch.Success)
+                        this.webtoken = tokenMatch.Groups[1].Value;
                 }
                 this.redirect = true;
                 return "OK";
@@ -703,10 +718,17 @@ namespace Beanfun
             }
         }
 
-        private void SetBaseHeaders(bool withReferer = false, string accept = null, string referer = null)
+        private void SetBaseHeaders(
+            bool withReferer = false,
+            string accept = null,
+            string referer = null
+        )
         {
             this.Headers.Clear();
-            this.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            this.Headers.Add(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            );
             if (accept != null)
                 this.Headers.Add("Accept", accept);
             if (withReferer && referer != null)
