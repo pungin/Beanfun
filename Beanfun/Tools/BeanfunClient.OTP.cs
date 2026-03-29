@@ -115,7 +115,10 @@ namespace Beanfun
                 if (responses[0] != "1")
                 {
                     this.errmsg =
-                        (System.Windows.Application.Current.TryFindResource("GetOtpError") as string)
+                        (
+                            System.Windows.Application.Current.TryFindResource("GetOtpError")
+                            as string
+                        )
                         + "\r\n"
                         + response;
                     return null;

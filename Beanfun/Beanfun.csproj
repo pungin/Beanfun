@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -86,5 +85,4 @@
       <LogicalName>LRSubMenus.dll</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
-
 </Project>
