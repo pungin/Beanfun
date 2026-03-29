@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -44,10 +44,7 @@ namespace Beanfun
 
             try
             {
-                var langDir = Path.Combine(
-                    Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
-                    @"Lang\"
-                );
+                var langDir = Path.Combine(AppContext.BaseDirectory, @"Lang\");
 
                 ResourceDictionary dictionary = null;
                 string langPath = null;
