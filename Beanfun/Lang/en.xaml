@@ -48,11 +48,101 @@
 			c-12.4,0-23-4.4-31.8-13.2s-13.2-19.4-13.2-31.7V607c0-78.8-35.5-118.2-106.5-118.2c-31.2,0-59.4,7.8-84.5,23.4
 			s-50,38.8-74.7,69.3v293c0,12.4-4.6,23-13.7,31.7c-9.1,8.8-19.9,13.2-32.2,13.2S3329,915.1,3320.2,906.3z</Geometry
   >
-  <system:String x:Key="CopyDeeplink">Copy Deeplink</system:String>
-  <system:String x:Key="CopyDeeplinkSuccess">Deeplink copied to clipboard.</system:String>
-  <system:String x:Key="CopyDeeplinkNotReady"
-    >Deeplink is not ready yet. Please wait for the QR Code to load.</system:String
+  <system:String x:Key="AppName">Beanfun</system:String>
+  <system:String x:Key="About">About</system:String>
+  <system:String x:Key="Settings">Settings</system:String>
+  <system:String x:Key="Minimize">Minimize</system:String>
+  <system:String x:Key="Close">Close</system:String>
+  <system:String x:Key="Version">Version</system:String>
+  <system:String x:Key="CheckUpdate">Check for Updates</system:String>
+  <system:String x:Key="AboutText"
+    >&lt;R&gt;This application is &lt;B&gt;&lt;R Foreground="Red"&gt;NOT&lt;/R&gt; an official client developed by Gamania Digital Entertainment&lt;/B&gt;.&lt;L/&gt;&lt;L/&gt;Please think carefully before using a third-party tool to log in to your game account, and make sure you downloaded this program from a trusted source.&lt;L/&gt;&lt;L/&gt;This program uses parts of BeanfunLogin's code.&lt;L/&gt;&lt;/R&gt;</system:String
   >
+  <system:String x:Key="Contact">Contact Developer</system:String>
+  <system:String x:Key="Email">Send Email</system:String>
+  <system:String x:Key="Back">Back</system:String>
+  <system:String x:Key="Feedback">Beanfun Feedback / Suggestions</system:String>
+  <system:String x:Key="FeedbackText">App version: {0}%0dFeedback / Suggestions:%0d</system:String>
+  <system:String x:Key="AccountList">Account List</system:String>
+  <system:String x:Key="GameChange">Change Game</system:String>
+  <system:String x:Key="GameStart">Start Game</system:String>
+  <system:String x:Key="Logout">Log Out</system:String>
+  <system:String x:Key="Tools">Tools</system:String>
+  <system:String x:Key="GashRemain">Gash: {0} points</system:String>
+  <system:String x:Key="GashRemainInGame"> (In-game {0})</system:String>
+  <system:String x:Key="GashRefresh">Refresh Points</system:String>
+  <system:String x:Key="GashRecharge">Top Up</system:String>
+  <system:String x:Key="AppGashRecharge">Redeem beanfun! App Gash Points</system:String>
+  <system:String x:Key="MemberCenter">Member Center</system:String>
+  <system:String x:Key="CustomerService">Customer Service</system:String>
+  <system:String x:Key="RightClickMenu">Right-click for menu</system:String>
+  <system:String x:Key="AccountBanned">Account locked</system:String>
+  <system:String x:Key="DoubleClickCopy">Double-click to copy account</system:String>
+  <system:String x:Key="CopyGameAccount">Copy Game Account</system:String>
+  <system:String x:Key="ChangeAccountName">Edit Game Account</system:String>
+  <system:String x:Key="ChangeAccountPassword">Change Account Password</system:String>
+  <system:String x:Key="GameAccountInfo">Game Account Details</system:String>
+  <system:String x:Key="CheckEmail">Check Verified Email</system:String>
+  <system:String x:Key="OfficialSite">Official Website</system:String>
+  <system:String x:Key="AddServiceAccount">Add Account</system:String>
+  <system:String x:Key="GetOtp">Get Password</system:String>
+  <system:String x:Key="GetOtpFailed">Failed to get password</system:String>
+  <system:String x:Key="GetOtpSuccessAndCopy">Password retrieved and copied.</system:String>
+  <system:String x:Key="AutoPaste">Auto Input</system:String>
+  <TextBlock x:Key="AutoPasteTip" TextWrapping="Wrap">
+    <Run Text="Auto input requires the game to be on the login screen." />
+    <LineBreak />
+    <LineBreak />
+    <Run Text="※ Auto input may occasionally fail due to game restrictions. Use at your own discretion." />
+  </TextBlock>
+  <system:String x:Key="ClickToCopy">Click to auto-copy</system:String>
+  <system:String x:Key="LogoutConfirm">You are about to log out. Continue?</system:String>
+  <system:String x:Key="MsgSelectAccount">You have not selected an account to start the game with.</system:String>
+  <system:String x:Key="GettingOtp">Retrieving...</system:String>
+  <system:String x:Key="GoToVerify">Go to Verification</system:String>
+  <system:String x:Key="AuthEmail">Verified Email</system:String>
+  <system:String x:Key="AcountOrEmail">Account or verified email:</system:String>
+  <system:String x:Key="Password_">Password:</system:String>
+  <system:String x:Key="RememberPassword">Remember password</system:String>
+  <system:String x:Key="AutoLogin">Auto login</system:String>
+  <system:String x:Key="ForgotPassword">Forgot?</system:String>
+  <system:String x:Key="RegisterAccount">Register Account</system:String>
+  <system:String x:Key="Login">Log In</system:String>
+  <system:String x:Key="QRCodeLogin">QR Code Login</system:String>
+  <system:String x:Key="AccountNeed">Please enter your account</system:String>
+  <system:String x:Key="PasswordNeed">Please enter your password</system:String>
+  <system:String x:Key="DeleteAccount">Remove Account</system:String>
+  <system:String x:Key="MsgDeleteAccount"
+    >You are about to remove account "{0}". This action cannot be undone. Are you sure?</system:String
+  >
+  <system:String x:Key="MsgLogging">Logging in, please wait...</system:String>
+  <system:String x:Key="Cancel">Cancel</system:String>
+  <system:String x:Key="ManageAccount">Manage Accounts</system:String>
+  <system:String x:Key="Taiwan">Taiwan</system:String>
+  <system:String x:Key="HongKong">Hong Kong</system:String>
+  <system:String x:Key="Account">Account</system:String>
+  <system:String x:Key="Remark">Remark</system:String>
+  <system:String x:Key="RememberAuthInfo">Remember verification info</system:String>
+  <system:String x:Key="DataBackup">Data Backup</system:String>
+  <system:String x:Key="Add">Add</system:String>
+  <system:String x:Key="Edit">Edit</system:String>
+  <system:String x:Key="Delete">Remove</system:String>
+  <system:String x:Key="Yes">Yes</system:String>
+  <system:String x:Key="No">No</system:String>
+  <system:String x:Key="MsgDeleteAccountMng"
+    >You are about to remove {0}. This action cannot be undone. Are you sure?</system:String
+  >
+  <system:String x:Key="MsgDeleteAccountMulti">{0} accounts</system:String>
+  <system:String x:Key="MsgDeleteAccountSingle">account "{0}"</system:String>
+  <system:String x:Key="RefreshQRCode">Reload</system:String>
+  <system:String x:Key="BackRegularLogin">Back to Regular Login</system:String>
+  <system:String x:Key="UpdateChannel">Update Channel</system:String>
+  <system:String x:Key="Stable">Stable</system:String>
+  <system:String x:Key="Development">Beta</system:String>
+  <system:String x:Key="ThemeColor">Theme Color</system:String>
+  <system:String x:Key="AutoCheckUpdate">Notify when a new version is available</system:String>
+  <system:String x:Key="RunAfterLogin">Launch game after login</system:String>
+  <system:String x:Key="MinimizeToTaskbar">Minimize to system tray</system:String>
   <system:String x:Key="DisableHardwareAcceleration"
     >Disable hardware acceleration (lower GPU usage)</system:String
   >
@@ -64,5 +154,297 @@
   <system:String x:Key="MsgRestartForHardwareAccelTitle">Restart required</system:String>
   <system:String x:Key="MsgRestartForHardwareAccel"
     >Hardware acceleration settings have changed. Fully exit Beanfun and start it again for the main window to use WPF software rendering.</system:String
+  >
+  <system:String x:Key="Game">Game</system:String>
+  <system:String x:Key="GamePath">Game Path</system:String>
+  <system:String x:Key="TraditionalLoginMode">Traditional Login Mode</system:String>
+  <TextBlock x:Key="TraditionalLoginModeTip" TextWrapping="Wrap">
+    <Run Text="Some games support logging in manually with a one-time password." />
+    <LineBreak />
+    <Run Text="Enable this option to get a one-time password for traditional login." />
+  </TextBlock>
+  <system:String x:Key="KillPatcher">Block Auto-Update</system:String>
+  <TextBlock x:Key="KillPatcherTip" TextWrapping="Wrap">
+    <Run Text="Automatically blocks the game's auto-update to prevent file corruption." />
+    <LineBreak />
+    <Run Text="※ Only supported for MapleStory" />
+  </TextBlock>
+  <system:String x:Key="SkipPlayWindow">Skip Play Window</system:String>
+  <TextBlock x:Key="SkipPlayWindowTip" TextWrapping="Wrap">
+    <Run Text="Skip the Play window wait and launch the game directly." />
+    <LineBreak />
+    <Run Text="※ Only supported for MapleStory" />
+  </TextBlock>
+  <system:String x:Key="AuthInfoNeed">Please enter advanced verification info</system:String>
+  <system:String x:Key="Remember">Remember</system:String>
+  <system:String x:Key="YourAuthInfoTip">Your advanced verification info is:</system:String>
+  <system:String x:Key="CaptchaCodeNeed">Please enter the CAPTCHA code</system:String>
+  <system:String x:Key="RefreshCaptcha">Refresh CAPTCHA</system:String>
+  <system:String x:Key="AuthConfirm">Submit</system:String>
+  <system:String x:Key="MsgAuthInfoEmpty">Verification info cannot be empty.</system:String>
+  <system:String x:Key="MsgCaptchaCodeEmpty">CAPTCHA code cannot be empty.</system:String>
+  <system:String x:Key="DataRecovery">Account Recovery</system:String>
+  <system:String x:Key="Password">Password</system:String>
+  <system:String x:Key="Data">Data</system:String>
+  <system:String x:Key="Export">Export</system:String>
+  <system:String x:Key="Recovery">Restore</system:String>
+  <system:String x:Key="ExportDone">Export completed</system:String>
+  <system:String x:Key="RecoveryFailed">Import failed</system:String>
+  <system:String x:Key="RecoverySuccess">Import successful</system:String>
+  <system:String x:Key="MsgDecryptFailed">Wrong password or data. Decryption failed.</system:String>
+  <system:String x:Key="AddAccount">Add Account</system:String>
+  <system:String x:Key="tbBeanfunAccount">Enter Beanfun account</system:String>
+  <system:String x:Key="tbBeanfunRemark">Enter account remark (leave blank if not needed)</system:String>
+  <system:String x:Key="tbBeanfunPassword">Password (leave blank to skip saving)</system:String>
+  <system:String x:Key="tbBeanfunAuthInfo">Verification info (leave blank to skip saving)</system:String>
+  <system:String x:Key="ServiceAccountDisplayName">Display name:</system:String>
+  <system:String x:Key="IAgree">I agree to the</system:String>
+  <system:String x:Key="TermsOfService">Terms of Service</system:String>
+  <system:String x:Key="SystemInfo">System Message</system:String>
+  <system:String x:Key="MsgDisplayNameNeed">Please enter a display name!</system:String>
+  <system:String x:Key="MsgTermsOfServiceNeed">You must agree to the Terms of Service before adding an account!</system:String>
+  <system:String x:Key="MsgCreateServiceAccountFailed"
+    >Failed to add game account. This game may not support account creation.</system:String
+  >
+  <system:String x:Key="UnknownError">An unknown error occurred</system:String>
+  <system:String x:Key="CaptchaCode">CAPTCHA code:</system:String>
+  <system:String x:Key="RefreshCaptchaImage">Reload CAPTCHA image</system:String>
+  <system:String x:Key="Confirm">Confirm</system:String>
+  <system:String x:Key="LoadCaptchaFailed">Failed to load CAPTCHA image</system:String>
+  <system:String x:Key="EditAccount">Edit Account</system:String>
+  <system:String x:Key="EditAccountSave">Save</system:String>
+  <system:String x:Key="MsgChangeDisplayNameError">Unknown error. Failed to change game account name.</system:String>
+  <system:String x:Key="Copy">Copy</system:String>
+  <system:String x:Key="CopyFinished">Copied</system:String>
+  <system:String x:Key="CopyFailed">Copy failed</system:String>
+  <system:String x:Key="EquipStarForceCaculator">Equipment Scroll &amp; Star Force Calculator</system:String>
+  <system:String x:Key="EquipType">Equipment type:</system:String>
+  <system:String x:Key="Weapon">Weapon</system:String>
+  <system:String x:Key="Glove">Glove</system:String>
+  <system:String x:Key="Armor">Other Armor</system:String>
+  <system:String x:Key="Accessory">Accessory</system:String>
+  <system:String x:Key="Heart">Heart</system:String>
+  <system:String x:Key="HeartNotice">※ Scroll stats follow weapon scrolls</system:String>
+  <system:String x:Key="Superior">Superior</system:String>
+  <system:String x:Key="Stat_">Stats:</system:String>
+  <system:String x:Key="Atk_Matk_">ATK / MATK:</system:String>
+  <system:String x:Key="StarForce">Apply </system:String>
+  <system:String x:Key="StarForceSplit">Star Force (up to </system:String>
+  <system:String x:Key="StarsInFused"> stars)</system:String>
+  <system:String x:Key="ScrollDestiny">Destiny Scroll</system:String>
+  <system:String x:Key="ScrollGlory">Glory Scroll</system:String>
+  <system:String x:Key="ScrollBlack">Dark Scroll</system:String>
+  <system:String x:Key="ScrollV">V Scroll</system:String>
+  <system:String x:Key="ScrollX">X Scroll</system:String>
+  <system:String x:Key="ScrollRed">Red Scroll</system:String>
+  <system:String x:Key="ScrollJiDian">Volt Scroll</system:String>
+  <system:String x:Key="ScrollSuMin">Fated Scroll</system:String>
+  <system:String x:Key="ScrollChuanShuo">Legendary Scroll</system:String>
+  <system:String x:Key="ScrollOthers">Other scroll stats</system:String>
+  <system:String x:Key="GloryMin">Min</system:String>
+  <system:String x:Key="GloryAverage">Avg</system:String>
+  <system:String x:Key="GloryMax">Max</system:String>
+  <system:String x:Key="Sheet"> pcs</system:String>
+  <system:String x:Key="Stat">Stats</system:String>
+  <system:String x:Key="Atk_Matk">ATK / MATK</system:String>
+  <system:String x:Key="PerfectCoreCaculator">Perfect Core Calculator</system:String>
+  <system:String x:Key="PerfectCoreNeedSkills">Required Skills</system:String>
+  <system:String x:Key="PerfectCoreMyCores">Owned Cores</system:String>
+  <system:String x:Key="PerfectCoreResult">Results</system:String>
+  <system:String x:Key="Caculator">Calculate</system:String>
+  <system:String x:Key="CaculatorCore">Calculate ({0} cores, {1} skills)</system:String>
+  <system:String x:Key="SkillNameIsEmpty">Skill name cannot be empty</system:String>
+  <system:String x:Key="SkillNameIsRepeat">Skill name already added</system:String>
+  <system:String x:Key="CoreSkillNameIsEmpty">You must select 3 core skills first</system:String>
+  <system:String x:Key="CoreSkillNameIsRepeat">3 core skills have duplicates</system:String>
+  <system:String x:Key="CoreIsRepeat">This core has already been added (sub-skill order is ignored)</system:String>
+  <system:String x:Key="NotFindPerfectCore">No perfect core combination found</system:String>
+  <system:String x:Key="Main">Main</system:String>
+  <system:String x:Key="Secondary">Sub</system:String>
+  <system:String x:Key="Others">Others</system:String>
+  <system:String x:Key="CoreGroup">Combination #{0}:</system:String>
+  <system:String x:Key="GameSelected">Select Game</system:String>
+  <system:String x:Key="ToolBox">Toolbox</system:String>
+  <system:String x:Key="ConvoyOperation">Convoy Operations</system:String>
+  <system:String x:Key="ConvoyManage">Convoy Management</system:String>
+  <system:String x:Key="ConvoyRank">Convoy Rankings</system:String>
+  <system:String x:Key="ConvoySearch">Search Convoys</system:String>
+  <system:String x:Key="RiderSearch">Search Riders</system:String>
+  <system:String x:Key="CreateConvoy">Create Convoy</system:String>
+  <system:String x:Key="LeaveConvoy">Leave Convoy</system:String>
+  <system:String x:Key="BeanfunRegionSelected">Select Beanfun region</system:String>
+  <system:String x:Key="RegionSelected">Select region</system:String>
+  <system:String x:Key="Recycling">Reclaim MapleStory folder space</system:String>
+  <system:String x:Key="MsgRecycling">Reclaim disk space? (Do not use this while updating the game.)</system:String>
+  <system:String x:Key="MsgRecyclingDone">MapleStory folder space reclaimed</system:String>
+  <system:String x:Key="PlayerReport">Report Cheater (GM verification)</system:String>
+  <system:String x:Key="MsgPlayerReport"
+    >The MapleStory real-time report feature requires a Taiwan Beanfun account. Hong Kong Beanfun accounts are not supported. You may register a Taiwan Beanfun account for reporting.</system:String
+  >
+  <system:String x:Key="VideoReport">Royal Inspector (video report)</system:String>
+  <system:String x:Key="ServiceAccountInfo">Account Details</system:String>
+  <system:String x:Key="SerialNumber">Serial No.</system:String>
+  <system:String x:Key="Name">Name</system:String>
+  <system:String x:Key="AuthType">Auth Method</system:String>
+  <system:String x:Key="Status">Status</system:String>
+  <system:String x:Key="Normal">Normal</system:String>
+  <system:String x:Key="Banned">Locked</system:String>
+  <system:String x:Key="AccountEstablished">Account has been created for</system:String>
+  <system:String x:Key="Days"> days</system:String>
+  <system:String x:Key="CreateDate">Created on {0}</system:String>
+  <system:String x:Key="LastLoginDate">Last login on {0}</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_1">Please set up a dedicated account and password for </system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_2">.</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_3">(1) This account and password are only for "</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_4">"!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_5"
+    >(2) To top up, please log in with your beanfun! account and password.</system:String
+  >
+  <system:String x:Key="UnconnectedGame_AddAccount_6">(3) The account and password must consist of </system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_7"> alphanumeric characters.</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_8">Set up for </system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_9">Confirm for </system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_10">Nickname:</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_11">(2–6 characters)</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_12">Nickname:</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_13">Check Account</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_14">Check Nickname</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_15">I agree and have read the</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_16">Service Agreement</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_17">Nickname required for game login</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_18">Please enter an account!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_19">Account length is incorrect!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_20">Please enter a password!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_21">Password length is incorrect!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_22">Please enter the confirmation password!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_23">Confirmation password length is incorrect!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_24">Please enter a nickname!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_25">Nickname length is incorrect!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_26"
+    >You must agree to the Terms of Service before adding an account!</system:String
+  >
+  <system:String x:Key="UnconnectedGame_AddAccount_27"
+    >Failed to add game account. This game may not support account creation.</system:String
+  >
+  <system:String x:Key="ChangePassword">Change Password</system:String>
+  <system:String x:Key="AuthEmailNeed">&gt; Enter verification email:</system:String>
+  <system:String x:Key="DataSended">Data has been sent!</system:String>
+  <system:String x:Key="MsgChangePassword"
+    >Please check your verified email for the password reset link!\r\nConfirmation code: {0}\r\nFor security, after receiving the email,\r\nplease verify that the confirmation code matches before clicking the link!</system:String
+  >
+  <system:String x:Key="AuthReLogin">Please complete advanced verification and log in again</system:String>
+  <system:String x:Key="NetworkConnectionError"
+    >Network connection error. Please check if the official website is accessible.</system:String
+  >
+  <system:String x:Key="GetOtpError">Failed to retrieve password.</system:String>
+  <system:String x:Key="InitAccountError">Account initialization failed. Unknown error.</system:String>
+  <system:String x:Key="LoadDataError"
+    >Error loading data from the official website. Error: {0}\r\n\r\n\r\nPossible reasons:\r\n1. The website is temporarily under maintenance.\r\n2. Your device cannot connect to the website directly.\r\n3. If you are using a game proxy and your browser can access the website, the proxy may not be covering this application.</system:String
+  >
+  <system:String x:Key="FileDialog_Filter">Executable|{0}|All Files (*.*)|*.*</system:String>
+  <system:String x:Key="FileDialog_Title">Select {0} file</system:String>
+  <system:String x:Key="ChangHKRegion">Switch to Hong Kong</system:String>
+  <system:String x:Key="ChangTWRegion">Switch to Taiwan</system:String>
+  <system:String x:Key="LoginErrorUnknown">Login failed. Unknown error.</system:String>
+  <system:String x:Key="LoginNoResponse">Initialization failed. Please check your network connection.</system:String>
+  <system:String x:Key="LoginNoSkey">Failed to get Skey.</system:String>
+  <system:String x:Key="LoginNoOTP1">Failed to get OTP1.</system:String>
+  <system:String x:Key="LoginNoSeed">Failed to get Seed.</system:String>
+  <system:String x:Key="LoginNoHash">Failed to get QR code.</system:String>
+  <system:String x:Key="LoginIntResultError"
+    >Failed to get QR code. The initialization response is invalid.</system:String
+  >
+  <system:String x:Key="AKeyParseFailed">Failed to get AKey.</system:String>
+  <system:String x:Key="authkeyParseFailed">Failed to get authkey.</system:String>
+  <system:String x:Key="LoginJsonParseFailed"
+    >Failed to detect login result. No JSON response found.</system:String
+  >
+  <system:String x:Key="LoginNoViewstate"
+    >Login failed. Viewstate not found. Please check your network connection.</system:String
+  >
+  <system:String x:Key="LoginNoEventvalidation"
+    >Login failed. Eventvalidation not found. Please check your network connection.</system:String
+  >
+  <system:String x:Key="LoginNoViewstateGenerator"
+    >Login failed. ViewstateGenerator not found. Please check your network connection.</system:String
+  >
+  <system:String x:Key="LoginNoSamplecaptcha"
+    >Login failed. Samplecaptcha not found. Please check your network connection.</system:String
+  >
+  <system:String x:Key="LoginNoAkey">Login failed. Incorrect account or password.</system:String>
+  <system:String x:Key="LoginNoAccountMatch">Login failed. Unable to retrieve account list.</system:String>
+  <system:String x:Key="LoginNoWebtoken">Login failed. Could not get bfWebToken cookie after login.</system:String>
+  <system:String x:Key="LoginUnknown">Login failed. Please try again later.</system:String>
+  <system:String x:Key="LoginNoMethod">Login error. Selected login method does not exist.</system:String>
+  <system:String x:Key="OTPUnknown">Failed to get password. Please try logging in again.</system:String>
+  <system:String x:Key="OTPNoCreateTime">Failed to get account creation time.</system:String>
+  <system:String x:Key="OTPNoSecretCode"
+    >Failed to get password. SecretCode not found. Please check your network connection.</system:String
+  >
+  <system:String x:Key="DecryptOTPError">Failed to decrypt password.</system:String>
+  <system:String x:Key="MainAccount_Not_Exist"
+    >This Beanfun account does not exist. Please verify that your Beanfun account is registered, or check if the account belongs to the {0} region.</system:String
+  >
+  <system:String x:Key="LoginInitCaptcha">Failed to load CAPTCHA.</system:String>
+  <system:String x:Key="GetOtpInitError">Initialization failed when getting password. Please check your network connection.</system:String>
+  <system:String x:Key="NeedAuthToPlayGame"
+    >Sorry, you must complete advanced verification before launching this game.</system:String
+  >
+  <system:String x:Key="DisconnectedFromServer">Disconnected from server. Please log in again.</system:String>
+  <system:String x:Key="MsgNeedAuth"
+    >To ensure your account security, please complete identity verification.</system:String
+  >
+  <system:String x:Key="MsgNeedBeanfunAuth"
+    >This account requires beanfun! game authorization to log in.\r\nPlease use beanfun! game authorization to log in.</system:String
+  >
+  <system:String x:Key="MsgCantFindGame"
+    >Unable to detect the game installation. Click &lt;Yes&gt; to re-detect. If the game is not installed, click &lt;No&gt; to start downloading.</system:String
+  >
+  <system:String x:Key="MsgGamePathHaveWChar">The game path contains non-ASCII characters, which may cause issues.</system:String>
+  <system:String x:Key="MsgGameAlreadyRun"
+    >The game is already running. It may not have exited properly. Do you want to terminate it?</system:String
+  >
+  <system:String x:Key="MsgLRDoNotSupportCmd"
+    >Launching 64-bit games with locale emulation does not support non-traditional login mode.</system:String
+  >
+  <system:String x:Key="MsgLEDoNotSupportXP"
+    >Launching games with locale emulation is not supported on Windows XP.</system:String
+  >
+  <system:String x:Key="MsgLocalePluginRunError"
+    >Launch failed. Please try starting the game directly from a desktop shortcut.\r\n\r\nIf your system locale is not Traditional Chinese, the locale emulator may not support your system, or the game may have been corrupted by auto-update (try reinstalling the game).</system:String
+  >
+  <system:String x:Key="MsgLocalePluginReleaseError"
+    >Failed to release locale emulator files. Please restart your computer and try again.</system:String
+  >
+  <system:String x:Key="MsgLEError0xC00700C1"
+    >Failed to launch game with locale emulation.\r\nError code: {0}\r\nThis error may be caused by using the game's auto-update, which corrupted game files.\r\n\r\nSolutions:\r\n- If an official fix patch is available, download and apply it manually.\r\n- If no fix patch is available or the above does not help, try reinstalling the game.\r\n</system:String
+  >
+  <system:String x:Key="MsgLEError"
+    >Failed to launch game with locale emulation.\r\nError code: {0}\r\n{1}\r\n{2}\r\nIf you have any antivirus software running, please disable it and try again.\r\nIf this window still appears, try launching in "Safe Mode". If none of these work, please submit an issue at:\r\nhttps://github.com/xupefei/Locale-Emulator/issues\r\n\r\n\r\nYou can press CTRL+C to copy this message to your clipboard.\r\n</system:String
+  >
+  <system:String x:Key="MsgBeanfunRejectLogin">Your login request was rejected by the beanfun! App.</system:String>
+  <system:String x:Key="ClientVersion">Client version:</system:String>
+  <system:String x:Key="ServerVersion">Server version:</system:String>
+  <system:String x:Key="MsgKillPatcher"
+    >The game's auto-update may corrupt game files and has been blocked.{0}\r\nIt is recommended to download {1}{2}. To re-enable auto-update, go to Settings.\r\nGo to the download page for {3}?</system:String
+  >
+  <system:String x:Key="UpdateByPatch">a manual patch</system:String>
+  <system:String x:Key="UpdateByFullClient">a full client reinstall</system:String>
+  <system:String x:Key="GamePatch">manual patch</system:String>
+  <system:String x:Key="GameFullClient">full client</system:String>
+  <system:String x:Key="WarningByBeanfun">Warning from Beanfun</system:String>
+  <system:String x:Key="WrongCaptcha">Incorrect CAPTCHA code</system:String>
+  <system:String x:Key="WrongAuthInfo">Incorrect data. Please re-enter.</system:String>
+  <system:String x:Key="UpdateCheck">Update Check</system:String>
+  <system:String x:Key="NoUpdatesDetected">No updates detected.</system:String>
+  <system:String x:Key="NewVersionDetected"
+    >New version {0} detected. Current: {1}\r\n\r\n{2}\r\n\r\nOpen the download page?</system:String
+  >
+  <system:String x:Key="Language">Language</system:String>
+  <system:String x:Key="InputTotp">Enter the two-factor authentication code from your app</system:String>
+  <system:String x:Key="CopyDeeplink">Copy Deeplink</system:String>
+  <system:String x:Key="CopyDeeplinkSuccess">Deeplink copied to clipboard.</system:String>
+  <system:String x:Key="CopyDeeplinkNotReady"
+    >Deeplink is not ready yet. Please wait for the QR Code to load.</system:String
   >
 </ResourceDictionary>

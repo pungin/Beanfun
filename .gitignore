@@ -262,3 +262,13 @@ __pycache__/
 /Dotfuscated
 /Build/Test
 /Build/Tools
+
+# LocaleRemulator runtime artifacts
+Beanfun/LRConfig.xml
+Beanfun/LRHookx32.dll
+Beanfun/LRHookx64.dll
+Beanfun/LRProc.exe
+Beanfun/LRSubMenus.dll
+
+# AI tool local settings
+.claude/

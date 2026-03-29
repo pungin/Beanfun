@@ -61,6 +61,13 @@ namespace Beanfun
 
     public class AccountManager
     {
+        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(
+            typeof(AccountManager)
+        );
+
+        private const string MigrationToolUrl =
+            "https://github.com/pungin/Beanfun/releases/tag/account-migrator";
+
         private Records accountRecords = null;
         private string dataPath =
             System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData)
@@ -177,6 +184,11 @@ namespace Beanfun
                 catch
                 {
                     accountRecords = null;
+                    if (IsLegacyFormat(raw))
+                    {
+                        log.Warn("Detected legacy BinaryFormatter account data");
+                        ShowLegacyFormatWarning();
+                    }
                 }
             }
             accRecInit();
@@ -474,6 +486,10 @@ namespace Beanfun
             }
             catch
             {
+                if (IsLegacyFormat(raw))
+                {
+                    ShowLegacyFormatWarning();
+                }
                 return false;
             }
 
@@ -483,6 +499,39 @@ namespace Beanfun
         public string exportRecord()
         {
             return JsonConvert.SerializeObject(accountRecords);
+        }
+        #endregion
+
+        #region Legacy format migration
+        private static bool IsLegacyFormat(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return false;
+            var trimmed = raw.TrimStart();
+            return !trimmed.StartsWith("{") && !trimmed.StartsWith("[");
+        }
+
+        private static void ShowLegacyFormatWarning()
+        {
+            var result = System.Windows.MessageBox.Show(
+                "偵測到舊版帳號資料格式（BinaryFormatter），此格式在新版中不再支援。\n\n"
+                    + "是否前往下載帳號資料轉換工具？\n"
+                    + "轉換完成後重新啟動程式即可恢復帳號資料。",
+                "帳號資料格式不相容",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning
+            );
+
+            if (result == System.Windows.MessageBoxResult.Yes)
+            {
+                System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = MigrationToolUrl,
+                        UseShellExecute = true,
+                    }
+                );
+            }
         }
         #endregion
     }
