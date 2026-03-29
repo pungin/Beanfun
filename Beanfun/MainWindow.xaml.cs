@@ -14,7 +14,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using IniParser;
+using IniParser.Parser;
 using IniParser.Model;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
@@ -317,8 +317,6 @@ namespace Beanfun
             {
                 if (App.OSVersion < App.Win11)
                 {
-                    if (App.OSVersion >= App.Win8_1)
-                        ServicePointManager.SecurityProtocol |= SecurityProtocolType.Ssl3;
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
                     ServicePointManager.ServerCertificateValidationCallback = (
                         sender,
@@ -678,8 +676,8 @@ namespace Beanfun
                     )
                 );
 
-                StringIniParser sip = new StringIniParser();
-                INIData = sip.ParseString(res);
+                IniDataParser parser = new IniDataParser();
+                INIData = parser.Parse(res);
 
                 res = Encoding.UTF8.GetString(
                     wc.DownloadData(
@@ -1283,7 +1281,7 @@ namespace Beanfun
             catch (Exception ex)
             {
                 e.Result =
-                    TryFindResource("LoginErrorUnknown") as string
+                    (TryFindResource("LoginErrorUnknown") as string)
                     + "\n\n"
                     + ex.Message
                     + "\n"
@@ -1464,7 +1462,7 @@ namespace Beanfun
             catch (Exception ex)
             {
                 e.Result =
-                    TryFindResource("LoginErrorUnknown") as string
+                    (TryFindResource("LoginErrorUnknown") as string)
                     + "\n\n"
                     + ex.Message
                     + "\n"
