@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue:*)",
+      "Bash(gh release:*)",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/pungin/Beanfun/master/VersionInfo.xml\")",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/pungin/Beanfun/code/VersionInfo.xml\")"
+    ]
+  }
+}

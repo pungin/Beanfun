@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<LRConfig>
+  <Profiles Type="exe">
+    <Profile Name="Run in Taiwan (Admin)" Guid="ef3e7b42-a87c-4c07-ae3e-eeebeef12762">
+      <Location>zh-TW</Location>
+      <CodePage>950</CodePage>
+      <LCID>1028</LCID>
+      <TimeZone>Taipei Standard Time</TimeZone>
+      <Bias>480</Bias>
+      <RunAsAdmin>true</RunAsAdmin>
+      <HookIME>true</HookIME>
+      <HookLCID>true</HookLCID>
+    </Profile>
+  </Profiles>
+</LRConfig>
