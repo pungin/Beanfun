@@ -21,7 +21,7 @@ Download available at <https://github.com/pungin/Beanfun/releases/latest>.
 
 ### Prerequisites
 
-* [.NET Framework 4.8](https://dotnet.microsoft.com/en-us/download/dotnet-framework/net48)
+* Windows 10 以上
 * [Microsoft Visual C++ Redistributable](https://docs.microsoft.com/zh-CN/cpp/windows/latest-supported-vc-redist?view=msvc-170)
 
 ### Usage
@@ -34,9 +34,11 @@ Download available at <https://github.com/pungin/Beanfun/releases/latest>.
 
 ## Built With
 
+* [.NET 8](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) - 目標框架（Self-contained，使用者不需另外安裝）
 * [ini-parser](https://github.com/rickyah/ini-parser) - ini元件
 * [log4net](https://logging.apache.org/log4net/) - 日誌元件
 * [Newtonsoft.Json](https://www.newtonsoft.com/json) - JSON元件
+* [Microsoft.Web.WebView2](https://www.nuget.org/packages/Microsoft.Web.WebView2) - 內嵌瀏覽器元件
 * [Detours](https://github.com/microsoft/Detours) - Used to hook ANSI/Unicode functions
 * [Locale_Remulator](https://github.com/InWILL/Locale_Remulator) - 區域模擬元件
 
