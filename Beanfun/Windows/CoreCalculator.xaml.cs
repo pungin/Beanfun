@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Windows;
@@ -203,7 +203,7 @@ namespace Beanfun
             }
             if (result.Count <= 0)
             {
-                t_Result.Text = TryFindResource("NotFindPerfectCore") as string + "\r\nBy:LinTx";
+                t_Result.Text = (TryFindResource("NotFindPerfectCore") as string) + "\r\nBy:LinTx";
             }
             else
             {

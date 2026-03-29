@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Specialized;
 using System.Net;
 using System.Text;
@@ -115,7 +115,7 @@ namespace Beanfun
                 if (responses[0] != "1")
                 {
                     this.errmsg =
-                        System.Windows.Application.Current.TryFindResource("GetOtpError") as string
+                        (System.Windows.Application.Current.TryFindResource("GetOtpError") as string)
                         + "\r\n"
                         + response;
                     return null;
@@ -138,7 +138,7 @@ namespace Beanfun
             catch (Exception e)
             {
                 this.errmsg =
-                    System.Windows.Application.Current.TryFindResource("GetOtpError") as string
+                    (System.Windows.Application.Current.TryFindResource("GetOtpError") as string)
                     + "\n\n"
                     + e.Message
                     + "\n"

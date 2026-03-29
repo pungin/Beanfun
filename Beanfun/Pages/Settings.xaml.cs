@@ -10,7 +10,7 @@ namespace Beanfun
     /// </summary>
     public partial class Settings : Page
     {
-        class Language
+        new class Language
         {
             public string Name { get; set; }
             public string DisplayName { get; set; }

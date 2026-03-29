@@ -631,8 +631,8 @@ namespace Beanfun
                 if (e is WebException)
                 {
                     this.errmsg =
-                        System.Windows.Application.Current.TryFindResource("NetworkConnectionError")
-                            as string
+                        (System.Windows.Application.Current.TryFindResource("NetworkConnectionError")
+                            as string)
                         + e.Message;
                 }
                 else
