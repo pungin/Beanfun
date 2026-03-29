@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -10,7 +10,7 @@ namespace Beanfun
         {
             try
             {
-                DESCryptoServiceProvider des = new DESCryptoServiceProvider();
+                using DES des = DES.Create();
                 des.Mode = CipherMode.ECB;
                 des.Padding = PaddingMode.None;
                 des.Key = Encoding.ASCII.GetBytes(key);
@@ -30,7 +30,7 @@ namespace Beanfun
         {
             try
             {
-                DESCryptoServiceProvider des = new DESCryptoServiceProvider();
+                using DES des = DES.Create();
                 des.Mode = CipherMode.ECB;
                 des.Padding = PaddingMode.None;
                 des.Key = Encoding.ASCII.GetBytes(key);

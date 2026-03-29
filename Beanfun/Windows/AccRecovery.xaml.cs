@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
@@ -30,10 +30,10 @@ namespace Beanfun
             string plaintext = accMan.exportRecord();
             byte[] plain_bytes = Encoding.UTF8.GetBytes(plaintext);
 
-            var md5 = new MD5CryptoServiceProvider();
+            using var md5 = MD5.Create();
             byte[] key = md5.ComputeHash(Encoding.UTF8.GetBytes(t_Password.Text));
-            RijndaelManaged provider_AES = new RijndaelManaged();
-            ICryptoTransform encrypt_AES = provider_AES.CreateEncryptor(
+            using var aes = Aes.Create();
+            ICryptoTransform encrypt_AES = aes.CreateEncryptor(
                 key,
                 md5.ComputeHash(Encoding.UTF8.GetBytes("pungin"))
             );
@@ -47,13 +47,13 @@ namespace Beanfun
         private void Recovery_Button_Click(object sender, RoutedEventArgs e)
         {
             byte[] byte_pwd = Encoding.UTF8.GetBytes(t_Password.Text);
-            MD5CryptoServiceProvider provider_MD5 = new MD5CryptoServiceProvider();
-            byte[] byte_pwdMD5 = provider_MD5.ComputeHash(byte_pwd);
+            using var md5 = MD5.Create();
+            byte[] byte_pwdMD5 = md5.ComputeHash(byte_pwd);
 
-            RijndaelManaged provider_AES = new RijndaelManaged();
-            ICryptoTransform decrypt_AES = provider_AES.CreateDecryptor(
+            using var aes = Aes.Create();
+            ICryptoTransform decrypt_AES = aes.CreateDecryptor(
                 byte_pwdMD5,
-                provider_MD5.ComputeHash(Encoding.UTF8.GetBytes("pungin"))
+                md5.ComputeHash(Encoding.UTF8.GetBytes("pungin"))
             );
 
             byte[] input = Convert.FromBase64String(t_Data.Text);

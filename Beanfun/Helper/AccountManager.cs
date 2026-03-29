@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 開發此功能主要用為多帳號時儲存
  * 以原有加解密寫法為基礎
  * 加上一層wrapper並用Serializable方式儲存資料
@@ -13,7 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization.Formatters.Binary;
+using Newtonsoft.Json;
 using System.Security.Cryptography;
 using System.Text;
 using Utility.ModifyRegistry;
@@ -170,22 +170,13 @@ namespace Beanfun
             var raw = readRawData();
             if (raw != null)
             {
-                byte[] cipher = Convert.FromBase64String(raw);
-
-                using (Stream stream = new MemoryStream(cipher))
+                try
                 {
-                    var bformatter =
-                        new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
-
-                    object records = bformatter.Deserialize(stream);
-                    if (records is AccountRecords)
-                    {
-                        accountRecords = Records.Change(records);
-                    }
-                    else
-                    {
-                        accountRecords = (Records)records;
-                    }
+                    accountRecords = JsonConvert.DeserializeObject<Records>(raw);
+                }
+                catch
+                {
+                    accountRecords = null;
                 }
             }
             accRecInit();
@@ -195,22 +186,8 @@ namespace Beanfun
 
         private bool storeRecord()
         {
-            using (var memoryStream = new MemoryStream())
-            {
-                // Serialize to memory instead of to file
-                var formatter = new BinaryFormatter();
-                formatter.Serialize(memoryStream, accountRecords);
-
-                // This resets the memory stream position for the following read operation
-                memoryStream.Seek(0, SeekOrigin.Begin);
-
-                // Get the bytes
-                var bytes = new byte[memoryStream.Length];
-                memoryStream.Read(bytes, 0, (int)memoryStream.Length);
-
-                writeRawData(Convert.ToBase64String(bytes));
-            }
-
+            string json = JsonConvert.SerializeObject(accountRecords);
+            writeRawData(json);
             return true;
         }
         #endregion
@@ -491,23 +468,7 @@ namespace Beanfun
         {
             try
             {
-                byte[] cipher = Convert.FromBase64String(raw);
-
-                using (Stream stream = new MemoryStream(cipher))
-                {
-                    var bformatter =
-                        new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
-
-                    object records = bformatter.Deserialize(stream);
-                    if (records is AccountRecords)
-                    {
-                        accountRecords = Records.Change(records);
-                    }
-                    else
-                    {
-                        accountRecords = (Records)records;
-                    }
-                }
+                accountRecords = JsonConvert.DeserializeObject<Records>(raw);
                 accRecInit();
                 storeRecord();
             }
@@ -521,21 +482,7 @@ namespace Beanfun
 
         public string exportRecord()
         {
-            using (var memoryStream = new MemoryStream())
-            {
-                // Serialize to memory instead of to file
-                var formatter = new BinaryFormatter();
-                formatter.Serialize(memoryStream, accountRecords);
-
-                // This resets the memory stream position for the following read operation
-                memoryStream.Seek(0, SeekOrigin.Begin);
-
-                // Get the bytes
-                var bytes = new byte[memoryStream.Length];
-                memoryStream.Read(bytes, 0, (int)memoryStream.Length);
-
-                return Convert.ToBase64String(bytes);
-            }
+            return JsonConvert.SerializeObject(accountRecords);
         }
         #endregion
     }
