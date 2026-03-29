@@ -97,7 +97,9 @@
   </TextBlock>
   <system:String x:Key="ClickToCopy">Click to auto-copy</system:String>
   <system:String x:Key="LogoutConfirm">You are about to log out. Continue?</system:String>
-  <system:String x:Key="MsgSelectAccount">You have not selected an account to start the game with.</system:String>
+  <system:String x:Key="MsgSelectAccount"
+    >You have not selected an account to start the game with.</system:String
+  >
   <system:String x:Key="GettingOtp">Retrieving...</system:String>
   <system:String x:Key="GoToVerify">Go to Verification</system:String>
   <system:String x:Key="AuthEmail">Verified Email</system:String>
@@ -194,15 +196,21 @@
   <system:String x:Key="MsgDecryptFailed">Wrong password or data. Decryption failed.</system:String>
   <system:String x:Key="AddAccount">Add Account</system:String>
   <system:String x:Key="tbBeanfunAccount">Enter Beanfun account</system:String>
-  <system:String x:Key="tbBeanfunRemark">Enter account remark (leave blank if not needed)</system:String>
+  <system:String x:Key="tbBeanfunRemark"
+    >Enter account remark (leave blank if not needed)</system:String
+  >
   <system:String x:Key="tbBeanfunPassword">Password (leave blank to skip saving)</system:String>
-  <system:String x:Key="tbBeanfunAuthInfo">Verification info (leave blank to skip saving)</system:String>
+  <system:String x:Key="tbBeanfunAuthInfo"
+    >Verification info (leave blank to skip saving)</system:String
+  >
   <system:String x:Key="ServiceAccountDisplayName">Display name:</system:String>
   <system:String x:Key="IAgree">I agree to the</system:String>
   <system:String x:Key="TermsOfService">Terms of Service</system:String>
   <system:String x:Key="SystemInfo">System Message</system:String>
   <system:String x:Key="MsgDisplayNameNeed">Please enter a display name!</system:String>
-  <system:String x:Key="MsgTermsOfServiceNeed">You must agree to the Terms of Service before adding an account!</system:String>
+  <system:String x:Key="MsgTermsOfServiceNeed"
+    >You must agree to the Terms of Service before adding an account!</system:String
+  >
   <system:String x:Key="MsgCreateServiceAccountFailed"
     >Failed to add game account. This game may not support account creation.</system:String
   >
@@ -213,11 +221,14 @@
   <system:String x:Key="LoadCaptchaFailed">Failed to load CAPTCHA image</system:String>
   <system:String x:Key="EditAccount">Edit Account</system:String>
   <system:String x:Key="EditAccountSave">Save</system:String>
-  <system:String x:Key="MsgChangeDisplayNameError">Unknown error. Failed to change game account name.</system:String>
+  <system:String x:Key="MsgChangeDisplayNameError"
+    >Unknown error. Failed to change game account name.</system:String
+  >
   <system:String x:Key="Copy">Copy</system:String>
   <system:String x:Key="CopyFinished">Copied</system:String>
   <system:String x:Key="CopyFailed">Copy failed</system:String>
-  <system:String x:Key="EquipStarForceCaculator">Equipment Scroll &amp; Star Force Calculator</system:String>
+  <system:String x:Key="EquipStarForceCaculator"
+    >Equipment Scroll &amp; Star Force Calculator</system:String>
   <system:String x:Key="EquipType">Equipment type:</system:String>
   <system:String x:Key="Weapon">Weapon</system:String>
   <system:String x:Key="Glove">Glove</system:String>
@@ -257,7 +268,9 @@
   <system:String x:Key="SkillNameIsRepeat">Skill name already added</system:String>
   <system:String x:Key="CoreSkillNameIsEmpty">You must select 3 core skills first</system:String>
   <system:String x:Key="CoreSkillNameIsRepeat">3 core skills have duplicates</system:String>
-  <system:String x:Key="CoreIsRepeat">This core has already been added (sub-skill order is ignored)</system:String>
+  <system:String x:Key="CoreIsRepeat"
+    >This core has already been added (sub-skill order is ignored)</system:String
+  >
   <system:String x:Key="NotFindPerfectCore">No perfect core combination found</system:String>
   <system:String x:Key="Main">Main</system:String>
   <system:String x:Key="Secondary">Sub</system:String>
@@ -275,7 +288,9 @@
   <system:String x:Key="BeanfunRegionSelected">Select Beanfun region</system:String>
   <system:String x:Key="RegionSelected">Select region</system:String>
   <system:String x:Key="Recycling">Reclaim MapleStory folder space</system:String>
-  <system:String x:Key="MsgRecycling">Reclaim disk space? (Do not use this while updating the game.)</system:String>
+  <system:String x:Key="MsgRecycling"
+    >Reclaim disk space? (Do not use this while updating the game.)</system:String
+  >
   <system:String x:Key="MsgRecyclingDone">MapleStory folder space reclaimed</system:String>
   <system:String x:Key="PlayerReport">Report Cheater (GM verification)</system:String>
   <system:String x:Key="MsgPlayerReport"
@@ -293,14 +308,19 @@
   <system:String x:Key="Days"> days</system:String>
   <system:String x:Key="CreateDate">Created on {0}</system:String>
   <system:String x:Key="LastLoginDate">Last login on {0}</system:String>
-  <system:String x:Key="UnconnectedGame_AddAccount_1">Please set up a dedicated account and password for </system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_1"
+    >Please set up a dedicated account and password for </system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_2">.</system:String>
-  <system:String x:Key="UnconnectedGame_AddAccount_3">(1) This account and password are only for "</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_3"
+    >(1) This account and password are only for "</system:String
+  >
   <system:String x:Key="UnconnectedGame_AddAccount_4">"!</system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_5"
     >(2) To top up, please log in with your beanfun! account and password.</system:String
   >
-  <system:String x:Key="UnconnectedGame_AddAccount_6">(3) The account and password must consist of </system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_6"
+    >(3) The account and password must consist of </system:String
+  >
   <system:String x:Key="UnconnectedGame_AddAccount_7"> alphanumeric characters.</system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_8">Set up for </system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_9">Confirm for </system:String>
@@ -311,13 +331,19 @@
   <system:String x:Key="UnconnectedGame_AddAccount_14">Check Nickname</system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_15">I agree and have read the</system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_16">Service Agreement</system:String>
-  <system:String x:Key="UnconnectedGame_AddAccount_17">Nickname required for game login</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_17"
+    >Nickname required for game login</system:String
+  >
   <system:String x:Key="UnconnectedGame_AddAccount_18">Please enter an account!</system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_19">Account length is incorrect!</system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_20">Please enter a password!</system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_21">Password length is incorrect!</system:String>
-  <system:String x:Key="UnconnectedGame_AddAccount_22">Please enter the confirmation password!</system:String>
-  <system:String x:Key="UnconnectedGame_AddAccount_23">Confirmation password length is incorrect!</system:String>
+  <system:String x:Key="UnconnectedGame_AddAccount_22"
+    >Please enter the confirmation password!</system:String
+  >
+  <system:String x:Key="UnconnectedGame_AddAccount_23"
+    >Confirmation password length is incorrect!</system:String
+  >
   <system:String x:Key="UnconnectedGame_AddAccount_24">Please enter a nickname!</system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_25">Nickname length is incorrect!</system:String>
   <system:String x:Key="UnconnectedGame_AddAccount_26"
@@ -332,12 +358,16 @@
   <system:String x:Key="MsgChangePassword"
     >Please check your verified email for the password reset link!\r\nConfirmation code: {0}\r\nFor security, after receiving the email,\r\nplease verify that the confirmation code matches before clicking the link!</system:String
   >
-  <system:String x:Key="AuthReLogin">Please complete advanced verification and log in again</system:String>
+  <system:String x:Key="AuthReLogin"
+    >Please complete advanced verification and log in again</system:String
+  >
   <system:String x:Key="NetworkConnectionError"
     >Network connection error. Please check if the official website is accessible.</system:String
   >
   <system:String x:Key="GetOtpError">Failed to retrieve password.</system:String>
-  <system:String x:Key="InitAccountError">Account initialization failed. Unknown error.</system:String>
+  <system:String x:Key="InitAccountError"
+    >Account initialization failed. Unknown error.</system:String
+  >
   <system:String x:Key="LoadDataError"
     >Error loading data from the official website. Error: {0}\r\n\r\n\r\nPossible reasons:\r\n1. The website is temporarily under maintenance.\r\n2. Your device cannot connect to the website directly.\r\n3. If you are using a game proxy and your browser can access the website, the proxy may not be covering this application.</system:String
   >
@@ -346,7 +376,9 @@
   <system:String x:Key="ChangHKRegion">Switch to Hong Kong</system:String>
   <system:String x:Key="ChangTWRegion">Switch to Taiwan</system:String>
   <system:String x:Key="LoginErrorUnknown">Login failed. Unknown error.</system:String>
-  <system:String x:Key="LoginNoResponse">Initialization failed. Please check your network connection.</system:String>
+  <system:String x:Key="LoginNoResponse"
+    >Initialization failed. Please check your network connection.</system:String
+  >
   <system:String x:Key="LoginNoSkey">Failed to get Skey.</system:String>
   <system:String x:Key="LoginNoOTP1">Failed to get OTP1.</system:String>
   <system:String x:Key="LoginNoSeed">Failed to get Seed.</system:String>
@@ -372,11 +404,19 @@
     >Login failed. Samplecaptcha not found. Please check your network connection.</system:String
   >
   <system:String x:Key="LoginNoAkey">Login failed. Incorrect account or password.</system:String>
-  <system:String x:Key="LoginNoAccountMatch">Login failed. Unable to retrieve account list.</system:String>
-  <system:String x:Key="LoginNoWebtoken">Login failed. Could not get bfWebToken cookie after login.</system:String>
+  <system:String x:Key="LoginNoAccountMatch"
+    >Login failed. Unable to retrieve account list.</system:String
+  >
+  <system:String x:Key="LoginNoWebtoken"
+    >Login failed. Could not get bfWebToken cookie after login.</system:String
+  >
   <system:String x:Key="LoginUnknown">Login failed. Please try again later.</system:String>
-  <system:String x:Key="LoginNoMethod">Login error. Selected login method does not exist.</system:String>
-  <system:String x:Key="OTPUnknown">Failed to get password. Please try logging in again.</system:String>
+  <system:String x:Key="LoginNoMethod"
+    >Login error. Selected login method does not exist.</system:String
+  >
+  <system:String x:Key="OTPUnknown"
+    >Failed to get password. Please try logging in again.</system:String
+  >
   <system:String x:Key="OTPNoCreateTime">Failed to get account creation time.</system:String>
   <system:String x:Key="OTPNoSecretCode"
     >Failed to get password. SecretCode not found. Please check your network connection.</system:String
@@ -386,11 +426,15 @@
     >This Beanfun account does not exist. Please verify that your Beanfun account is registered, or check if the account belongs to the {0} region.</system:String
   >
   <system:String x:Key="LoginInitCaptcha">Failed to load CAPTCHA.</system:String>
-  <system:String x:Key="GetOtpInitError">Initialization failed when getting password. Please check your network connection.</system:String>
+  <system:String x:Key="GetOtpInitError"
+    >Initialization failed when getting password. Please check your network connection.</system:String
+  >
   <system:String x:Key="NeedAuthToPlayGame"
     >Sorry, you must complete advanced verification before launching this game.</system:String
   >
-  <system:String x:Key="DisconnectedFromServer">Disconnected from server. Please log in again.</system:String>
+  <system:String x:Key="DisconnectedFromServer"
+    >Disconnected from server. Please log in again.</system:String
+  >
   <system:String x:Key="MsgNeedAuth"
     >To ensure your account security, please complete identity verification.</system:String
   >
@@ -400,7 +444,9 @@
   <system:String x:Key="MsgCantFindGame"
     >Unable to detect the game installation. Click &lt;Yes&gt; to re-detect. If the game is not installed, click &lt;No&gt; to start downloading.</system:String
   >
-  <system:String x:Key="MsgGamePathHaveWChar">The game path contains non-ASCII characters, which may cause issues.</system:String>
+  <system:String x:Key="MsgGamePathHaveWChar"
+    >The game path contains non-ASCII characters, which may cause issues.</system:String
+  >
   <system:String x:Key="MsgGameAlreadyRun"
     >The game is already running. It may not have exited properly. Do you want to terminate it?</system:String
   >
@@ -422,7 +468,9 @@
   <system:String x:Key="MsgLEError"
     >Failed to launch game with locale emulation.\r\nError code: {0}\r\n{1}\r\n{2}\r\nIf you have any antivirus software running, please disable it and try again.\r\nIf this window still appears, try launching in "Safe Mode". If none of these work, please submit an issue at:\r\nhttps://github.com/xupefei/Locale-Emulator/issues\r\n\r\n\r\nYou can press CTRL+C to copy this message to your clipboard.\r\n</system:String
   >
-  <system:String x:Key="MsgBeanfunRejectLogin">Your login request was rejected by the beanfun! App.</system:String>
+  <system:String x:Key="MsgBeanfunRejectLogin"
+    >Your login request was rejected by the beanfun! App.</system:String
+  >
   <system:String x:Key="ClientVersion">Client version:</system:String>
   <system:String x:Key="ServerVersion">Server version:</system:String>
   <system:String x:Key="MsgKillPatcher"
@@ -441,7 +489,9 @@
     >New version {0} detected. Current: {1}\r\n\r\n{2}\r\n\r\nOpen the download page?</system:String
   >
   <system:String x:Key="Language">Language</system:String>
-  <system:String x:Key="InputTotp">Enter the two-factor authentication code from your app</system:String>
+  <system:String x:Key="InputTotp"
+    >Enter the two-factor authentication code from your app</system:String
+  >
   <system:String x:Key="CopyDeeplink">Copy Deeplink</system:String>
   <system:String x:Key="CopyDeeplinkSuccess">Deeplink copied to clipboard.</system:String>
   <system:String x:Key="CopyDeeplinkNotReady"
