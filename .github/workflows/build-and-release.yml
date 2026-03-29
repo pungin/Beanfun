@@ -36,11 +36,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Setup NuGet
-        uses: NuGet/setup-nuget@v2
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
       - name: Get Current Version from AssemblyInfo.cs
         id: get_current_version
@@ -141,17 +140,14 @@ jobs:
           
           Write-Host "Updated $($assemblyInfoFile.Name) to version $newAssemblyVersion"
 
-      - name: Restore NuGet Packages
-        run: nuget restore Beanfun.sln
-
-      - name: Build Solution
-        run: msbuild Beanfun.sln /p:Configuration=Release /p:Platform="Any CPU"
+      - name: Publish Application
+        run: dotnet publish Beanfun/Beanfun.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 
       - name: Get Version from Compiled EXE and Convert to Timestamp
         id: get_exe_version
         shell: pwsh
         run: |
-          $exePath = "Build/Release/Beanfun.exe"
+          $exePath = "publish/Beanfun.exe"
           
           if (Test-Path $exePath) {
             $versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exePath)
@@ -464,7 +460,7 @@ jobs:
             1. Download `Beanfun.exe`
             2. Run the executable
             ${{ github.event.inputs.release_type == 'prerelease' && '3. ⚠️ This is a pre-release version - use with caution' || '' }}
-          files: Build/Release/Beanfun.exe
+          files: publish/Beanfun.exe
           draft: false
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
         env:
