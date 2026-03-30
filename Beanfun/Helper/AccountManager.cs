@@ -406,6 +406,7 @@ namespace Beanfun
 
         #region Legacy format migration
         // Fix #182: 實作內建的舊版資料自動升級機制，取代原先會導致 404 的外部轉換工具
+        // TODO: 此升級機制僅為過渡用途。建議於發布幾個版本後，確認多數活躍玩家皆已轉換至 JSON 格式時，將此方法徹底移除。
         private bool TryAutoMigrateLegacyData(string raw)
         {
             try
