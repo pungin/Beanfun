@@ -1158,7 +1158,7 @@ namespace Beanfun
             switch (msg)
             {
                 case "AdvanceCheckSuccessRetry":
-                    msg = "驗證成功！請再次輸入密碼登入遊戲。";
+                    msg = TryFindResource("AdvanceCheckSuccessRetry") as string;
                     method = 1;
                     break;
                 case "LoginNoResponse":

@@ -185,7 +185,7 @@ namespace Beanfun
         {
             if (advanceUrl.Contains("gamaweb.beanfun.com"))
             {
-                this.errmsg = "帳號狀態異常，請先使用瀏覽器登入官網確認（可能需聯絡客服）";
+                this.errmsg = "AdvanceCheckAccountAbnormal";
                 return null;
             }
 
@@ -197,7 +197,7 @@ namespace Beanfun
             );
             if (!captchaMatch.Success)
             {
-                this.errmsg = "無法取得驗證碼編號，帳號可能處於異常狀態";
+                this.errmsg = "AdvanceCheckNoCaptchaId";
                 return null;
             }
             string captchaId = captchaMatch.Groups[1].Value;
@@ -244,7 +244,7 @@ namespace Beanfun
 
             if (captchaImgBytes == null || captchaImgBytes.Length < 500)
             {
-                this.errmsg = "無法載入驗證碼圖片（Session 可能已過期）";
+                this.errmsg = "AdvanceCheckCaptchaLoadFailed";
                 return null;
             }
 
