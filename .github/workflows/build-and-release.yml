@@ -50,23 +50,43 @@ jobs:
         shell: pwsh
         run: |
           $file = Get-ChildItem -Path . -Filter "AssemblyInfo.cs" -Recurse | Select-Object -First 1
+          if (-not $file) { Write-Error "AssemblyInfo.cs not found!"; exit 1 }
+
           $content = Get-Content $file.FullName -Raw
           if ($content -match 'AssemblyVersion\("(\d+)\.(\d+)(?:\.\d+)?\.\*"\)') {
-              $major = [int]$matches[1]; $minor = [int]$matches[2]
-          } else { $major = 5; $minor = 8 } # Fallback
+              $major = [int]$matches[1]
+              $minor = [int]$matches[2]
+          } else { 
+              $major = 5
+              $minor = 8 
+          }
 
+          # Fetch all tags to find the highest patch number for the current Major.Minor
           git fetch --tags 2>$null
-          $tags = git tag -l "v*.*.*.*" --sort=-v:refname
-          $patch = 0
-          if ($tags -and ($tags[0] -match '^v(\d+)\.(\d+)\.(\d+)\.')) { $patch = [int]$matches[3] }
+          # Note: Changed to descending order (-v:refname) to get the latest tag first
+          $tags = git tag -l "v$major.$minor.*.*" --sort=-v:refname
 
-          if ("${{ github.event.inputs.release_type }}" -eq 'release') {
-              switch ("${{ github.event.inputs.version_increment }}") {
+          $patch = 0
+          if ($tags -and $tags.Count -gt 0) {
+              $latestTag = $tags[0]
+              if ($latestTag -match "^v\d+\.\d+\.(\d+)\.") {
+                  $patch = [int]$matches[1]
+                  Write-Host "Found existing patch number: $patch from tag: $latestTag"
+              }
+          }
+
+          $releaseType = "${{ github.event.inputs.release_type }}"
+          $increment = "${{ github.event.inputs.version_increment }}"
+
+          if ($releaseType -eq 'release') {
+              switch ($increment) {
                   'major' { $major++; $minor=0; $patch=0 }
                   'minor' { $minor++; $patch=0 }
                   'patch' { $patch++ }
               }
-          } else { $patch++ }
+          } else { 
+              $patch++ 
+          }
 
           $utcNow = (Get-Date).ToUniversalTime()
           $timestamp = $utcNow.ToString("yyMMddHHmm")
@@ -153,18 +173,17 @@ jobs:
 
             ---
 
-            ## 🌐 英文 Release Notes （點擊展開 View English）
             <details>
-            <summary><b>Expand English Details</b></summary>
+            <summary><b> 英文 Release Notes （點擊展開 View English）</b></summary>
+
+            <br>
 
             ### 📦 Download
-            ⬇️ **[Download Beanfun.exe]**(
-              ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe
-            )
+            ⬇️ **[Download Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)**
 
             ### 📝 What's New (Commits)
-            ```
-            \${{ steps.prep_release.outputs.commits_text }}
+            ```text
+            ${{ steps.prep_release.outputs.commits_text }}
             ```
             > ✅ Total commits: ${{ steps.prep_release.outputs.commit_count }}
 
@@ -179,23 +198,21 @@ jobs:
             |-----------------------|----------------------------------------|
             | Full Build Version    | ${{ steps.prep_version.outputs.info_version }} |
             | Build Date/Time (UTC) | ${{ steps.prep_version.outputs.build_datetime }} |
-            | MS Build Revision    | ${{ steps.prep_version.outputs.build }}.${{ steps.prep_version.outputs.revision }} |
-            | Source Commit        | [View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |
+            | MS Build Revision     | ${{ steps.prep_version.outputs.build }}.${{ steps.prep_version.outputs.revision }} |
+            | Source Commit         | [View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |
 
             </details>
 
             ---
 
-            ## 🇹🇼 中文 Release Notes （優先顯示）
+            ## 中文 Release Notes
 
             ### 📦 下載 Download
-            ⬇️ **[下載 Beanfun.exe]**(
-              ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe
-            )
+            ⬇️ **[下載 Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)**
 
             ### 📝 更新內容 What's New
-            ```
-            \${{ steps.prep_release.outputs.commits_text }}
+            ```text
+            ${{ steps.prep_release.outputs.commits_text }}
             ```
             > ✅ 總提交數：${{ steps.prep_release.outputs.commit_count }}
 
@@ -206,7 +223,7 @@ jobs:
             ${{ github.event.inputs.release_type == 'prerelease' && '> ⚠️ **注意：** 此為預發布測試版本，請斟酌使用！' || '' }}
 
             ### 🔧 技術細節 Technical Details
-            | 項目                 | 值值                                  |
+            | 項目                 | 值                                     |
             |----------------------|---------------------------------------|
             | 完整版號             | ${{ steps.prep_version.outputs.info_version }} |
             | 建立時間 (UTC)       | ${{ steps.prep_version.outputs.build_datetime }} |
