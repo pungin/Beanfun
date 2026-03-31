@@ -13,12 +13,13 @@ namespace Beanfun
             InitializeComponent();
         }
 
-        private void btn_OpenGamePass_Click(object sender, RoutedEventArgs e)
+        private async void btn_OpenGamePass_Click(object sender, RoutedEventArgs e)
         {
+            btn_OpenGamePass.IsEnabled = false;
             try
             {
                 var client = new BeanfunClient();
-                string skey = client.GetSessionkey();
+                string skey = await System.Threading.Tasks.Task.Run(() => client.GetSessionkey());
                 if (string.IsNullOrEmpty(skey))
                 {
                     MessageBox.Show(
@@ -27,13 +28,15 @@ namespace Beanfun
                     return;
                 }
                 App.MainWnd.bfClient = client;
-                new WebBrowser(
-                    $"https://login.beanfun.com/Login/GoGamaPassRequest?pSKey={skey}"
-                ).Show();
+                new GamePassBrowser(skey).Show();
             }
             catch
             {
                 MessageBox.Show(Application.Current.TryFindResource("ConnectionFailed") as string);
+            }
+            finally
+            {
+                btn_OpenGamePass.IsEnabled = true;
             }
         }
 

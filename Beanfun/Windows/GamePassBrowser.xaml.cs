@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Windows;
@@ -155,7 +156,10 @@ namespace Beanfun
                     App.MainWnd.GamePassLoginCompleted(webToken, allCookies);
                 });
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[GamePassBrowser] TryCompleteLogin failed: {ex.Message}");
+            }
         }
 
         private void ConvertCookies(
