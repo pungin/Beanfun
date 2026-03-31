@@ -59,18 +59,14 @@ namespace Beanfun.Update
                     return;
 
                 // Create a display string for the UI, e.g., "5.8(2604011114)"
-                string newVerDisplay =
-                    $"{match.Groups[1].Value}.{match.Groups[2].Value}({match.Groups[3].Value})";
+                string major = match.Groups[1].Value;
+                string minor = match.Groups[2].Value;
+                string patch = match.Groups[3].Value;
+                string timestamp = match.Groups[4].Value;
+                string newVerDisplay = $"{major}.{minor}.{patch}({timestamp})";
 
                 // Compare local version vs remote version using numeric logic
-                if (
-                    IsNewerVersion(
-                        App.AssemblyVersion,
-                        match.Groups[1].Value,
-                        match.Groups[2].Value,
-                        match.Groups[4].Value
-                    )
-                )
+                if (IsNewerVersion(App.AssemblyVersion, major, minor, timestamp))
                 {
                     try
                     {
