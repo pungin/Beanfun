@@ -26,6 +26,7 @@ namespace Beanfun
     {
         Regular = 0,
         QRCode = 1,
+        GamePass = 2,
     };
 
     enum GameStartMode : int
@@ -364,8 +365,8 @@ namespace Beanfun
                 );
                 if (loginMethod < (int)LoginMethod.Regular)
                     loginMethod = int.Parse(ConfigAppSettings.GetValue("loginMethod", "0"));
-                if (loginMethod > (int)LoginMethod.QRCode)
-                    loginMethod = (int)LoginMethod.QRCode;
+                if (loginMethod > (int)LoginMethod.GamePass)
+                    loginMethod = (int)LoginMethod.GamePass;
 
                 loginMethodInit();
                 reLoadGameInfo();
@@ -979,6 +980,7 @@ namespace Beanfun
 
             if (App.LoginRegion == "TW")
             {
+                loginPage.id_pass.btn_GamePass.Visibility = Visibility.Visible;
                 switch (App.LoginMethod)
                 {
                     case (int)LoginMethod.QRCode:
@@ -989,6 +991,10 @@ namespace Beanfun
                             loginPage == null || loginPage.qr == null ? false : true
                         );
                         break;
+                    case (int)LoginMethod.GamePass:
+                        btn_Region.IsEnabled = false;
+                        loginPage.login_form.Content = loginPage.gamepass;
+                        break;
                     default:
                         loginPage.login_form.Content = loginPage.id_pass;
                         break;
@@ -996,6 +1002,7 @@ namespace Beanfun
             }
             else
             {
+                loginPage.id_pass.btn_GamePass.Visibility = Visibility.Collapsed;
                 loginPage.login_form.Content = loginPage.id_pass;
                 App.LoginMethod = (int)LoginMethod.Regular;
             }

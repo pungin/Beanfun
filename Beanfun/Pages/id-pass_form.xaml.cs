@@ -268,5 +268,25 @@ namespace Beanfun
             App.LoginMethod = (int)LoginMethod.QRCode;
             App.MainWnd.loginMethodChanged();
         }
+
+        private void btn_GamePass_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var client = new BeanfunClient();
+                string skey = client.GetSessionkey();
+                if (string.IsNullOrEmpty(skey))
+                {
+                    MessageBox.Show("無法取得 SessionKey，請稍後再試");
+                    return;
+                }
+                App.MainWnd.bfClient = client;
+                new GamePassBrowser(skey).Show();
+            }
+            catch
+            {
+                MessageBox.Show("連線失敗，請檢查網路連線");
+            }
+        }
     }
 }
