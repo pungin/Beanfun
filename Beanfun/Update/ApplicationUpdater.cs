@@ -89,7 +89,44 @@ namespace Beanfun.Update
                         );
 
                         if (result == MessageBoxResult.OK)
-                            Process.Start(release.Assets[0].BrowserDownloadUrl);
+                        {
+                            try
+                            {
+                                // 1. Check if there are any assets available
+                                if (release.Assets != null && release.Assets.Count > 0)
+                                {
+                                    string downloadUrl = release.Assets[0].BrowserDownloadUrl;
+
+                                    // 2. For .NET Core / .NET 5+, Process.Start needs UseShellExecute = true to open URLs
+                                    Process.Start(
+                                        new ProcessStartInfo
+                                        {
+                                            FileName = downloadUrl,
+                                            UseShellExecute = true,
+                                        }
+                                    );
+                                }
+                                else
+                                {
+                                    // Fallback: If assets are missing, open the release page instead
+                                    // Using the tag_name to construct the URL
+                                    string releasePage =
+                                        $"https://github.com/lshw54/Beanfun/releases/tag/{release.TagName}";
+                                    Process.Start(
+                                        new ProcessStartInfo
+                                        {
+                                            FileName = releasePage,
+                                            UseShellExecute = true,
+                                        }
+                                    );
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                // Log or show error if needed
+                                Debug.WriteLine("Failed to open download link: " + ex.Message);
+                            }
+                        }
                     }
                     catch (Exception) { }
                 }
