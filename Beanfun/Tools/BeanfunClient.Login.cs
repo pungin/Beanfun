@@ -12,15 +12,27 @@ namespace Beanfun
 {
     public partial class BeanfunClient : WebClient
     {
-        private string RegularLogin(string id, string pass, string skey)
+        private string RegularLogin(
+            string id,
+            string pass,
+            string skey,
+            string service_code = "610074",
+            string service_region = "T9"
+        )
         {
             if (App.LoginRegion == "TW")
-                return TwRegularLogin(id, pass, skey);
+                return TwRegularLogin(id, pass, skey, service_code, service_region);
             else
                 return HkRegularLogin(id, pass, skey);
         }
 
-        private string TwRegularLogin(string id, string pass, string skey)
+        private string TwRegularLogin(
+            string id,
+            string pass,
+            string skey,
+            string service_code,
+            string service_region
+        )
         {
             try
             {
@@ -81,12 +93,77 @@ namespace Beanfun
                     if (result == "1")
                         return "REDIRECT_VERIFY";
 
-                    this.DownloadString($"{apiBase}/Login/Finalize?pSKey={skey}");
-                    string akey = Regex
-                        .Match(this.ResponseUri?.ToString() ?? "", @"akey=([^&]+)")
-                        .Groups[1]
-                        .Value;
-                    return string.IsNullOrEmpty(akey) ? "SUCCESS" : akey;
+                    // Use SendLogin flow (same as QRCode) to get bfWebToken
+                    SetBaseHeaders(
+                        true,
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        indexUrl
+                    );
+                    string sendLoginHtml = this.DownloadString($"{apiBase}/Login/SendLogin");
+
+                    NameValueCollection payload = new NameValueCollection();
+                    foreach (
+                        Match tag in Regex.Matches(
+                            sendLoginHtml,
+                            @"<input[^>]+>",
+                            RegexOptions.IgnoreCase | RegexOptions.Singleline
+                        )
+                    )
+                    {
+                        string tagStr = tag.Value;
+                        Match nameMatch = Regex.Match(
+                            tagStr,
+                            @"name\s*=\s*['""]([^'""]+)['""]",
+                            RegexOptions.IgnoreCase
+                        );
+                        Match valMatch = Regex.Match(
+                            tagStr,
+                            @"value\s*=\s*['""]([^'""]*)['""]",
+                            RegexOptions.IgnoreCase
+                        );
+                        if (
+                            nameMatch.Success
+                            && valMatch.Success
+                            && tagStr.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase)
+                                == -1
+                        )
+                            payload.Add(nameMatch.Groups[1].Value, valMatch.Groups[1].Value);
+                    }
+
+                    if (payload.Count == 0)
+                    {
+                        this.errmsg = "SendLoginNoFormData";
+                        return null;
+                    }
+
+                    this.redirect = false;
+                    SetBaseHeaders(true, null, $"{apiBase}/");
+                    string returnResponse = this.UploadString(
+                        "https://tw.beanfun.com/beanfun_block/bflogin/return.aspx",
+                        payload
+                    );
+                    string setCookieHeader = this.ResponseHeaders?["Set-Cookie"];
+                    if (!string.IsNullOrEmpty(setCookieHeader))
+                    {
+                        Match tokenMatch = Regex.Match(setCookieHeader, @"bfWebToken=([^;]+)");
+                        if (tokenMatch.Success)
+                            this.webtoken = tokenMatch.Groups[1].Value;
+                    }
+                    this.redirect = true;
+
+                    if (string.IsNullOrEmpty(this.webtoken))
+                    {
+                        this.errmsg = "LoginNoWebtoken";
+                        return null;
+                    }
+
+                    GetAccounts(service_code, service_region, false);
+                    if (this.errmsg != null)
+                        return null;
+
+                    this.remainPoint = getRemainPoint();
+                    this.errmsg = null;
+                    return null; // return null with no errmsg = success, skip LoginCompleted
                 }
 
                 // ResultCode 2: AdvanceCheck required
@@ -782,7 +859,7 @@ namespace Beanfun
                 switch (loginMethod)
                 {
                     case (int)LoginMethod.Regular:
-                        akey = RegularLogin(id, pass, SessionKey);
+                        akey = RegularLogin(id, pass, SessionKey, service_code, service_region);
                         break;
                     case (int)LoginMethod.QRCode:
                         akey = QRCodeLogin(qrcodeClass);
