@@ -189,7 +189,7 @@ jobs:
             
             $patch = "${{ steps.update_version.outputs.new_patch }}"
             $semanticVersion = "${{ steps.update_version.outputs.semantic_version }}"
-            $tagVersion = "$semanticVersion.$timestamp"
+            $tagVersion = "$major.$minor.$timestamp"
             $tagName = "v$tagVersion"
             
             Write-Host "Generated tag name: $tagName"
