@@ -1269,8 +1269,7 @@ namespace Beanfun
 
         private void SaveLoginCredentials()
         {
-            bool isAccountLogin =
-                App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode;
+            bool isAccountLogin = App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode;
             if (!isAccountLogin)
             {
                 ConfigAppSettings.SetValue("AccountID", null);
@@ -1280,34 +1279,21 @@ namespace Beanfun
             var idPassForm = loginPage.id_pass;
             string accountId = idPassForm.t_AccountID.Text;
             LastLoginAccountID = accountId;
-
-            ConfigAppSettings.SetValue(
-                "AccountID",
-                string.IsNullOrWhiteSpace(accountId) ? null : accountId
-            );
-
-            if (string.IsNullOrWhiteSpace(accountId))
-                return;
-
-            bool shouldSavePwd =
-                !string.IsNullOrEmpty(idPassForm.t_Password.Password)
-                && idPassForm.checkBox_RememberPWD.IsEnabled
-                && (bool)idPassForm.checkBox_RememberPWD.IsChecked;
-
-            bool shouldAutoLogin = shouldSavePwd && (bool)idPassForm.checkBox_AutoLogin.IsChecked;
-
-            string savedVerify = (bool)verifyPage.checkBoxRememberVerify.IsChecked
-                ? verifyPage.t_Verify.Text
-                : "";
+            ConfigAppSettings.SetValue("AccountID", accountId);
 
             accountManager.addAccount(
                 App.LoginRegion,
                 accountId,
                 "",
-                shouldSavePwd ? idPassForm.t_Password.Password : "",
-                savedVerify,
+                idPassForm.checkBox_RememberPWD.IsEnabled
+                && (bool)idPassForm.checkBox_RememberPWD.IsChecked
+                    ? idPassForm.t_Password.Password
+                    : "",
+                (bool)verifyPage.checkBoxRememberVerify.IsChecked
+                    ? verifyPage.t_Verify.Text
+                    : "",
                 App.LoginMethod,
-                shouldAutoLogin
+                (bool)idPassForm.checkBox_AutoLogin.IsChecked
             );
 
             loginMethodInit();
