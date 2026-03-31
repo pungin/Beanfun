@@ -35,7 +35,7 @@ Download available at <https://github.com/pungin/Beanfun/releases/latest>.
 ## Built With
 
 * [.NET 8](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) - 目標框架（Self-contained，使用者不需另外安裝）
-* [ini-parser](https://github.com/rickyah/ini-parser) - ini元件
+* [ini-parser-netstandard](https://github.com/lukazh/ini-parser-standard) - ini元件
 * [log4net](https://logging.apache.org/log4net/) - 日誌元件
 * [Newtonsoft.Json](https://www.newtonsoft.com/json) - JSON元件
 * [Microsoft.Web.WebView2](https://www.nuget.org/packages/Microsoft.Web.WebView2) - 內嵌瀏覽器元件
@@ -43,6 +43,16 @@ Download available at <https://github.com/pungin/Beanfun/releases/latest>.
 * [Locale_Remulator](https://github.com/InWILL/Locale_Remulator) - 區域模擬元件
 
 ## Development
+
+### 建置發行版本
+
+```bash
+# 清理並發行單一 exe（Self-contained，不需安裝 .NET Runtime）
+dotnet clean Beanfun/Beanfun.csproj -c Release
+dotnet publish Beanfun/Beanfun.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish
+```
+
+產出的 `publish/Beanfun.exe` 即為可直接發行的單一執行檔。
 
 ### 程式碼格式化
 

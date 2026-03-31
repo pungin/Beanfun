@@ -17,9 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ini-parser" Version="2.5.2">
-      <NoWarn>NU1701</NoWarn>
-    </PackageReference>
+    <PackageReference Include="ini-parser-netstandard" Version="2.5.2" />
     <PackageReference Include="log4net" Version="2.0.12" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.1343.22" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
