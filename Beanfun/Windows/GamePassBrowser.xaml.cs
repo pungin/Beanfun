@@ -10,6 +10,7 @@ namespace Beanfun
     {
         private readonly string _skey;
         private bool _hasClickedGamePass = false;
+        private bool _loginCompleted = false;
 
         public GamePassBrowser(string skey)
         {
@@ -20,6 +21,16 @@ namespace Beanfun
                 Path.GetTempPath() + "\\Beanfun\\WebView2\\"
             );
             Loaded += OnLoaded;
+            Closed += OnClosed;
+        }
+
+        private void OnClosed(object sender, EventArgs e)
+        {
+            if (!_loginCompleted)
+            {
+                // User closed window without completing login, reset bfClient
+                App.MainWnd.bfClient = null;
+            }
         }
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -139,6 +150,7 @@ namespace Beanfun
 
                 Dispatcher.Invoke(() =>
                 {
+                    _loginCompleted = true;
                     this.Close();
                     App.MainWnd.GamePassLoginCompleted(webToken, allCookies);
                 });

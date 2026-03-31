@@ -264,7 +264,10 @@ namespace Beanfun
             });
 
             if (dialogResult != true || string.IsNullOrEmpty(userEmail))
+            {
+                this.errmsg = "LoginAdvanceCheck";
                 return null;
+            }
 
             // Submit advance check form
             SetBaseHeaders(true, null, advanceUrl);
