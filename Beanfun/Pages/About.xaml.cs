@@ -1,4 +1,6 @@
-﻿using System.Windows;
+﻿using System;
+using System.Diagnostics;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
@@ -57,18 +59,13 @@ namespace Beanfun
 
                 string mailtoUrl = $"mailto:{to}?subject={subject}&body={body}";
 
-                // Fix for .NET 8 compatibility
-                System.Diagnostics.Process.Start(
-                    new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = mailtoUrl,
-                        UseShellExecute = true,
-                    }
+                Process.Start(
+                    new ProcessStartInfo { FileName = mailtoUrl, UseShellExecute = true }
                 );
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("Failed to open mail: " + ex.Message);
+                Debug.WriteLine("Failed to open mail: " + ex.Message);
             }
         }
 
