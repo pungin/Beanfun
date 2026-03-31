@@ -96,7 +96,7 @@ jobs:
           }
           echo "current_patch=$currentPatch" >> $env:GITHUB_OUTPUT
 
-      - name: Update AssemblyInfo.cs for Release
+      - name: Calculate New Version
         id: update_version
         shell: pwsh
         run: |
@@ -145,21 +145,6 @@ jobs:
           echo "version_changed=$($versionChanged.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           echo "semantic_version=$newMajor.$newMinor.$newPatch" >> $env:GITHUB_OUTPUT
 
-      - name: Apply Version Update to AssemblyInfo.cs
-        if: steps.update_version.outputs.version_changed == 'true'
-        shell: pwsh
-        run: |
-          $assemblyInfoFile = Get-ChildItem -Path . -Filter "AssemblyInfo.cs" -Recurse | Select-Object -First 1
-          $newAssemblyVersion = "${{ steps.update_version.outputs.new_version }}"
-
-          Write-Host "Updating AssemblyInfo.cs to: $newAssemblyVersion"
-
-          $content = Get-Content $assemblyInfoFile.FullName -Raw
-          $content = $content -replace 'AssemblyVersion\("\d+\.\d+(?:\.\d+)?\.\*"\)', "AssemblyVersion(`"$newAssemblyVersion`")"
-          $content | Set-Content $assemblyInfoFile.FullName -NoNewline
-
-          Write-Host "Updated $($assemblyInfoFile.Name) to version $newAssemblyVersion"
-
       - name: Generate Version Strings and Timestamp
         id: get_exe_version
         shell: pwsh
@@ -176,7 +161,6 @@ jobs:
           $build = [math]::Floor(($utcNow - $baseDate).TotalDays)
           $revision = [math]::Floor($utcNow.TimeOfDay.TotalSeconds / 2)
 
-          # 建立注入 EXE 嘅 InformationalVersion 字串
           $infoVersion = "$major.$minor.$patch($timestamp)"
           $tagName = "v$major.$minor.$patch.$timestamp"
 
@@ -192,8 +176,34 @@ jobs:
           echo "build=$build" >> $env:GITHUB_OUTPUT
           echo "revision=$revision" >> $env:GITHUB_OUTPUT
 
+      - name: Force Inject Versions into AssemblyInfo.cs
+        shell: pwsh
+        run: |
+          $assemblyInfoFile = Get-ChildItem -Path . -Filter "AssemblyInfo.cs" -Recurse | Select-Object -First 1
+          if (-not $assemblyInfoFile) {
+              Write-Error "AssemblyInfo.cs not found!"
+              exit 1
+          }
+
+          $major = "${{ steps.update_version.outputs.new_major }}"
+          $minor = "${{ steps.update_version.outputs.new_minor }}"
+          $infoVersion = "${{ steps.get_exe_version.outputs.info_version }}"
+
+          $content = Get-Content $assemblyInfoFile.FullName -Raw
+
+          $content = $content -replace 'AssemblyVersion\(".*?"\)', "AssemblyVersion(`"$major.$minor.*`")"
+
+          if ($content -match 'AssemblyInformationalVersion') {
+              $content = $content -replace 'AssemblyInformationalVersion\(".*?"\)', "AssemblyInformationalVersion(`"$infoVersion`")"
+          } else {
+              $content += "`r`n[assembly: System.Reflection.AssemblyInformationalVersion(`"$infoVersion`")]"
+          }
+
+          $content | Set-Content $assemblyInfoFile.FullName -NoNewline
+          Write-Host "Injected InformationalVersion: $infoVersion into $($assemblyInfoFile.Name)"
+
       - name: Publish Application
-        run: dotnet publish Beanfun/Beanfun.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:InformationalVersion="${{ steps.get_exe_version.outputs.info_version }}" -o publish
+        run: dotnet publish Beanfun/Beanfun.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish
 
       - name: Check if Tag Exists
         id: check_tag
@@ -379,7 +389,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add $assemblyInfoFile.FullName
-          git commit -m "Bump version to ${{ steps.update_version.outputs.semantic_version }} for release ${{ steps.get_exe_version.outputs.tag_name }}"
+          git commit -m "Bump version to ${{ steps.get_exe_version.outputs.semantic_version }} for release ${{ steps.get_exe_version.outputs.tag_name }}"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
