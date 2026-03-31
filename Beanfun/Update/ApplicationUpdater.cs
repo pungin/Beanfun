@@ -140,51 +140,42 @@ namespace Beanfun.Update
         /// 比較版本號。將 Major, Minor, Patch 全部補齊 3 位後與 Timestamp 拼接進行 Long 比較。
         /// 確保 5.8.9 < 5.8.10 且 Timestamp 格式永遠大於舊版。
         /// </summary>
-        private static bool IsNewerVersion(
-            string localVer,
-            string major,
-            string minor,
-            string patch,
-            string timestamp
-        )
+        private static bool IsNewerVersion(string localVer, string major, string minor, string patch, string timestamp)
         {
             try
             {
-                // 1. 遠端標準化 (19位數): Major(3) + Minor(3) + Patch(3) + Timestamp(10)
-                long remoteNum = long.Parse(
-                    string.Format(
-                        "{0:D3}{1:D3}{2:D3}{3}",
-                        int.Parse(major),
-                        int.Parse(minor),
-                        int.Parse(patch),
-                        timestamp
-                    )
-                );
-
-                long localNum;
-                // 兼容 5.8(timestamp) 或 5.8.3(timestamp) 或 5.8.(timestamp)
+                // 提取本地 Timestamp
                 var match = Regex.Match(localVer, @"(\d+)\.(\d+)\.?(\d+)?\.?\((\d+)\)");
-
+                
                 if (match.Success)
                 {
+                    string localTimestamp = match.Groups[4].Value;
+                    if (timestamp == localTimestamp)
+                    {
+                        return false;
+                    }
+
+                    long remoteNum = long.Parse(string.Format("{0:D3}{1:D3}{2:D3}{3}", 
+                        int.Parse(major), int.Parse(minor), int.Parse(patch), timestamp));
+
                     int lMajor = int.Parse(match.Groups[1].Value);
                     int lMinor = int.Parse(match.Groups[2].Value);
-                    int lPatch = string.IsNullOrEmpty(match.Groups[3].Value)
-                        ? 0
-                        : int.Parse(match.Groups[3].Value);
-                    string lTimestamp = match.Groups[4].Value;
+                    int lPatch = string.IsNullOrEmpty(match.Groups[3].Value) ? 0 : int.Parse(match.Groups[3].Value);
+                    
+                    long localNum = long.Parse(string.Format("{0:D3}{1:D3}{2:D3}{3}", lMajor, lMinor, lPatch, localTimestamp));
 
-                    localNum = long.Parse(
-                        string.Format("{0:D3}{1:D3}{2:D3}{3}", lMajor, lMinor, lPatch, lTimestamp)
-                    );
+                    return remoteNum > localNum;
                 }
                 else
                 {
+                    long remoteNum = long.Parse(string.Format("{0:D3}{1:D3}{2:D3}{3}", 
+                        int.Parse(major), int.Parse(minor), int.Parse(patch), timestamp));
+                        
                     string digits = Regex.Replace(localVer, @"[^\d]", "");
-                    localNum = long.Parse(digits.PadLeft(19, '0'));
+                    long localNum = long.Parse(digits.PadLeft(19, '0'));
+                    
+                    return remoteNum > localNum;
                 }
-
-                return remoteNum > localNum;
             }
             catch
             {

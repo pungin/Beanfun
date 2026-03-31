@@ -55,7 +55,7 @@ jobs:
           if ($assemblyInfoFile) {
             $content = Get-Content $assemblyInfoFile.FullName -Raw
             
-            if ($content -match 'AssemblyVersion\("(\d+)\.(\d+)\.\*"\)') {
+            if ($content -match 'AssemblyVersion\("(\d+)\.(\d+)(?:\.\d+)?\.\*"\)') {
               $currentMajor = [int]$matches[1]
               $currentMinor = [int]$matches[2]
               
@@ -135,7 +135,7 @@ jobs:
             $newPatch = $currentPatch + 1
           }
           
-          $newAssemblyVersion = "$newMajor.$newMinor.*"
+          $newAssemblyVersion = "$newMajor.$newMinor.$newPatch.*"
           Write-Host "New version: $newMajor.$newMinor.$newPatch (AssemblyInfo: $newAssemblyVersion)"
           
           echo "new_major=$newMajor" >> $env:GITHUB_OUTPUT
@@ -156,7 +156,7 @@ jobs:
           
           $content = Get-Content $assemblyInfoFile.FullName -Raw
           
-          $content = $content -replace 'AssemblyVersion\("\d+\.\d+\.\*"\)', "AssemblyVersion(`"$newAssemblyVersion`")"
+          $content = $content -replace 'AssemblyVersion\("\d+\.\d+(?:\.\d+)?\.\*"\)', "AssemblyVersion(`"$newAssemblyVersion`")"
           
           $content | Set-Content $assemblyInfoFile.FullName -NoNewline
           
@@ -181,16 +181,17 @@ jobs:
             
             Write-Host "Raw assembly version: $major.$minor.$build.$revision"
             
-            # CRITICAL FIX: Ensure the base date is treated as UTC to match MS Compiler
-            # Microsoft compiler uses UTC days since Jan 1, 2000
             $baseDate = (Get-Date -Year 2000 -Month 1 -Day 1 -Hour 0 -Minute 0 -Second 0).ToUniversalTime()
-            $buildDate = $baseDate.AddDays($build)
+
+            if ($build -lt 1000) {
+                Write-Host "Build is interpreted as Patch number ($build). Generating UTC Timestamp based on NOW."
+                $buildDateTime = (Get-Date).ToUniversalTime()
+            } else {
+                $buildDate = $baseDate.AddDays($build)
+                $secondsSinceMidnight = $revision * 2
+                $buildDateTime = $buildDate.AddSeconds($secondsSinceMidnight)
+            }
             
-            # Revision is seconds since midnight UTC / 2
-            $secondsSinceMidnight = $revision * 2
-            $buildDateTime = $buildDate.AddSeconds($secondsSinceMidnight)
-            
-            # Now buildDateTime is the exact time the compiler used
             $timestamp = $buildDateTime.ToString("yyMMddHHmm")
             
             Write-Host "Compiler Build DateTime (UTC): $($buildDateTime.ToString('yyyy-MM-dd HH:mm:ss'))"
@@ -226,7 +227,6 @@ jobs:
         run: |
           $tag = "${{ steps.get_exe_version.outputs.tag_name }}"
           $repo = "${{ github.repository }}"
-          
           Write-Host "Checking if tag '$tag' exists in repository '$repo'"
           
           $tagExists = $false
@@ -247,18 +247,11 @@ jobs:
                 "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"
                 "Accept" = "application/vnd.github.v3+json"
               } -ErrorAction SilentlyContinue
-              
               if ($response -and $response.ref) {
                 $tagExists = $true
                 Write-Host "Tag found via GitHub API: $tag"
               }
-            } catch {
-              if ($_.Exception.Response.StatusCode -eq 404) {
-                Write-Host "Tag not found via GitHub API (404)"
-              } else {
-                Write-Host "GitHub API error: $_"
-              }
-            }
+            } catch {}
           }
           
           try {
@@ -281,9 +274,6 @@ jobs:
             echo "tag=$tag" >> $env:GITHUB_OUTPUT
             Write-Host "Tag $tag does not exist - will create release"
           }
-          
-          Write-Host "Existing tags in repository:"
-          git ls-remote --tags origin | ForEach-Object { Write-Host "  $_" }
     
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -294,23 +284,14 @@ jobs:
         run: |
           try {
             $allReleases = gh api repos/${{ github.repository }}/releases --paginate 2>$null
-            
             if ($allReleases) {
               $releases = $allReleases | ConvertFrom-Json
-              
               if ($releases.Count -gt 0) {
                 $latestRelease = $releases | Sort-Object -Property created_at -Descending | Select-Object -First 1
-                
                 $lastTag = $latestRelease.tag_name
                 $lastReleaseName = $latestRelease.name
                 $lastReleaseType = if ($latestRelease.prerelease) { "Pre-Release" } else { "Release" }
                 $lastReleaseDate = $latestRelease.created_at
-                
-                Write-Host "Last release found:"
-                Write-Host "  Tag: $lastTag"
-                Write-Host "  Name: $lastReleaseName"
-                Write-Host "  Type: $lastReleaseType"
-                Write-Host "  Date: $lastReleaseDate"
                 
                 echo "last_tag=$lastTag" >> $env:GITHUB_OUTPUT
                 echo "last_release_name=$lastReleaseName" >> $env:GITHUB_OUTPUT
@@ -318,15 +299,12 @@ jobs:
                 echo "last_release_date=$lastReleaseDate" >> $env:GITHUB_OUTPUT
                 echo "has_last_release=true" >> $env:GITHUB_OUTPUT
               } else {
-                Write-Host "No releases found"
                 echo "has_last_release=false" >> $env:GITHUB_OUTPUT
               }
             } else {
-              Write-Host "No releases found"
               echo "has_last_release=false" >> $env:GITHUB_OUTPUT
             }
           } catch {
-            Write-Host "Error getting releases: $_"
             echo "has_last_release=false" >> $env:GITHUB_OUTPUT
           }
         env:
@@ -349,17 +327,14 @@ jobs:
           
           $range = if ($hasLastRelease) {
             $lastTag = "${{ steps.get_last_release.outputs.last_tag }}"
-            Write-Host "Getting commits since last release: $lastTag"
             git fetch --tags 2>$null
             "$lastTag..HEAD"
           } else {
-            Write-Host "No previous release, getting last 30 commits"
             "-n 30"
           }
           
           try {
             $commits = git log $range --pretty=format:"%h|%s|%an|%ad" --date=short --no-merges
-            
             if ($commits) {
               foreach ($commit in $commits) {
                 $parts = $commit -split '\|', 4
@@ -367,17 +342,13 @@ jobs:
                 $message = if ($parts[1].Length -gt 80) { $parts[1].Substring(0, 77) + "..." } else { $parts[1] }
                 $author = $parts[2]
                 $date = $parts[3]
-                
                 $commitsList += "- [$hash] $message - $author ($date)"
                 $commitCount++
               }
             }
-          } catch {
-            Write-Host "Error getting commits: $_"
-          }
+          } catch {}
           
           $commitsText = if ($commitCount -gt 0) { $commitsList -join "`n" } else { "No commits found" }
-          
           Set-MultilineOutput "commits_text" $commitsText
           echo "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
 
@@ -406,7 +377,7 @@ jobs:
             ---
             
             ### 🔧 Build Details
-            - **Build Number (Days since 2000-01-01):** ${{ steps.get_exe_version.outputs.build }}
+            - **Build Number (Days since 2000-01-01 / Patch):** ${{ steps.get_exe_version.outputs.build }}
             - **Revision (Seconds since midnight / 2):** ${{ steps.get_exe_version.outputs.revision }}
             - **Actual Build Time:** ${{ steps.get_exe_version.outputs.build_datetime }}
             - **Git Commit:** [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
