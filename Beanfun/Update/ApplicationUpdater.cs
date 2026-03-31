@@ -37,7 +37,7 @@ namespace Beanfun.Update
 
         internal static void CheckApplicationUpdate(bool show)
         {
-            var url = $"https://api.github.com/repos/pungin/beanfun/releases";
+            var url = $"https://api.github.com/repos/lshw54/Beanfun/releases";
 
             try
             {
