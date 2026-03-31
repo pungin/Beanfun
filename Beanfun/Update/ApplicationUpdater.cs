@@ -150,8 +150,7 @@ namespace Beanfun.Update
         {
             try
             {
-                // 1. 遠端標準化 (Major 3位 + Minor 3位 + Patch 3位 + Timestamp 10位)
-                // e.g. 5.8.10.2604011200 -> 0050080102604011200
+                // 1. 遠端標準化 (19位數): Major(3) + Minor(3) + Patch(3) + Timestamp(10)
                 long remoteNum = long.Parse(
                     string.Format(
                         "{0:D3}{1:D3}{2:D3}{3}",
@@ -163,37 +162,26 @@ namespace Beanfun.Update
                 );
 
                 long localNum;
-                var match = Regex.Match(localVer, @"(\d+)\.(\d+)\.(\d+)\.?\((\d+)\)");
+                // 兼容 5.8(timestamp) 或 5.8.3(timestamp) 或 5.8.(timestamp)
+                var match = Regex.Match(localVer, @"(\d+)\.(\d+)\.?(\d+)?\.?\((\d+)\)");
 
                 if (match.Success)
                 {
+                    int lMajor = int.Parse(match.Groups[1].Value);
+                    int lMinor = int.Parse(match.Groups[2].Value);
+                    int lPatch = string.IsNullOrEmpty(match.Groups[3].Value)
+                        ? 0
+                        : int.Parse(match.Groups[3].Value);
+                    string lTimestamp = match.Groups[4].Value;
+
                     localNum = long.Parse(
-                        string.Format(
-                            "{0:D3}{1:D3}{2:D3}{3}",
-                            int.Parse(match.Groups[1].Value),
-                            int.Parse(match.Groups[2].Value),
-                            int.Parse(match.Groups[3].Value),
-                            match.Groups[4].Value
-                        )
-                    );
-                }
-                else if (Version.TryParse(localVer, out Version v))
-                {
-                    // 兼容舊版 5.8.9586.xxxx (15位數字，會細過 19位嘅新版數字)
-                    localNum = long.Parse(
-                        string.Format(
-                            "{0:D3}{1:D3}{2:D3}{3}",
-                            v.Major,
-                            v.Minor,
-                            v.Build,
-                            v.Revision
-                        )
+                        string.Format("{0:D3}{1:D3}{2:D3}{3}", lMajor, lMinor, lPatch, lTimestamp)
                     );
                 }
                 else
                 {
-                    // 最終保險：提取純數字
-                    localNum = long.Parse(Regex.Replace(localVer, @"[^\d]", ""));
+                    string digits = Regex.Replace(localVer, @"[^\d]", "");
+                    localNum = long.Parse(digits.PadLeft(19, '0'));
                 }
 
                 return remoteNum > localNum;
