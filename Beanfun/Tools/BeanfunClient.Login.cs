@@ -91,7 +91,10 @@ namespace Beanfun
                 if (resultCode == "1")
                 {
                     if (result == "1")
-                        return "REDIRECT_VERIFY";
+                    {
+                        this.errmsg = "LoginAdvanceCheck";
+                        return null;
+                    }
 
                     // Use SendLogin flow (same as QRCode) to get bfWebToken
                     SetBaseHeaders(
