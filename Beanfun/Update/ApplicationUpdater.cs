@@ -53,7 +53,7 @@ namespace Beanfun.Update
                     if (release == null)
                         return;
 
-                    // 1. 解析遠端 Tag (支援 v5.8.3.2604011114)
+                    // 1. 解析遠端 Tag (格式: vMajor.Minor.Patch.Timestamp)
                     // Groups: [1]=Major, [2]=Minor, [3]=Patch, [4]=Timestamp
                     var match = Regex.Match(release.TagName, @"^v(\d+)\.(\d+)\.(\d+)\.(\d+)$");
                     if (!match.Success)
@@ -64,11 +64,11 @@ namespace Beanfun.Update
                     string patch = match.Groups[3].Value;
                     string timestamp = match.Groups[4].Value;
 
-                    // 2. 準備顯示文字
+                    // 2. 準備顯示文字: 5.8.3(2604011114)
                     string newVerDisplay = $"{major}.{minor}.{patch}({timestamp})";
 
-                    // 3. 數值比較邏輯
-                    if (IsNewerVersion(App.AssemblyVersion, major, minor, timestamp))
+                    // 3. 數值比較邏輯 (傳入 patch 以支援 5.8.9 < 5.8.10)
+                    if (IsNewerVersion(App.AssemblyVersion, major, minor, patch, timestamp))
                     {
                         string msg = string.Format(
                             Regex.Unescape(
@@ -129,57 +129,73 @@ namespace Beanfun.Update
             foreach (var release in releases)
             {
                 if (isBeta)
-                    return release; // Beta 頻道攞絕對最新
+                    return release;
                 if (!release.Prerelease)
-                    return release; // Stable 頻道跳過 Prerelease
+                    return release;
             }
             return null;
         }
 
+        /// <summary>
+        /// 比較版本號。將 Major, Minor, Patch 全部補齊 3 位後與 Timestamp 拼接進行 Long 比較。
+        /// 確保 5.8.9 < 5.8.10 且 Timestamp 格式永遠大於舊版。
+        /// </summary>
         private static bool IsNewerVersion(
             string localVer,
             string major,
             string minor,
+            string patch,
             string timestamp
         )
         {
             try
             {
-                // 1. 遠端版本標準化 (e.g. 0050082604011114)
+                // 1. 遠端標準化 (Major 3位 + Minor 3位 + Patch 3位 + Timestamp 10位)
+                // e.g. 5.8.10.2604011200 -> 0050080102604011200
                 long remoteNum = long.Parse(
-                    string.Format("{0:D3}{1:D3}{2}", int.Parse(major), int.Parse(minor), timestamp)
+                    string.Format(
+                        "{0:D3}{1:D3}{2:D3}{3}",
+                        int.Parse(major),
+                        int.Parse(minor),
+                        int.Parse(patch),
+                        timestamp
+                    )
                 );
 
-                // 2. 本地版本標準化
                 long localNum;
-                // Regex 修正：\.? 兼容 5.8.(xxx) 或者 5.8(xxx) 格式
-                var match = Regex.Match(localVer, @"(\d+)\.(\d+)\.?\((\d+)\)");
+                var match = Regex.Match(localVer, @"(\d+)\.(\d+)\.(\d+)\.?\((\d+)\)");
 
                 if (match.Success)
                 {
                     localNum = long.Parse(
                         string.Format(
-                            "{0:D3}{1:D3}{2}",
+                            "{0:D3}{1:D3}{2:D3}{3}",
                             int.Parse(match.Groups[1].Value),
                             int.Parse(match.Groups[2].Value),
-                            match.Groups[3].Value
+                            int.Parse(match.Groups[3].Value),
+                            match.Groups[4].Value
                         )
                     );
                 }
                 else if (Version.TryParse(localVer, out Version v))
                 {
-                    // 兼容舊版 5.8.9586... (通常會細過 16 位 Timestamp 數值)
+                    // 兼容舊版 5.8.9586.xxxx (15位數字，會細過 19位嘅新版數字)
                     localNum = long.Parse(
-                        string.Format("{0:D3}{1:D3}{2}{3}", v.Major, v.Minor, v.Build, v.Revision)
+                        string.Format(
+                            "{0:D3}{1:D3}{2:D3}{3}",
+                            v.Major,
+                            v.Minor,
+                            v.Build,
+                            v.Revision
+                        )
                     );
                 }
                 else
                 {
-                    // 暴力提取所有數字
+                    // 最終保險：提取純數字
                     localNum = long.Parse(Regex.Replace(localVer, @"[^\d]", ""));
                 }
 
-                // 3. 嚴格大於才更新
                 return remoteNum > localNum;
             }
             catch
