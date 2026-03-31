@@ -1155,10 +1155,12 @@ namespace Beanfun
 
         public bool errexit(string msg, int method, string title = null)
         {
-            string originalMsg = msg;
-
             switch (msg)
             {
+                case "AdvanceCheckSuccessRetry":
+                    msg = "驗證成功！請再次輸入密碼登入遊戲。";
+                    method = 1;
+                    break;
                 case "LoginNoResponse":
                 case "LoginNoSkey":
                 case "LoginNoOTP1":
@@ -1190,41 +1192,55 @@ namespace Beanfun
                 default:
                     if (msg.StartsWith("OTPNoLongPollingKey:"))
                     {
-                        msg = msg.Replace("OTPNoLongPollingKey:", "");
-                        if (msg == "")
+                        string otpDetail = msg.Substring("OTPNoLongPollingKey:".Length);
+                        if (string.IsNullOrEmpty(otpDetail))
                             msg = TryFindResource("GetOtpInitError") as string;
-                        else if (msg.Contains("很抱歉，需先完成進階認證"))
+                        else if (otpDetail.Contains("很抱歉，需先完成進階認證"))
                             msg = TryFindResource("NeedAuthToPlayGame") as string;
                         else if (
-                            msg.Contains("尚未登入，請重新登入") || msg.Contains("無法認證登入狀態")
+                            otpDetail.Contains("尚未登入，請重新登入")
+                            || otpDetail.Contains("無法認證登入狀態")
                         )
                         {
                             msg = TryFindResource("DisconnectedFromServer") as string;
                             method = 1;
                         }
-                        ;
                     }
                     else
                     {
-                        string res = null;
+                        string localized = null;
                         try
                         {
-                            res = TryFindResource(msg) as string;
+                            localized = TryFindResource(msg) as string;
                         }
                         catch { }
-                        if (res != null)
-                            msg = res;
+                        if (localized != null)
+                            msg = localized;
                     }
                     break;
             }
 
-            MessageBox.Show(Regex.Unescape(I18n.ToSimplified(msg)), title);
+            string displayMsg = I18n.ToSimplified(msg);
+            try
+            {
+                if (
+                    !string.IsNullOrEmpty(displayMsg)
+                    && displayMsg.Contains("\\u")
+                    && !displayMsg.Contains(":\\")
+                )
+                    displayMsg = Regex.Unescape(displayMsg);
+            }
+            catch { }
+
+            MessageBox.Show(displayMsg, title ?? TryFindResource("Error") as string);
+
             if (method == 0)
                 App.Current.Shutdown();
             else if (method == 1)
             {
                 loginMethodChanged();
-                accountList.t_Password.Text = "";
+                if (accountList?.t_Password != null)
+                    accountList.t_Password.Text = "";
                 NavigateLoginPage();
             }
 
@@ -1241,6 +1257,93 @@ namespace Beanfun
         public void ResumeWork()
         {
             isCancelRequested = false;
+        }
+
+        private void OnLoginCompleted()
+        {
+            ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
+
+            SaveLoginCredentials();
+            ShowAccountListPage();
+        }
+
+        private void SaveLoginCredentials()
+        {
+            bool isAccountLogin =
+                App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode;
+            if (!isAccountLogin)
+            {
+                ConfigAppSettings.SetValue("AccountID", null);
+                return;
+            }
+
+            var idPassForm = loginPage.id_pass;
+            string accountId = idPassForm.t_AccountID.Text;
+            LastLoginAccountID = accountId;
+
+            ConfigAppSettings.SetValue(
+                "AccountID",
+                string.IsNullOrWhiteSpace(accountId) ? null : accountId
+            );
+
+            if (string.IsNullOrWhiteSpace(accountId))
+                return;
+
+            bool shouldSavePwd =
+                !string.IsNullOrEmpty(idPassForm.t_Password.Password)
+                && idPassForm.checkBox_RememberPWD.IsEnabled
+                && (bool)idPassForm.checkBox_RememberPWD.IsChecked;
+
+            bool shouldAutoLogin = shouldSavePwd && (bool)idPassForm.checkBox_AutoLogin.IsChecked;
+
+            string savedVerify = (bool)verifyPage.checkBoxRememberVerify.IsChecked
+                ? verifyPage.t_Verify.Text
+                : "";
+
+            accountManager.addAccount(
+                App.LoginRegion,
+                accountId,
+                "",
+                shouldSavePwd ? idPassForm.t_Password.Password : "",
+                savedVerify,
+                App.LoginMethod,
+                shouldAutoLogin
+            );
+
+            loginMethodInit();
+        }
+
+        private void ShowAccountListPage()
+        {
+            try
+            {
+                frame.Content = accountList;
+                btn_Region.Visibility = Visibility.Collapsed;
+
+                redrawSAccountList();
+
+                if (!this.pingWorker.IsBusy)
+                    this.pingWorker.RunWorkerAsync();
+
+                updateRemainPoint(this.bfClient.remainPoint);
+
+                accountList.list_Account.Focus();
+
+                bool hasAccounts = this.bfClient.accountList.Count() > 0;
+                bool wantsAutoStart = (bool)settingPage.autoStartGame.IsChecked && hasAccounts;
+                if (wantsAutoStart)
+                {
+                    bool useTradLogin =
+                        (bool)settingPage.tradLogin.IsChecked && login_action_type == 1;
+                    if (useTradLogin || login_action_type == 0)
+                        runGame();
+                    accountList.btnGetOtp_Click(null, null);
+                }
+            }
+            catch
+            {
+                errexit(TryFindResource("LoginNoAccountMatch") as string, 1);
+            }
         }
 
         // Login do work.
@@ -1367,61 +1470,7 @@ namespace Beanfun
                 return;
             }
 
-            ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
-            if (App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode)
-            {
-                LastLoginAccountID = loginPage.id_pass.t_AccountID.Text;
-                ConfigAppSettings.SetValue("AccountID", LastLoginAccountID);
-                accountManager.addAccount(
-                    App.LoginRegion,
-                    loginPage.id_pass.t_AccountID.Text,
-                    "",
-                    loginPage.id_pass.checkBox_RememberPWD.IsEnabled
-                    && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked
-                        ? loginPage.id_pass.t_Password.Password
-                        : "",
-                    (bool)verifyPage.checkBoxRememberVerify.IsChecked
-                        ? verifyPage.t_Verify.Text
-                        : "",
-                    App.LoginMethod,
-                    (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked
-                );
-
-                loginMethodInit();
-            }
-            else
-                ConfigAppSettings.SetValue("AccountID", null);
-
-            try
-            {
-                frame.Content = accountList;
-                btn_Region.Visibility = Visibility.Collapsed;
-
-                redrawSAccountList();
-
-                if (!this.pingWorker.IsBusy)
-                    this.pingWorker.RunWorkerAsync();
-
-                updateRemainPoint(this.bfClient.remainPoint);
-
-                accountList.list_Account.Focus();
-                if (
-                    (bool)settingPage.autoStartGame.IsChecked
-                    && this.bfClient.accountList.Count() > 0
-                )
-                {
-                    if (
-                        ((bool)settingPage.tradLogin.IsChecked && login_action_type == 1)
-                        || login_action_type == 0
-                    )
-                        runGame();
-                    accountList.btnGetOtp_Click(null, null);
-                }
-            }
-            catch
-            {
-                errexit(TryFindResource("LoginNoAccountMatch") as string, 1);
-            }
+            OnLoginCompleted();
         }
 
         // totp do work.
@@ -1534,61 +1583,7 @@ namespace Beanfun
                 return;
             }
 
-            ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
-            if (App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode)
-            {
-                LastLoginAccountID = loginPage.id_pass.t_AccountID.Text;
-                ConfigAppSettings.SetValue("AccountID", LastLoginAccountID);
-                accountManager.addAccount(
-                    App.LoginRegion,
-                    loginPage.id_pass.t_AccountID.Text,
-                    "",
-                    loginPage.id_pass.checkBox_RememberPWD.IsEnabled
-                    && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked
-                        ? loginPage.id_pass.t_Password.Password
-                        : "",
-                    (bool)verifyPage.checkBoxRememberVerify.IsChecked
-                        ? verifyPage.t_Verify.Text
-                        : "",
-                    App.LoginMethod,
-                    (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked
-                );
-
-                loginMethodInit();
-            }
-            else
-                ConfigAppSettings.SetValue("AccountID", null);
-
-            try
-            {
-                frame.Content = accountList;
-                btn_Region.Visibility = Visibility.Collapsed;
-
-                redrawSAccountList();
-
-                if (!this.pingWorker.IsBusy)
-                    this.pingWorker.RunWorkerAsync();
-
-                updateRemainPoint(this.bfClient.remainPoint);
-
-                accountList.list_Account.Focus();
-                if (
-                    (bool)settingPage.autoStartGame.IsChecked
-                    && this.bfClient.accountList.Count() > 0
-                )
-                {
-                    if (
-                        ((bool)settingPage.tradLogin.IsChecked && login_action_type == 1)
-                        || login_action_type == 0
-                    )
-                        runGame();
-                    accountList.btnGetOtp_Click(null, null);
-                }
-            }
-            catch
-            {
-                errexit(TryFindResource("LoginNoAccountMatch") as string, 1);
-            }
+            OnLoginCompleted();
         }
 
         private void redrawSAccountList()
