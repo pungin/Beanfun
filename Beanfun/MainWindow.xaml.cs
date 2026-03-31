@@ -370,7 +370,12 @@ namespace Beanfun
                     loginMethod = (int)LoginMethod.GamePass;
 
                 loginMethodInit();
-                reLoadGameInfo();
+
+                // Load game info async to avoid blocking UI on startup
+                var bgWorker = new System.ComponentModel.BackgroundWorker();
+                bgWorker.DoWork += (s, args) => { };
+                bgWorker.RunWorkerCompleted += (s, args) => reLoadGameInfo();
+                bgWorker.RunWorkerAsync();
 
                 App.LoginMethod = loginMethod;
                 loginMethodChanged();

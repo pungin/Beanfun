@@ -495,7 +495,15 @@ namespace Beanfun
         {
             try
             {
-                byte[] cipher = Convert.FromBase64String(raw);
+                byte[] cipher;
+                try
+                {
+                    cipher = Convert.FromBase64String(raw);
+                }
+                catch
+                {
+                    return false;
+                }
                 using (var stream = new MemoryStream(cipher))
                 {
                     // 忽略編譯器針對 BinaryFormatter 的安全性警告
