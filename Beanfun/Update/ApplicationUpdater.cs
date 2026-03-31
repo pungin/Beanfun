@@ -132,8 +132,8 @@ namespace Beanfun.Update
         }
 
         /// <summary>
-        /// Compares versions by converting them into a sequence of digits.
-        /// Optimized to handle transitions from legacy MS build days to new timestamps.
+        /// Compares versions by converting them into a normalized long integer.
+        /// Uses padding to ensure semantic versioning (Major.Minor) remains consistent.
         /// </summary>
         private static bool IsNewerVersion(
             string localVer,
@@ -144,33 +144,64 @@ namespace Beanfun.Update
         {
             try
             {
-                // 1. Detect Legacy MS Format (e.g., 5.8.9586...)
-                // MS build days are typically 9000+, while your timestamp starts with 26 (year 2026).
-                // If local version contains the old MS "Days" pattern, force an update.
-                if (localVer.Contains(".9"))
+                // 1. Normalize Remote Version: Major(3 digits) + Minor(3 digits) + Timestamp(10 digits)
+                // e.g. 5, 8, 2604011114 -> 0050082604011114
+                long remoteNum = long.Parse(
+                    string.Format("{0:D3}{1:D3}{2}", int.Parse(major), int.Parse(minor), timestamp)
+                );
+
+                // 2. Normalize Local Version
+                // We extract ALL digits and check the format
+                string localDigitsOnly = Regex.Replace(localVer, @"[^\d]", "");
+
+                // If it's the old format "5.8.9586.32322", it might have 4 segments
+                // We try to parse the local string as a Version object first to be safe
+                Version v;
+                long localNum;
+
+                if (localVer.Contains("(") && localVer.Contains(")"))
                 {
-                    return true;
+                    // New format: "5.8(2603311757)"
+                    // Extract Major, Minor and the stuff inside brackets
+                    var match = Regex.Match(localVer, @"(\d+)\.(\d+)\((\d+)\)");
+                    if (match.Success)
+                    {
+                        localNum = long.Parse(
+                            string.Format(
+                                "{0:D3}{1:D3}{2}",
+                                int.Parse(match.Groups[1].Value),
+                                int.Parse(match.Groups[2].Value),
+                                match.Groups[3].Value
+                            )
+                        );
+                    }
+                    else
+                    {
+                        localNum = long.Parse(localDigitsOnly);
+                    }
+                }
+                else if (Version.TryParse(localVer, out v))
+                {
+                    // Legacy MS format: "5.8.9586.32322"
+                    // These are ALWAYS considered older than the new timestamp system
+                    // because the timestamp system starts from year 26 (260101....)
+                    // while MS build day 9586 is only 11 digits total in our logic
+                    localNum = long.Parse(
+                        string.Format("{0:D3}{1:D3}{2}{3}", v.Major, v.Minor, v.Build, v.Revision)
+                    );
+                }
+                else
+                {
+                    localNum = long.Parse(localDigitsOnly);
                 }
 
-                // 2. Clean local version (e.g., "5.8(2603311757)" -> 582603311757)
-                string localDigits = Regex.Replace(localVer, @"[^\d]", "");
-                if (!long.TryParse(localDigits, out long localNum))
-                    return true; // If local is unreadable, assume it needs update
-
-                // 3. Combine remote parts (e.g., "5" + "8" + "2604011114" -> 582604011114)
-                // Ensure minor is padded if you ever hit version 5.10.x
-                string remoteDigits = major + int.Parse(minor).ToString() + timestamp;
-                if (!long.TryParse(remoteDigits, out long remoteNum))
-                    return false;
-
-                // 4. Final Comparison
-                // If remote timestamp (260401...) > local timestamp (260331...)
+                // 3. Comparison
                 return remoteNum > localNum;
             }
             catch
             {
-                // On error, only update if the local version string looks suspect
-                return localVer.Contains(".9");
+                // If parsing fails, we assume it's a very old version and needs update
+                return true;
             }
         }
     }
