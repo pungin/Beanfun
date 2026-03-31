@@ -55,8 +55,12 @@ namespace Beanfun
 
                 // Step 2: Check account type
                 SetJsonHeaders(formToken, indexUrl);
-                string checkTypeBody =
-                    $"{{\"Account\":\"{EscapeJson(id)}\",\"Captcha\":\"\",\"__RequestVerificationToken\":\"{formToken}\"}}";
+                string checkTypeBody = new JObject
+                {
+                    ["Account"] = id,
+                    ["Captcha"] = "",
+                    ["__RequestVerificationToken"] = formToken,
+                }.ToString(Newtonsoft.Json.Formatting.None);
                 string checkTypeRes = this.UploadString(
                     $"{apiBase}/Login/CheckAccountType?pSKey={skey}",
                     "POST",
@@ -75,8 +79,14 @@ namespace Beanfun
 
                 // Step 3: Account login
                 SetJsonHeaders(formToken, indexUrl);
-                string loginBody =
-                    $"{{\"Account\":\"{EscapeJson(id)}\",\"Pasw\":\"{EscapeJson(pass)}\",\"IsMobile\":false,\"Captcha\":\"{captchaToken}\",\"__RequestVerificationToken\":\"{formToken}\"}}";
+                string loginBody = new JObject
+                {
+                    ["Account"] = id,
+                    ["Pasw"] = pass,
+                    ["IsMobile"] = false,
+                    ["Captcha"] = captchaToken,
+                    ["__RequestVerificationToken"] = formToken,
+                }.ToString(Newtonsoft.Json.Formatting.None);
                 string loginRes = this.UploadString(
                     $"{apiBase}/Login/AccountLogin?pSKey={skey}",
                     "POST",
@@ -391,17 +401,6 @@ namespace Beanfun
                 this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
                 return null;
             }
-        }
-
-        private static string EscapeJson(string s)
-        {
-            if (string.IsNullOrEmpty(s))
-                return "";
-            return s.Replace("\\", "\\\\")
-                .Replace("\"", "\\\"")
-                .Replace("\n", "\\n")
-                .Replace("\r", "\\r")
-                .Replace("\t", "\\t");
         }
 
         private void SetJsonHeaders(string verificationToken, string referer)

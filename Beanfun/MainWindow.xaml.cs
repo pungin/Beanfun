@@ -1230,12 +1230,7 @@ namespace Beanfun
             string displayMsg = I18n.ToSimplified(msg);
             try
             {
-                if (
-                    !string.IsNullOrEmpty(displayMsg)
-                    && displayMsg.Contains("\\u")
-                    && !displayMsg.Contains(":\\")
-                )
-                    displayMsg = Regex.Unescape(displayMsg);
+                displayMsg = Regex.Unescape(displayMsg);
             }
             catch { }
 
