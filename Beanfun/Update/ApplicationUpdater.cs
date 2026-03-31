@@ -132,14 +132,9 @@ namespace Beanfun.Update
         }
 
         /// <summary>
-        /// Compares versions by converting them into a continuous sequence of digits.
-        /// This avoids System.Version overflow issues with long timestamps.
+        /// Compares versions by converting them into a sequence of digits.
+        /// Optimized to handle transitions from legacy MS build days to new timestamps.
         /// </summary>
-        /// <param name="localVer">The current local version string, e.g., "5.8(2604011114)"</param>
-        /// <param name="major">Remote major version</param>
-        /// <param name="minor">Remote minor version</param>
-        /// <param name="timestamp">Remote timestamp/build part</param>
-        /// <returns>True if remote version is strictly greater than local version</returns>
         private static bool IsNewerVersion(
             string localVer,
             string major,
@@ -149,25 +144,33 @@ namespace Beanfun.Update
         {
             try
             {
-                // 1. Clean local version: remove dots, parentheses, etc.
-                // "5.8(2604011114)" -> 582604011114
+                // 1. Detect Legacy MS Format (e.g., 5.8.9586...)
+                // MS build days are typically 9000+, while your timestamp starts with 26 (year 2026).
+                // If local version contains the old MS "Days" pattern, force an update.
+                if (localVer.Contains(".9"))
+                {
+                    return true;
+                }
+
+                // 2. Clean local version (e.g., "5.8(2603311757)" -> 582603311757)
                 string localDigits = Regex.Replace(localVer, @"[^\d]", "");
                 if (!long.TryParse(localDigits, out long localNum))
-                    return false;
+                    return true; // If local is unreadable, assume it needs update
 
-                // 2. Combine remote parts into a single numeric string
-                // "5" + "8" + "2604011114" -> 582604011114
-                string remoteDigits = major + minor + timestamp;
+                // 3. Combine remote parts (e.g., "5" + "8" + "2604011114" -> 582604011114)
+                // Ensure minor is padded if you ever hit version 5.10.x
+                string remoteDigits = major + int.Parse(minor).ToString() + timestamp;
                 if (!long.TryParse(remoteDigits, out long remoteNum))
                     return false;
 
-                // 3. Simple numeric comparison
+                // 4. Final Comparison
+                // If remote timestamp (260401...) > local timestamp (260331...)
                 return remoteNum > localNum;
             }
             catch
             {
-                // Fallback to no update on parsing error
-                return false;
+                // On error, only update if the local version string looks suspect
+                return localVer.Contains(".9");
             }
         }
     }
