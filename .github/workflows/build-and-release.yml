@@ -50,43 +50,23 @@ jobs:
         shell: pwsh
         run: |
           $file = Get-ChildItem -Path . -Filter "AssemblyInfo.cs" -Recurse | Select-Object -First 1
-          if (-not $file) { Write-Error "AssemblyInfo.cs not found!"; exit 1 }
-
           $content = Get-Content $file.FullName -Raw
           if ($content -match 'AssemblyVersion\("(\d+)\.(\d+)(?:\.\d+)?\.\*"\)') {
-              $major = [int]$matches[1]
-              $minor = [int]$matches[2]
-          } else { 
-              $major = 5
-              $minor = 8 
-          }
+              $major = [int]$matches[1]; $minor = [int]$matches[2]
+          } else { $major = 5; $minor = 8 }
 
-          # Fetch all tags to find the highest patch number for the current Major.Minor
           git fetch --tags 2>$null
-          # Note: Changed to descending order (-v:refname) to get the latest tag first
-          $tags = git tag -l "v$major.$minor.*.*" --sort=-v:refname
-
+          $tags = git tag -l "v*.*.*.*" --sort=-v:refname
           $patch = 0
-          if ($tags -and $tags.Count -gt 0) {
-              $latestTag = $tags[0]
-              if ($latestTag -match "^v\d+\.\d+\.(\d+)\.") {
-                  $patch = [int]$matches[1]
-                  Write-Host "Found existing patch number: $patch from tag: $latestTag"
-              }
-          }
+          if ($tags -and ($tags[0] -match '^v(\d+)\.(\d+)\.(\d+)\.')) { $patch = [int]$matches[3] }
 
-          $releaseType = "${{ github.event.inputs.release_type }}"
-          $increment = "${{ github.event.inputs.version_increment }}"
-
-          if ($releaseType -eq 'release') {
-              switch ($increment) {
+          if ("${{ github.event.inputs.release_type }}" -eq 'release') {
+              switch ("${{ github.event.inputs.version_increment }}") {
                   'major' { $major++; $minor=0; $patch=0 }
                   'minor' { $minor++; $patch=0 }
                   'patch' { $patch++ }
               }
-          } else { 
-              $patch++ 
-          }
+          } else { $patch++ }
 
           $utcNow = (Get-Date).ToUniversalTime()
           $timestamp = $utcNow.ToString("yyMMddHHmm")
@@ -140,7 +120,9 @@ jobs:
           $lastRelease = gh api repos/${{ github.repository }}/releases --paginate 2>$null | ConvertFrom-Json | Sort-Object created_at -Descending | Select-Object -First 1
           $range = if ($lastRelease) { "$($lastRelease.tag_name)..HEAD" } else { "-n 30" }
 
-          $commits = git log $range --pretty=format:"- [%h] %s - %an (%ad)" --date=short --no-merges
+          $repoUrl = "${{ github.server_url }}/${{ github.repository }}"
+          $commits = git log $range --pretty=format:"- [\`%h\`]($repoUrl/commit/%H) %s - %an (%ad)" --date=short --no-merges
+
           $commitCount = if ($commits) { ($commits -split "`n").Count } else { 0 }
           $commitsText = if ($commits) { $commits -join "`n" } else { "No commits found" }
 
@@ -182,9 +164,8 @@ jobs:
             ⬇️ **[Download Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)**
 
             ### 📝 What's New (Commits)
-            ```text
             ${{ steps.prep_release.outputs.commits_text }}
-            ```
+
             > ✅ Total commits: ${{ steps.prep_release.outputs.commit_count }}
 
             ### 📖 Installation Guide
@@ -205,15 +186,14 @@ jobs:
 
             ---
 
-            ## 中文 Release Notes
+            ## 中文 Release Notes （優先顯示）
 
             ### 📦 下載 Download
             ⬇️ **[下載 Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)**
 
             ### 📝 更新內容 What's New
-            ```text
             ${{ steps.prep_release.outputs.commits_text }}
-            ```
+
             > ✅ 總提交數：${{ steps.prep_release.outputs.commit_count }}
 
             ### 📖 安裝指南 Installation
