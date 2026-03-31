@@ -77,43 +77,60 @@ namespace Beanfun
                 catch { }
         }
 
+        // --- 版本解析邏輯 (支援 3 段及 4 段格式) ---
         public static Version ParseVersion(string version)
         {
-            var oldFormatMatch = Regex.Match(version, @"^(\d+)\.(\d+)\.(\d+)\((\d+)\)$");
-            if (oldFormatMatch.Success)
+            // 1. 支援新式四段 (v5.8.3(2603311841))
+            var match4 = Regex.Match(version, @"^v?(\d+)\.(\d+)\.(\d+)\((\d{10})\)$");
+            if (match4.Success)
             {
-                return new Version(
-                    int.Parse(oldFormatMatch.Groups[1].Value),
-                    int.Parse(oldFormatMatch.Groups[2].Value),
-                    int.Parse(oldFormatMatch.Groups[3].Value),
-                    int.Parse(oldFormatMatch.Groups[4].Value)
-                );
-            }
-            var newFormatMatch = Regex.Match(version, @"^(\d+)\.(\d+)\((\d{10})\)$");
-            if (newFormatMatch.Success)
-            {
-                var dateStr = newFormatMatch.Groups[3].Value;
                 var buildDate = DateTime.ParseExact(
-                    dateStr,
+                    match4.Groups[4].Value,
                     "yyMMddHHmm",
                     CultureInfo.InvariantCulture
                 );
-
-                var baseDate = new DateTime(2000, 1, 1);
-                var build = (int)(buildDate - baseDate).TotalDays;
-                var revision = (int)(buildDate.TimeOfDay.TotalSeconds / 2);
-
                 return new Version(
-                    int.Parse(newFormatMatch.Groups[1].Value),
-                    int.Parse(newFormatMatch.Groups[2].Value),
-                    build,
-                    revision
+                    int.Parse(match4.Groups[1].Value),
+                    int.Parse(match4.Groups[2].Value),
+                    int.Parse(match4.Groups[3].Value), // Patch Number
+                    (int)(buildDate.TimeOfDay.TotalSeconds / 2) // Revision
                 );
             }
 
-            throw new FormatException();
+            // 2. 支援新式三段 (v5.8(2603311841))
+            var match3 = Regex.Match(version, @"^v?(\d+)\.(\d+)\((\d{10})\)$");
+            if (match3.Success)
+            {
+                var buildDate = DateTime.ParseExact(
+                    match3.Groups[3].Value,
+                    "yyMMddHHmm",
+                    CultureInfo.InvariantCulture
+                );
+                var baseDate = new DateTime(2000, 1, 1);
+                return new Version(
+                    int.Parse(match3.Groups[1].Value),
+                    int.Parse(match3.Groups[2].Value),
+                    (int)(buildDate - baseDate).TotalDays,
+                    (int)(buildDate.TimeOfDay.TotalSeconds / 2)
+                );
+            }
+
+            // 3. 支援舊式 (5.8.9586(33854))
+            var oldMatch = Regex.Match(version, @"^(\d+)\.(\d+)\.(\d+)\((\d+)\)$");
+            if (oldMatch.Success)
+            {
+                return new Version(
+                    int.Parse(oldMatch.Groups[1].Value),
+                    int.Parse(oldMatch.Groups[2].Value),
+                    int.Parse(oldMatch.Groups[3].Value),
+                    int.Parse(oldMatch.Groups[4].Value)
+                );
+            }
+
+            throw new FormatException("Invalid version format: " + version);
         }
 
+        // --- 版本轉換邏輯 (處理幽靈點問題) ---
         public static string ConvertVersion(Version version)
         {
             if (version < new Version(4, 1))
@@ -123,10 +140,19 @@ namespace Beanfun
                 .AddDays(version.Build)
                 .AddSeconds(version.Revision * 2);
 
-            string patch = version.Build < 1000 ? $".{version.Build}" : "";
             string timestamp = buildDate.ToString("yyMMddHHmm");
 
-            return $"{version.Major}.{version.Minor}.{patch}({timestamp})";
+            // 關鍵：如果 Build < 1000 代表係 Patch 號碼
+            if (version.Build < 1000)
+            {
+                // 格式: 5.8.3(2604011114)
+                return $"{version.Major}.{version.Minor}.{version.Build}({timestamp})";
+            }
+            else
+            {
+                // 格式: 5.8(2604011114) -> 絕對唔加多餘嘅點
+                return $"{version.Major}.{version.Minor}({timestamp})";
+            }
         }
 
         internal static string AssemblyVersion
@@ -144,7 +170,6 @@ namespace Beanfun
             {
                 if (stream != null)
                 {
-                    // Fast path: if file exists and size matches, skip MD5 comparison
                     if (File.Exists(path))
                     {
                         var fileInfo = new FileInfo(path);
@@ -180,19 +205,17 @@ namespace Beanfun
         {
             try
             {
-                FileStream file = new FileStream(
+                using FileStream file = new FileStream(
                     fileName,
                     FileMode.Open,
                     FileAccess.Read,
                     FileShare.ReadWrite
                 );
-                string md5 = GetMD5HashFromStream(file);
-                file.Close();
-                return md5;
+                return GetMD5HashFromStream(file);
             }
             catch (Exception ex)
             {
-                throw new Exception("GetMD5HashFromFile() fail,error:" + ex.Message);
+                throw new Exception("GetMD5HashFromFile() fail, error: " + ex.Message);
             }
         }
 
@@ -211,7 +234,7 @@ namespace Beanfun
             }
             catch (Exception ex)
             {
-                throw new Exception("GetMD5HashFromStream() fail,error:" + ex.Message);
+                throw new Exception("GetMD5HashFromStream() fail, error: " + ex.Message);
             }
         }
     }
