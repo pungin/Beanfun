@@ -197,8 +197,8 @@ jobs:
             Write-Host "Formatted timestamp for Tag: $timestamp"
             
             $patch = "${{ steps.update_version.outputs.new_patch }}"
-            $semanticVersion = "${{ steps.update_version.outputs.semantic_version }}"
-            $tagVersion = "$major.$minor.$timestamp"
+            $semanticVersion = "$major.$minor.$patch"
+            $tagVersion = "$major.$minor.$patch.$timestamp"
             $tagName = "v$tagVersion"
             
             Write-Host "Generated tag name: $tagName"

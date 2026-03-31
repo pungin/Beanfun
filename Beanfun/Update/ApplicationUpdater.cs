@@ -54,7 +54,7 @@ namespace Beanfun.Update
 
                 // Parse Tag Name (e.g., v5.8.2604011114)
                 // Groups: [1]=Major, [2]=Minor, [3]=Timestamp/Build
-                var match = Regex.Match(release.TagName, @"^v(\d+)\.(\d+)\.(\d+)$");
+                var match = Regex.Match(release.TagName, @"^v(\d+)\.(\d+)\.(\d+)\.(\d+)$");
                 if (!match.Success)
                     return;
 
@@ -68,7 +68,7 @@ namespace Beanfun.Update
                         App.AssemblyVersion,
                         match.Groups[1].Value,
                         match.Groups[2].Value,
-                        match.Groups[3].Value
+                        match.Groups[4].Value
                     )
                 )
                 {
