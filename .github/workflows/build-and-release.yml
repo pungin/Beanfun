@@ -177,15 +177,20 @@ jobs:
             
             Write-Host "Raw assembly version: $major.$minor.$build.$revision"
             
-            $baseDate = Get-Date -Year 2000 -Month 1 -Day 1
+            # CRITICAL FIX: Ensure the base date is treated as UTC to match MS Compiler
+            # Microsoft compiler uses UTC days since Jan 1, 2000
+            $baseDate = (Get-Date -Year 2000 -Month 1 -Day 1 -Hour 0 -Minute 0 -Second 0).ToUniversalTime()
             $buildDate = $baseDate.AddDays($build)
+            
+            # Revision is seconds since midnight UTC / 2
             $secondsSinceMidnight = $revision * 2
             $buildDateTime = $buildDate.AddSeconds($secondsSinceMidnight)
             
+            # Now buildDateTime is the exact time the compiler used
             $timestamp = $buildDateTime.ToString("yyMMddHHmm")
             
-            Write-Host "Converted date/time: $($buildDateTime.ToString('yyyy-MM-dd HH:mm:ss'))"
-            Write-Host "Formatted timestamp: $timestamp"
+            Write-Host "Compiler Build DateTime (UTC): $($buildDateTime.ToString('yyyy-MM-dd HH:mm:ss'))"
+            Write-Host "Formatted timestamp for Tag: $timestamp"
             
             $patch = "${{ steps.update_version.outputs.new_patch }}"
             $semanticVersion = "${{ steps.update_version.outputs.semantic_version }}"
