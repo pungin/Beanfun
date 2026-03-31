@@ -430,4 +430,31 @@
   <system:String x:Key="CopyDeeplinkNotReady"
     >Deeplink 尚未取得，請等待 QR Code 載入完成。</system:String
   >
+  <system:String x:Key="AdvanceCheckSuccessRetry">驗證成功！請再次輸入密碼登入遊戲。</system:String>
+  <system:String x:Key="AdvanceCheckAccountAbnormal"
+    >帳號狀態異常，請先使用瀏覽器登入官網確認（可能需聯絡客服）</system:String
+  >
+  <system:String x:Key="AdvanceCheckNoCaptchaId"
+    >無法取得驗證碼編號，帳號可能處於異常狀態</system:String
+  >
+  <system:String x:Key="AdvanceCheckCaptchaLoadFailed"
+    >無法載入驗證碼圖片（Session 可能已過期）</system:String
+  >
+  <system:String x:Key="AdvanceCheckFillEmailAndCaptcha">請填寫 Email 同驗證碼</system:String>
+  <system:String x:Key="GamePassLogin">GamePass 登入</system:String>
+  <system:String x:Key="GamePassWaiting">正在等待 GamePass 認證...</system:String>
+  <system:String x:Key="GamePassOpen">開啟 GamePass 登入</system:String>
+  <system:String x:Key="SessionKeyFailed">無法取得 SessionKey，請稍後再試</system:String>
+  <system:String x:Key="ConnectionFailed">連線失敗，請檢查網路連線</system:String>
+  <system:String x:Key="LegacyDataMigrateSuccess"
+    >系統已成功將您的舊版帳號資料自動升級至新格式！&#x0a;您現在可以正常使用所有帳號。</system:String
+  >
+  <system:String x:Key="LegacyDataMigrateTitle">資料轉換成功</system:String>
+  <system:String x:Key="AdvanceCheckTitle">進階驗證</system:String>
+  <system:String x:Key="AdvanceCheckHintPrefix">提示：</system:String>
+  <system:String x:Key="AdvanceCheckInputEmail">請輸入認證 Email：</system:String>
+  <system:String x:Key="AdvanceCheckInputPhone">請輸入認證電話號碼：</system:String>
+  <system:String x:Key="AdvanceCheckCaptchaLabel">圖形驗證碼：</system:String>
+  <system:String x:Key="AdvanceCheckConfirm">確定</system:String>
+  <system:String x:Key="AdvanceCheckCancel">取消</system:String>
 </ResourceDictionary>

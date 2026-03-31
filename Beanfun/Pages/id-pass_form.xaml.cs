@@ -268,5 +268,30 @@ namespace Beanfun
             App.LoginMethod = (int)LoginMethod.QRCode;
             App.MainWnd.loginMethodChanged();
         }
+
+        private async void btn_GamePass_Click(object sender, RoutedEventArgs e)
+        {
+            btn_GamePass.IsEnabled = false;
+            try
+            {
+                var client = new BeanfunClient();
+                string skey = await System.Threading.Tasks.Task.Run(() => client.GetSessionkey());
+                if (string.IsNullOrEmpty(skey))
+                {
+                    MessageBox.Show(TryFindResource("SessionKeyFailed") as string);
+                    return;
+                }
+                App.MainWnd.bfClient = client;
+                new GamePassBrowser(skey).Show();
+            }
+            catch
+            {
+                MessageBox.Show(TryFindResource("ConnectionFailed") as string);
+            }
+            finally
+            {
+                btn_GamePass.IsEnabled = true;
+            }
+        }
     }
 }

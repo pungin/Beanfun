@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Net;
@@ -28,20 +29,33 @@ namespace Beanfun
 
         public BitmapImage getVerifyCaptcha(string samplecaptcha)
         {
+            if (string.IsNullOrWhiteSpace(samplecaptcha))
+                return null;
+
             BitmapImage result;
             try
             {
-                byte[] buffer = this.DownloadData(
+                string url =
                     "https://tw.newlogin.beanfun.com/LoginCheck/BotDetectCaptcha.ashx?get=image&c=c_logincheck_advancecheck_samplecaptcha&t="
-                        + samplecaptcha
-                );
+                    + samplecaptcha;
+                byte[] buffer = this.DownloadData(url);
+
+                if (buffer == null || buffer.Length < 500)
+                {
+                    Debug.WriteLine("[Captcha] Downloaded data is too small to be an image.");
+                    return null;
+                }
+
                 result = new BitmapImage();
                 result.BeginInit();
+                result.CacheOption = BitmapCacheOption.OnLoad;
                 result.StreamSource = new MemoryStream(buffer);
                 result.EndInit();
+                result.Freeze();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Debug.WriteLine($"[Captcha] Error parsing image: {ex.Message}");
                 result = null;
             }
             return result;

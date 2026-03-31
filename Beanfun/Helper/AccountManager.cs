@@ -65,9 +65,6 @@ namespace Beanfun
             typeof(AccountManager)
         );
 
-        private const string MigrationToolUrl =
-            "https://github.com/pungin/Beanfun/releases/tag/account-migrator";
-
         private Records accountRecords = null;
         private string dataPath =
             System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData)
@@ -179,16 +176,14 @@ namespace Beanfun
             {
                 try
                 {
+                    // 嘗試以新版 JSON 格式讀取資料
                     accountRecords = JsonConvert.DeserializeObject<Records>(raw);
                 }
                 catch
                 {
                     accountRecords = null;
-                    if (IsLegacyFormat(raw))
-                    {
-                        log.Warn("Detected legacy BinaryFormatter account data");
-                        ShowLegacyFormatWarning();
-                    }
+                    // 解析失敗時，自動視為舊版 BinaryFormatter 格式並嘗試進行無縫轉換
+                    TryAutoMigrateLegacyData(raw);
                 }
             }
             accRecInit();
@@ -226,7 +221,7 @@ namespace Beanfun
                             Encoding.UTF8.GetBytes(entropy),
                             DataProtectionScope.CurrentUser
                         );
-                        return System.Text.Encoding.UTF8.GetString(plaintext);
+                        return Encoding.UTF8.GetString(plaintext);
                     }
                     catch
                     {
@@ -250,7 +245,6 @@ namespace Beanfun
         {
             using (BinaryWriter writer = new BinaryWriter(File.Open(dataPath, FileMode.Create)))
             {
-                // Create random entropy of 8 characters.
                 var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
                 var random = new Random();
                 string entropy = new string(
@@ -397,7 +391,6 @@ namespace Beanfun
                     return accountRecords.verifyList[i];
                 }
             }
-
             return null;
         }
 
@@ -413,7 +406,6 @@ namespace Beanfun
                     return accountRecords.methodList[i];
                 }
             }
-
             return -1;
         }
 
@@ -429,7 +421,6 @@ namespace Beanfun
                     return accountRecords.autoLoginList[i];
                 }
             }
-
             return false;
         }
 
@@ -454,7 +445,6 @@ namespace Beanfun
                     return true;
                 }
             }
-
             return false;
         }
 
@@ -483,17 +473,13 @@ namespace Beanfun
                 accountRecords = JsonConvert.DeserializeObject<Records>(raw);
                 accRecInit();
                 storeRecord();
+                return true;
             }
             catch
             {
-                if (IsLegacyFormat(raw))
-                {
-                    ShowLegacyFormatWarning();
-                }
-                return false;
+                // 匯入失敗時，嘗試將其視為舊版格式進行轉換
+                return TryAutoMigrateLegacyData(raw);
             }
-
-            return true;
         }
 
         public string exportRecord()
@@ -503,35 +489,57 @@ namespace Beanfun
         #endregion
 
         #region Legacy format migration
-        private static bool IsLegacyFormat(string raw)
+        // Fix #182: 實作內建的舊版資料自動升級機制，取代原先會導致 404 的外部轉換工具
+        // TODO: 此升級機制僅為過渡用途。建議於發布幾個版本後，確認多數活躍玩家皆已轉換至 JSON 格式時，將此方法徹底移除。
+        private bool TryAutoMigrateLegacyData(string raw)
         {
-            if (string.IsNullOrWhiteSpace(raw))
-                return false;
-            var trimmed = raw.TrimStart();
-            return !trimmed.StartsWith("{") && !trimmed.StartsWith("[");
-        }
-
-        private static void ShowLegacyFormatWarning()
-        {
-            var result = System.Windows.MessageBox.Show(
-                "偵測到舊版帳號資料格式（BinaryFormatter），此格式在新版中不再支援。\n\n"
-                    + "是否前往下載帳號資料轉換工具？\n"
-                    + "轉換完成後重新啟動程式即可恢復帳號資料。",
-                "帳號資料格式不相容",
-                System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Warning
-            );
-
-            if (result == System.Windows.MessageBoxResult.Yes)
+            try
             {
-                System.Diagnostics.Process.Start(
-                    new System.Diagnostics.ProcessStartInfo
+                byte[] cipher = Convert.FromBase64String(raw);
+                using (var stream = new MemoryStream(cipher))
+                {
+                    // 忽略編譯器針對 BinaryFormatter 的安全性警告
+                    // 注意：此類別極度不安全，僅限於此處讀取舊版資料使用，新代碼嚴禁使用！
+#pragma warning disable SYSLIB0011
+                    var bformatter =
+                        new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
+                    object oldRecords = bformatter.Deserialize(stream);
+#pragma warning restore SYSLIB0011
+
+                    if (oldRecords != null)
                     {
-                        FileName = MigrationToolUrl,
-                        UseShellExecute = true,
+                        // 透過 JSON 序列化作為中介，避免類別轉型 (Casting) 發生例外狀況
+                        string tempJson = JsonConvert.SerializeObject(oldRecords);
+                        accountRecords = JsonConvert.DeserializeObject<Records>(tempJson);
+
+                        if (accountRecords != null)
+                        {
+                            accRecInit();
+                            storeRecord(); // 立即將轉換後的資料以最新 JSON 格式寫入，覆寫舊檔
+
+                            log.Info("Legacy account data auto-migrated to JSON format.");
+                            System.Windows.MessageBox.Show(
+                                System.Windows.Application.Current.TryFindResource(
+                                    "LegacyDataMigrateSuccess"
+                                ) as string,
+                                System.Windows.Application.Current.TryFindResource(
+                                    "LegacyDataMigrateTitle"
+                                ) as string,
+                                System.Windows.MessageBoxButton.OK,
+                                System.Windows.MessageBoxImage.Information
+                            );
+                            return true;
+                        }
                     }
-                );
+                }
             }
+            catch (Exception ex)
+            {
+                // 若因 .NET 版本限制或資料損毀導致轉換失敗，則記錄錯誤，並讓 accRecInit 建立新的空白紀錄
+                log.Error($"Auto-migration of legacy data failed: {ex.Message}");
+            }
+
+            return false;
         }
         #endregion
     }

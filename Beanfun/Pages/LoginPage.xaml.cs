@@ -12,6 +12,7 @@ namespace Beanfun
     {
         public id_pass_form id_pass = new id_pass_form();
         public qr_form qr = new qr_form();
+        public gamepass_form gamepass = new gamepass_form();
 
         public LoginPage()
         {

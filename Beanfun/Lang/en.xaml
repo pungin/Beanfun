@@ -497,4 +497,39 @@
   <system:String x:Key="CopyDeeplinkNotReady"
     >Deeplink is not ready yet. Please wait for the QR Code to load.</system:String
   >
+  <system:String x:Key="AdvanceCheckSuccessRetry"
+    >Verification successful! Please enter your password again to log in.</system:String
+  >
+  <system:String x:Key="AdvanceCheckAccountAbnormal"
+    >Account status is abnormal. Please log in via browser to check (may need to contact support).</system:String
+  >
+  <system:String x:Key="AdvanceCheckNoCaptchaId"
+    >Unable to retrieve captcha ID. Account may be in an abnormal state.</system:String
+  >
+  <system:String x:Key="AdvanceCheckCaptchaLoadFailed"
+    >Unable to load captcha image (session may have expired).</system:String
+  >
+  <system:String x:Key="AdvanceCheckFillEmailAndCaptcha"
+    >Please fill in both email and captcha code.</system:String
+  >
+  <system:String x:Key="GamePassLogin">GamePass Login</system:String>
+  <system:String x:Key="GamePassWaiting">Waiting for GamePass authentication...</system:String>
+  <system:String x:Key="GamePassOpen">Open GamePass Login</system:String>
+  <system:String x:Key="SessionKeyFailed"
+    >Unable to get SessionKey. Please try again later.</system:String
+  >
+  <system:String x:Key="ConnectionFailed"
+    >Connection failed. Please check your network.</system:String
+  >
+  <system:String x:Key="LegacyDataMigrateSuccess"
+    >Your legacy account data has been successfully upgraded to the new format!&#x0a;You can now use all your accounts normally.</system:String
+  >
+  <system:String x:Key="LegacyDataMigrateTitle">Data Migration Successful</system:String>
+  <system:String x:Key="AdvanceCheckTitle">Advanced Verification</system:String>
+  <system:String x:Key="AdvanceCheckHintPrefix">Hint: </system:String>
+  <system:String x:Key="AdvanceCheckInputEmail">Enter verification Email:</system:String>
+  <system:String x:Key="AdvanceCheckInputPhone">Enter verification phone number:</system:String>
+  <system:String x:Key="AdvanceCheckCaptchaLabel">Captcha:</system:String>
+  <system:String x:Key="AdvanceCheckConfirm">Confirm</system:String>
+  <system:String x:Key="AdvanceCheckCancel">Cancel</system:String>
 </ResourceDictionary>

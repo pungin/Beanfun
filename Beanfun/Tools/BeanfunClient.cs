@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -98,22 +99,45 @@ namespace Beanfun
 
         protected override WebRequest GetWebRequest(Uri address)
         {
+            ServicePointManager.SecurityProtocol =
+                SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
             HttpWebRequest webRequest = base.GetWebRequest(address) as HttpWebRequest;
-            webRequest.Timeout = Timeout;
 
             if (webRequest != null)
             {
+                webRequest.Timeout = this.Timeout;
+                if (this.CookieContainer == null)
+                    this.CookieContainer = new CookieContainer();
+
                 webRequest.CookieContainer = this.CookieContainer;
                 webRequest.AllowAutoRedirect = this.redirect;
+                webRequest.AutomaticDecompression =
+                    DecompressionMethods.GZip | DecompressionMethods.Deflate;
             }
             return webRequest;
         }
 
         protected override WebResponse GetWebResponse(WebRequest request)
         {
-            WebResponse webResponse = base.GetWebResponse(request);
-            this.ResponseUri = webResponse.ResponseUri;
-            return webResponse;
+            try
+            {
+                WebResponse webResponse = base.GetWebResponse(request);
+                this.ResponseUri = webResponse.ResponseUri;
+                return webResponse;
+            }
+            catch (WebException wex)
+            {
+                if (wex.Response != null)
+                {
+                    var httpResponse = wex.Response as HttpWebResponse;
+                    Debug.WriteLine(
+                        $"[WebResponse] Status={httpResponse?.StatusCode} Uri={wex.Response.ResponseUri}"
+                    );
+                    this.ResponseUri = wex.Response.ResponseUri;
+                    return wex.Response;
+                }
+                throw;
+            }
         }
 
         public CookieCollection GetCookies()
@@ -135,6 +159,16 @@ namespace Beanfun
                 }
             }
             return null;
+        }
+
+        public void SetCookie(string name, string value, string domain, string path = "/")
+        {
+            this.CookieContainer.Add(new Cookie(name, value, path, domain));
+        }
+
+        public void SetWebToken(string token)
+        {
+            this.webtoken = token;
         }
 
         private string GetCurrentTime(int method = 0)

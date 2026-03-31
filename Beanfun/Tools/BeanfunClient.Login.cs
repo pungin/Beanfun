@@ -12,19 +12,302 @@ namespace Beanfun
 {
     public partial class BeanfunClient : WebClient
     {
-        private string RegularLogin(string id, string pass, string skey)
+        private string RegularLogin(
+            string id,
+            string pass,
+            string skey,
+            string service_code = "610074",
+            string service_region = "T9"
+        )
         {
-            string loginHost;
             if (App.LoginRegion == "TW")
-                loginHost = "tw.newlogin.beanfun.com";
+                return TwRegularLogin(id, pass, skey, service_code, service_region);
             else
-                loginHost = "login.hk.beanfun.com";
+                return HkRegularLogin(id, pass, skey);
+        }
 
+        private string TwRegularLogin(
+            string id,
+            string pass,
+            string skey,
+            string service_code,
+            string service_region
+        )
+        {
             try
             {
-                string response = this.DownloadString(
-                    $"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}"
+                string apiBase = "https://login.beanfun.com";
+                string indexUrl = $"{apiBase}/Login/Index?pSKey={skey}";
+
+                // Step 1: Get index page and antiforgery token
+                SetBaseHeaders(false, "text/html");
+                string indexHtml = this.DownloadString(indexUrl);
+                string formToken = Regex
+                    .Match(indexHtml, "name=\"__RequestVerificationToken\"[^>]+value=\"([^\"]+)\"")
+                    .Groups[1]
+                    .Value;
+
+                if (string.IsNullOrEmpty(formToken))
+                {
+                    this.errmsg = "LoginNoToken";
+                    return null;
+                }
+
+                // Step 2: Check account type
+                SetJsonHeaders(formToken, indexUrl);
+                string checkTypeBody =
+                    $"{{\"Account\":\"{EscapeJson(id)}\",\"Captcha\":\"\",\"__RequestVerificationToken\":\"{formToken}\"}}";
+                string checkTypeRes = this.UploadString(
+                    $"{apiBase}/Login/CheckAccountType?pSKey={skey}",
+                    "POST",
+                    checkTypeBody
                 );
+
+                string captchaToken = "";
+                if (
+                    !string.IsNullOrWhiteSpace(checkTypeRes)
+                    && checkTypeRes.TrimStart().StartsWith("{")
+                )
+                {
+                    var checkJson = JObject.Parse(checkTypeRes);
+                    captchaToken = checkJson["ResultData"]?["Captcha"]?.ToString() ?? "";
+                }
+
+                // Step 3: Account login
+                SetJsonHeaders(formToken, indexUrl);
+                string loginBody =
+                    $"{{\"Account\":\"{EscapeJson(id)}\",\"Pasw\":\"{EscapeJson(pass)}\",\"IsMobile\":false,\"Captcha\":\"{captchaToken}\",\"__RequestVerificationToken\":\"{formToken}\"}}";
+                string loginRes = this.UploadString(
+                    $"{apiBase}/Login/AccountLogin?pSKey={skey}",
+                    "POST",
+                    loginBody
+                );
+
+                var loginJson = JObject.Parse(loginRes);
+                string resultCode = loginJson["ResultCode"]?.ToString();
+                string result = loginJson["Result"]?.ToString();
+                string resultMsg = loginJson["ResultMessage"]?.ToString() ?? "";
+
+                if (resultCode == "1")
+                {
+                    if (result == "1")
+                    {
+                        this.errmsg = "LoginAdvanceCheck";
+                        return null;
+                    }
+
+                    // Use SendLogin flow (same as QRCode) to get bfWebToken
+                    SetBaseHeaders(
+                        true,
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        indexUrl
+                    );
+                    string sendLoginHtml = this.DownloadString($"{apiBase}/Login/SendLogin");
+
+                    NameValueCollection payload = new NameValueCollection();
+                    foreach (
+                        Match tag in Regex.Matches(
+                            sendLoginHtml,
+                            @"<input[^>]+>",
+                            RegexOptions.IgnoreCase | RegexOptions.Singleline
+                        )
+                    )
+                    {
+                        string tagStr = tag.Value;
+                        Match nameMatch = Regex.Match(
+                            tagStr,
+                            @"name\s*=\s*['""]([^'""]+)['""]",
+                            RegexOptions.IgnoreCase
+                        );
+                        Match valMatch = Regex.Match(
+                            tagStr,
+                            @"value\s*=\s*['""]([^'""]*)['""]",
+                            RegexOptions.IgnoreCase
+                        );
+                        if (
+                            nameMatch.Success
+                            && valMatch.Success
+                            && tagStr.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase)
+                                == -1
+                        )
+                            payload.Add(nameMatch.Groups[1].Value, valMatch.Groups[1].Value);
+                    }
+
+                    if (payload.Count == 0)
+                    {
+                        this.errmsg = "SendLoginNoFormData";
+                        return null;
+                    }
+
+                    this.redirect = false;
+                    SetBaseHeaders(true, null, $"{apiBase}/");
+                    string returnResponse = this.UploadString(
+                        "https://tw.beanfun.com/beanfun_block/bflogin/return.aspx",
+                        payload
+                    );
+                    string setCookieHeader = this.ResponseHeaders?["Set-Cookie"];
+                    if (!string.IsNullOrEmpty(setCookieHeader))
+                    {
+                        Match tokenMatch = Regex.Match(setCookieHeader, @"bfWebToken=([^;]+)");
+                        if (tokenMatch.Success)
+                            this.webtoken = tokenMatch.Groups[1].Value;
+                    }
+                    this.redirect = true;
+
+                    if (string.IsNullOrEmpty(this.webtoken))
+                    {
+                        this.errmsg = "LoginNoWebtoken";
+                        return null;
+                    }
+
+                    GetAccounts(service_code, service_region, false);
+                    if (this.errmsg != null)
+                        return null;
+
+                    this.remainPoint = getRemainPoint();
+                    this.errmsg = null;
+                    return null; // return null with no errmsg = success, skip LoginCompleted
+                }
+
+                // ResultCode 2: AdvanceCheck required
+                if (resultCode == "2" && resultMsg.StartsWith("http"))
+                    return HandleAdvanceCheck(resultMsg);
+
+                this.errmsg = resultMsg;
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TwRegularLogin] Exception: {ex.Message}");
+                this.errmsg = "LoginUnknown\n\n" + ex.Message + "\n" + ex.StackTrace;
+                return null;
+            }
+        }
+
+        private string HandleAdvanceCheck(string advanceUrl)
+        {
+            if (advanceUrl.Contains("gamaweb.beanfun.com"))
+            {
+                this.errmsg = "AdvanceCheckAccountAbnormal";
+                return null;
+            }
+
+            string advanceHtml = this.DownloadString(advanceUrl);
+
+            var captchaMatch = Regex.Match(
+                advanceHtml,
+                "id=\"LBD_VCID_[^\"]+\"[^>]+value=\"([^\"]+)\""
+            );
+            if (!captchaMatch.Success)
+            {
+                this.errmsg = "AdvanceCheckNoCaptchaId";
+                return null;
+            }
+            string captchaId = captchaMatch.Groups[1].Value;
+
+            string viewState = Regex
+                .Match(advanceHtml, "id=\"__VIEWSTATE\"[^>]+value=\"([^\"]+)\"")
+                .Groups[1]
+                .Value;
+            string viewStateGen = Regex
+                .Match(advanceHtml, "id=\"__VIEWSTATEGENERATOR\"[^>]+value=\"([^\"]+)\"")
+                .Groups[1]
+                .Value;
+            string eventValidation = Regex
+                .Match(advanceHtml, "id=\"__EVENTVALIDATION\"[^>]+value=\"([^\"]+)\"")
+                .Groups[1]
+                .Value;
+            string captchaImgSrc = Regex
+                .Match(advanceHtml, "class=\"LBD_CaptchaImage\"[^>]+src=\"([^\"]+)\"")
+                .Groups[1]
+                .Value;
+            string emailHint = Regex
+                .Match(advanceHtml, "id=\"lblAuthType\">([^<]+)<")
+                .Groups[1]
+                .Value;
+            string formAction = Regex
+                .Match(advanceHtml, "action=\"(AdvanceCheck\\.aspx[^\"]+)\"")
+                .Groups[1]
+                .Value;
+
+            string captchaImgUrl =
+                $"https://tw.newlogin.beanfun.com/LoginCheck/{captchaImgSrc.TrimStart('/')}".Replace(
+                    "&amp;",
+                    "&"
+                );
+            string submitUrl =
+                $"https://tw.newlogin.beanfun.com/LoginCheck/{formAction.Replace("&amp;", "&")}";
+
+            byte[] captchaImgBytes = null;
+            try
+            {
+                captchaImgBytes = this.DownloadData(captchaImgUrl);
+            }
+            catch { }
+
+            if (captchaImgBytes == null || captchaImgBytes.Length < 500)
+            {
+                this.errmsg = "AdvanceCheckCaptchaLoadFailed";
+                return null;
+            }
+
+            string userEmail = "",
+                userCaptcha = "";
+            bool? dialogResult = false;
+
+            App.Current.Dispatcher.Invoke(() =>
+            {
+                var dlg = new AdvanceCheckDialog(emailHint, captchaImgBytes);
+                dialogResult = dlg.ShowDialog();
+                if (dialogResult == true)
+                {
+                    userEmail = dlg.Email;
+                    userCaptcha = dlg.CaptchaCode;
+                }
+            });
+
+            if (dialogResult != true || string.IsNullOrEmpty(userEmail))
+            {
+                this.errmsg = "LoginAdvanceCheck";
+                return null;
+            }
+
+            // Submit advance check form
+            SetBaseHeaders(true, null, advanceUrl);
+            this.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
+
+            string submitBody =
+                $"__VIEWSTATE={Uri.EscapeDataString(viewState)}"
+                + $"&__VIEWSTATEGENERATOR={Uri.EscapeDataString(viewStateGen)}"
+                + $"&__EVENTVALIDATION={Uri.EscapeDataString(eventValidation)}"
+                + $"&txtVerify={Uri.EscapeDataString(userEmail)}"
+                + $"&CodeTextBox={Uri.EscapeDataString(userCaptcha)}"
+                + $"&LBD_VCID_c_logincheck_advancecheck_samplecaptcha={Uri.EscapeDataString(captchaId)}"
+                + "&imgbtnSubmit.x=30&imgbtnSubmit.y=10";
+
+            string submitRes = this.UploadString(submitUrl, "POST", submitBody);
+
+            if (submitRes.Contains("驗證成功") || submitRes.Contains("再次輸入您的帳號密碼"))
+            {
+                this.errmsg = "AdvanceCheckSuccessRetry";
+                return null;
+            }
+
+            string akeyFinal = Regex
+                .Match(this.ResponseUri?.ToString() ?? "", @"akey=([^&]+)")
+                .Groups[1]
+                .Value;
+            return string.IsNullOrEmpty(akeyFinal) ? null : akeyFinal;
+        }
+
+        private string HkRegularLogin(string id, string pass, string skey)
+        {
+            string loginHost = "login.hk.beanfun.com";
+            try
+            {
+                string url = $"https://{loginHost}/login/id-pass_form_newBF.aspx?otp1={skey}";
+                string response = this.DownloadString(url);
+
                 Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
                 {
@@ -40,6 +323,7 @@ namespace Beanfun
                     return null;
                 }
                 string eventvalidation = regex.Match(response).Groups[1].Value;
+
                 regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
                 {
@@ -47,43 +331,20 @@ namespace Beanfun
                     return null;
                 }
                 string viewstateGenerator = regex.Match(response).Groups[1].Value;
-                /*
-                regex = new Regex("id=\"LBD_VCID_c_login_idpass_form_samplecaptcha\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                { this.errmsg = "LoginNoSamplecaptcha"; return null; }
-                string samplecaptcha = regex.Match(response).Groups[1].Value;
-
-                string Captcha = "";
-                regex = new Regex("isHideCaptcha\\s?=\\s?false");
-                if (regex.IsMatch(response))
-                {
-                    CaptchaWnd wnd = null;
-                    (wnd = new CaptchaWnd(this, samplecaptcha)).ShowDialog();
-                    if (wnd == null) { this.errmsg = "LoginInitCaptcha"; return null; }
-                    else Captcha = wnd.Captcha;
-                }
-                */
 
                 NameValueCollection payload = new NameValueCollection();
                 payload.Add("__EVENTTARGET", "");
                 payload.Add("__EVENTARGUMENT", "");
                 payload.Add("__VIEWSTATE", viewstate);
                 payload.Add("__VIEWSTATEGENERATOR", viewstateGenerator);
-                if (App.LoginRegion == "HK")
-                    payload.Add("__VIEWSTATEENCRYPTED", "");
+                payload.Add("__VIEWSTATEENCRYPTED", "");
                 payload.Add("__EVENTVALIDATION", eventvalidation);
                 payload.Add("t_AccountID", id);
                 payload.Add("t_Password", pass);
-                //payload.Add("CodeTextBox", Captcha);
-                //payload.Add("LBD_VCID_c_login_idpass_form_samplecaptcha", samplecaptcha);
-                //payload.Add("g-recaptcha-response", samplecaptcha);
-                //payload.Add("token1", "");
                 payload.Add("btn_login", "登入");
 
-                response = this.UploadString(
-                    $"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}",
-                    payload
-                );
+                response = this.UploadString(url, payload);
+
                 if (response.Contains("RELOAD_CAPTCHA_CODE") && response.Contains("alert"))
                 {
                     this.errmsg = "LoginAdvanceCheck";
@@ -93,8 +354,7 @@ namespace Beanfun
                 if (response.Contains("totpLoginBtn"))
                 {
                     this.totpResponse = response;
-                    this.totpUrl =
-                        $"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}";
+                    this.totpUrl = url;
                     this.errmsg = "need_totp";
                     return null;
                 }
@@ -124,15 +384,32 @@ namespace Beanfun
                     }
                     return null;
                 }
-                string akey = regex.Match(this.ResponseUri.ToString()).Groups[1].Value;
-
-                return akey;
+                return regex.Match(this.ResponseUri.ToString()).Groups[1].Value;
             }
             catch (Exception e)
             {
                 this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
                 return null;
             }
+        }
+
+        private static string EscapeJson(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return "";
+            return s.Replace("\\", "\\\\")
+                .Replace("\"", "\\\"")
+                .Replace("\n", "\\n")
+                .Replace("\r", "\\r")
+                .Replace("\t", "\\t");
+        }
+
+        private void SetJsonHeaders(string verificationToken, string referer)
+        {
+            SetBaseHeaders(true, "application/json, text/plain, */*", referer);
+            this.Headers.Add("X-Requested-With", "XMLHttpRequest");
+            this.Headers.Add("RequestVerificationToken", verificationToken);
+            this.Headers[HttpRequestHeader.ContentType] = "application/json; charset=utf-8";
         }
 
         public void TotpLogin(
@@ -245,22 +522,6 @@ namespace Beanfun
             SetBaseHeaders(false, "text/html");
             string url = $"https://login.beanfun.com/Login/Index?pSKey={skey}";
             string response = this.DownloadString(url);
-            //Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-            //if (!regex.IsMatch(response))
-            //{ this.errmsg = "LoginNoViewstate"; return null; }
-            //string viewstate = regex.Match(response).Groups[1].Value;
-
-            //regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-            //if (!regex.IsMatch(response))
-            //{ this.errmsg = "LoginNoEventvalidation"; return null; }
-            //string eventvalidation = regex.Match(response).Groups[1].Value;
-
-            //Thread.Sleep(3000);
-
-            //regex = new Regex("\\$\\(\"#theQrCodeImg\"\\)\\.attr\\(\"src\", \"\\.\\./(.*)\"");
-            //if (!regex.IsMatch(response))
-            //{ this.errmsg = "LoginNoHash"; return null; }
-            //string value = regex.Match(response).Groups[1].Value;
 
             JObject strEncryptData = this.getQRCodeStrEncryptData(skey);
             if (strEncryptData == null)
@@ -374,7 +635,6 @@ namespace Beanfun
             try
             {
                 string skey = qrcodeclass.skey;
-                // QRLogin
                 SetBaseHeaders(
                     true,
                     "application/json, text/plain, */*",
@@ -383,7 +643,6 @@ namespace Beanfun
                 string response = this.DownloadString("https://login.beanfun.com/QRLogin/QRLogin");
                 Debug.WriteLine("QRLogin response: " + response);
 
-                // SendLogin
                 SetBaseHeaders(
                     true,
                     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -429,7 +688,6 @@ namespace Beanfun
                     return null;
                 }
 
-                // Get bfWebToken Data
                 this.redirect = false;
                 SetBaseHeaders(true, null, "https://login.beanfun.com/");
                 string returnUrl = "https://tw.beanfun.com/beanfun_block/bflogin/return.aspx";
@@ -456,13 +714,11 @@ namespace Beanfun
             try
             {
                 string skey = qrcodeclass.skey;
-                //int errorCount = 0;
                 string result;
                 this.Headers.Add("User-Agent", "Mozilla/5.0");
                 this.Headers.Add("Accept", "application/json, text/plain, */*");
                 this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
                 this.Headers.Add("Origin", "https://login.beanfun.com");
-                //Debug.WriteLine(qrcodeclass.value);
 
                 string response = this.DownloadString(
                     $"https://login.beanfun.com/QRLogin/CheckLoginStatus?pSKey={skey}"
@@ -483,10 +739,7 @@ namespace Beanfun
                 if (result == "Failed" || result == "Wait Login")
                     return 0;
                 else if (result == "Token Expired")
-                {
-                    //this.errmsg = "登入逾時，請重新取得QRCode";
                     return -2;
-                }
                 else if (result == "Success")
                     return 1;
                 else
@@ -546,25 +799,23 @@ namespace Beanfun
         {
             if (App.LoginRegion == "TW")
             {
-                string response = this.DownloadString(
+                this.DownloadString(
                     "https://tw.beanfun.com/beanfun_block/bflogin/default.aspx?service=999999_T0"
                 );
-                //this.DownloadString(this.ResponseHeaders["Location"]);
-                //this.DownloadString(this.ResponseHeaders["Location"]);
-                //response = this.ResponseHeaders["Location"];
-                response = this.ResponseUri.ToString();
-                if (response == null)
+                string finalUrl = this.ResponseUri?.ToString();
+                if (string.IsNullOrEmpty(finalUrl))
                 {
                     this.errmsg = "LoginNoResponse";
                     return null;
                 }
-                Regex regex = new Regex("skey=(.*)&display");
-                if (!regex.IsMatch(response))
+
+                Regex regex = new Regex(@"[sp][Ss]?[Kk]ey=([^&]+)");
+                if (!regex.IsMatch(finalUrl))
                 {
                     this.errmsg = "LoginNoSkey";
                     return null;
                 }
-                return regex.Match(response).Groups[1].Value;
+                return regex.Match(finalUrl).Groups[1].Value;
             }
             else
             {
@@ -614,7 +865,7 @@ namespace Beanfun
                 switch (loginMethod)
                 {
                     case (int)LoginMethod.Regular:
-                        akey = RegularLogin(id, pass, SessionKey);
+                        akey = RegularLogin(id, pass, SessionKey, service_code, service_region);
                         break;
                     case (int)LoginMethod.QRCode:
                         akey = QRCodeLogin(qrcodeClass);
@@ -645,6 +896,41 @@ namespace Beanfun
             }
         }
 
+        public void GamePassLogin(
+            string webToken,
+            System.Collections.Generic.IEnumerable<System.Net.Cookie> cookies,
+            string service_code = "610074",
+            string service_region = "T9"
+        )
+        {
+            try
+            {
+                // Sync all cookies from WebView2 to BeanfunClient
+                foreach (var cookie in cookies)
+                {
+                    SetCookie(
+                        cookie.Name,
+                        cookie.Value,
+                        cookie.Domain.TrimStart('.'),
+                        string.IsNullOrEmpty(cookie.Path) ? "/" : cookie.Path
+                    );
+                }
+
+                this.webtoken = webToken;
+
+                GetAccounts(service_code, service_region, false);
+                if (this.errmsg != null)
+                    return;
+
+                this.remainPoint = getRemainPoint();
+                this.errmsg = null;
+            }
+            catch (Exception e)
+            {
+                this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
+            }
+        }
+
         private void LoginCompleted(
             string akey,
             string service_code = "610074",
@@ -672,9 +958,7 @@ namespace Beanfun
                 $"https://{host}/beanfun_block/bflogin/return.aspx",
                 payload
             );
-            //Debug.WriteLine(response);
             response = this.DownloadString($"https://{host}/{this.ResponseHeaders["Location"]}");
-            //Debug.WriteLine(response);
             Debug.WriteLine(this.ResponseHeaders);
 
             this.webtoken = this.GetCookie("bfWebToken");
