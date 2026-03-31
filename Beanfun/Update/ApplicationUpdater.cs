@@ -109,15 +109,24 @@ namespace Beanfun.Update
 
         private static GitHubRelease GetLastRelease(List<GitHubRelease> releases)
         {
+            // Check if user wants Stable channel
             bool stable = ConfigAppSettings.GetValue("updateChannel", "Stable").Equals("Stable");
+
             foreach (var release in releases)
             {
-                // If Beta channel, return the first release (could be prerelease)
-                if (!stable && release.Prerelease)
+                // If user is on Beta/Preview channel (!stable),
+                // we take the absolute newest release (the first one in the list).
+                if (!stable)
+                {
                     return release;
-                // If Stable channel, skip prereleases
-                else if (!release.Prerelease)
+                }
+
+                // If user is on Stable channel,
+                // we skip any prerelease and only return the first official release found.
+                if (!release.Prerelease)
+                {
                     return release;
+                }
             }
             return null;
         }
