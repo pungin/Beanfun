@@ -5,7 +5,7 @@
   xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
   xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
   mc:Ignorable="d"
-  Title="進階驗證"
+  Title="{DynamicResource AdvanceCheckTitle}"
   Height="280"
   Width="400"
   WindowStartupLocation="CenterScreen"
@@ -14,16 +14,25 @@
   <StackPanel Margin="20">
     <TextBlock x:Name="lblHint" Margin="0,0,0,10" TextWrapping="Wrap" />
 
-    <TextBlock Text="請輸入認證 Email：" Margin="0,0,0,4" />
+    <TextBlock x:Name="lblVerifyInput" Margin="0,0,0,4" />
     <TextBox x:Name="txtEmail" Margin="0,0,0,12" />
 
-    <TextBlock Text="圖形驗證碼：" Margin="0,0,0,4" />
+    <TextBlock Text="{DynamicResource AdvanceCheckCaptchaLabel}" Margin="0,0,0,4" />
     <Image x:Name="imgCaptcha" Height="40" Margin="0,0,0,8" HorizontalAlignment="Left" />
     <TextBox x:Name="txtCaptcha" Margin="0,0,0,16" />
 
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-      <Button Content="確定" Width="80" Margin="0,0,10,0" Click="btnOK_Click" />
-      <Button Content="取消" Width="80" Click="btnCancel_Click" />
+      <Button
+        Content="{DynamicResource AdvanceCheckConfirm}"
+        Width="80"
+        Margin="0,0,10,0"
+        Click="btnOK_Click"
+      />
+      <Button
+        Content="{DynamicResource AdvanceCheckCancel}"
+        Width="80"
+        Click="btnCancel_Click"
+      />
     </StackPanel>
   </StackPanel>
 </Window>

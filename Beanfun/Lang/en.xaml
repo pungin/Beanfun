@@ -525,4 +525,11 @@
     >Your legacy account data has been successfully upgraded to the new format!&#x0a;You can now use all your accounts normally.</system:String
   >
   <system:String x:Key="LegacyDataMigrateTitle">Data Migration Successful</system:String>
+  <system:String x:Key="AdvanceCheckTitle">Advanced Verification</system:String>
+  <system:String x:Key="AdvanceCheckHintPrefix">Hint: </system:String>
+  <system:String x:Key="AdvanceCheckInputEmail">Enter verification Email:</system:String>
+  <system:String x:Key="AdvanceCheckInputPhone">Enter verification phone number:</system:String>
+  <system:String x:Key="AdvanceCheckCaptchaLabel">Captcha:</system:String>
+  <system:String x:Key="AdvanceCheckConfirm">Confirm</system:String>
+  <system:String x:Key="AdvanceCheckCancel">Cancel</system:String>
 </ResourceDictionary>

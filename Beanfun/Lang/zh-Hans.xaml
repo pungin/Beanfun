@@ -428,4 +428,11 @@
     >系统已成功将您的旧版帐号资料自动升级至新格式！&#x0a;您现在可以正常使用所有帐号。</system:String
   >
   <system:String x:Key="LegacyDataMigrateTitle">资料转换成功</system:String>
+  <system:String x:Key="AdvanceCheckTitle">进阶验证</system:String>
+  <system:String x:Key="AdvanceCheckHintPrefix">提示：</system:String>
+  <system:String x:Key="AdvanceCheckInputEmail">请输入认证 Email：</system:String>
+  <system:String x:Key="AdvanceCheckInputPhone">请输入认证电话号码：</system:String>
+  <system:String x:Key="AdvanceCheckCaptchaLabel">图形验证码：</system:String>
+  <system:String x:Key="AdvanceCheckConfirm">确定</system:String>
+  <system:String x:Key="AdvanceCheckCancel">取消</system:String>
 </ResourceDictionary>

@@ -450,4 +450,11 @@
     >系統已成功將您的舊版帳號資料自動升級至新格式！&#x0a;您現在可以正常使用所有帳號。</system:String
   >
   <system:String x:Key="LegacyDataMigrateTitle">資料轉換成功</system:String>
+  <system:String x:Key="AdvanceCheckTitle">進階驗證</system:String>
+  <system:String x:Key="AdvanceCheckHintPrefix">提示：</system:String>
+  <system:String x:Key="AdvanceCheckInputEmail">請輸入認證 Email：</system:String>
+  <system:String x:Key="AdvanceCheckInputPhone">請輸入認證電話號碼：</system:String>
+  <system:String x:Key="AdvanceCheckCaptchaLabel">圖形驗證碼：</system:String>
+  <system:String x:Key="AdvanceCheckConfirm">確定</system:String>
+  <system:String x:Key="AdvanceCheckCancel">取消</system:String>
 </ResourceDictionary>
