@@ -39,7 +39,9 @@ namespace Beanfun
 
             if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(CaptchaCode))
             {
-                MessageBox.Show("請填寫 Email 同驗證碼");
+                MessageBox.Show(
+                    Application.Current.TryFindResource("AdvanceCheckFillEmailAndCaptcha") as string
+                );
                 return;
             }
             DialogResult = true;

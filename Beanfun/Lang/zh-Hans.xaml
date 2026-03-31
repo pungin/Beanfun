@@ -408,4 +408,15 @@
   <system:String x:Key="CopyDeeplinkNotReady"
     >Deeplink 尚未取得，请等待二维码加载完成。</system:String
   >
+  <system:String x:Key="AdvanceCheckSuccessRetry">验证成功！请再次输入密码登录游戏。</system:String>
+  <system:String x:Key="AdvanceCheckAccountAbnormal"
+    >帐号状态异常，请先使用浏览器登录官网确认（可能需联络客服）</system:String
+  >
+  <system:String x:Key="AdvanceCheckNoCaptchaId"
+    >无法取得验证码编号，帐号可能处于异常状态</system:String
+  >
+  <system:String x:Key="AdvanceCheckCaptchaLoadFailed"
+    >无法载入验证码图片（Session 可能已过期）</system:String
+  >
+  <system:String x:Key="AdvanceCheckFillEmailAndCaptcha">请填写 Email 和验证码</system:String>
 </ResourceDictionary>

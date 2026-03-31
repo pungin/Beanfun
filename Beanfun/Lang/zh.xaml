@@ -430,4 +430,15 @@
   <system:String x:Key="CopyDeeplinkNotReady"
     >Deeplink 尚未取得，請等待 QR Code 載入完成。</system:String
   >
+  <system:String x:Key="AdvanceCheckSuccessRetry">驗證成功！請再次輸入密碼登入遊戲。</system:String>
+  <system:String x:Key="AdvanceCheckAccountAbnormal"
+    >帳號狀態異常，請先使用瀏覽器登入官網確認（可能需聯絡客服）</system:String
+  >
+  <system:String x:Key="AdvanceCheckNoCaptchaId"
+    >無法取得驗證碼編號，帳號可能處於異常狀態</system:String
+  >
+  <system:String x:Key="AdvanceCheckCaptchaLoadFailed"
+    >無法載入驗證碼圖片（Session 可能已過期）</system:String
+  >
+  <system:String x:Key="AdvanceCheckFillEmailAndCaptcha">請填寫 Email 同驗證碼</system:String>
 </ResourceDictionary>

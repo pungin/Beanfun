@@ -1165,7 +1165,7 @@ namespace Beanfun
             switch (msg)
             {
                 case "AdvanceCheckSuccessRetry":
-                    msg = "驗證成功！請再次輸入密碼登入遊戲。";
+                    msg = TryFindResource("AdvanceCheckSuccessRetry") as string;
                     method = 1;
                     break;
                 case "LoginNoResponse":
@@ -1864,8 +1864,12 @@ namespace Beanfun
                     try
                     {
                         var proc = new Process();
-                        proc.StartInfo.FileName =
-                            System.Environment.CurrentDirectory + "\\LRProc.exe";
+                        proc.StartInfo.FileName = Path.Combine(
+                            Path.GetDirectoryName(
+                                System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName
+                            ),
+                            "LRProc.exe"
+                        );
                         proc.StartInfo.Arguments =
                             "ef3e7b42-a87c-4c07-ae3e-eeebeef12762 " + commandLine;
                         proc.StartInfo.WorkingDirectory = Path.GetDirectoryName(path);
