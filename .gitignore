@@ -272,3 +272,6 @@ Beanfun/LRSubMenus.dll
 
 # AI tool local settings
 .claude/
+
+# Local scripts
+sync-upstream.ps1

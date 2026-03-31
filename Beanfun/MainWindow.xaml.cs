@@ -319,13 +319,14 @@ namespace Beanfun
                 if (App.OSVersion < App.Win11)
                 {
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                    ServicePointManager.ServerCertificateValidationCallback = (
-                        sender,
-                        certificate,
-                        chain,
-                        errors
-                    ) => true;
                 }
+                // Accept all SSL certificates to support VPN/game accelerator proxy environments
+                ServicePointManager.ServerCertificateValidationCallback = (
+                    sender,
+                    certificate,
+                    chain,
+                    errors
+                ) => true;
                 if (settingPage.tradLogin != null && !(bool)settingPage.tradLogin.IsChecked)
                     accountList.panel_GetOtp.Visibility = Visibility.Collapsed;
 
