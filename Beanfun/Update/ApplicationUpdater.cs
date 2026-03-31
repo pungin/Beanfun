@@ -37,137 +37,105 @@ namespace Beanfun.Update
 
         internal static void CheckApplicationUpdate(bool show)
         {
-            var url = $"https://api.github.com/repos/lshw54/Beanfun/releases";
+            var url = "https://api.github.com/repos/lshw54/Beanfun/releases";
 
             try
             {
-                var client = new WebClient();
-                // Set User-Agent as required by GitHub API
-                client.Headers.Add("User-Agent", $"Beanfun(V{App.AssemblyVersion})");
-                client.Headers.Add("Accept", "application/vnd.github.v3+json");
-                var json = Encoding.UTF8.GetString(client.DownloadData(url));
-
-                var releases = JsonConvert.DeserializeObject<List<GitHubRelease>>(json);
-                GitHubRelease release = GetLastRelease(releases);
-                if (release == null)
-                    return;
-
-                // Parse Tag Name (e.g., v5.8.2604011114)
-                // Groups: [1]=Major, [2]=Minor, [3]=Timestamp/Build
-                var match = Regex.Match(release.TagName, @"^v(\d+)\.(\d+)\.(\d+)\.(\d+)$");
-                if (!match.Success)
-                    return;
-
-                // Create a display string for the UI, e.g., "5.8(2604011114)"
-                string major = match.Groups[1].Value;
-                string minor = match.Groups[2].Value;
-                string patch = match.Groups[3].Value;
-                string timestamp = match.Groups[4].Value;
-                string newVerDisplay = $"{major}.{minor}.{patch}({timestamp})";
-
-                // Compare local version vs remote version using numeric logic
-                if (IsNewerVersion(App.AssemblyVersion, major, minor, timestamp))
+                using (var client = new WebClient())
                 {
-                    try
+                    client.Headers.Add("User-Agent", $"Beanfun(V{App.AssemblyVersion})");
+                    client.Headers.Add("Accept", "application/vnd.github.v3+json");
+                    var json = Encoding.UTF8.GetString(client.DownloadData(url));
+
+                    var releases = JsonConvert.DeserializeObject<List<GitHubRelease>>(json);
+                    GitHubRelease release = GetLastRelease(releases);
+
+                    if (release == null)
+                        return;
+
+                    // 1. 解析遠端 Tag (支援 v5.8.3.2604011114)
+                    // Groups: [1]=Major, [2]=Minor, [3]=Patch, [4]=Timestamp
+                    var match = Regex.Match(release.TagName, @"^v(\d+)\.(\d+)\.(\d+)\.(\d+)$");
+                    if (!match.Success)
+                        return;
+
+                    string major = match.Groups[1].Value;
+                    string minor = match.Groups[2].Value;
+                    string patch = match.Groups[3].Value;
+                    string timestamp = match.Groups[4].Value;
+
+                    // 2. 準備顯示文字
+                    string newVerDisplay = $"{major}.{minor}.{patch}({timestamp})";
+
+                    // 3. 數值比較邏輯
+                    if (IsNewerVersion(App.AssemblyVersion, major, minor, timestamp))
                     {
-                        MessageBoxResult result = MessageBox.Show(
-                            string.Format(
-                                Regex.Unescape(
-                                    Application.Current.TryFindResource("NewVersionDetected")
-                                        as string
-                                ),
-                                newVerDisplay,
-                                App.AssemblyVersion,
-                                release.Body
+                        string msg = string.Format(
+                            Regex.Unescape(
+                                Application.Current.TryFindResource("NewVersionDetected") as string
+                                    ?? "Detect New Version {0} (Current: {1})\n\n{2}"
                             ),
-                            Application.Current.TryFindResource("UpdateCheck") as string,
+                            newVerDisplay,
+                            App.AssemblyVersion,
+                            release.Body
+                        );
+
+                        MessageBoxResult result = MessageBox.Show(
+                            msg,
+                            Application.Current.TryFindResource("UpdateCheck") as string
+                                ?? "Update Check",
                             MessageBoxButton.OKCancel
                         );
 
                         if (result == MessageBoxResult.OK)
                         {
-                            try
-                            {
-                                // 1. Check if there are any assets available
-                                if (release.Assets != null && release.Assets.Count > 0)
-                                {
-                                    string downloadUrl = release.Assets[0].BrowserDownloadUrl;
+                            string downloadUrl =
+                                (release.Assets != null && release.Assets.Count > 0)
+                                    ? release.Assets[0].BrowserDownloadUrl
+                                    : $"https://github.com/lshw54/Beanfun/releases/tag/{release.TagName}";
 
-                                    // 2. For .NET Core / .NET 5+, Process.Start needs UseShellExecute = true to open URLs
-                                    Process.Start(
-                                        new ProcessStartInfo
-                                        {
-                                            FileName = downloadUrl,
-                                            UseShellExecute = true,
-                                        }
-                                    );
-                                }
-                                else
+                            Process.Start(
+                                new ProcessStartInfo
                                 {
-                                    // Fallback: If assets are missing, open the release page instead
-                                    // Using the tag_name to construct the URL
-                                    string releasePage =
-                                        $"https://github.com/lshw54/Beanfun/releases/tag/{release.TagName}";
-                                    Process.Start(
-                                        new ProcessStartInfo
-                                        {
-                                            FileName = releasePage,
-                                            UseShellExecute = true,
-                                        }
-                                    );
+                                    FileName = downloadUrl,
+                                    UseShellExecute = true,
                                 }
-                            }
-                            catch (Exception ex)
-                            {
-                                // Log or show error if needed
-                                Debug.WriteLine("Failed to open download link: " + ex.Message);
-                            }
+                            );
                         }
                     }
-                    catch (Exception) { }
-                }
-                else
-                {
-                    // If manually checking and no update is found
-                    if (show)
+                    else if (show)
+                    {
                         MessageBox.Show(
-                            Application.Current.TryFindResource("NoUpdatesDetected") as string,
-                            Application.Current.TryFindResource("UpdateCheck") as string,
+                            Application.Current.TryFindResource("NoUpdatesDetected") as string
+                                ?? "No Updates Found",
+                            Application.Current.TryFindResource("UpdateCheck") as string
+                                ?? "Update Check",
                             MessageBoxButton.OK
                         );
+                    }
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Update check failed: " + ex.Message);
+            }
         }
 
         private static GitHubRelease GetLastRelease(List<GitHubRelease> releases)
         {
-            // Check if user wants Stable channel
-            bool stable = ConfigAppSettings.GetValue("updateChannel", "Stable").Equals("Stable");
+            string channel = ConfigAppSettings.GetValue("updateChannel", "Stable");
+            bool isBeta = channel.Equals("Beta") || channel.Equals("Preview");
 
             foreach (var release in releases)
             {
-                // If user is on Beta/Preview channel (!stable),
-                // we take the absolute newest release (the first one in the list).
-                if (!stable)
-                {
-                    return release;
-                }
-
-                // If user is on Stable channel,
-                // we skip any prerelease and only return the first official release found.
+                if (isBeta)
+                    return release; // Beta 頻道攞絕對最新
                 if (!release.Prerelease)
-                {
-                    return release;
-                }
+                    return release; // Stable 頻道跳過 Prerelease
             }
             return null;
         }
 
-        /// <summary>
-        /// Compares versions by converting them into a normalized long integer.
-        /// Uses padding to ensure semantic versioning (Major.Minor) remains consistent.
-        /// </summary>
         private static bool IsNewerVersion(
             string localVer,
             string major,
@@ -177,64 +145,46 @@ namespace Beanfun.Update
         {
             try
             {
-                // 1. Normalize Remote Version: Major(3 digits) + Minor(3 digits) + Timestamp(10 digits)
-                // e.g. 5, 8, 2604011114 -> 0050082604011114
+                // 1. 遠端版本標準化 (e.g. 0050082604011114)
                 long remoteNum = long.Parse(
                     string.Format("{0:D3}{1:D3}{2}", int.Parse(major), int.Parse(minor), timestamp)
                 );
 
-                // 2. Normalize Local Version
-                // We extract ALL digits and check the format
-                string localDigitsOnly = Regex.Replace(localVer, @"[^\d]", "");
-
-                // If it's the old format "5.8.9586.32322", it might have 4 segments
-                // We try to parse the local string as a Version object first to be safe
-                Version v;
+                // 2. 本地版本標準化
                 long localNum;
+                // Regex 修正：\.? 兼容 5.8.(xxx) 或者 5.8(xxx) 格式
+                var match = Regex.Match(localVer, @"(\d+)\.(\d+)\.?\((\d+)\)");
 
-                if (localVer.Contains("(") && localVer.Contains(")"))
+                if (match.Success)
                 {
-                    // New format: "5.8(2603311757)"
-                    // Extract Major, Minor and the stuff inside brackets
-                    var match = Regex.Match(localVer, @"(\d+)\.(\d+)\((\d+)\)");
-                    if (match.Success)
-                    {
-                        localNum = long.Parse(
-                            string.Format(
-                                "{0:D3}{1:D3}{2}",
-                                int.Parse(match.Groups[1].Value),
-                                int.Parse(match.Groups[2].Value),
-                                match.Groups[3].Value
-                            )
-                        );
-                    }
-                    else
-                    {
-                        localNum = long.Parse(localDigitsOnly);
-                    }
+                    localNum = long.Parse(
+                        string.Format(
+                            "{0:D3}{1:D3}{2}",
+                            int.Parse(match.Groups[1].Value),
+                            int.Parse(match.Groups[2].Value),
+                            match.Groups[3].Value
+                        )
+                    );
                 }
-                else if (Version.TryParse(localVer, out v))
+                else if (Version.TryParse(localVer, out Version v))
                 {
-                    // Legacy MS format: "5.8.9586.32322"
-                    // These are ALWAYS considered older than the new timestamp system
-                    // because the timestamp system starts from year 26 (260101....)
-                    // while MS build day 9586 is only 11 digits total in our logic
+                    // 兼容舊版 5.8.9586... (通常會細過 16 位 Timestamp 數值)
                     localNum = long.Parse(
                         string.Format("{0:D3}{1:D3}{2}{3}", v.Major, v.Minor, v.Build, v.Revision)
                     );
                 }
                 else
                 {
-                    localNum = long.Parse(localDigitsOnly);
+                    // 暴力提取所有數字
+                    localNum = long.Parse(Regex.Replace(localVer, @"[^\d]", ""));
                 }
 
-                // 3. Comparison
+                // 3. 嚴格大於才更新
                 return remoteNum > localNum;
             }
             catch
             {
-                // If parsing fails, we assume it's a very old version and needs update
-                return true;
+                return false;
             }
         }
     }
