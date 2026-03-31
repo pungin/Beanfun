@@ -327,122 +327,50 @@ jobs:
         id: get_commits
         shell: pwsh
         run: |
+          function Set-MultilineOutput($name, $value) {
+            $delimiter = "EOF_$([guid]::NewGuid().ToString('N'))"
+            "$name<<$delimiter" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            $value | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            $delimiter | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+          
           $hasLastRelease = "${{ steps.get_last_release.outputs.has_last_release }}" -eq 'true'
           $commitsList = @()
           $commitCount = 0
           
-          if ($hasLastRelease) {
+          $range = if ($hasLastRelease) {
             $lastTag = "${{ steps.get_last_release.outputs.last_tag }}"
             Write-Host "Getting commits since last release: $lastTag"
-            
-            try {
-              $tagExists = git rev-parse --verify "$lastTag" 2>$null
-              if ($LASTEXITCODE -eq 0) {
-                $commits = git log $lastTag..HEAD --pretty=format:"%h|%s|%an|%ad" --date=short --no-merges
-                
-                if ($commits) {
-                  foreach ($commit in $commits) {
-                    $parts = $commit -split '\|'
-                    $hash = $parts[0]
-                    $message = $parts[1]
-                    $author = $parts[2]
-                    $date = $parts[3]
-                    
-                    if ($message.Length -gt 80) {
-                      $message = $message.Substring(0, 77) + "..."
-                    }
-                    
-                    $commitsList += "- **[$hash]** $message - *$author* ($date)"
-                    $commitCount++
-                  }
-                  
-                  $commitsText = $commitsList -join "`n"
-                  Write-Host "Found $commitCount commits since last release"
-                  echo "commits_text=$commitsText" >> $env:GITHUB_OUTPUT
-                  echo "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
-                } else {
-                  Write-Host "No new commits since last release"
-                  echo "commits_text=No new commits since last release" >> $env:GITHUB_OUTPUT
-                  echo "commit_count=0" >> $env:GITHUB_OUTPUT
-                }
-              } else {
-                Write-Host "Tag $lastTag not found locally, fetching tags..."
-                git fetch --tags
-                
-                $tagExists = git rev-parse --verify "$lastTag" 2>$null
-                if ($LASTEXITCODE -eq 0) {
-                  $commits = git log $lastTag..HEAD --pretty=format:"%h|%s|%an|%ad" --date=short --no-merges
-                  
-                  if ($commits) {
-                    foreach ($commit in $commits) {
-                      $parts = $commit -split '\|'
-                      $hash = $parts[0]
-                      $message = $parts[1]
-                      $author = $parts[2]
-                      $date = $parts[3]
-                      
-                      if ($message.Length -gt 80) {
-                        $message = $message.Substring(0, 77) + "..."
-                      }
-                      
-                      $commitsList += "- **[$hash]** $message - *$author* ($date)"
-                      $commitCount++
-                    }
-                    
-                    $commitsText = $commitsList -join "`n"
-                    echo "commits_text=$commitsText" >> $env:GITHUB_OUTPUT
-                    echo "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
-                  } else {
-                    echo "commits_text=No new commits since last release" >> $env:GITHUB_OUTPUT
-                    echo "commit_count=0" >> $env:GITHUB_OUTPUT
-                  }
-                } else {
-                  Write-Host "Tag $lastTag not found in repository"
-                  echo "commits_text=Previous release tag not found. Showing recent commits instead." >> $env:GITHUB_OUTPUT
-                  echo "commit_count=0" >> $env:GITHUB_OUTPUT
-                }
-              }
-            } catch {
-              Write-Host "Error getting commits: $_"
-              echo "commits_text=Error retrieving commits since last release" >> $env:GITHUB_OUTPUT
-              echo "commit_count=0" >> $env:GITHUB_OUTPUT
-            }
+            git fetch --tags 2>$null
+            "$lastTag..HEAD"
           } else {
             Write-Host "No previous release, getting last 30 commits"
-            try {
-              $commits = git log --pretty=format:"%h|%s|%an|%ad" --date=short --no-merges -n 30
-              
-              if ($commits) {
-                foreach ($commit in $commits) {
-                  $parts = $commit -split '\|'
-                  $hash = $parts[0]
-                  $message = $parts[1]
-                  $author = $parts[2]
-                  $date = $parts[3]
-                  
-                  if ($message.Length -gt 80) {
-                    $message = $message.Substring(0, 77) + "..."
-                  }
-                  
-                  $commitsList += "- **[$hash]** $message - *$author* ($date)"
-                  $commitCount++
-                }
-                
-                $commitsText = $commitsList -join "`n"
-                Write-Host "Showing last $commitCount commits"
-                echo "commits_text=$commitsText" >> $env:GITHUB_OUTPUT
-                echo "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
-                echo "first_release=true" >> $env:GITHUB_OUTPUT
-              } else {
-                echo "commits_text=No commits found" >> $env:GITHUB_OUTPUT
-                echo "commit_count=0" >> $env:GITHUB_OUTPUT
-              }
-            } catch {
-              Write-Host "Error getting commits: $_"
-              echo "commits_text=Error retrieving commits" >> $env:GITHUB_OUTPUT
-              echo "commit_count=0" >> $env:GITHUB_OUTPUT
-            }
+            "-n 30"
           }
+          
+          try {
+            $commits = git log $range --pretty=format:"%h|%s|%an|%ad" --date=short --no-merges
+            
+            if ($commits) {
+              foreach ($commit in $commits) {
+                $parts = $commit -split '\|', 4
+                $hash = $parts[0]
+                $message = if ($parts[1].Length -gt 80) { $parts[1].Substring(0, 77) + "..." } else { $parts[1] }
+                $author = $parts[2]
+                $date = $parts[3]
+                
+                $commitsList += "- [$hash] $message - $author ($date)"
+                $commitCount++
+              }
+            }
+          } catch {
+            Write-Host "Error getting commits: $_"
+          }
+          
+          $commitsText = if ($commitCount -gt 0) { $commitsList -join "`n" } else { "No commits found" }
+          
+          Set-MultilineOutput "commits_text" $commitsText
+          echo "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
 
       - name: Create Release
         if: steps.check_tag.outputs.exists == 'false'
