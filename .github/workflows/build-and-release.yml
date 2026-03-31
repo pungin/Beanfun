@@ -50,23 +50,40 @@ jobs:
         shell: pwsh
         run: |
           $file = Get-ChildItem -Path . -Filter "AssemblyInfo.cs" -Recurse | Select-Object -First 1
+          if (-not $file) { Write-Error "AssemblyInfo.cs not found!"; exit 1 }
+
           $content = Get-Content $file.FullName -Raw
           if ($content -match 'AssemblyVersion\("(\d+)\.(\d+)(?:\.\d+)?\.\*"\)') {
-              $major = [int]$matches[1]; $minor = [int]$matches[2]
-          } else { $major = 5; $minor = 8 }
+              $major = [int]$matches[1]
+              $minor = [int]$matches[2]
+          } else { 
+              $major = 5
+              $minor = 8 
+          }
 
           git fetch --tags 2>$null
-          $tags = git tag -l "v*.*.*.*" --sort=-v:refname
-          $patch = 0
-          if ($tags -and ($tags[0] -match '^v(\d+)\.(\d+)\.(\d+)\.')) { $patch = [int]$matches[3] }
+          $tags = git tag -l "v$major.$minor.*.*" --sort=-v:refname
 
-          if ("${{ github.event.inputs.release_type }}" -eq 'release') {
-              switch ("${{ github.event.inputs.version_increment }}") {
+          $patch = 0
+          if ($tags -and $tags.Count -gt 0) {
+              $latestTag = $tags[0]
+              if ($latestTag -match "^v\d+\.\d+\.(\d+)\.") {
+                  $patch = [int]$matches[1]
+              }
+          }
+
+          $releaseType = "${{ github.event.inputs.release_type }}"
+          $increment = "${{ github.event.inputs.version_increment }}"
+
+          if ($releaseType -eq 'release') {
+              switch ($increment) {
                   'major' { $major++; $minor=0; $patch=0 }
                   'minor' { $minor++; $patch=0 }
                   'patch' { $patch++ }
               }
-          } else { $patch++ }
+          } else { 
+              $patch++ 
+          }
 
           $utcNow = (Get-Date).ToUniversalTime()
           $timestamp = $utcNow.ToString("yyMMddHHmm")
@@ -121,7 +138,8 @@ jobs:
           $range = if ($lastRelease) { "$($lastRelease.tag_name)..HEAD" } else { "-n 30" }
 
           $repoUrl = "${{ github.server_url }}/${{ github.repository }}"
-          $commits = git log $range --pretty=format:"- [\`%h\`]($repoUrl/commit/%H) %s - %an (%ad)" --date=short --no-merges
+
+          $commits = git log $range --pretty=format:"- [%h]($repoUrl/commit/%H) %s - %an (%ad)" --date=short --no-merges
 
           $commitCount = if ($commits) { ($commits -split "`n").Count } else { 0 }
           $commitsText = if ($commits) { $commits -join "`n" } else { "No commits found" }
@@ -156,7 +174,7 @@ jobs:
             ---
 
             <details>
-            <summary><b> 英文 Release Notes （點擊展開 View English）</b></summary>
+            <summary><b>英文 Release Notes （點擊展開 View English）</b></summary>
 
             <br>
 
@@ -186,7 +204,7 @@ jobs:
 
             ---
 
-            ## 中文 Release Notes （優先顯示）
+            ## 中文 Release Notes
 
             ### 📦 下載 Download
             ⬇️ **[下載 Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)**
