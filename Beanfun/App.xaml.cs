@@ -121,7 +121,7 @@ namespace Beanfun
             DateTime buildDate = new DateTime(2000, 1, 1)
                 .AddDays(version.Build)
                 .AddSeconds(version.Revision * 2);
-            return $"{version.Major}.{version.Minor}({buildDate.ToString("yyMMddHHmm")})";
+            return $"{version.Major}.{version.Minor}.{version.Build}({buildDate.ToString("yyMMddHHmm")})";
         }
 
         internal static string AssemblyVersion
