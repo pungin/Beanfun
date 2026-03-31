@@ -1274,6 +1274,24 @@ namespace Beanfun
             ShowAccountListPage();
         }
 
+        public void GamePassLoginCompleted(
+            string webToken,
+            System.Collections.Generic.List<System.Net.Cookie> cookies
+        )
+        {
+            bfClient.GamePassLogin(webToken, cookies, service_code, service_region);
+
+            if (bfClient.errmsg != null)
+            {
+                errexit(bfClient.errmsg, 1);
+                return;
+            }
+
+            App.LoginMethod = (int)LoginMethod.GamePass;
+            ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
+            ShowAccountListPage();
+        }
+
         private void SaveLoginCredentials()
         {
             bool isAccountLogin =

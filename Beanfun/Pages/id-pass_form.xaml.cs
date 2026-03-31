@@ -269,15 +269,16 @@ namespace Beanfun
             App.MainWnd.loginMethodChanged();
         }
 
-        private void btn_GamePass_Click(object sender, RoutedEventArgs e)
+        private async void btn_GamePass_Click(object sender, RoutedEventArgs e)
         {
+            btn_GamePass.IsEnabled = false;
             try
             {
                 var client = new BeanfunClient();
-                string skey = client.GetSessionkey();
+                string skey = await System.Threading.Tasks.Task.Run(() => client.GetSessionkey());
                 if (string.IsNullOrEmpty(skey))
                 {
-                    MessageBox.Show("無法取得 SessionKey，請稍後再試");
+                    MessageBox.Show(TryFindResource("SessionKeyFailed") as string);
                     return;
                 }
                 App.MainWnd.bfClient = client;
@@ -285,7 +286,11 @@ namespace Beanfun
             }
             catch
             {
-                MessageBox.Show("連線失敗，請檢查網路連線");
+                MessageBox.Show(TryFindResource("ConnectionFailed") as string);
+            }
+            finally
+            {
+                btn_GamePass.IsEnabled = true;
             }
         }
     }

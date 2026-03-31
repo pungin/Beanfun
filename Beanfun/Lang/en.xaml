@@ -512,4 +512,13 @@
   <system:String x:Key="AdvanceCheckFillEmailAndCaptcha"
     >Please fill in both email and captcha code.</system:String
   >
+  <system:String x:Key="GamePassLogin">GamePass Login</system:String>
+  <system:String x:Key="GamePassWaiting">Waiting for GamePass authentication...</system:String>
+  <system:String x:Key="GamePassOpen">Open GamePass Login</system:String>
+  <system:String x:Key="SessionKeyFailed"
+    >Unable to get SessionKey. Please try again later.</system:String
+  >
+  <system:String x:Key="ConnectionFailed"
+    >Connection failed. Please check your network.</system:String
+  >
 </ResourceDictionary>

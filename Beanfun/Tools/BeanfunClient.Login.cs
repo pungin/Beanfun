@@ -890,6 +890,41 @@ namespace Beanfun
             }
         }
 
+        public void GamePassLogin(
+            string webToken,
+            System.Collections.Generic.IEnumerable<System.Net.Cookie> cookies,
+            string service_code = "610074",
+            string service_region = "T9"
+        )
+        {
+            try
+            {
+                // Sync all cookies from WebView2 to BeanfunClient
+                foreach (var cookie in cookies)
+                {
+                    SetCookie(
+                        cookie.Name,
+                        cookie.Value,
+                        cookie.Domain.TrimStart('.'),
+                        string.IsNullOrEmpty(cookie.Path) ? "/" : cookie.Path
+                    );
+                }
+
+                this.webtoken = webToken;
+
+                GetAccounts(service_code, service_region, false);
+                if (this.errmsg != null)
+                    return;
+
+                this.remainPoint = getRemainPoint();
+                this.errmsg = null;
+            }
+            catch (Exception e)
+            {
+                this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
+            }
+        }
+
         private void LoginCompleted(
             string akey,
             string service_code = "610074",

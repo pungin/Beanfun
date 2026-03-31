@@ -21,15 +21,19 @@ namespace Beanfun
                 string skey = client.GetSessionkey();
                 if (string.IsNullOrEmpty(skey))
                 {
-                    MessageBox.Show("無法取得 SessionKey，請稍後再試");
+                    MessageBox.Show(
+                        Application.Current.TryFindResource("SessionKeyFailed") as string
+                    );
                     return;
                 }
                 App.MainWnd.bfClient = client;
-                new WebBrowser($"https://login.beanfun.com/Login/GoGamaPassRequest?pSKey={skey}").Show();
+                new WebBrowser(
+                    $"https://login.beanfun.com/Login/GoGamaPassRequest?pSKey={skey}"
+                ).Show();
             }
             catch
             {
-                MessageBox.Show("連線失敗，請檢查網路連線");
+                MessageBox.Show(Application.Current.TryFindResource("ConnectionFailed") as string);
             }
         }
 

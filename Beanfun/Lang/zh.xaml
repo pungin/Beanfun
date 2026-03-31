@@ -441,4 +441,9 @@
     >無法載入驗證碼圖片（Session 可能已過期）</system:String
   >
   <system:String x:Key="AdvanceCheckFillEmailAndCaptcha">請填寫 Email 同驗證碼</system:String>
+  <system:String x:Key="GamePassLogin">GamePass 登入</system:String>
+  <system:String x:Key="GamePassWaiting">正在等待 GamePass 認證...</system:String>
+  <system:String x:Key="GamePassOpen">開啟 GamePass 登入</system:String>
+  <system:String x:Key="SessionKeyFailed">無法取得 SessionKey，請稍後再試</system:String>
+  <system:String x:Key="ConnectionFailed">連線失敗，請檢查網路連線</system:String>
 </ResourceDictionary>

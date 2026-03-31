@@ -161,6 +161,16 @@ namespace Beanfun
             return null;
         }
 
+        public void SetCookie(string name, string value, string domain, string path = "/")
+        {
+            this.CookieContainer.Add(new Cookie(name, value, path, domain));
+        }
+
+        public void SetWebToken(string token)
+        {
+            this.webtoken = token;
+        }
+
         private string GetCurrentTime(int method = 0)
         {
             DateTime date = DateTime.Now;

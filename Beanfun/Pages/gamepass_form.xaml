@@ -39,14 +39,14 @@
       <StackPanel VerticalAlignment="Center">
         <TextBlock
           x:Name="lblStatus"
-          Text="正在等待 GamePass 認證..."
+          Text="{DynamicResource GamePassWaiting}"
           HorizontalAlignment="Center"
           FontSize="14"
           Margin="0 20 0 10"
         />
         <Button
           x:Name="btn_OpenGamePass"
-          Content="開啟 GamePass 登入"
+          Content="{DynamicResource GamePassOpen}"
           Height="30"
           Width="250"
           FontWeight="Bold"

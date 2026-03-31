@@ -12,9 +12,6 @@
   WindowStartupLocation="CenterScreen"
 >
   <Grid>
-    <wv2:WebView2
-      x:Name="wb_Main"
-      NavigationStarting="wb_Main_NavigationStarting"
-    />
+    <wv2:WebView2 x:Name="wb_Main" NavigationStarting="wb_Main_NavigationStarting" />
   </Grid>
 </Window>

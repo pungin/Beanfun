@@ -650,7 +650,7 @@
             Height="22"
             HorizontalAlignment="Right"
             Visibility="Collapsed"
-            ToolTip="GamePass Login"
+            ToolTip="{DynamicResource GamePassLogin}"
             Click="btn_GamePass_Click"
           >
             <Button.Resources>

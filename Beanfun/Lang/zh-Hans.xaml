@@ -419,4 +419,9 @@
     >无法载入验证码图片（Session 可能已过期）</system:String
   >
   <system:String x:Key="AdvanceCheckFillEmailAndCaptcha">请填写 Email 和验证码</system:String>
+  <system:String x:Key="GamePassLogin">GamePass 登录</system:String>
+  <system:String x:Key="GamePassWaiting">正在等待 GamePass 认证...</system:String>
+  <system:String x:Key="GamePassOpen">开启 GamePass 登录</system:String>
+  <system:String x:Key="SessionKeyFailed">无法取得 SessionKey，请稍后再试</system:String>
+  <system:String x:Key="ConnectionFailed">连接失败，请检查网络连接</system:String>
 </ResourceDictionary>
