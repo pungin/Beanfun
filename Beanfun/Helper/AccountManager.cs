@@ -517,10 +517,14 @@ namespace Beanfun
                             accRecInit();
                             storeRecord(); // 立即將轉換後的資料以最新 JSON 格式寫入，覆寫舊檔
 
-                            log.Info("偵測到舊版帳號資料，已成功自動升級至 JSON 格式。");
+                            log.Info("Legacy account data auto-migrated to JSON format.");
                             System.Windows.MessageBox.Show(
-                                "系統已成功將您的舊版帳號資料自動升級至新格式！\n您現在可以正常使用所有帳號。",
-                                "資料轉換成功",
+                                System.Windows.Application.Current.TryFindResource(
+                                    "LegacyDataMigrateSuccess"
+                                ) as string,
+                                System.Windows.Application.Current.TryFindResource(
+                                    "LegacyDataMigrateTitle"
+                                ) as string,
                                 System.Windows.MessageBoxButton.OK,
                                 System.Windows.MessageBoxImage.Information
                             );
@@ -532,7 +536,7 @@ namespace Beanfun
             catch (Exception ex)
             {
                 // 若因 .NET 版本限制或資料損毀導致轉換失敗，則記錄錯誤，並讓 accRecInit 建立新的空白紀錄
-                log.Error($"自動轉換舊版資料失敗: {ex.Message}");
+                log.Error($"Auto-migration of legacy data failed: {ex.Message}");
             }
 
             return false;

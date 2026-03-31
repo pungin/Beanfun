@@ -521,4 +521,8 @@
   <system:String x:Key="ConnectionFailed"
     >Connection failed. Please check your network.</system:String
   >
+  <system:String x:Key="LegacyDataMigrateSuccess"
+    >Your legacy account data has been successfully upgraded to the new format!&#x0a;You can now use all your accounts normally.</system:String
+  >
+  <system:String x:Key="LegacyDataMigrateTitle">Data Migration Successful</system:String>
 </ResourceDictionary>
