@@ -45,10 +45,31 @@ namespace Beanfun
 
         private void MailContact_Click(object sender, RoutedEventArgs e)
         {
-            string to = "pungin@msn.com ";
-            string subject = TryFindResource("Feedback") as string;
-            string body = string.Format(TryFindResource("FeedbackText") as string, version.Text);
-            System.Diagnostics.Process.Start($"mailto:{to}?subject={subject}&body={body}");
+            try
+            {
+                string to = "pungin@msn.com";
+                string subject = Uri.EscapeDataString(
+                    TryFindResource("Feedback") as string ?? "Feedback"
+                );
+                string body = Uri.EscapeDataString(
+                    string.Format(TryFindResource("FeedbackText") as string ?? "{0}", version.Text)
+                );
+
+                string mailtoUrl = $"mailto:{to}?subject={subject}&body={body}";
+
+                // Fix for .NET 8 compatibility
+                System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = mailtoUrl,
+                        UseShellExecute = true,
+                    }
+                );
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Failed to open mail: " + ex.Message);
+            }
         }
 
         private void Github_Click(object sender, RoutedEventArgs e)

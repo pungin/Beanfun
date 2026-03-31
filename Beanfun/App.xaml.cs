@@ -118,10 +118,15 @@ namespace Beanfun
         {
             if (version < new Version(4, 1))
                 return $"{version.Major}.{version.Minor}.{version.Build}({version.Revision})";
+
             DateTime buildDate = new DateTime(2000, 1, 1)
                 .AddDays(version.Build)
                 .AddSeconds(version.Revision * 2);
-            return $"{version.Major}.{version.Minor}.{version.Build}({buildDate.ToString("yyMMddHHmm")})";
+
+            string patch = version.Build < 1000 ? $".{version.Build}" : "";
+            string timestamp = buildDate.ToString("yyMMddHHmm");
+
+            return $"{version.Major}.{version.Minor}.{patch}({timestamp})";
         }
 
         internal static string AssemblyVersion
