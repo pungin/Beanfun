@@ -4,21 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       release_name:
-        description: 'Release Name (leave empty to auto-generate)'
+        description: "Release Name (leave empty to auto-generate)"
         required: false
-        default: ''
+        default: ""
       release_type:
-        description: 'Release type'
+        description: "Release type"
         required: true
-        default: 'prerelease'
+        default: "prerelease"
         type: choice
         options:
           - prerelease
           - release
       version_increment:
-        description: 'Version increment type'
+        description: "Version increment type"
         required: false
-        default: 'patch'
+        default: "patch"
         type: choice
         options:
           - patch
@@ -44,14 +44,14 @@ jobs:
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "8.0.x"
 
       - name: Get Current Version from AssemblyInfo.cs
         id: get_current_version
         shell: pwsh
         run: |
           $assemblyInfoFile = Get-ChildItem -Path . -Filter "AssemblyInfo.cs" -Recurse | Select-Object -First 1
-          
+
           if ($assemblyInfoFile) {
             $content = Get-Content $assemblyInfoFile.FullName -Raw
             
@@ -105,15 +105,15 @@ jobs:
           $currentMajor = [int]"${{ steps.get_current_version.outputs.current_major }}"
           $currentMinor = [int]"${{ steps.get_current_version.outputs.current_minor }}"
           $currentPatch = [int]"${{ steps.get_patch.outputs.current_patch }}"
-          
+
           Write-Host "Current: $currentMajor.$currentMinor.$currentPatch"
           Write-Host "Mode: $releaseType, Increment: $versionIncrement"
-          
+
           $newMajor = $currentMajor
           $newMinor = $currentMinor
           $newPatch = $currentPatch
           $versionChanged = $false
-          
+
           if ($releaseType -eq 'release') {
             switch ($versionIncrement) {
               'major' {
@@ -134,10 +134,10 @@ jobs:
           } else {
             $newPatch = $currentPatch + 1
           }
-          
+
           $newAssemblyVersion = "$newMajor.$newMinor.$newPatch.*"
           Write-Host "New version: $newMajor.$newMinor.$newPatch (AssemblyInfo: $newAssemblyVersion)"
-          
+
           echo "new_major=$newMajor" >> $env:GITHUB_OUTPUT
           echo "new_minor=$newMinor" >> $env:GITHUB_OUTPUT
           echo "new_patch=$newPatch" >> $env:GITHUB_OUTPUT
@@ -151,75 +151,49 @@ jobs:
         run: |
           $assemblyInfoFile = Get-ChildItem -Path . -Filter "AssemblyInfo.cs" -Recurse | Select-Object -First 1
           $newAssemblyVersion = "${{ steps.update_version.outputs.new_version }}"
-          
+
           Write-Host "Updating AssemblyInfo.cs to: $newAssemblyVersion"
-          
+
           $content = Get-Content $assemblyInfoFile.FullName -Raw
-          
           $content = $content -replace 'AssemblyVersion\("\d+\.\d+(?:\.\d+)?\.\*"\)', "AssemblyVersion(`"$newAssemblyVersion`")"
-          
           $content | Set-Content $assemblyInfoFile.FullName -NoNewline
-          
+
           Write-Host "Updated $($assemblyInfoFile.Name) to version $newAssemblyVersion"
 
-      - name: Publish Application
-        run: dotnet publish Beanfun/Beanfun.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish
-
-      - name: Get Version from Compiled EXE and Convert to Timestamp
+      - name: Generate Version Strings and Timestamp
         id: get_exe_version
         shell: pwsh
         run: |
-          $exePath = "publish/Beanfun.exe"
-          
-          if (Test-Path $exePath) {
-            $versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exePath)
-            
-            $major = $versionInfo.FileMajorPart
-            $minor = $versionInfo.FileMinorPart
-            $build = $versionInfo.FileBuildPart
-            $revision = $versionInfo.FilePrivatePart
-            
-            Write-Host "Raw assembly version: $major.$minor.$build.$revision"
-            
-            $baseDate = (Get-Date -Year 2000 -Month 1 -Day 1 -Hour 0 -Minute 0 -Second 0).ToUniversalTime()
+          $major = "${{ steps.update_version.outputs.new_major }}"
+          $minor = "${{ steps.update_version.outputs.new_minor }}"
+          $patch = "${{ steps.update_version.outputs.new_patch }}"
 
-            if ($build -lt 1000) {
-                Write-Host "Build is interpreted as Patch number ($build). Generating UTC Timestamp based on NOW."
-                $buildDateTime = (Get-Date).ToUniversalTime()
-            } else {
-                $buildDate = $baseDate.AddDays($build)
-                $secondsSinceMidnight = $revision * 2
-                $buildDateTime = $buildDate.AddSeconds($secondsSinceMidnight)
-            }
-            
-            $timestamp = $buildDateTime.ToString("yyMMddHHmm")
-            
-            Write-Host "Compiler Build DateTime (UTC): $($buildDateTime.ToString('yyyy-MM-dd HH:mm:ss'))"
-            Write-Host "Formatted timestamp for Tag: $timestamp"
-            
-            $patch = "${{ steps.update_version.outputs.new_patch }}"
-            $semanticVersion = "$major.$minor.$patch"
-            $tagVersion = "$major.$minor.$patch.$timestamp"
-            $tagName = "v$tagVersion"
-            
-            Write-Host "Generated tag name: $tagName"
-            
-            echo "full_version=$major.$minor.$build.$revision" >> $env:GITHUB_OUTPUT
-            echo "tag_version=$tagVersion" >> $env:GITHUB_OUTPUT
-            echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
-            echo "major=$major" >> $env:GITHUB_OUTPUT
-            echo "minor=$minor" >> $env:GITHUB_OUTPUT
-            echo "patch=$patch" >> $env:GITHUB_OUTPUT
-            echo "semantic_version=$semanticVersion" >> $env:GITHUB_OUTPUT
-            echo "build=$build" >> $env:GITHUB_OUTPUT
-            echo "revision=$revision" >> $env:GITHUB_OUTPUT
-            echo "timestamp=$timestamp" >> $env:GITHUB_OUTPUT
-            echo "build_datetime=$($buildDateTime.ToString('yyyy-MM-dd HH:mm:ss'))" >> $env:GITHUB_OUTPUT
-            
-          } else {
-            Write-Error "EXE file not found at $exePath"
-            exit 1
-          }
+          $utcNow = (Get-Date).ToUniversalTime()
+          $timestamp = $utcNow.ToString("yyMMddHHmm")
+          $buildDateTime = $utcNow.ToString("yyyy-MM-dd HH:mm:ss")
+
+          $baseDate = (Get-Date -Year 2000 -Month 1 -Day 1 -Hour 0 -Minute 0 -Second 0).ToUniversalTime()
+          $build = [math]::Floor(($utcNow - $baseDate).TotalDays)
+          $revision = [math]::Floor($utcNow.TimeOfDay.TotalSeconds / 2)
+
+          # 建立注入 EXE 嘅 InformationalVersion 字串
+          $infoVersion = "$major.$minor.$patch($timestamp)"
+          $tagName = "v$major.$minor.$patch.$timestamp"
+
+          Write-Host "Generated Info Version: $infoVersion"
+          Write-Host "Generated Tag Name: $tagName"
+
+          echo "info_version=$infoVersion" >> $env:GITHUB_OUTPUT
+          echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
+          echo "semantic_version=$major.$minor.$patch" >> $env:GITHUB_OUTPUT
+          echo "build_datetime=$buildDateTime" >> $env:GITHUB_OUTPUT
+          echo "full_version=$infoVersion" >> $env:GITHUB_OUTPUT
+          echo "timestamp=$timestamp" >> $env:GITHUB_OUTPUT
+          echo "build=$build" >> $env:GITHUB_OUTPUT
+          echo "revision=$revision" >> $env:GITHUB_OUTPUT
+
+      - name: Publish Application
+        run: dotnet publish Beanfun/Beanfun.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:InformationalVersion="${{ steps.get_exe_version.outputs.info_version }}" -o publish
 
       - name: Check if Tag Exists
         id: check_tag
@@ -228,7 +202,7 @@ jobs:
           $tag = "${{ steps.get_exe_version.outputs.tag_name }}"
           $repo = "${{ github.repository }}"
           Write-Host "Checking if tag '$tag' exists in repository '$repo'"
-          
+
           $tagExists = $false
           try {
             $remoteTags = git ls-remote --tags origin
@@ -236,10 +210,8 @@ jobs:
               $tagExists = $true
               Write-Host "Tag found via git ls-remote: $tag"
             }
-          } catch {
-            Write-Host "Git ls-remote failed: $_"
-          }
-          
+          } catch {}
+
           if (-not $tagExists) {
             try {
               $apiUrl = "https://api.github.com/repos/$repo/git/refs/tags/$tag"
@@ -253,7 +225,7 @@ jobs:
               }
             } catch {}
           }
-          
+
           try {
             git fetch --tags
             $localTags = git tag -l
@@ -261,10 +233,8 @@ jobs:
               $tagExists = $true
               Write-Host "Tag found locally: $tag"
             }
-          } catch {
-            Write-Host "Git fetch tags failed: $_"
-          }
-          
+          } catch {}
+
           if ($tagExists) {
             echo "exists=true" >> $env:GITHUB_OUTPUT
             echo "tag=$tag" >> $env:GITHUB_OUTPUT
@@ -274,7 +244,6 @@ jobs:
             echo "tag=$tag" >> $env:GITHUB_OUTPUT
             Write-Host "Tag $tag does not exist - will create release"
           }
-    
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -320,11 +289,11 @@ jobs:
             $value | Out-File -FilePath $env:GITHUB_OUTPUT -Append
             $delimiter | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           }
-          
+
           $hasLastRelease = "${{ steps.get_last_release.outputs.has_last_release }}" -eq 'true'
           $commitsList = @()
           $commitCount = 0
-          
+
           $range = if ($hasLastRelease) {
             $lastTag = "${{ steps.get_last_release.outputs.last_tag }}"
             git fetch --tags 2>$null
@@ -332,7 +301,7 @@ jobs:
           } else {
             "-n 30"
           }
-          
+
           try {
             $commits = git log $range --pretty=format:"%h|%s|%an|%ad" --date=short --no-merges
             if ($commits) {
@@ -347,7 +316,7 @@ jobs:
               }
             }
           } catch {}
-          
+
           $commitsText = if ($commitCount -gt 0) { $commitsList -join "`n" } else { "No commits found" }
           Set-MultilineOutput "commits_text" $commitsText
           echo "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
@@ -360,31 +329,31 @@ jobs:
           name: ${{ github.event.inputs.release_name != '' && github.event.inputs.release_name || format('{0} v{1}', github.event.inputs.release_type == 'release' && 'Release' || 'Pre-Release', steps.get_exe_version.outputs.semantic_version) }}
           body: |
             ## ${{ github.event.inputs.release_type == 'release' && 'Release' || 'Pre-Release' }} v${{ steps.get_exe_version.outputs.semantic_version }}
-            
+
             ### Version Information
             - **Version:** ${{ steps.get_exe_version.outputs.semantic_version }}
             - **Full Build Version:** ${{ steps.get_exe_version.outputs.full_version }}
             - **Build Date/Time:** ${{ steps.get_exe_version.outputs.build_datetime }}
             - **Release Type:** ${{ github.event.inputs.release_type }}
-            
+
             ---
-            
+
             ### 📝 Commits in this Release
             ${{ steps.get_commits.outputs.commits_text }}
-            
+
             **Total commits:** ${{ steps.get_commits.outputs.commit_count }}
-            
+
             ---
-            
+
             ### 🔧 Build Details
             - **Build Number (Days since 2000-01-01 / Patch):** ${{ steps.get_exe_version.outputs.build }}
             - **Revision (Seconds since midnight / 2):** ${{ steps.get_exe_version.outputs.revision }}
             - **Actual Build Time:** ${{ steps.get_exe_version.outputs.build_datetime }}
             - **Git Commit:** [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
-            
+
             ### 📦 Download
             - [Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.get_exe_version.outputs.tag_name }}/Beanfun.exe)
-            
+
             ### 🚀 Installation
             1. Download `Beanfun.exe`
             2. Run the executable
@@ -394,7 +363,7 @@ jobs:
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Skip Release (Tag Exists)
         if: steps.check_tag.outputs.exists == 'true'
         run: |
@@ -406,7 +375,7 @@ jobs:
         shell: pwsh
         run: |
           $assemblyInfoFile = Get-ChildItem -Path . -Filter "AssemblyInfo.cs" -Recurse | Select-Object -First 1
-          
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add $assemblyInfoFile.FullName

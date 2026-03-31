@@ -157,7 +157,25 @@ namespace Beanfun
 
         internal static string AssemblyVersion
         {
-            get { return ConvertVersion(Assembly.GetExecutingAssembly().GetName().Version); }
+            get
+            {
+                var attr = Assembly
+                    .GetExecutingAssembly()
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+                if (attr != null && !string.IsNullOrEmpty(attr.InformationalVersion))
+                {
+                    string ver = attr.InformationalVersion;
+
+                    int plusIndex = ver.IndexOf('+');
+                    if (plusIndex > 0)
+                        ver = ver.Substring(0, plusIndex);
+
+                    if (ver.Contains("("))
+                        return ver;
+                }
+
+                return ConvertVersion(Assembly.GetExecutingAssembly().GetName().Version);
+            }
         }
 
         public static int ReleaseResource(string file)
