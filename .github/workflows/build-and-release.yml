@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_name:
-        description: 'Release Name'
+        description: 'Release Name (leave empty to auto-generate)'
         required: false
-        default: 'Manual Release'
+        default: ''
       release_type:
         description: 'Release type'
         required: true
@@ -16,13 +16,14 @@ on:
           - prerelease
           - release
       version_increment:
-        description: 'Version increment type (only for release)'
+        description: 'Version increment type'
         required: false
-        default: 'minor'
+        default: 'patch'
         type: choice
         options:
-          - major
+          - patch
           - minor
+          - major
 
 jobs:
   build:
@@ -68,60 +69,77 @@ jobs:
             echo "found=false" >> $env:GITHUB_OUTPUT
           }
 
+      - name: Get Patch from Latest Release Tag
+        id: get_patch
+        shell: pwsh
+        run: |
+          $currentPatch = 0
+          try {
+            git fetch --tags
+            $tags = git tag -l "v*.*.*.*" --sort=-v:refname
+            if ($tags) {
+              $latestTag = ($tags -split "`n")[0].Trim()
+              Write-Host "Latest tag: $latestTag"
+              if ($latestTag -match '^v(\d+)\.(\d+)\.(\d+)\.') {
+                $currentPatch = [int]$matches[3]
+                Write-Host "Parsed patch from tag: $currentPatch"
+              }
+            } else {
+              Write-Host "No matching tags found, starting patch at 0"
+            }
+          } catch {
+            Write-Host "Error getting tags: $_"
+          }
+          echo "current_patch=$currentPatch" >> $env:GITHUB_OUTPUT
+
       - name: Update AssemblyInfo.cs for Release
         id: update_version
         shell: pwsh
         run: |
           $releaseType = "${{ github.event.inputs.release_type }}"
-          $assemblyInfoFile = Get-ChildItem -Path . -Filter "AssemblyInfo.cs" -Recurse | Select-Object -First 1
+          $versionIncrement = "${{ github.event.inputs.version_increment }}"
+          $currentMajor = [int]"${{ steps.get_current_version.outputs.current_major }}"
+          $currentMinor = [int]"${{ steps.get_current_version.outputs.current_minor }}"
+          $currentPatch = [int]"${{ steps.get_patch.outputs.current_patch }}"
           
-          if ($assemblyInfoFile) {
-            if ($releaseType -eq 'release') {
-              $versionIncrement = "${{ github.event.inputs.version_increment }}"
-              $currentMajor = [int]"${{ steps.get_current_version.outputs.current_major }}"
-              $currentMinor = [int]"${{ steps.get_current_version.outputs.current_minor }}"
-              
-              Write-Host "Release mode - incrementing version"
-              Write-Host "Current version: $currentMajor.$currentMinor.*"
-              
-              switch ($versionIncrement) {
-                'major' {
-                  $newMajor = $currentMajor + 1
-                  $newMinor = 0
-                }
-                'minor' {
-                  $newMajor = $currentMajor
-                  $newMinor = $currentMinor + 1
-                }
-                default {
-                  $newMajor = $currentMajor
-                  $newMinor = $currentMinor + 1
-                }
+          Write-Host "Current: $currentMajor.$currentMinor.$currentPatch"
+          Write-Host "Mode: $releaseType, Increment: $versionIncrement"
+          
+          $newMajor = $currentMajor
+          $newMinor = $currentMinor
+          $newPatch = $currentPatch
+          $versionChanged = $false
+          
+          if ($releaseType -eq 'release') {
+            switch ($versionIncrement) {
+              'major' {
+                $newMajor = $currentMajor + 1
+                $newMinor = 0
+                $newPatch = 0
+                $versionChanged = $true
               }
-              
-              $newAssemblyVersion = "$newMajor.$newMinor.*"
-              Write-Host "New version: $newAssemblyVersion"
-              
-              echo "updated=true" >> $env:GITHUB_OUTPUT
-              echo "new_major=$newMajor" >> $env:GITHUB_OUTPUT
-              echo "new_minor=$newMinor" >> $env:GITHUB_OUTPUT
-              echo "new_version=$newAssemblyVersion" >> $env:GITHUB_OUTPUT
-              echo "version_changed=true" >> $env:GITHUB_OUTPUT
-              
-            } else {
-              Write-Host "Prerelease mode - keeping current version"
-              $currentVersion = "${{ steps.get_current_version.outputs.current_version }}"
-              
-              echo "updated=false" >> $env:GITHUB_OUTPUT
-              echo "new_major=${{ steps.get_current_version.outputs.current_major }}" >> $env:GITHUB_OUTPUT
-              echo "new_minor=${{ steps.get_current_version.outputs.current_minor }}" >> $env:GITHUB_OUTPUT
-              echo "new_version=$currentVersion" >> $env:GITHUB_OUTPUT
-              echo "version_changed=false" >> $env:GITHUB_OUTPUT
+              'minor' {
+                $newMinor = $currentMinor + 1
+                $newPatch = 0
+                $versionChanged = $true
+              }
+              'patch' {
+                $newPatch = $currentPatch + 1
+              }
             }
           } else {
-            Write-Error "AssemblyInfo.cs not found"
-            exit 1
+            $newPatch = $currentPatch + 1
           }
+          
+          $newAssemblyVersion = "$newMajor.$newMinor.*"
+          Write-Host "New version: $newMajor.$newMinor.$newPatch (AssemblyInfo: $newAssemblyVersion)"
+          
+          echo "new_major=$newMajor" >> $env:GITHUB_OUTPUT
+          echo "new_minor=$newMinor" >> $env:GITHUB_OUTPUT
+          echo "new_patch=$newPatch" >> $env:GITHUB_OUTPUT
+          echo "new_version=$newAssemblyVersion" >> $env:GITHUB_OUTPUT
+          echo "version_changed=$($versionChanged.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          echo "semantic_version=$newMajor.$newMinor.$newPatch" >> $env:GITHUB_OUTPUT
 
       - name: Apply Version Update to AssemblyInfo.cs
         if: steps.update_version.outputs.version_changed == 'true'
@@ -169,7 +187,9 @@ jobs:
             Write-Host "Converted date/time: $($buildDateTime.ToString('yyyy-MM-dd HH:mm:ss'))"
             Write-Host "Formatted timestamp: $timestamp"
             
-            $tagVersion = "$major.$minor.$timestamp"
+            $patch = "${{ steps.update_version.outputs.new_patch }}"
+            $semanticVersion = "${{ steps.update_version.outputs.semantic_version }}"
+            $tagVersion = "$semanticVersion.$timestamp"
             $tagName = "v$tagVersion"
             
             Write-Host "Generated tag name: $tagName"
@@ -179,6 +199,8 @@ jobs:
             echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
             echo "major=$major" >> $env:GITHUB_OUTPUT
             echo "minor=$minor" >> $env:GITHUB_OUTPUT
+            echo "patch=$patch" >> $env:GITHUB_OUTPUT
+            echo "semantic_version=$semanticVersion" >> $env:GITHUB_OUTPUT
             echo "build=$build" >> $env:GITHUB_OUTPUT
             echo "revision=$revision" >> $env:GITHUB_OUTPUT
             echo "timestamp=$timestamp" >> $env:GITHUB_OUTPUT
@@ -427,16 +449,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_exe_version.outputs.tag_name }}
-          name: ${{ github.event.inputs.release_name }}
+          name: ${{ github.event.inputs.release_name != '' && github.event.inputs.release_name || format('{0} v{1}', github.event.inputs.release_type == 'release' && 'Release' || 'Pre-Release', steps.get_exe_version.outputs.semantic_version) }}
           body: |
-            ## ${{ github.event.inputs.release_type == 'release' && 'Release' || 'Pre-Release' }} ${{ steps.get_exe_version.outputs.tag_version }}
+            ## ${{ github.event.inputs.release_type == 'release' && 'Release' || 'Pre-Release' }} v${{ steps.get_exe_version.outputs.semantic_version }}
             
             ### Version Information
-            - **Full Version:** ${{ steps.get_exe_version.outputs.full_version }}
-            - **Version Format:** ${{ steps.get_exe_version.outputs.major }}.${{ steps.get_exe_version.outputs.minor }}.${{ steps.get_exe_version.outputs.timestamp }}
+            - **Version:** ${{ steps.get_exe_version.outputs.semantic_version }}
+            - **Full Build Version:** ${{ steps.get_exe_version.outputs.full_version }}
             - **Build Date/Time:** ${{ steps.get_exe_version.outputs.build_datetime }}
             - **Release Type:** ${{ github.event.inputs.release_type }}
-            ${{ github.event.inputs.release_type == 'release' && format('- **Version Change:** {0} -> {1}', steps.get_current_version.outputs.current_version, steps.update_version.outputs.new_version) || format('- **Based on Version:** {0}', steps.get_current_version.outputs.current_version) }}
             
             ---
             
@@ -481,7 +502,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add $assemblyInfoFile.FullName
-          git commit -m "Bump version to ${{ steps.update_version.outputs.new_version }} for release ${{ steps.get_exe_version.outputs.tag_name }}"
+          git commit -m "Bump version to ${{ steps.update_version.outputs.semantic_version }} for release ${{ steps.get_exe_version.outputs.tag_name }}"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
