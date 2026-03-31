@@ -1269,7 +1269,8 @@ namespace Beanfun
 
         private void SaveLoginCredentials()
         {
-            bool isAccountLogin = App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode;
+            bool isAccountLogin =
+                App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode;
             if (!isAccountLogin)
             {
                 ConfigAppSettings.SetValue("AccountID", null);
@@ -1289,9 +1290,7 @@ namespace Beanfun
                 && (bool)idPassForm.checkBox_RememberPWD.IsChecked
                     ? idPassForm.t_Password.Password
                     : "",
-                (bool)verifyPage.checkBoxRememberVerify.IsChecked
-                    ? verifyPage.t_Verify.Text
-                    : "",
+                (bool)verifyPage.checkBoxRememberVerify.IsChecked ? verifyPage.t_Verify.Text : "",
                 App.LoginMethod,
                 (bool)idPassForm.checkBox_AutoLogin.IsChecked
             );
