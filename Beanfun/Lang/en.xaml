@@ -403,12 +403,18 @@
   <system:String x:Key="LoginNoSamplecaptcha"
     >Login failed. Samplecaptcha not found. Please check your network connection.</system:String
   >
+  <system:String x:Key="LoginNoRequestVerificationToken"
+    >Login failed. RequestVerificationToken not found. The login page may have changed.</system:String
+  >
   <system:String x:Key="LoginNoAkey">Login failed. Incorrect account or password.</system:String>
   <system:String x:Key="LoginNoAccountMatch"
     >Login failed. Unable to retrieve account list.</system:String
   >
   <system:String x:Key="LoginNoWebtoken"
     >Login failed. Could not get bfWebToken cookie after login.</system:String
+  >
+  <system:String x:Key="SendLoginNoFormData"
+    >Login failed. SendLogin form data was not found.</system:String
   >
   <system:String x:Key="LoginUnknown">Login failed. Please try again later.</system:String>
   <system:String x:Key="LoginNoMethod"

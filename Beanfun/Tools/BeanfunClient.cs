@@ -18,7 +18,7 @@ namespace Beanfun
         public string accountAmountLimitNotice;
         bool redirect;
         private const string userAgent =
-            "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36";
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
         private string LoginToken;
         private string SessionKey;
         private string totpResponse;
@@ -69,6 +69,15 @@ namespace Beanfun
             return Encoding.UTF8.GetString(base.UploadValues(skey, payload));
         }
 
+        public string UploadJsonString(string url, string payload)
+        {
+            this.Headers.Set("User-Agent", userAgent);
+            this.Headers.Set("Accept-Encoding", "identity");
+            this.Headers[HttpRequestHeader.ContentType] = "application/json";
+            byte[] responseBytes = base.UploadData(url, "POST", Encoding.UTF8.GetBytes(payload));
+            return Encoding.UTF8.GetString(responseBytes);
+        }
+
         public string UploadStringGZip(string skey, NameValueCollection payload)
         {
             this.Headers.Set("User-Agent", userAgent);
@@ -94,6 +103,79 @@ namespace Beanfun
                 byteArray = msTemp.ToArray();
             }
             return Encoding.UTF8.GetString(byteArray);
+        }
+
+        private bool TryGetRequiredInputValue(
+            string html,
+            string inputNameOrId,
+            string errorKey,
+            out string value
+        )
+        {
+            if (HtmlInputParser.TryGetInputValue(html, inputNameOrId, out value))
+                return true;
+
+            this.errmsg = errorKey;
+            return false;
+        }
+
+        private bool TryGetAspNetFormState(
+            string html,
+            bool requireEventValidation,
+            out string viewstate,
+            out string viewstateGenerator,
+            out string eventvalidation
+        )
+        {
+            viewstate = null;
+            viewstateGenerator = null;
+            eventvalidation = null;
+
+            if (!TryGetRequiredInputValue(html, "__VIEWSTATE", "LoginNoViewstate", out viewstate))
+                return false;
+
+            if (
+                !TryGetRequiredInputValue(
+                    html,
+                    "__VIEWSTATEGENERATOR",
+                    "LoginNoViewstateGenerator",
+                    out viewstateGenerator
+                )
+            )
+                return false;
+
+            if (
+                requireEventValidation
+                && !TryGetRequiredInputValue(
+                    html,
+                    "__EVENTVALIDATION",
+                    "LoginNoEventvalidation",
+                    out eventvalidation
+                )
+            )
+                return false;
+
+            return true;
+        }
+
+        public void CompleteExternalLogin(
+            string service_code = "610074",
+            string service_region = "T9"
+        )
+        {
+            this.webtoken = this.GetCookie("bfWebToken");
+            if (string.IsNullOrEmpty(this.webtoken))
+            {
+                this.errmsg = "LoginNoWebtoken";
+                return;
+            }
+
+            GetAccounts(service_code, service_region, false);
+            if (this.errmsg != null)
+                return;
+
+            this.remainPoint = getRemainPoint();
+            this.errmsg = null;
         }
 
         protected override WebRequest GetWebRequest(Uri address)

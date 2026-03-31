@@ -14,39 +14,29 @@ namespace Beanfun
     {
         private string RegularLogin(string id, string pass, string skey)
         {
-            string loginHost;
             if (App.LoginRegion == "TW")
-                loginHost = "tw.newlogin.beanfun.com";
-            else
-                loginHost = "login.hk.beanfun.com";
+                return RegularLoginOfficial(id, pass, skey);
+
+            string loginHost;
+            loginHost = "login.hk.beanfun.com";
 
             try
             {
                 string response = this.DownloadString(
                     $"https://{loginHost}/login/id-pass_form{(App.LoginRegion == "HK" ? "_newBF.aspx?otp1" : ".aspx?skey")}={skey}"
                 );
-                Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                {
-                    this.errmsg = "LoginNoViewstate";
+                if (
+                    !TryGetAspNetFormState(
+                        response,
+                        true,
+                        out string viewstate,
+                        out string viewstateGenerator,
+                        out string eventvalidation
+                    )
+                )
                     return null;
-                }
-                string viewstate = regex.Match(response).Groups[1].Value;
 
-                regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                {
-                    this.errmsg = "LoginNoEventvalidation";
-                    return null;
-                }
-                string eventvalidation = regex.Match(response).Groups[1].Value;
-                regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                {
-                    this.errmsg = "LoginNoViewstateGenerator";
-                    return null;
-                }
-                string viewstateGenerator = regex.Match(response).Groups[1].Value;
+                Regex regex;
                 /*
                 regex = new Regex("id=\"LBD_VCID_c_login_idpass_form_samplecaptcha\" value=\"(.*)\" />");
                 if (!regex.IsMatch(response))
@@ -135,6 +125,365 @@ namespace Beanfun
             }
         }
 
+        private string RegularLoginOfficial(string id, string pass, string skey)
+        {
+            string indexUrl = $"https://login.beanfun.com/Login/Index?pSKey={HttpUtility.UrlEncode(skey)}";
+
+            try
+            {
+                Debug.WriteLine("Official login: GET Index");
+                SetBaseHeaders(false, "text/html");
+                string response = this.DownloadString(indexUrl);
+                if (!TryGetOfficialRequestVerificationToken(response, out string requestVerificationToken))
+                {
+                    this.errmsg = "LoginNoRequestVerificationToken";
+                    return null;
+                }
+
+                Debug.WriteLine("Official login: POST CheckAccountType");
+                JObject checkAccountTypeResponse = PostOfficialJson(
+                    "https://login.beanfun.com/Login/CheckAccountType",
+                    new JObject
+                    {
+                        ["Account"] = id,
+                        ["Captcha"] = "",
+                    },
+                    requestVerificationToken,
+                    indexUrl
+                );
+                if (checkAccountTypeResponse == null || !TryEnsureOfficialApiSuccess(checkAccountTypeResponse))
+                    return null;
+
+                if (checkAccountTypeResponse["ResultData"]?["IsGamaPass"]?.Value<bool>() == true)
+                {
+                    string gamaPassUrl =
+                        checkAccountTypeResponse["ResultData"]?["GamaPassUrl"]?.Value<string>();
+                    this.errmsg = string.IsNullOrWhiteSpace(gamaPassUrl)
+                        ? "此账号需要使用 GamaPass 登录。"
+                        : gamaPassUrl;
+                    return null;
+                }
+
+                Debug.WriteLine("Official login: POST AccountLogin");
+                response = PostOfficialAccountLogin(id, pass, requestVerificationToken, indexUrl);
+                if (this.errmsg != null)
+                    return null;
+
+                if (TryHandleOfficialLoginInterruption(response))
+                    return null;
+
+                if (
+                    TryParseOfficialApiJson(response, out JObject accountLoginJson)
+                    && !TryEnsureOfficialApiSuccess(accountLoginJson)
+                )
+                    return null;
+
+                Debug.WriteLine("Official login: GET SendLogin");
+                if (!TryCompleteOfficialSendLogin(indexUrl))
+                    return null;
+
+                Debug.WriteLine("Official login: bfWebToken acquired");
+                return null;
+            }
+            catch (Exception e)
+            {
+                this.errmsg = "LoginUnknown\n\n" + e.Message + "\n" + e.StackTrace;
+                return null;
+            }
+        }
+
+        private bool TryGetOfficialRequestVerificationToken(string html, out string token)
+        {
+            token = null;
+            if (HtmlInputParser.TryGetInputValue(html, "__RequestVerificationToken", out token))
+                return true;
+
+            Match match = Regex.Match(
+                html,
+                @"name\s*=\s*[""']__RequestVerificationToken[""'][^>]*value\s*=\s*[""']([^""']+)[""']",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline
+            );
+            if (match.Success)
+            {
+                token = HttpUtility.HtmlDecode(match.Groups[1].Value);
+                return true;
+            }
+
+            match = Regex.Match(
+                html,
+                @"requestverificationtoken[""']?\s*[:=]\s*[""']([^""']+)[""']",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline
+            );
+            if (match.Success)
+            {
+                token = HttpUtility.HtmlDecode(match.Groups[1].Value);
+                return true;
+            }
+
+            return false;
+        }
+
+        private JObject PostOfficialJson(
+            string url,
+            JObject payload,
+            string requestVerificationToken,
+            string referer
+        )
+        {
+            string response = PostOfficialJsonRaw(url, payload, requestVerificationToken, referer);
+            if (!TryParseOfficialApiJson(response, out JObject json))
+            {
+                this.errmsg = "LoginJsonParseFailed";
+                return null;
+            }
+
+            return json;
+        }
+
+        private string PostOfficialJsonRaw(
+            string url,
+            JObject payload,
+            string requestVerificationToken,
+            string referer
+        )
+        {
+            SetBaseHeaders(true, "application/json, text/plain, */*", referer);
+            this.Headers.Add("Origin", "https://login.beanfun.com");
+            this.Headers.Add("RequestVerificationToken", requestVerificationToken);
+            return this.UploadJsonString(url, payload.ToString(Newtonsoft.Json.Formatting.None));
+        }
+
+        private bool TryParseOfficialApiJson(string response, out JObject json)
+        {
+            json = null;
+            if (string.IsNullOrWhiteSpace(response))
+                return false;
+
+            string trimmed = response.TrimStart();
+            if (!trimmed.StartsWith("{") && !trimmed.StartsWith("["))
+                return false;
+
+            try
+            {
+                json = JObject.Parse(response);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TryEnsureOfficialApiSuccess(JObject response)
+        {
+            int? result = response["Result"]?.Value<int>();
+            int? resultCode = response["ResultCode"]?.Value<int>();
+            int? statusCode = response["StatusCode"]?.Value<int>();
+
+            if ((result == null || result == 0) && (resultCode == null || resultCode == 1) && (statusCode == null || statusCode == 0))
+                return true;
+
+            string message =
+                response["ResultData"]?["Message"]?.Value<string>()
+                ?? response["ResultMessage"]?.Value<string>()
+                ?? response["LogMessage"]?.Value<string>()
+                ?? response["Message"]?.Value<string>();
+            this.errmsg = string.IsNullOrWhiteSpace(message) ? "LoginUnknown" : message;
+            return false;
+        }
+
+        private string PostOfficialAccountLogin(
+            string id,
+            string pass,
+            string requestVerificationToken,
+            string indexUrl
+        )
+        {
+            string response = null;
+            this.redirect = false;
+
+            try
+            {
+                response = PostOfficialJsonRaw(
+                    "https://login.beanfun.com/Login/AccountLogin",
+                    new JObject
+                    {
+                        ["Account"] = id,
+                        ["Captcha"] = "",
+                        ["Pasw"] = pass,
+                        ["IsMobile"] = false,
+                    },
+                    requestVerificationToken,
+                    indexUrl
+                );
+            }
+            finally
+            {
+                this.redirect = true;
+            }
+
+            string location = this.ResponseHeaders?["Location"];
+            if (string.IsNullOrWhiteSpace(location))
+                return response;
+
+            string absoluteLocation = ToAbsoluteOfficialUrl(location);
+            if (absoluteLocation.IndexOf("AdvanceCheck", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                this.errmsg = "LoginAdvanceCheck";
+                return null;
+            }
+
+            if (absoluteLocation.IndexOf("SendLogin", StringComparison.OrdinalIgnoreCase) >= 0)
+                return response;
+
+            SetBaseHeaders(
+                true,
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                indexUrl
+            );
+            return this.DownloadString(absoluteLocation);
+        }
+
+        private string ToAbsoluteOfficialUrl(string location)
+        {
+            if (Uri.TryCreate(location, UriKind.Absolute, out Uri absoluteUri))
+                return absoluteUri.ToString();
+
+            return new Uri(new Uri("https://login.beanfun.com/"), location).ToString();
+        }
+
+        private bool TryHandleOfficialLoginInterruption(string response)
+        {
+            if (
+                this.ResponseUri != null
+                && this.ResponseUri.AbsoluteUri.IndexOf("AdvanceCheck", StringComparison.OrdinalIgnoreCase)
+                    >= 0
+            )
+            {
+                this.errmsg = "LoginAdvanceCheck";
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(response))
+                return false;
+
+            if (response.Contains("RELOAD_CAPTCHA_CODE") && response.Contains("alert"))
+            {
+                this.errmsg = "LoginAdvanceCheck";
+                return true;
+            }
+
+            if (response.Contains("totpLoginBtn"))
+            {
+                this.totpResponse = response;
+                this.totpUrl = this.ResponseUri?.ToString() ?? "https://login.beanfun.com/Login/AccountLogin";
+                this.errmsg = "need_totp";
+                return true;
+            }
+
+            Regex regex = new Regex(
+                "<script type=\"text/javascript\">\\$\\(function\\(\\){MsgBox.Show\\('(.*)'\\);}\\);</script>"
+            );
+            if (regex.IsMatch(response))
+            {
+                this.errmsg = regex.Match(response).Groups[1].Value;
+                return true;
+            }
+
+            regex = new Regex("pollRequest\\(\"([^\"]*)\",\"(\\w+)\",\"([^\"]+)\"\\);");
+            if (regex.IsMatch(response))
+            {
+                this.errmsg =
+                    regex.Match(response).Groups[1].Value
+                    + "\",\""
+                    + regex.Match(response).Groups[3].Value;
+                LoginToken = regex.Match(response).Groups[2].Value;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryCompleteOfficialSendLogin(string indexUrl)
+        {
+            SetBaseHeaders(
+                true,
+                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                indexUrl
+            );
+            string sendLoginHtml = this.DownloadString("https://login.beanfun.com/Login/SendLogin");
+            NameValueCollection payload = new NameValueCollection();
+
+            foreach (
+                Match tag in Regex.Matches(
+                    sendLoginHtml,
+                    @"<input[^>]+>",
+                    RegexOptions.IgnoreCase | RegexOptions.Singleline
+                )
+            )
+            {
+                string tagStr = tag.Value;
+                Match nameMatch = Regex.Match(
+                    tagStr,
+                    @"name\s*=\s*['""]([^'""]+)['""]",
+                    RegexOptions.IgnoreCase
+                );
+
+                Match valMatch = Regex.Match(
+                    tagStr,
+                    @"value\s*=\s*['""]([^'""]*)['""]",
+                    RegexOptions.IgnoreCase
+                );
+                if (
+                    nameMatch.Success
+                    && valMatch.Success
+                    && tagStr.IndexOf("type=\"submit\"", StringComparison.OrdinalIgnoreCase) == -1
+                )
+                    payload.Add(nameMatch.Groups[1].Value, valMatch.Groups[1].Value);
+            }
+
+            if (
+                payload.Count == 0
+                || string.IsNullOrWhiteSpace(payload["SessionKey"])
+                || string.IsNullOrWhiteSpace(payload["AuthKey"])
+            )
+            {
+                if (TryHandleOfficialLoginInterruption(sendLoginHtml))
+                    return false;
+
+                this.errmsg = "SendLoginNoFormData";
+                return false;
+            }
+
+            this.redirect = false;
+            try
+            {
+                string host = App.LoginRegion == "TW" ? "tw.beanfun.com" : "bfweb.hk.beanfun.com";
+                SetBaseHeaders(true, null, "https://login.beanfun.com/");
+                this.UploadString($"https://{host}/beanfun_block/bflogin/return.aspx", payload);
+            }
+            finally
+            {
+                this.redirect = true;
+            }
+
+            this.webtoken = this.GetCookie("bfWebToken");
+            if (string.IsNullOrEmpty(this.webtoken))
+            {
+                Match tokenMatch = Regex.Match(this.ResponseHeaders?["Set-Cookie"] ?? "", @"bfWebToken=([^;]+)");
+                if (tokenMatch.Success)
+                    this.webtoken = tokenMatch.Groups[1].Value;
+            }
+
+            if (string.IsNullOrEmpty(this.webtoken))
+            {
+                this.errmsg = "LoginNoWebtoken";
+                return false;
+            }
+
+            return true;
+        }
+
         public void TotpLogin(
             string otp1,
             string otp2,
@@ -151,28 +500,18 @@ namespace Beanfun
             try
             {
                 string response = this.totpResponse;
-                Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                {
-                    this.errmsg = "LoginNoViewstate";
+                if (
+                    !TryGetAspNetFormState(
+                        response,
+                        true,
+                        out string viewstate,
+                        out string viewstateGenerator,
+                        out string eventvalidation
+                    )
+                )
                     return;
-                }
-                string viewstate = regex.Match(response).Groups[1].Value;
 
-                regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                {
-                    this.errmsg = "LoginNoEventvalidation";
-                    return;
-                }
-                string eventvalidation = regex.Match(response).Groups[1].Value;
-                regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
-                if (!regex.IsMatch(response))
-                {
-                    this.errmsg = "LoginNoViewstateGenerator";
-                    return;
-                }
-                string viewstateGenerator = regex.Match(response).Groups[1].Value;
+                Regex regex;
 
                 NameValueCollection payload = new NameValueCollection();
                 payload.Add("__EVENTTARGET", "");
@@ -458,7 +797,7 @@ namespace Beanfun
                 string skey = qrcodeclass.skey;
                 //int errorCount = 0;
                 string result;
-                this.Headers.Add("User-Agent", "Mozilla/5.0");
+                this.Headers.Add("User-Agent", userAgent);
                 this.Headers.Add("Accept", "application/json, text/plain, */*");
                 this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
                 this.Headers.Add("Origin", "https://login.beanfun.com");
@@ -558,13 +897,13 @@ namespace Beanfun
                     this.errmsg = "LoginNoResponse";
                     return null;
                 }
-                Regex regex = new Regex("skey=(.*)&display");
+                Regex regex = new Regex(@"[?&](?:skey|pSKey)=([^&]+)", RegexOptions.IgnoreCase);
                 if (!regex.IsMatch(response))
                 {
                     this.errmsg = "LoginNoSkey";
                     return null;
                 }
-                return regex.Match(response).Groups[1].Value;
+                return HttpUtility.UrlDecode(regex.Match(response).Groups[1].Value);
             }
             else
             {
@@ -622,6 +961,12 @@ namespace Beanfun
                     default:
                         this.errmsg = "LoginNoMethod";
                         return;
+                }
+
+                if (!string.IsNullOrEmpty(this.webtoken))
+                {
+                    CompleteExternalLogin(service_code, service_region);
+                    return;
                 }
 
                 LoginCompleted(akey, service_code, service_region);
@@ -727,10 +1072,7 @@ namespace Beanfun
         )
         {
             this.Headers.Clear();
-            this.Headers.Add(
-                "User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            );
+            this.Headers.Add("User-Agent", userAgent);
             if (accept != null)
                 this.Headers.Add("Accept", accept);
             if (withReferer && referer != null)

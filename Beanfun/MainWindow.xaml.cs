@@ -734,26 +734,28 @@ namespace Beanfun
 
         private string reLoadVerifyPage(string response)
         {
-            Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\"");
-            if (!regex.IsMatch(response))
-            {
+            if (!HtmlInputParser.TryGetInputValue(response, "__VIEWSTATE", out this.viewstate))
                 return "VerifyNoViewstate";
-            }
-            this.viewstate = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\"");
-            if (!regex.IsMatch(response))
-            {
+
+            if (
+                !HtmlInputParser.TryGetInputValue(
+                    response,
+                    "__EVENTVALIDATION",
+                    out this.eventvalidation
+                )
+            )
                 return "VerifyNoEventvalidation";
-            }
-            this.eventvalidation = regex.Match(response).Groups[1].Value;
-            regex = new Regex(
-                "id=\"LBD_VCID_c_logincheck_advancecheck_samplecaptcha\" value=\"(.*)\""
-            );
-            if (!regex.IsMatch(response))
-            {
+
+            if (
+                !HtmlInputParser.TryGetInputValue(
+                    response,
+                    "LBD_VCID_c_logincheck_advancecheck_samplecaptcha",
+                    out this.samplecaptcha
+                )
+            )
                 return "VerifyNoSamplecaptcha";
-            }
-            this.samplecaptcha = regex.Match(response).Groups[1].Value;
+
+            Regex regex;
             /*regex = new Regex("\\<span id=\"lblVerify\"\\>(.*)\\<\\/span\\>");
             if (!regex.IsMatch(response))
             { return "VerifyNoLblVerify"; }
@@ -1243,6 +1245,76 @@ namespace Beanfun
             isCancelRequested = false;
         }
 
+        private void FinishLoginSuccess()
+        {
+            ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
+            if (App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode)
+            {
+                LastLoginAccountID = loginPage.id_pass.t_AccountID.Text;
+                if (!string.IsNullOrWhiteSpace(LastLoginAccountID))
+                    ConfigAppSettings.SetValue("AccountID", LastLoginAccountID);
+                else
+                    ConfigAppSettings.SetValue("AccountID", null);
+
+                bool rememberPassword =
+                    !string.IsNullOrEmpty(loginPage.id_pass.t_Password.Password)
+                    && loginPage.id_pass.checkBox_RememberPWD.IsEnabled
+                    && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked;
+                bool autoLogin =
+                    rememberPassword && (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked;
+
+                if (!string.IsNullOrWhiteSpace(loginPage.id_pass.t_AccountID.Text))
+                {
+                    accountManager.addAccount(
+                        App.LoginRegion,
+                        loginPage.id_pass.t_AccountID.Text,
+                        "",
+                        rememberPassword ? loginPage.id_pass.t_Password.Password : "",
+                        (bool)verifyPage.checkBoxRememberVerify.IsChecked
+                            ? verifyPage.t_Verify.Text
+                            : "",
+                        App.LoginMethod,
+                        autoLogin
+                    );
+
+                    loginMethodInit();
+                }
+            }
+            else
+                ConfigAppSettings.SetValue("AccountID", null);
+
+            try
+            {
+                frame.Content = accountList;
+                btn_Region.Visibility = Visibility.Collapsed;
+
+                redrawSAccountList();
+
+                if (!this.pingWorker.IsBusy)
+                    this.pingWorker.RunWorkerAsync();
+
+                updateRemainPoint(this.bfClient.remainPoint);
+
+                accountList.list_Account.Focus();
+                if (
+                    (bool)settingPage.autoStartGame.IsChecked
+                    && this.bfClient.accountList.Count() > 0
+                )
+                {
+                    if (
+                        ((bool)settingPage.tradLogin.IsChecked && login_action_type == 1)
+                        || login_action_type == 0
+                    )
+                        runGame();
+                    accountList.btnGetOtp_Click(null, null);
+                }
+            }
+            catch
+            {
+                errexit(TryFindResource("LoginNoAccountMatch") as string, 1);
+            }
+        }
+
         // Login do work.
         private void loginWorker_DoWork(object sender, DoWorkEventArgs e)
         {
@@ -1367,61 +1439,7 @@ namespace Beanfun
                 return;
             }
 
-            ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
-            if (App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode)
-            {
-                LastLoginAccountID = loginPage.id_pass.t_AccountID.Text;
-                ConfigAppSettings.SetValue("AccountID", LastLoginAccountID);
-                accountManager.addAccount(
-                    App.LoginRegion,
-                    loginPage.id_pass.t_AccountID.Text,
-                    "",
-                    loginPage.id_pass.checkBox_RememberPWD.IsEnabled
-                    && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked
-                        ? loginPage.id_pass.t_Password.Password
-                        : "",
-                    (bool)verifyPage.checkBoxRememberVerify.IsChecked
-                        ? verifyPage.t_Verify.Text
-                        : "",
-                    App.LoginMethod,
-                    (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked
-                );
-
-                loginMethodInit();
-            }
-            else
-                ConfigAppSettings.SetValue("AccountID", null);
-
-            try
-            {
-                frame.Content = accountList;
-                btn_Region.Visibility = Visibility.Collapsed;
-
-                redrawSAccountList();
-
-                if (!this.pingWorker.IsBusy)
-                    this.pingWorker.RunWorkerAsync();
-
-                updateRemainPoint(this.bfClient.remainPoint);
-
-                accountList.list_Account.Focus();
-                if (
-                    (bool)settingPage.autoStartGame.IsChecked
-                    && this.bfClient.accountList.Count() > 0
-                )
-                {
-                    if (
-                        ((bool)settingPage.tradLogin.IsChecked && login_action_type == 1)
-                        || login_action_type == 0
-                    )
-                        runGame();
-                    accountList.btnGetOtp_Click(null, null);
-                }
-            }
-            catch
-            {
-                errexit(TryFindResource("LoginNoAccountMatch") as string, 1);
-            }
+            FinishLoginSuccess();
         }
 
         // totp do work.
@@ -1534,61 +1552,7 @@ namespace Beanfun
                 return;
             }
 
-            ConfigAppSettings.SetValue("loginMethod", App.LoginMethod.ToString());
-            if (App.LoginRegion != "TW" || App.LoginMethod != (int)LoginMethod.QRCode)
-            {
-                LastLoginAccountID = loginPage.id_pass.t_AccountID.Text;
-                ConfigAppSettings.SetValue("AccountID", LastLoginAccountID);
-                accountManager.addAccount(
-                    App.LoginRegion,
-                    loginPage.id_pass.t_AccountID.Text,
-                    "",
-                    loginPage.id_pass.checkBox_RememberPWD.IsEnabled
-                    && (bool)loginPage.id_pass.checkBox_RememberPWD.IsChecked
-                        ? loginPage.id_pass.t_Password.Password
-                        : "",
-                    (bool)verifyPage.checkBoxRememberVerify.IsChecked
-                        ? verifyPage.t_Verify.Text
-                        : "",
-                    App.LoginMethod,
-                    (bool)loginPage.id_pass.checkBox_AutoLogin.IsChecked
-                );
-
-                loginMethodInit();
-            }
-            else
-                ConfigAppSettings.SetValue("AccountID", null);
-
-            try
-            {
-                frame.Content = accountList;
-                btn_Region.Visibility = Visibility.Collapsed;
-
-                redrawSAccountList();
-
-                if (!this.pingWorker.IsBusy)
-                    this.pingWorker.RunWorkerAsync();
-
-                updateRemainPoint(this.bfClient.remainPoint);
-
-                accountList.list_Account.Focus();
-                if (
-                    (bool)settingPage.autoStartGame.IsChecked
-                    && this.bfClient.accountList.Count() > 0
-                )
-                {
-                    if (
-                        ((bool)settingPage.tradLogin.IsChecked && login_action_type == 1)
-                        || login_action_type == 0
-                    )
-                        runGame();
-                    accountList.btnGetOtp_Click(null, null);
-                }
-            }
-            catch
-            {
-                errexit(TryFindResource("LoginNoAccountMatch") as string, 1);
-            }
+            FinishLoginSuccess();
         }
 
         private void redrawSAccountList()

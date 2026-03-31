@@ -332,9 +332,13 @@
   <system:String x:Key="LoginNoSamplecaptcha"
     >登录失败，未找到Samplecaptcha信息，请检查网络连接。</system:String
   >
+  <system:String x:Key="LoginNoRequestVerificationToken"
+    >登录失败，未找到RequestVerificationToken信息，请检查登录页是否有变更。</system:String
+  >
   <system:String x:Key="LoginNoAkey">登录失败，账号或密码错误。</system:String>
   <system:String x:Key="LoginNoAccountMatch">登录失败，无法获取账号列表。</system:String>
   <system:String x:Key="LoginNoWebtoken">登录失败，登录后无法获取bfWebToken Cookie。</system:String>
+  <system:String x:Key="SendLoginNoFormData">登录失败，未找到SendLogin表单信息。</system:String>
   <system:String x:Key="LoginUnknown">登录失败，请稍后再试</system:String>
   <system:String x:Key="LoginNoMethod">登录出错，选择了不存在的登录方式。</system:String>
   <system:String x:Key="OTPUnknown">获取密码失败，请尝试重新登录。</system:String>

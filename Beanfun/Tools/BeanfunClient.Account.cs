@@ -186,20 +186,16 @@ namespace Beanfun
                 $"{strUrl}auth.aspx?channel=accounts_management&page_and_query=01.aspx%3FServiceCode%3D{service_code}%26ServiceRegion%3D{service_region}&web_token={WebToken}"
             );
 
-            Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstate";
+            if (
+                !TryGetAspNetFormState(
+                    response,
+                    false,
+                    out string viewstate,
+                    out string viewstategenerator,
+                    out _
+                )
+            )
                 return null;
-            }
-            string viewstate = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstategenerator";
-                return null;
-            }
-            string viewstategenerator = regex.Match(response).Groups[1].Value;
 
             NameValueCollection payload = new NameValueCollection();
             payload.Add("__VIEWSTATE", viewstate);
@@ -234,27 +230,18 @@ namespace Beanfun
                     payload
                 );
 
-            Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstate";
+            if (
+                !TryGetAspNetFormState(
+                    response,
+                    true,
+                    out string viewstate,
+                    out string viewstategenerator,
+                    out string eventvalidation
+                )
+            )
                 return null;
-            }
-            string viewstate = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstategenerator";
-                return null;
-            }
-            string viewstategenerator = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoEventvalidation";
-                return null;
-            }
-            string eventvalidation = regex.Match(response).Groups[1].Value;
+
+            Regex regex;
 
             payload.Clear();
             payload.Add("__VIEWSTATE", viewstate);
@@ -320,27 +307,18 @@ namespace Beanfun
                     payload
                 );
 
-            Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstate";
+            if (
+                !TryGetAspNetFormState(
+                    response,
+                    true,
+                    out string viewstate,
+                    out string viewstategenerator,
+                    out string eventvalidation
+                )
+            )
                 return null;
-            }
-            string viewstate = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstategenerator";
-                return null;
-            }
-            string viewstategenerator = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoEventvalidation";
-                return null;
-            }
-            string eventvalidation = regex.Match(response).Groups[1].Value;
+
+            Regex regex;
 
             payload.Clear();
             payload.Add("__VIEWSTATE", viewstate);
@@ -391,27 +369,18 @@ namespace Beanfun
                     payload
                 );
 
-            Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstate";
+            if (
+                !TryGetAspNetFormState(
+                    response,
+                    true,
+                    out string viewstate,
+                    out string viewstategenerator,
+                    out string eventvalidation
+                )
+            )
                 return null;
-            }
-            string viewstate = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstategenerator";
-                return null;
-            }
-            string viewstategenerator = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoEventvalidation";
-                return null;
-            }
-            string eventvalidation = regex.Match(response).Groups[1].Value;
+
+            Regex regex;
 
             payload.Clear();
             payload.Add("__VIEWSTATE", viewstate);
@@ -501,27 +470,18 @@ namespace Beanfun
                     "https://bfweb.hk.beanfun.com/HK/accounts_management/01Accounts.aspx"
                 );
 
-            Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstate";
+            if (
+                !TryGetAspNetFormState(
+                    response,
+                    true,
+                    out string viewstate,
+                    out string viewstategenerator,
+                    out string eventvalidation
+                )
+            )
                 return null;
-            }
-            string viewstate = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstategenerator";
-                return null;
-            }
-            string viewstategenerator = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoEventvalidation";
-                return null;
-            }
-            string eventvalidation = regex.Match(response).Groups[1].Value;
+
+            Regex regex;
 
             NameValueCollection payload = new NameValueCollection();
             payload.Add("__VIEWSTATE", viewstate);
@@ -555,27 +515,16 @@ namespace Beanfun
                 );
             }
 
-            regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstate";
+            if (
+                !TryGetAspNetFormState(
+                    response,
+                    true,
+                    out viewstate,
+                    out viewstategenerator,
+                    out eventvalidation
+                )
+            )
                 return null;
-            }
-            viewstate = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__VIEWSTATEGENERATOR\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoViewstategenerator";
-                return null;
-            }
-            viewstategenerator = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\" />");
-            if (!regex.IsMatch(response))
-            {
-                this.errmsg = "LoginNoEventvalidation";
-                return null;
-            }
-            eventvalidation = regex.Match(response).Groups[1].Value;
 
             payload.Clear();
             payload.Add("__VIEWSTATE", viewstate);
