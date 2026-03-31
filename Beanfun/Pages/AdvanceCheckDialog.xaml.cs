@@ -23,10 +23,12 @@ namespace Beanfun
             // Determine input label based on hint content (email or phone)
             bool isPhone =
                 emailHint != null
-                && (emailHint.Contains("手機") || emailHint.Contains("電話") || emailHint.Contains("phone"));
-            string labelKey = isPhone
-                ? "AdvanceCheckInputPhone"
-                : "AdvanceCheckInputEmail";
+                && (
+                    emailHint.Contains("手機")
+                    || emailHint.Contains("電話")
+                    || emailHint.Contains("phone")
+                );
+            string labelKey = isPhone ? "AdvanceCheckInputPhone" : "AdvanceCheckInputEmail";
             lblVerifyInput.Text =
                 Application.Current.TryFindResource(labelKey) as string
                 ?? (isPhone ? "請輸入認證電話號碼：" : "請輸入認證 Email：");

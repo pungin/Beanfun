@@ -28,11 +28,7 @@
         Margin="0,0,10,0"
         Click="btnOK_Click"
       />
-      <Button
-        Content="{DynamicResource AdvanceCheckCancel}"
-        Width="80"
-        Click="btnCancel_Click"
-      />
+      <Button Content="{DynamicResource AdvanceCheckCancel}" Width="80" Click="btnCancel_Click" />
     </StackPanel>
   </StackPanel>
 </Window>

@@ -139,30 +139,26 @@ namespace Beanfun
             {
                 if (stream != null)
                 {
-                    string md5 = GetMD5HashFromStream(stream);
+                    // Fast path: if file exists and size matches, skip MD5 comparison
                     if (File.Exists(path))
                     {
-                        if (md5.ToUpper().Equals(GetMD5HashFromFile(path).ToUpper()))
-                        {
+                        var fileInfo = new FileInfo(path);
+                        if (fileInfo.Length == stream.Length)
                             return 0;
-                        }
-                        else
+
+                        try
                         {
-                            try
-                            {
-                                File.Delete(path);
-                            }
-                            catch
-                            {
-                                return -1;
-                            }
+                            File.Delete(path);
+                        }
+                        catch
+                        {
+                            return -1;
                         }
                     }
+
                     string dir = Path.GetDirectoryName(path);
                     if (!Directory.Exists(dir))
-                    {
                         Directory.CreateDirectory(dir);
-                    }
 
                     stream.Position = 0;
                     File.WriteAllBytes(
