@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -77,59 +76,6 @@ namespace Beanfun
                 catch { }
         }
 
-        // --- 版本解析邏輯 (支援 3 段及 4 段格式) ---
-        public static Version ParseVersion(string version)
-        {
-            // 1. 支援新式四段 (v5.8.3(2603311841))
-            var match4 = Regex.Match(version, @"^v?(\d+)\.(\d+)\.(\d+)\((\d{10})\)$");
-            if (match4.Success)
-            {
-                var buildDate = DateTime.ParseExact(
-                    match4.Groups[4].Value,
-                    "yyMMddHHmm",
-                    CultureInfo.InvariantCulture
-                );
-                return new Version(
-                    int.Parse(match4.Groups[1].Value),
-                    int.Parse(match4.Groups[2].Value),
-                    int.Parse(match4.Groups[3].Value), // Patch Number
-                    (int)(buildDate.TimeOfDay.TotalSeconds / 2) // Revision
-                );
-            }
-
-            // 2. 支援新式三段 (v5.8(2603311841))
-            var match3 = Regex.Match(version, @"^v?(\d+)\.(\d+)\((\d{10})\)$");
-            if (match3.Success)
-            {
-                var buildDate = DateTime.ParseExact(
-                    match3.Groups[3].Value,
-                    "yyMMddHHmm",
-                    CultureInfo.InvariantCulture
-                );
-                var baseDate = new DateTime(2000, 1, 1);
-                return new Version(
-                    int.Parse(match3.Groups[1].Value),
-                    int.Parse(match3.Groups[2].Value),
-                    (int)(buildDate - baseDate).TotalDays,
-                    (int)(buildDate.TimeOfDay.TotalSeconds / 2)
-                );
-            }
-
-            // 3. 支援舊式 (5.8.9586(33854))
-            var oldMatch = Regex.Match(version, @"^(\d+)\.(\d+)\.(\d+)\((\d+)\)$");
-            if (oldMatch.Success)
-            {
-                return new Version(
-                    int.Parse(oldMatch.Groups[1].Value),
-                    int.Parse(oldMatch.Groups[2].Value),
-                    int.Parse(oldMatch.Groups[3].Value),
-                    int.Parse(oldMatch.Groups[4].Value)
-                );
-            }
-
-            throw new FormatException("Invalid version format: " + version);
-        }
-
         // --- 版本轉換邏輯 (處理幽靈點問題) ---
         public static string ConvertVersion(Version version)
         {
@@ -180,7 +126,7 @@ namespace Beanfun
 
         public static int ReleaseResource(string file)
         {
-            string path = string.Format("{0}\\{1}", Environment.CurrentDirectory, file);
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, file);
             using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(file))
             {
                 if (stream != null)
