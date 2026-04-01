@@ -106,6 +106,7 @@ jobs:
           } else {
               $content += "`r`n[assembly: System.Reflection.AssemblyInformationalVersion(`"$infoVersion`")]"
           }
+          if (-not $content.EndsWith("`n")) { $content += "`r`n" }
           $content | Set-Content $file.FullName -NoNewline
 
           "tag_name=$tagName" >> $env:GITHUB_OUTPUT
