@@ -180,10 +180,7 @@ namespace Beanfun
 
         public static int ReleaseResource(string file)
         {
-            string baseDir = Path.GetDirectoryName(
-                System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName
-            );
-            string path = Path.Combine(baseDir, file);
+            string path = string.Format("{0}\\{1}", Environment.CurrentDirectory, file);
             using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(file))
             {
                 if (stream != null)
