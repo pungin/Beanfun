@@ -106,6 +106,7 @@ jobs:
           } else {
               $content += "`r`n[assembly: System.Reflection.AssemblyInformationalVersion(`"$infoVersion`")]"
           }
+          if (-not $content.EndsWith("`n")) { $content += "`r`n" }
           $content | Set-Content $file.FullName -NoNewline
 
           "tag_name=$tagName" >> $env:GITHUB_OUTPUT
@@ -160,78 +161,40 @@ jobs:
             ${{ 
               github.event.inputs.release_name != '' 
                 && github.event.inputs.release_name 
-                || format(
-                  '{0} v{1}', 
-                  github.event.inputs.release_type == 'release' && '正式版 (Release)' || '預發布版 (Pre-Release)', 
-                  steps.prep_version.outputs.semantic_version
-                )
+                || format('v{0}', steps.prep_version.outputs.semantic_version)
             }}
           body: |
-            # 🚀 本版資訊 Overview
-            **版本號：** v${{ steps.prep_version.outputs.semantic_version }}  
-            **發布類型：** ${{ github.event.inputs.release_type == 'release' && '正式版' || '預發布版' }}  
-            **建立時間：** ${{ steps.prep_version.outputs.build_datetime }} (UTC)
+            **Version:** v${{ steps.prep_version.outputs.semantic_version }}
+            **Release Type:** ${{ github.event.inputs.release_type == 'release' && 'Release' || 'Pre-Release' }}
+            **Build Time:** ${{ steps.prep_version.outputs.build_datetime }} (UTC)
 
             ---
+
+            ### Download
+            **[Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)**
+
+            ### What's New
+            ${{ steps.prep_release.outputs.commits_text }}
+
+            Total commits: ${{ steps.prep_release.outputs.commit_count }}
+
+            ### Installation
+            1. Download **Beanfun.exe** above.
+            2. Replace your old file and run.
+
+            ${{ github.event.inputs.release_type == 'prerelease' && '> **NOTE:** This is a pre-release version. Use at your own risk.' || '' }}
 
             <details>
-            <summary><b>英文 Release Notes （點擊展開 View English）</b></summary>
+            <summary>Technical Details</summary>
 
-            <br>
-
-            ### 📦 Download
-            ⬇️ **[Download Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)**
-
-            ### 📝 What's New (Commits)
-            ${{ steps.prep_release.outputs.commits_text }}
-
-            > ✅ Total commits: ${{ steps.prep_release.outputs.commit_count }}
-
-            ### 📖 Installation Guide
-            1. Click the link above to download **Beanfun.exe**.
-            2. **Replace** your old file and run the new executable.
-
-            ${{ github.event.inputs.release_type == 'prerelease' && '> ⚠️ **NOTE:** This is a PRE-RELEASE version. Use at your own risk.' || '' }}
-
-            ### 🔧 Technical Details
-            | Item                  | Value                                  |
-            |-----------------------|----------------------------------------|
-            | Full Build Version    | ${{ steps.prep_version.outputs.info_version }} |
+            | Item | Value |
+            |------|-------|
+            | Full Build Version | ${{ steps.prep_version.outputs.info_version }} |
             | Build Date/Time (UTC) | ${{ steps.prep_version.outputs.build_datetime }} |
-            | MS Build Revision     | ${{ steps.prep_version.outputs.build }}.${{ steps.prep_version.outputs.revision }} |
-            | Source Commit         | [View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |
+            | MS Build Revision | ${{ steps.prep_version.outputs.build }}.${{ steps.prep_version.outputs.revision }} |
+            | Source Commit | [View](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |
 
             </details>
-
-            ---
-
-            ## 中文 Release Notes
-
-            ### 📦 下載 Download
-            ⬇️ **[下載 Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)**
-
-            ### 📝 更新內容 What's New
-            ${{ steps.prep_release.outputs.commits_text }}
-
-            > ✅ 總提交數：${{ steps.prep_release.outputs.commit_count }}
-
-            ### 📖 安裝指南 Installation
-            1. 點擊上方 **「下載 Beanfun.exe」** 連結。
-            2. **覆蓋替換** 你原本的執行檔，重新啟動程式。
-
-            ${{ github.event.inputs.release_type == 'prerelease' && '> ⚠️ **注意：** 此為預發布測試版本，請斟酌使用！' || '' }}
-
-            ### 🔧 技術細節 Technical Details
-            | 項目                 | 值                                     |
-            |----------------------|---------------------------------------|
-            | 完整版號             | ${{ steps.prep_version.outputs.info_version }} |
-            | 建立時間 (UTC)       | ${{ steps.prep_version.outputs.build_datetime }} |
-            | MS Build & Revision | ${{ steps.prep_version.outputs.build }}.${{ steps.prep_version.outputs.revision }} |
-            | 來源 Commit          | [查看程式碼](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |
-
-            ---
-
-            > 💡 **提示：** 建議在釋出後檢查執行檔的完整性，避免版本衝突。
           files: publish/Beanfun.exe
           draft: false
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
