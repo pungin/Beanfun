@@ -38,9 +38,9 @@
         <Label x:Name="t_Author" Content="By Pungin" VerticalAlignment="Bottom" />
       </DockPanel>
       <DockPanel Margin="0,5,0,0">
-        <TextBlock x:Name="t_Version" Text="{DynamicResource Version}" />
-        <TextBlock x:Name="version" Margin="5,0" />
-        <TextBlock>
+        <TextBlock x:Name="t_Version" Text="{DynamicResource Version}" VerticalAlignment="Center" />
+        <TextBlock x:Name="version" Text="" Margin="5,0" VerticalAlignment="Center" />
+        <TextBlock VerticalAlignment="Center">
           <Hyperlink Click="UpdateCheck_Click">
             <Run Text="{DynamicResource CheckUpdate}" />
           </Hyperlink>

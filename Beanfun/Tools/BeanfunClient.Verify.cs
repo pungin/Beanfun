@@ -12,13 +12,18 @@ namespace Beanfun
 {
     public partial class BeanfunClient : WebClient
     {
+        // Stored from getVerifyPageInfo HTML parsing
+        public string verifyFormAction;
+        public string verifyViewStateGenerator;
+
         public string getVerifyPageInfo()
         {
             try
             {
-                return this.DownloadString(
-                    "https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx"
-                );
+                string url = !string.IsNullOrEmpty(this.advanceCheckUrl)
+                    ? this.advanceCheckUrl
+                    : "https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx";
+                return this.DownloadString(url);
             }
             catch (Exception e)
             {
@@ -73,16 +78,19 @@ namespace Beanfun
             {
                 NameValueCollection payload = new NameValueCollection();
                 payload.Add("__VIEWSTATE", viewstate);
+                if (!string.IsNullOrEmpty(this.verifyViewStateGenerator))
+                    payload.Add("__VIEWSTATEGENERATOR", this.verifyViewStateGenerator);
                 payload.Add("__EVENTVALIDATION", eventvalidation);
                 payload.Add("txtVerify", verifyCode);
                 payload.Add("CodeTextBox", captchaCode);
                 payload.Add("imgbtnSubmit.x", "19");
                 payload.Add("imgbtnSubmit.y", "23");
                 payload.Add("LBD_VCID_c_logincheck_advancecheck_samplecaptcha", samplecaptcha);
-                return this.UploadString(
-                    "https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx",
-                    payload
-                );
+
+                string submitUrl = !string.IsNullOrEmpty(this.verifyFormAction)
+                    ? this.verifyFormAction
+                    : "https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx";
+                return this.UploadString(submitUrl, payload);
             }
             catch (Exception e)
             {

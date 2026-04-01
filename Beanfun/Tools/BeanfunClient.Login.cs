@@ -179,9 +179,14 @@ namespace Beanfun
                     return null; // return null with no errmsg = success, skip LoginCompleted
                 }
 
-                // ResultCode 2: AdvanceCheck required
-                if (resultCode == "2" && resultMsg.StartsWith("http"))
-                    return HandleAdvanceCheck(resultMsg);
+                // ResultCode 2: AdvanceCheck required — reuse existing VerifyPage flow
+                if (resultCode == "2")
+                {
+                    if (resultMsg.StartsWith("http"))
+                        this.advanceCheckUrl = resultMsg;
+                    this.errmsg = "LoginAdvanceCheck";
+                    return null;
+                }
 
                 this.errmsg = resultMsg;
                 return null;
@@ -192,122 +197,6 @@ namespace Beanfun
                 this.errmsg = "LoginUnknown\n\n" + ex.Message + "\n" + ex.StackTrace;
                 return null;
             }
-        }
-
-        private string HandleAdvanceCheck(string advanceUrl)
-        {
-            if (advanceUrl.Contains("gamaweb.beanfun.com"))
-            {
-                this.errmsg = "AdvanceCheckAccountAbnormal";
-                return null;
-            }
-
-            string advanceHtml = this.DownloadString(advanceUrl);
-
-            var captchaMatch = Regex.Match(
-                advanceHtml,
-                "id=\"LBD_VCID_[^\"]+\"[^>]+value=\"([^\"]+)\""
-            );
-            if (!captchaMatch.Success)
-            {
-                this.errmsg = "AdvanceCheckNoCaptchaId";
-                return null;
-            }
-            string captchaId = captchaMatch.Groups[1].Value;
-
-            string viewState = Regex
-                .Match(advanceHtml, "id=\"__VIEWSTATE\"[^>]+value=\"([^\"]+)\"")
-                .Groups[1]
-                .Value;
-            string viewStateGen = Regex
-                .Match(advanceHtml, "id=\"__VIEWSTATEGENERATOR\"[^>]+value=\"([^\"]+)\"")
-                .Groups[1]
-                .Value;
-            string eventValidation = Regex
-                .Match(advanceHtml, "id=\"__EVENTVALIDATION\"[^>]+value=\"([^\"]+)\"")
-                .Groups[1]
-                .Value;
-            string captchaImgSrc = Regex
-                .Match(advanceHtml, "class=\"LBD_CaptchaImage\"[^>]+src=\"([^\"]+)\"")
-                .Groups[1]
-                .Value;
-            string emailHint = Regex
-                .Match(advanceHtml, "id=\"lblAuthType\">([^<]+)<")
-                .Groups[1]
-                .Value;
-            string formAction = Regex
-                .Match(advanceHtml, "action=\"(AdvanceCheck\\.aspx[^\"]+)\"")
-                .Groups[1]
-                .Value;
-
-            string captchaImgUrl =
-                $"https://tw.newlogin.beanfun.com/LoginCheck/{captchaImgSrc.TrimStart('/')}".Replace(
-                    "&amp;",
-                    "&"
-                );
-            string submitUrl =
-                $"https://tw.newlogin.beanfun.com/LoginCheck/{formAction.Replace("&amp;", "&")}";
-
-            byte[] captchaImgBytes = null;
-            try
-            {
-                captchaImgBytes = this.DownloadData(captchaImgUrl);
-            }
-            catch { }
-
-            if (captchaImgBytes == null || captchaImgBytes.Length < 500)
-            {
-                this.errmsg = "AdvanceCheckCaptchaLoadFailed";
-                return null;
-            }
-
-            string userEmail = "",
-                userCaptcha = "";
-            bool? dialogResult = false;
-
-            App.Current.Dispatcher.Invoke(() =>
-            {
-                var dlg = new AdvanceCheckDialog(emailHint, captchaImgBytes);
-                dialogResult = dlg.ShowDialog();
-                if (dialogResult == true)
-                {
-                    userEmail = dlg.Email;
-                    userCaptcha = dlg.CaptchaCode;
-                }
-            });
-
-            if (dialogResult != true || string.IsNullOrEmpty(userEmail))
-            {
-                this.errmsg = "LoginAdvanceCheck";
-                return null;
-            }
-
-            // Submit advance check form
-            SetBaseHeaders(true, null, advanceUrl);
-            this.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
-
-            string submitBody =
-                $"__VIEWSTATE={Uri.EscapeDataString(viewState)}"
-                + $"&__VIEWSTATEGENERATOR={Uri.EscapeDataString(viewStateGen)}"
-                + $"&__EVENTVALIDATION={Uri.EscapeDataString(eventValidation)}"
-                + $"&txtVerify={Uri.EscapeDataString(userEmail)}"
-                + $"&CodeTextBox={Uri.EscapeDataString(userCaptcha)}"
-                + $"&LBD_VCID_c_logincheck_advancecheck_samplecaptcha={Uri.EscapeDataString(captchaId)}"
-                + "&imgbtnSubmit.x=30&imgbtnSubmit.y=10";
-
-            string submitRes = this.UploadString(submitUrl, "POST", submitBody);
-
-            if (submitRes.Contains("驗證成功") || submitRes.Contains("再次輸入您的帳號密碼"))
-            {
-                this.errmsg = "AdvanceCheckSuccessRetry";
-                return null;
-            }
-
-            string akeyFinal = Regex
-                .Match(this.ResponseUri?.ToString() ?? "", @"akey=([^&]+)")
-                .Groups[1]
-                .Value;
-            return string.IsNullOrEmpty(akeyFinal) ? null : akeyFinal;
         }
 
         private string HkRegularLogin(string id, string pass, string skey)

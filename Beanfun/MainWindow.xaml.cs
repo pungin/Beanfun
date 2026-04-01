@@ -319,13 +319,14 @@ namespace Beanfun
                 if (App.OSVersion < App.Win11)
                 {
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                    ServicePointManager.ServerCertificateValidationCallback = (
-                        sender,
-                        certificate,
-                        chain,
-                        errors
-                    ) => true;
                 }
+                // Accept all SSL certificates to support VPN/game accelerator proxy environments
+                ServicePointManager.ServerCertificateValidationCallback = (
+                    sender,
+                    certificate,
+                    chain,
+                    errors
+                ) => true;
                 if (settingPage.tradLogin != null && !(bool)settingPage.tradLogin.IsChecked)
                     accountList.panel_GetOtp.Visibility = Visibility.Collapsed;
 
@@ -369,7 +370,12 @@ namespace Beanfun
                     loginMethod = (int)LoginMethod.GamePass;
 
                 loginMethodInit();
-                reLoadGameInfo();
+
+                // Load game info async to avoid blocking UI on startup
+                var bgWorker = new System.ComponentModel.BackgroundWorker();
+                bgWorker.DoWork += (s, args) => { };
+                bgWorker.RunWorkerCompleted += (s, args) => reLoadGameInfo();
+                bgWorker.RunWorkerAsync();
 
                 App.LoginMethod = loginMethod;
                 loginMethodChanged();
@@ -735,41 +741,63 @@ namespace Beanfun
 
         private string reLoadVerifyPage(string response)
         {
-            Regex regex = new Regex("id=\"__VIEWSTATE\" value=\"(.*)\"");
+            Regex regex;
+
+            // __VIEWSTATE
+            regex = new Regex("id=\"__VIEWSTATE\"[^>]+value=\"([^\"]+)\"");
             if (!regex.IsMatch(response))
             {
                 return "VerifyNoViewstate";
             }
             this.viewstate = regex.Match(response).Groups[1].Value;
-            regex = new Regex("id=\"__EVENTVALIDATION\" value=\"(.*)\"");
+
+            // __VIEWSTATEGENERATOR (optional but store if present)
+            regex = new Regex("id=\"__VIEWSTATEGENERATOR\"[^>]+value=\"([^\"]+)\"");
+            if (regex.IsMatch(response))
+            {
+                this.bfClient.verifyViewStateGenerator = regex.Match(response).Groups[1].Value;
+            }
+
+            // __EVENTVALIDATION
+            regex = new Regex("id=\"__EVENTVALIDATION\"[^>]+value=\"([^\"]+)\"");
             if (!regex.IsMatch(response))
             {
                 return "VerifyNoEventvalidation";
             }
             this.eventvalidation = regex.Match(response).Groups[1].Value;
-            regex = new Regex(
-                "id=\"LBD_VCID_c_logincheck_advancecheck_samplecaptcha\" value=\"(.*)\""
-            );
+
+            // Captcha ID
+            regex = new Regex("id=\"LBD_VCID_[^\"]+\"[^>]+value=\"([^\"]+)\"");
             if (!regex.IsMatch(response))
             {
                 return "VerifyNoSamplecaptcha";
             }
             this.samplecaptcha = regex.Match(response).Groups[1].Value;
-            /*regex = new Regex("\\<span id=\"lblVerify\"\\>(.*)\\<\\/span\\>");
-            if (!regex.IsMatch(response))
-            { return "VerifyNoLblVerify"; }
-            verifyPage.t_Verify.MaskText = regex.Match(response).Groups[1].Value;*/
-            regex = new Regex("\\<span id=\"lblAuthType\"\\>(.*)\\<\\/span\\>");
+
+            // Auth type label
+            regex = new Regex("id=\"lblAuthType\">([^<]+)<");
             if (!regex.IsMatch(response))
             {
                 return "VerifyNoLblAuthType";
             }
             verifyPage.labelAuthType.Content = regex.Match(response).Groups[1].Value;
+
+            // Form action URL (store for submit)
+            regex = new Regex("action=\"(AdvanceCheck\\.aspx[^\"]+)\"");
+            if (regex.IsMatch(response))
+            {
+                string formAction = regex.Match(response).Groups[1].Value.Replace("&amp;", "&");
+                this.bfClient.verifyFormAction =
+                    $"https://tw.newlogin.beanfun.com/LoginCheck/{formAction}";
+            }
+
+            // Alert check
             regex = new Regex("alert\\('(.*)'\\);");
             if (regex.IsMatch(response))
             {
                 return regex.Match(response).Groups[1].Value;
             }
+
             verifyPage.imageCaptcha.Source = this.bfClient.getVerifyCaptcha(this.samplecaptcha);
             return null;
         }
