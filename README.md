@@ -93,6 +93,21 @@
 * **Release Notes 生成**：自動抓取版本間的 Commits，排版成包含中英雙語、支援摺疊技術細節的 Release 頁面。
 * **自動 Commit**：產生新 Tag 後，系統會自動將修改後的 `AssemblyInfo.cs` Commit 並 Push 回儲存庫。
 
+### 程式碼格式化
+
+本專案使用 [CSharpier](https://csharpier.com/) 作為程式碼格式化工具。
+
+```bash
+# 安裝還原工具
+dotnet tool restore
+
+# 格式化所有 .cs 檔案
+dotnet csharpier format .
+
+# 檢查格式（不修改檔案）
+dotnet csharpier check .
+```
+
 ### 本地測試打包 (僅供開發除錯用)
 
 若你需要在本地端測試打包流程，可使用以下指令。
