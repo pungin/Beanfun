@@ -92,7 +92,7 @@ namespace Beanfun.Update
                             string downloadUrl =
                                 (release.Assets != null && release.Assets.Count > 0)
                                     ? release.Assets[0].BrowserDownloadUrl
-                                    : $"https://github.com/lshw54/Beanfun/releases/tag/{release.TagName}";
+                                    : $"https://github.com/pungin/Beanfun/releases/tag/{release.TagName}";
 
                             Process.Start(
                                 new ProcessStartInfo
