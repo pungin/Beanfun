@@ -320,13 +320,24 @@ namespace Beanfun
                 {
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
                 }
-                // Accept all SSL certificates to support VPN/game accelerator proxy environments
+                // Allow SSL errors only for beanfun/gamania domains (VPN/game accelerator proxy compatibility)
                 ServicePointManager.ServerCertificateValidationCallback = (
                     sender,
                     certificate,
                     chain,
                     errors
-                ) => true;
+                ) =>
+                {
+                    if (errors == System.Net.Security.SslPolicyErrors.None)
+                        return true;
+                    if (sender is HttpWebRequest req)
+                    {
+                        string host = req.RequestUri.Host;
+                        if (host.EndsWith(".beanfun.com") || host.EndsWith(".gamania.com"))
+                            return true;
+                    }
+                    return false;
+                };
                 if (settingPage.tradLogin != null && !(bool)settingPage.tradLogin.IsChecked)
                     accountList.panel_GetOtp.Visibility = Visibility.Collapsed;
 
@@ -371,11 +382,7 @@ namespace Beanfun
 
                 loginMethodInit();
 
-                // Load game info async to avoid blocking UI on startup
-                var bgWorker = new System.ComponentModel.BackgroundWorker();
-                bgWorker.DoWork += (s, args) => { };
-                bgWorker.RunWorkerCompleted += (s, args) => reLoadGameInfo();
-                bgWorker.RunWorkerAsync();
+                Dispatcher.BeginInvoke(new Action(() => reLoadGameInfo()));
 
                 App.LoginMethod = loginMethod;
                 loginMethodChanged();

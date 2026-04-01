@@ -65,8 +65,9 @@ jobs:
           $tags = git tag -l "v$major.$minor.*.*" --sort=-v:refname
 
           $patch = 0
-          if ($tags -and $tags.Count -gt 0) {
-              $latestTag = $tags[0]
+          $tagsArray = @($tags)
+          if ($tagsArray.Count -gt 0 -and $tagsArray[0]) {
+              $latestTag = $tagsArray[0]
               if ($latestTag -match "^v\d+\.\d+\.(\d+)\.") {
                   $patch = [int]$matches[1]
               }
