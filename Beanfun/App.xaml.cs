@@ -150,7 +150,7 @@ namespace Beanfun
             }
             else
             {
-                // 格式: 5.8(2604011114) -> 絕對唔加多餘嘅點
+                // 格式: 5.8(2604011114)
                 return $"{version.Major}.{version.Minor}({timestamp})";
             }
         }
