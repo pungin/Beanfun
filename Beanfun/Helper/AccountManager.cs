@@ -500,7 +500,7 @@ namespace Beanfun
                 {
                     cipher = Convert.FromBase64String(raw);
                 }
-                catch
+                catch (FormatException)
                 {
                     return false;
                 }

@@ -102,6 +102,22 @@
 # 清理專案
 dotnet clean Beanfun/Beanfun.csproj -c Release
 
+# 格式化所有 .cs 檔案
+dotnet csharpier format .
+
+# 檢查格式（不修改檔案）
+dotnet csharpier check .
+```
+
+### 本地測試打包 (僅供開發除錯用)
+
+若你需要在本地端測試打包流程，可使用以下指令。
+*(⚠️ 注意：此產出的 `Beanfun.exe` 僅供本地除錯，切勿手動上傳至 GitHub Release)*
+
+```bash
+# 清理專案
+dotnet clean Beanfun/Beanfun.csproj -c Release
+
 # 建置單一 exe（Self-contained）
 dotnet publish Beanfun/Beanfun.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish
 ```
