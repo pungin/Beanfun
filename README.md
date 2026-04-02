@@ -98,9 +98,11 @@
 若你需要在本地端測試打包流程，可使用以下指令。
 *(⚠️ 注意：此產出的 `Beanfun.exe` 僅供本地除錯，切勿手動上傳至 GitHub Release)*
 
+本專案使用 [CSharpier](https://csharpier.com/) 作為程式碼格式化工具。
+
 ```bash
-# 清理專案
-dotnet clean Beanfun/Beanfun.csproj -c Release
+# 安裝還原工具
+dotnet tool restore
 
 # 格式化所有 .cs 檔案
 dotnet csharpier format .
