@@ -320,7 +320,8 @@ namespace Beanfun
                 {
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
                 }
-                // Allow SSL errors only for beanfun/gamania domains (VPN/game accelerator proxy compatibility)
+                // Allow SSL errors for beanfun/gamania domains; fall through for unknown sender types
+                // (e.g. process-mode game accelerators like UU) to preserve backward compatibility
                 ServicePointManager.ServerCertificateValidationCallback = (
                     sender,
                     certificate,
@@ -333,10 +334,9 @@ namespace Beanfun
                     if (sender is HttpWebRequest req)
                     {
                         string host = req.RequestUri.Host;
-                        if (host.EndsWith(".beanfun.com") || host.EndsWith(".gamania.com"))
-                            return true;
+                        return host.EndsWith(".beanfun.com") || host.EndsWith(".gamania.com");
                     }
-                    return false;
+                    return true;
                 };
                 if (settingPage.tradLogin != null && !(bool)settingPage.tradLogin.IsChecked)
                     accountList.panel_GetOtp.Visibility = Visibility.Collapsed;
