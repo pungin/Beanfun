@@ -124,9 +124,14 @@ namespace Beanfun
             }
         }
 
+        public static string AppDir =>
+            Path.GetDirectoryName(
+                System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName
+            );
+
         public static int ReleaseResource(string file)
         {
-            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, file);
+            string path = Path.Combine(AppDir, file);
             using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(file))
             {
                 if (stream != null)
