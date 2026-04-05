@@ -34,4 +34,4 @@ using System.Runtime.InteropServices;
 //[assembly: AssemblyFileVersion("0.0.0.0")]
 [assembly: NeutralResourcesLanguage("zh-Hant")]
 
-[assembly: System.Reflection.AssemblyInformationalVersion("5.8.2(2604021401)")]
+[assembly: System.Reflection.AssemblyInformationalVersion("5.8.3(2604050015)")]
