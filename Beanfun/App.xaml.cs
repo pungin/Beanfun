@@ -124,9 +124,9 @@ namespace Beanfun
             }
         }
 
-        public static string AppDir =>
+        public static readonly string AppDir =
             Path.GetDirectoryName(
-                System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName
+                Process.GetCurrentProcess().MainModule.FileName
             );
 
         public static int ReleaseResource(string file)
