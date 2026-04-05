@@ -1897,7 +1897,10 @@ namespace Beanfun
                 || App.ReleaseResource("LRProc.exe") == -1
                 || App.ReleaseResource("LRSubMenus.dll") == -1
             )
+            {
                 MessageBox.Show(TryFindResource("MsgLocalePluginReleaseError") as string);
+                return;
+            }
 
             var commandLine = string.Empty;
             commandLine = path.StartsWith("\"") ? $"{path} " : $"\"{path}\" ";
@@ -1912,12 +1915,7 @@ namespace Beanfun
                     try
                     {
                         var proc = new Process();
-                        proc.StartInfo.FileName = Path.Combine(
-                            Path.GetDirectoryName(
-                                System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName
-                            ),
-                            "LRProc.exe"
-                        );
+                        proc.StartInfo.FileName = Path.Combine(App.AppDir, "LRProc.exe");
                         proc.StartInfo.Arguments =
                             "ef3e7b42-a87c-4c07-ae3e-eeebeef12762 " + commandLine;
                         proc.StartInfo.WorkingDirectory = Path.GetDirectoryName(path);
