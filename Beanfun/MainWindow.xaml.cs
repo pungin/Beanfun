@@ -378,8 +378,9 @@ namespace Beanfun
                 );
                 if (loginMethod < (int)LoginMethod.Regular)
                     loginMethod = int.Parse(ConfigAppSettings.GetValue("loginMethod", "0"));
-                if (loginMethod > (int)LoginMethod.GamePass)
-                    loginMethod = (int)LoginMethod.GamePass;
+                // Don't restore QRCode/GamePass on startup — they require active auth sessions
+                if (loginMethod > (int)LoginMethod.Regular)
+                    loginMethod = (int)LoginMethod.Regular;
 
                 loginMethodInit();
 
@@ -1013,6 +1014,7 @@ namespace Beanfun
         public void loginMethodChanged()
         {
             qrCheckLogin.IsEnabled = false;
+            btn_Region.IsEnabled = true;
 
             if (App.LoginRegion == "TW")
             {
