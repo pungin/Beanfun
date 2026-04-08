@@ -2268,8 +2268,13 @@ namespace Beanfun
                     break;
                 }
 
-                if (this.getOtpWorker.IsBusy || this.loginWorker.IsBusy || this.totpWorker.IsBusy
-                    || this.qrWorker.IsBusy || this.verifyWorker.IsBusy)
+                if (
+                    this.getOtpWorker.IsBusy
+                    || this.loginWorker.IsBusy
+                    || this.totpWorker.IsBusy
+                    || this.qrWorker.IsBusy
+                    || this.verifyWorker.IsBusy
+                )
                 {
                     Console.WriteLine("ping.busy sleep 1s");
                     System.Threading.Thread.Sleep(1000 * 1);
