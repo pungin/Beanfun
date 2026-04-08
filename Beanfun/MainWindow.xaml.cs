@@ -64,6 +64,7 @@ namespace Beanfun
         public AccountManager accountManager = null;
 
         public BeanfunClient bfClient;
+        private readonly object _bfClientLock = new object();
 
         public BeanfunClient.QRCodeClass qrcodeClass;
 
@@ -2267,16 +2268,24 @@ namespace Beanfun
                     break;
                 }
 
-                if (this.getOtpWorker.IsBusy || this.loginWorker.IsBusy || this.totpWorker.IsBusy)
+                if (this.getOtpWorker.IsBusy || this.loginWorker.IsBusy || this.totpWorker.IsBusy
+                    || this.qrWorker.IsBusy || this.verifyWorker.IsBusy)
                 {
                     Console.WriteLine("ping.busy sleep 1s");
                     System.Threading.Thread.Sleep(1000 * 1);
                     continue;
                 }
 
-                if (this.bfClient != null)
+                if (this.bfClient != null && Monitor.TryEnter(_bfClientLock))
                 {
-                    this.bfClient.Ping();
+                    try
+                    {
+                        this.bfClient.Ping();
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_bfClientLock);
+                    }
                 }
 
                 for (int i = 0; i < WaitSecs; ++i)
@@ -2314,7 +2323,17 @@ namespace Beanfun
                 MessageBox.Show("QRCode not get yet");
                 return;
             }
-            int res = this.bfClient.QRCodeCheckLoginStatus(this.qrcodeClass);
+            if (!Monitor.TryEnter(_bfClientLock))
+                return;
+            int res;
+            try
+            {
+                res = this.bfClient.QRCodeCheckLoginStatus(this.qrcodeClass);
+            }
+            finally
+            {
+                Monitor.Exit(_bfClientLock);
+            }
             if (res != 0)
                 this.qrCheckLogin.IsEnabled = false;
             if (res == 1)
@@ -2358,7 +2377,17 @@ namespace Beanfun
 
         private void bfAPPAutoLogin_Tick(object sender, EventArgs e)
         {
-            JObject resultJson = this.bfClient.CheckIsRegisteDevice(service_code, service_region);
+            if (!Monitor.TryEnter(_bfClientLock))
+                return;
+            JObject resultJson;
+            try
+            {
+                resultJson = this.bfClient.CheckIsRegisteDevice(service_code, service_region);
+            }
+            finally
+            {
+                Monitor.Exit(_bfClientLock);
+            }
             if (resultJson == null || resultJson["IntResult"] == null)
                 return;
             if ((string)resultJson["IntResult"] != "1" && (string)resultJson["IntResult"] != "0")
