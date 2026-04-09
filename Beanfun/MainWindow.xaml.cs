@@ -2084,11 +2084,6 @@ namespace Beanfun
         private void getOtpWorker_DoWork(object sender, DoWorkEventArgs e)
         {
             CancelWork();
-            //if (this.pingWorker.IsBusy) this.pingWorker.CancelAsync();
-            /*while (this.pingWorker.IsBusy) {
-                Thread.Sleep(133);
-            }
-            */
 
             Console.WriteLine("getOtpWorker start");
             Thread.CurrentThread.Name = "GetOTP Worker";
@@ -2099,11 +2094,19 @@ namespace Beanfun
                 return;
             }
             Console.WriteLine("call GetOTP");
-            this.otp = this.bfClient.GetOTP(
-                this.bfClient.accountList[index],
-                this.service_code,
-                this.service_region
-            );
+            Monitor.Enter(_bfClientLock);
+            try
+            {
+                this.otp = this.bfClient.GetOTP(
+                    this.bfClient.accountList[index],
+                    this.service_code,
+                    this.service_region
+                );
+            }
+            finally
+            {
+                Monitor.Exit(_bfClientLock);
+            }
             Console.WriteLine("call GetOTP done");
             if (this.otp == null)
                 e.Result = -1;
@@ -2112,8 +2115,6 @@ namespace Beanfun
                 e.Result = index;
             }
 
-            //if (!this.pingWorker.IsBusy) this.pingWorker.RunWorkerAsync();
-            //this.pingWorker.RunWorkerAsync();
             ResumeWork();
             return;
         }
