@@ -2476,7 +2476,7 @@ namespace Beanfun
                     FileVersionInfo fileVerInfo = FileVersionInfo.GetVersionInfo(
                         settingPage.t_GamePath.Text
                     );
-                    ClientMapleMajor = (short)fileVerInfo.ProductPrivatePart;
+                    ClientMapleMajor = (short)fileVerInfo.ProductMinorPart;
                     ClientMapleMinor = (short)fileVerInfo.FileBuildPart;
 
                     // 獲取伺服器版本
