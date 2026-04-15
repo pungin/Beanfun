@@ -1732,7 +1732,9 @@ namespace Beanfun
                 }
                 else
                 {
-                    Process.Start(SelectedGame.download_url);
+                    Process.Start(
+                        new ProcessStartInfo(SelectedGame.download_url) { UseShellExecute = true }
+                    );
                 }
                 return;
             }
