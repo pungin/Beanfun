@@ -403,6 +403,7 @@ namespace Beanfun
             public string skey;
             public string bitmapBase64;
             public string deeplink;
+            public string requestVerificationToken;
         }
 
         public QRCodeClass GetQRCodeValue(string skey)
@@ -410,7 +411,14 @@ namespace Beanfun
             SetBaseHeaders(false, "text/html");
             string url = $"https://login.beanfun.com/Login/Index?pSKey={skey}";
             string response = this.DownloadString(url);
-
+            // Extract RequestVerificationToken from login page for QR polling
+            string verificationToken = null;
+            Match tokenMatch = Regex.Match(
+                response,
+                @"name=""__RequestVerificationToken""[^>]+value=""([^""]+)"""
+            );
+            if (tokenMatch.Success)
+                verificationToken = tokenMatch.Groups[1].Value;
             JObject strEncryptData = this.getQRCodeStrEncryptData(skey);
             if (strEncryptData == null)
             {
@@ -440,6 +448,7 @@ namespace Beanfun
                 skey = skey,
                 bitmapBase64 = "data:image/png;base64," + base64Image,
                 deeplink = deeplink,
+                requestVerificationToken = verificationToken,
             };
         }
 
@@ -602,21 +611,15 @@ namespace Beanfun
             try
             {
                 string skey = qrcodeclass.skey;
-                string loginPage = this.DownloadString(
-                    $"https://login.beanfun.com/Login/Index?pSKey={skey}"
-                );
-                Match match = Regex.Match(
-                    loginPage,
-                    @"__RequestVerificationToken.*?value=""([^""]+)"""
-                );
-                string requestToken = match.Groups[1].Value;
+
                 SetBaseHeaders(
                     true,
                     "application/json, text/plain, */*",
                     $"https://login.beanfun.com/Login/Index?pSKey={skey}"
                 );
-                this.Headers.Add("Origin", "https://login.beanfun.com");
-                this.Headers.Add("RequestVerificationToken", requestToken);
+                this.Headers.Set("Origin", "https://login.beanfun.com");
+                this.Headers.Set("RequestVerificationToken", qrcodeclass.requestVerificationToken);
+
                 NameValueCollection payload = new NameValueCollection();
                 string response = this.UploadString(
                     "https://login.beanfun.com/QRLogin/CheckLoginStatus",
