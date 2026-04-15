@@ -43,7 +43,7 @@ namespace Beanfun
                 SetBaseHeaders(false, "text/html");
                 string indexHtml = this.DownloadString(indexUrl);
                 string formToken = Regex
-                    .Match(indexHtml, "name=\"__RequestVerificationToken\"[^>]+value=\"([^\"]+)\"")
+                    .Match(indexHtml, "__RequestVerificationToken[^>]+value=\"([^\"]+)\"")
                     .Groups[1]
                     .Value;
 
@@ -415,7 +415,7 @@ namespace Beanfun
             string verificationToken = null;
             Match tokenMatch = Regex.Match(
                 response,
-                @"name=""__RequestVerificationToken""[^>]+value=""([^""]+)"""
+                @"__RequestVerificationToken[^>]+value=""([^""]+)"""
             );
             if (tokenMatch.Success)
                 verificationToken = tokenMatch.Groups[1].Value;
