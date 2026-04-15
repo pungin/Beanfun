@@ -610,16 +610,13 @@ namespace Beanfun
                     @"__RequestVerificationToken.*?value=""([^""]+)"""
                 );
                 string requestToken = match.Groups[1].Value;
-
-                this.Headers.Set(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+                SetBaseHeaders(
+                    true,
+                    "application/json, text/plain, */*",
+                    $"https://login.beanfun.com/Login/Index?pSKey={skey}"
                 );
-                this.Headers.Set("Accept", "application/json, text/plain, */*");
-                this.Headers.Set("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
-                this.Headers.Set("Origin", "https://login.beanfun.com");
-                this.Headers.Set("RequestVerificationToken", requestToken);
-
+                this.Headers.Add("Origin", "https://login.beanfun.com");
+                this.Headers.Add("RequestVerificationToken", requestToken);
                 NameValueCollection payload = new NameValueCollection();
                 string response = this.UploadString(
                     "https://login.beanfun.com/QRLogin/CheckLoginStatus",
