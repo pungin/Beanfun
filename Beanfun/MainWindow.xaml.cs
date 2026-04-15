@@ -2467,6 +2467,7 @@ namespace Beanfun
             if (found)
             {
                 short ClientMapleMajor = 0;
+                short ClientMapleMinor = 0;
                 short SrvMapleMajor = 0;
                 string SrvMapleMinor = "";
                 try
@@ -2476,6 +2477,7 @@ namespace Beanfun
                         settingPage.t_GamePath.Text
                     );
                     ClientMapleMajor = (short)fileVerInfo.ProductPrivatePart;
+                    ClientMapleMinor = (short)fileVerInfo.FileBuildPart;
 
                     // 獲取伺服器版本
                     CancellationTokenSource c = new CancellationTokenSource();
@@ -2558,7 +2560,8 @@ namespace Beanfun
                 string info = "";
                 if (ClientMapleMajor != 0)
                 {
-                    info += $"\r\n{TryFindResource("ClientVersion") as string}{ClientMapleMajor}";
+                    info +=
+                        $"\r\n{TryFindResource("ClientVersion") as string}{ClientMapleMajor}.{ClientMapleMinor}";
                     if (SrvMapleMajor != 0 && SrvMapleMinor.Split(':')[0] != "")
                     {
                         info +=
@@ -2588,7 +2591,12 @@ namespace Beanfun
                 );
                 if (result == MessageBoxResult.Yes)
                     Process.Start(
-                        $"https://maplestory.beanfun.com/download{(isCanUpdate ? "?download_type=2" : "")}"
+                        new ProcessStartInfo(
+                            $"https://maplestory.beanfun.com/download{(isCanUpdate ? "?download_type=2" : "")}"
+                        )
+                        {
+                            UseShellExecute = true,
+                        }
                     );
             }
         }
