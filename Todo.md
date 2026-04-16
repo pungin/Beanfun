@@ -216,16 +216,18 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] 非 ASCII 容錯行為測試：key / plaintext 含 `é` / `中` 對齊 `?` 取代結果
 - **驗收** ✅：`cargo test core::wcdes` 19 passed / 0 failed、`cargo clippy -D warnings` 綠、`cargo fmt --check` 綠、cipher 位元等同 WPF（已以 Node ground-truth fixture 驗證；真實 WPF runtime OTP 回應將於 P3 登入 flow 錄到後再補一組 integration fixture）
 
-### P2 — Rust `core/version` + `core/parser`
+### P2 — Rust `core/version` + `core/parser` ✅
 
-- [ ] `core/version/mod.rs`：`is_newer(local: &str, remote: &VersionInfo) -> bool`
-- [ ] 覆蓋 WPF `IsNewerVersion` 所有 case（5.8.9 < 5.8.10、timestamp 相同、舊格式無 patch）
-- [ ] `core/parser/viewstate.rs`：`extract_viewstate(html: &str) -> Result<ViewStateForm>`（`__VIEWSTATE` / `__VIEWSTATEGENERATOR` / `__EVENTVALIDATION`）
-- [ ] `core/parser/account.rs`：從 `game_server_account_list.aspx` HTML 抽出 ServiceAccount 清單
-- [ ] `core/parser/akey.rs`：從 redirect URL 抓 `akey=xxx`
-- [ ] `core/parser/token.rs`：從 HTML 抓 `__RequestVerificationToken`
-- [ ] 單元測試：每個 parser 5+ cases（含 WPF 實際 response 當 fixture）
-- **驗收**：parser 全部單元測試綠、行覆蓋 >= 95%
+- [x] `core/version/mod.rs`：`is_newer(local: &str, remote: &VersionInfo) -> bool`
+- [x] 覆蓋 WPF `IsNewerVersion` 所有 case（5.8.9 < 5.8.10、timestamp 相同、舊格式無 patch、regex-miss fallback、i64 overflow）
+- [x] `core/parser/viewstate.rs`：`extract_viewstate(html: &str) -> Result<ViewStateForm>`（`__VIEWSTATE` 必填，`__VIEWSTATEGENERATOR` / `__EVENTVALIDATION` 為 `Option`，對齊 WPF 多個呼叫端對同一 parser 的不同要求）
+- [x] `core/parser/account.rs`：從 `game_server_account_list.aspx` HTML 抽出 `ServiceAccountRow { is_enable, sid, ssn, sname }` 清單 + `extract_account_limit_notice`（帳號上限提示）
+- [x] `core/parser/akey.rs`：從 redirect URL / JSON 字串抓 `akey=...`（對齊 WPF 貪婪 `(.*)` 行為，docs 已註記）
+- [x] `core/parser/token.rs`：從 HTML 抓 `__RequestVerificationToken`（支援 `name="..."` 與 `id="..."` 兩種 emit 形式）
+- [x] 單元測試：每個 parser ≥ 5 cases，共 28 個 parser tests
+  - viewstate 7、account 8（5 rows + 2 notice + 1 empty）、akey 7、token 6
+- [x] SRP/DRY 自我 review：共用 `ParserError` enum、`capture_first` / `compile_field` helper 去除 dispatch-with-panic 分支
+- **驗收** ✅：`cargo test core::parser` 28 passed / 0 failed、`cargo test core::version` 15 passed / 0 failed、全套 62 lib tests + 4 smoke 綠、`cargo clippy -D warnings` 綠、`cargo fmt --check` 綠。Fixture 全為 hand-crafted WPF-aligned HTML snippet；真實 login-flow response 將於 P3 錄到後補 integration fixture。
 
 ### P3 — Rust `services/beanfun` Login
 

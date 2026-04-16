@@ -58,6 +58,7 @@ regex = "1"
 url = "2"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
+html-escape = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 # Win32 API bindings — features will be expanded per phase (DPAPI in P5, WMI/PostMessage in P8/P9).
