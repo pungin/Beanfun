@@ -71,8 +71,17 @@ pub async fn post_return_aspx(
 fn scan_bfwebtoken(cookie_header: &str) -> Option<String> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| {
-        // `[^;]+` stops at the attribute delimiter, matching WPF L163.
-        // Case-insensitive because Set-Cookie casing isn't guaranteed.
+        // `[^;]+` stops at the attribute delimiter, matching WPF L163
+        // (`bfWebToken=([^;]+)`).
+        //
+        // **Intentional divergence from WPF**: the `(?i)` flag makes
+        // the cookie-name match case-insensitive. WPF is case-sensitive,
+        // which is a latent bug — a middlebox or a future server change
+        // that emits `BFWebToken=…` would silently miss the token and
+        // surface `LoginNoWebtoken`. Our leniency strictly widens the
+        // accept set (every cookie WPF would capture, we capture too)
+        // and is exercised by the `case_insensitive_cookie_name` unit
+        // test below.
         Regex::new(r"(?i)bfWebToken=([^;]+)").expect("bfWebToken regex must compile")
     });
     re.captures(cookie_header)

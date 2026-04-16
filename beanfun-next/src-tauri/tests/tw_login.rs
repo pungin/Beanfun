@@ -15,7 +15,7 @@ use beanfun_next_lib::services::beanfun::{
     LoginRegion,
 };
 use url::Url;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_partial_json, header_regex, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ACCOUNT: &str = "alice";
@@ -320,6 +320,125 @@ async fn return_aspx_without_cookie_yields_missing_web_token() {
         matches!(err, LoginError::MissingWebToken),
         "expected MissingWebToken, got {err:?}"
     );
+}
+
+#[tokio::test]
+async fn check_account_type_non_json_response_falls_through_empty_captcha() {
+    // WPF L70-78: when CheckAccountType returns anything that does not
+    // start with `{`, the captcha token defaults to empty and the flow
+    // continues. We model that here by returning an HTML error page and
+    // asserting the full flow still succeeds.
+    let server = MockServer::start().await;
+    mount_session_key(&server).await;
+    mount_index_with_token(&server, FORM_TOKEN).await;
+    Mock::given(method("POST"))
+        .and(path("/Login/CheckAccountType"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string("<html><body>transient error</body></html>"),
+        )
+        .mount(&server)
+        .await;
+    mount_account_login_success(&server).await;
+    mount_send_login_happy(&server).await;
+    mount_return_aspx_with_token(&server, WEB_TOKEN).await;
+
+    let client = client_for(&server);
+    let session = login_tw_regular(&client, &creds())
+        .await
+        .expect("non-JSON CheckAccountType must be tolerated");
+    assert_eq!(session.web_token, WEB_TOKEN);
+}
+
+#[tokio::test]
+async fn account_login_payload_propagates_captcha_from_check_account_type() {
+    // Guards the Chunk 3.2 wiring: the captcha value returned by
+    // CheckAccountType MUST be forwarded verbatim into AccountLogin's
+    // JSON body. We enforce this by making AccountLogin's mock only
+    // match when the request body contains
+    // `"Captcha": "CAPTCHA_FROM_STEP_2"`. If the propagation breaks in
+    // a future refactor, the mock falls through to wiremock's 404 and
+    // the test fails with a `LoginError::Unknown("AccountLogin returned
+    // HTTP 404 …")` which surfaces the regression loudly.
+    let server = MockServer::start().await;
+    mount_session_key(&server).await;
+    mount_index_with_token(&server, FORM_TOKEN).await;
+    mount_check_account_type(&server, "CAPTCHA_FROM_STEP_2").await;
+
+    Mock::given(method("POST"))
+        .and(path("/Login/AccountLogin"))
+        .and(body_partial_json(serde_json::json!({
+            "Account": ACCOUNT,
+            "Pasw": PASSWORD,
+            "Captcha": "CAPTCHA_FROM_STEP_2",
+            "IsMobile": false,
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "ResultCode": "1",
+            "Result": "0",
+            "ResultMessage": ""
+        })))
+        .mount(&server)
+        .await;
+
+    mount_send_login_happy(&server).await;
+    mount_return_aspx_with_token(&server, WEB_TOKEN).await;
+
+    let client = client_for(&server);
+    let session = login_tw_regular(&client, &creds())
+        .await
+        .expect("captcha must be forwarded into AccountLogin body");
+    assert_eq!(session.web_token, WEB_TOKEN);
+}
+
+#[tokio::test]
+async fn session_cookies_persist_across_login_steps() {
+    // Verifies that the shared cookie jar on `BeanfunClient` captures a
+    // `Set-Cookie` from Login/Index and forwards it on subsequent same-
+    // host requests. If the two reqwest clients (redirect / no-redirect)
+    // ever stop sharing the jar, the CheckAccountType mock below will
+    // 404 and the test will surface the regression.
+    let session_cookie = "ASP.NET_SessionId=COOKIE_FIXTURE";
+    let server = MockServer::start().await;
+    mount_session_key(&server).await;
+
+    // Override the plain Login/Index mock with one that plants a cookie
+    // in its Set-Cookie header.
+    let index_html = format!(
+        r#"<html><body>
+            <input name="__RequestVerificationToken" type="hidden" value="{FORM_TOKEN}" />
+        </body></html>"#
+    );
+    Mock::given(method("GET"))
+        .and(path("/Login/Index"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(index_html)
+                .append_header("Set-Cookie", format!("{session_cookie}; Path=/").as_str()),
+        )
+        .mount(&server)
+        .await;
+
+    // Gate CheckAccountType on the cookie being present on the inbound
+    // request. `header_regex` escapes the dot in `ASP.NET_SessionId`.
+    Mock::given(method("POST"))
+        .and(path("/Login/CheckAccountType"))
+        .and(header_regex("cookie", r"ASP\.NET_SessionId=COOKIE_FIXTURE"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "ResultCode": "1",
+            "ResultData": { "Captcha": "" }
+        })))
+        .mount(&server)
+        .await;
+
+    mount_account_login_success(&server).await;
+    mount_send_login_happy(&server).await;
+    mount_return_aspx_with_token(&server, WEB_TOKEN).await;
+
+    let client = client_for(&server);
+    let session = login_tw_regular(&client, &creds())
+        .await
+        .expect("cookies from Login/Index must be forwarded to CheckAccountType");
+    assert_eq!(session.web_token, WEB_TOKEN);
 }
 
 #[tokio::test]

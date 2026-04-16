@@ -250,12 +250,13 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] `BeanfunClient::{login_url, login_url_with_skey, portal_url}` helper + `login::ensure_success` / `login::apply_json_headers` 共用減 DRY
 - [x] `login/index.rs` — GET `Login/Index?pSKey=…`、remap `ParserError::MissingRequestVerificationToken` → `LoginError::MissingVerificationToken`
 - [x] `login/check_account_type.rs` — POST `Login/CheckAccountType`、JSON body sniff（非 `{` 視同無 captcha）、typed DTO
-- [x] `login/account_login.rs` — POST `Login/AccountLogin`、`classify_outcome(code, result, msg)` 純函式 + 5 unit tests 對應 4 分支
+- [x] `login/account_login.rs` — POST `Login/AccountLogin`、`classify_outcome(code, result, msg)` 純函式 + 7 unit tests 對應 4 分支（含 `("1", "")` / `("1", "2")` ⇒ Ok 的 WPF-permissive case）
 - [x] `login/send_login.rs` — GET `Login/SendLogin`、空 form 直接 `SendLoginNoFormData`
 - [x] `login/return_aspx.rs` — POST `return.aspx`（no-redirect）、raw Set-Cookie 掃 `bfWebToken`（4 unit tests）
 - [x] `login/tw_regular.rs` — orchestrator `login_tw_regular(client, creds) -> Session`
-- [x] Integration tests `tests/tw_login.rs`：7 支（happy path、wrong password → `ServerMessage`、advance check 1/1 → `AdvanceCheckRequired{None}`、advance check 2 + http URL、SendLogin 空 → `SendLoginNoFormData`、return.aspx 無 cookie → `MissingWebToken`、Index 無 token → `MissingVerificationToken`）
-- **驗收** ✅：97 lib tests + 7 session_key + 4 smoke + 7 tw_login = 115 全綠、`clippy -D warnings` 綠、`fmt --check` 綠
+- [x] Integration tests `tests/tw_login.rs`：10 支（7 主流程 + CheckAccountType non-JSON tolerance + captcha step2→step3 propagation + 跨 step session cookie persistence）
+- **驗收** ✅：99 lib tests + 7 session_key + 4 smoke + 10 tw_login = 120 全綠、`clippy -D warnings` 綠、`fmt --check` 綠
+- **Post-commit polish**（對齊 WPF + 補覆蓋率）：`classify_outcome` match arms 改成 `("1", "1") ⇒ AdvanceCheck`, `("1", _) ⇒ Ok`（WPF L101-107 故意 lenient）、`scan_bfwebtoken` `(?i)` 標記為 intentional divergence
 
 #### Chunk 3.3 — HK Regular + TOTP + LoginCompleted
 
