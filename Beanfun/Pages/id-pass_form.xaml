@@ -628,7 +628,7 @@
             Content="{DynamicResource ForgotPassword}"
           />
         </Grid>
-        <Grid Margin="0 10 0 20">
+        <Grid Margin="0 10 0 20" MinWidth="{Binding MinWidth, ElementName=t_AccountID}">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
