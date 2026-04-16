@@ -20,7 +20,21 @@ pub mod akey;
 pub mod token;
 pub mod viewstate;
 
+use regex::Regex;
 use thiserror::Error;
+
+/// Return the first capture group of the first regex match in `input`, owned
+/// as a `String`. Returns `None` when the pattern fails to match at all.
+///
+/// Every regex-based parser under `core::parser` follows the same
+/// "first match, group 1, or nothing" shape (the C# reference uses
+/// `regex.Match(...).Groups[1].Value`), so centralising the chain here keeps
+/// call sites to a single line and locks the semantics in one place.
+pub(crate) fn capture_first(re: &Regex, input: &str) -> Option<String> {
+    re.captures(input)
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().to_owned())
+}
 
 /// Errors surfaced by the parsers under [`crate::core::parser`].
 ///

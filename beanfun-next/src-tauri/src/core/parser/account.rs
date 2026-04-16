@@ -36,6 +36,8 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
+use super::capture_first;
+
 /// One row from the service-account listing table.
 ///
 /// Field names mirror the legacy C# `ServiceAccount` class verbatim (`sid` /
@@ -96,10 +98,7 @@ pub fn extract_service_accounts(html: &str) -> Vec<ServiceAccountRow> {
 /// "auth re-login" and a translated form of the server text outside this
 /// parser; we stay pure here.
 pub fn extract_account_limit_notice(html: &str) -> Option<String> {
-    amount_limit_notice_regex()
-        .captures(html)
-        .and_then(|caps| caps.get(1))
-        .map(|m| m.as_str().to_owned())
+    capture_first(amount_limit_notice_regex(), html)
 }
 
 // -----------------------------------------------------------------------------

@@ -128,7 +128,9 @@ fn pack_numeric(major: &str, minor: &str, patch: &str, timestamp: &str) -> Optio
 /// Identical to the C# pattern `(\d+)\.(\d+)\.?(\d+)?\.?\((\d+)\)`.
 fn local_version_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(\d+)\.(\d+)\.?(\d+)?\.?\((\d+)\)").unwrap())
+    RE.get_or_init(|| {
+        Regex::new(r"(\d+)\.(\d+)\.?(\d+)?\.?\((\d+)\)").expect("local version regex must compile")
+    })
 }
 
 // -----------------------------------------------------------------------------

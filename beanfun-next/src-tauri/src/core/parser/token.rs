@@ -31,7 +31,7 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-use super::{ParserError, Result};
+use super::{capture_first, ParserError, Result};
 
 /// Extract the `__RequestVerificationToken` value from the first matching
 /// `<input>` tag in `html`.
@@ -41,11 +41,7 @@ use super::{ParserError, Result};
 /// (by defaulting to an empty string) but errors out in another; surfacing a
 /// typed error lets each call site decide.
 pub fn extract_verification_token(html: &str) -> Result<String> {
-    token_regex()
-        .captures(html)
-        .and_then(|caps| caps.get(1))
-        .map(|m| m.as_str().to_owned())
-        .ok_or(ParserError::MissingRequestVerificationToken)
+    capture_first(token_regex(), html).ok_or(ParserError::MissingRequestVerificationToken)
 }
 
 fn token_regex() -> &'static Regex {

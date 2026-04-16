@@ -31,7 +31,7 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-use super::{ParserError, Result};
+use super::{capture_first, ParserError, Result};
 
 /// Extracted hidden-field payload from an ASP.NET WebForms HTML response.
 ///
@@ -82,14 +82,6 @@ pub fn extract_viewstate(html: &str) -> Result<ViewStateForm> {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
-/// Return the first capture group (`value="…"`) of the first regex match, or
-/// `None` when the pattern fails to find a match in `html`.
-fn capture_first(re: &Regex, html: &str) -> Option<String> {
-    re.captures(html)
-        .and_then(|caps| caps.get(1))
-        .map(|m| m.as_str().to_owned())
-}
 
 /// Compile the WPF loose pattern `id="<field_name>"[^>]+value="([^"]+)"` for
 /// an arbitrary hidden-field name. `regex::escape` guards against any

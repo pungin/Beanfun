@@ -26,7 +26,7 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-use super::{ParserError, Result};
+use super::{capture_first, ParserError, Result};
 
 /// Extract the value following the first `akey=` occurrence in `input`.
 ///
@@ -34,11 +34,7 @@ use super::{ParserError, Result};
 /// returned as the value, matching the WPF regex. Callers whose input may
 /// contain trailing parameters should split on `&` themselves.
 pub fn extract_akey(input: &str) -> Result<String> {
-    akey_regex()
-        .captures(input)
-        .and_then(|caps| caps.get(1))
-        .map(|m| m.as_str().to_owned())
-        .ok_or(ParserError::MissingAkey)
+    capture_first(akey_regex(), input).ok_or(ParserError::MissingAkey)
 }
 
 fn akey_regex() -> &'static Regex {
