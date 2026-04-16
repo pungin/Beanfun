@@ -142,6 +142,7 @@ async fn happy_path_returns_qr_login_init() {
 
     let client = client_for(&server, LoginRegion::TW);
     let QrLoginInit {
+        skey,
         bitmap_base64,
         deeplink,
         verification_token,
@@ -149,6 +150,10 @@ async fn happy_path_returns_qr_login_init() {
         .await
         .expect("happy path returns Ok");
 
+    // skey roundtrips verbatim from `init_qr_login`'s argument so the
+    // poll/finalize steps can rebuild the `Referer` URL without the
+    // caller threading the value separately.
+    assert_eq!(skey, SESSION_KEY);
     assert_eq!(verification_token, VERIFICATION_TOKEN);
     assert_eq!(
         bitmap_base64,

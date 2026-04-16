@@ -316,9 +316,15 @@ c:\Users\mo030\Desktop\Beanfun\
 - **驗收** ✅：fmt / clippy -D warnings / cargo test (216 pass) / cargo doc 全綠
 - **Divergence**：JSON parse 失敗用 `LoginError::Json(...)` 取代 WPF `JObject.Parse` 未捕例外（與 P3.3.4 同原則，安全性 strictly better）
 
-##### 3.4.2 — `qr_poll`
-- [ ] `login/qr_poll.rs` — `QRLogin/CheckLoginStatus` single-shot：POST 空 body + Origin + RequestVerificationToken header → JSON 解析 → typed `QrPollOutcome { Pending / Approved(akey) / Rejected / Expired / ... }`；未知 ResultMessage → `LoginError::ServerMessage(raw)`；JSON parse fail → `LoginError::QrJsonParseFailed`（對齊 WPF `QRCodeCheckLoginStatus` L609-665）
-- [ ] Integration tests：每個 ResultMessage 一支 + 未知 + 非 JSON
+##### 3.4.2 — `qr_poll` ✅
+- [x] `QrLoginInit` 加 `pub skey: String` 欄位（poll/finalize 都要從中取 skey 重建 Referer URL，對齊 WPF L538/L618 從 `qrcodeclass.skey` 拿；single arg `&QrLoginInit` 取代多個 loose `&str`）
+- [x] `login/qr_poll.rs` — `poll_qr_login_status(client, &init) -> Result<QrPollOutcome, LoginError>` single-shot：region guard → POST `https://login.beanfun.com/QRLogin/CheckLoginStatus`（注意是 `/QRLogin/`，不在 `/Login/` 底下）+ 5 header（Accept / Referer / Origin / RequestVerificationToken / Content-Type=`application/x-www-form-urlencoded`，**不**送 X-Requested-With —— 對齊 WPF `SetBaseHeaders` L917 清空 + L615-621 重設後沒加回）+ 空字串 body → JSON 解析 → 4-way 對齊
+- [x] `QrPollOutcome` enum 4 個 variant 對齊 WPF L640-653 實際 4 個 `ResultMessage` 字串：`Failed` / `WaitLogin` / `TokenExpired` / `Approved`（option B 不合併；`Approved` 不帶 ResultData，因 WPF L647-648 也沒讀，finalize 從 `init.skey` 取）
+- [x] 錯誤對齊：unknown / 缺 ResultMessage → `LoginError::ServerMessage(raw_body)`（WPF L640+L649-652 同分支）；JSON parse fail → `LoginError::QrJsonParseFailed`（WPF L634-638）；HK region → `LoginError::QrUnsupportedRegion`（短路無 HTTP，跟 qr_init 一致）
+- [x] `login/mod.rs` 註冊 `qr_poll` + re-export `poll_qr_login_status` / `QrPollOutcome`
+- [x] Unit tests（3 支）：`PollResponse` serde shape — 接受額外 ResultData / 鎖大寫 CamelCase 欄名 / 缺欄=None
+- [x] Integration tests `tests/qr_poll.rs`（9 支）：4 個 happy `ResultMessage` / unknown / 缺 ResultMessage / 非 JSON / HK 短路 / wire shape（5 header + 空 body + 確認**不**送 X-Requested-With）
+- **驗收** ✅：fmt / clippy -D warnings / cargo test (228 pass) / cargo doc 全綠
 
 ##### 3.4.3 — `qr_finalize`
 - [ ] `login/qr_finalize.rs` — `QRCodeLogin(client, akey, verification_token, session_key) -> Session`：POST `Login/QRLogin/{akey}` → 拿 SendLogin URL → 複用 `send_login` + `return_aspx`（對齊 WPF `QRCodeLogin` L530-607；**跳過** WPF L597-606 的第二次 garbage `AuthKey="OK"` POST，因 `bfWebToken` 已經在第一次 `return.aspx` 拿到）

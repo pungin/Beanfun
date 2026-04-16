@@ -69,9 +69,18 @@ use crate::services::beanfun::{BeanfunClient, LoginError, LoginRegion};
 ///
 /// Cheap to clone (small `String`s only). The token + skey pair is
 /// what the subsequent `qr_poll` and `qr_finalize` calls need to
-/// drive the rest of the flow.
+/// drive the rest of the flow — bundling them here keeps the
+/// downstream API surface to a single `&QrLoginInit` argument
+/// instead of three loose `&str`s.
 #[derive(Debug, Clone)]
 pub struct QrLoginInit {
+    /// Portal session key (`pSKey`). Forwarded by
+    /// `qr_poll::poll_qr_login_status` and `qr_finalize` as the
+    /// `Referer` URL's `pSKey=…` query parameter — WPF L538 / L618
+    /// both rebuild the same `Login/Index?pSKey={skey}` referer
+    /// from `qrcodeclass.skey`.
+    pub skey: String,
+
     /// Full `data:image/png;base64,<base64>` data URL — UI can drop
     /// this straight into an `<img>` tag. WPF stores the same shape
     /// verbatim on `QRCodeClass.bitmapBase64` (L449).
@@ -190,6 +199,7 @@ pub async fn init_qr_login(
         .filter(|s| !s.is_empty());
 
     Ok(QrLoginInit {
+        skey: session_key.to_owned(),
         bitmap_base64,
         deeplink,
         verification_token: index.verification_token,
