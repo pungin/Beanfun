@@ -30,8 +30,8 @@ using System.Runtime.InteropServices;
 //      生成号
 //      修订号
 //
-[assembly: AssemblyVersion("5.8.*")]
+[assembly: AssemblyVersion("5.9.*")]
 //[assembly: AssemblyFileVersion("0.0.0.0")]
 [assembly: NeutralResourcesLanguage("zh-Hant")]
 
-[assembly: System.Reflection.AssemblyInformationalVersion("5.8.2(2604160335)")]
+[assembly: System.Reflection.AssemblyInformationalVersion("5.9.0(2604161535)")]
