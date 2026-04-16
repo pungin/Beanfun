@@ -280,12 +280,16 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] 順手清 3.2 遺漏的 5 支 rustdoc warnings（redundant explicit link + ambiguous fn/mod）
 - **驗收** ✅：127 lib + 5 login_completed + 7 session_key + 4 smoke + 10 tw_login + 10 hk_login = 163 全綠、`clippy -D warnings` 綠、`fmt --check` 綠、`cargo doc` 0 warning
 
-##### Chunk 3.3.3 — TOTP flow
+##### Chunk 3.3.3 — TOTP flow ✅
 
-- [ ] `login/totp.rs` — `login_totp(client, challenge, otp1, otp2, otp3, otp4, otp5, otp6) -> Session`（對齊 WPF 簽章 6 個獨立 `&str` 參數）
-- [ ] POST 暫存的 `totp_url`（payload：`__EVENTTARGET=""` + `__EVENTARGUMENT=""` + 3 viewstate + `__VIEWSTATEENCRYPTED=""`(HK) + `otpCode1..6` + `totpLoginBtn="登入"`）
-- [ ] 3 路分支（akey → `login_completed` / RELOAD_CAPTCHA_CODE → AdvanceCheck / MsgBox or pollRequest → ServerMessage）複用 `hk_error`
-- [ ] Integration tests：happy、advance check、MsgBox 錯誤、no akey
+- [x] `login/totp.rs` — `login_totp(client, challenge, otp1, otp2, otp3, otp4, otp5, otp6) -> Session`（對齊 WPF 簽章 6 個獨立 `&str` 參數）
+- [x] POST 暫存的 `totp_url`（payload：`__EVENTTARGET=""` + `__EVENTARGUMENT=""` + 3 viewstate + `__VIEWSTATEENCRYPTED=""`(HK only, region 從 `client.config().region` 取) + `otpCode1..6` + `totpLoginBtn="登入"`）
+- [x] 3 路分支（akey → `login_completed` / RELOAD_CAPTCHA_CODE → AdvanceCheck / MsgBox or pollRequest → ServerMessage）複用 `hk_error`
+- [x] 搬 `is_advance_check` + `classify_missing_akey_body` 從 `hk_regular.rs` 到 `hk_error.rs`（DRY，HK Regular + TOTP 共用）
+- [x] `TotpChallenge` 拿掉 `#[allow(dead_code)]`（viewstate/session_key 進入 `login_totp` 實際使用）
+- [x] Unit tests：form builder × 4（HK 13 欄順序、TW 12 欄不含 `__VIEWSTATEENCRYPTED`、值填充、OTP 位置映射）
+- [x] Integration tests：7 支（happy、advance check、MsgBox、pollRequest、unrecognized、HK wire shape、TW wire shape）
+- [x] Quality gates：fmt / clippy -D warnings / 175 tests pass / doc 0 warnings
 
 ##### Chunk 3.3.4 — CheckIsRegisteDevice
 

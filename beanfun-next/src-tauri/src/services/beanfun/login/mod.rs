@@ -28,6 +28,7 @@ pub mod index;
 pub mod return_aspx;
 pub mod send_login;
 pub mod session_key;
+pub mod totp;
 pub mod totp_challenge;
 pub mod tw_regular;
 
@@ -40,6 +41,7 @@ pub use index::{get_login_index, LoginIndex};
 pub use return_aspx::post_return_aspx;
 pub use send_login::send_login;
 pub use session_key::get_session_key;
+pub use totp::login_totp;
 pub use totp_challenge::TotpChallenge;
 pub use tw_regular::login_tw_regular;
 

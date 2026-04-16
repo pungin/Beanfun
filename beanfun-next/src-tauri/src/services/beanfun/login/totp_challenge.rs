@@ -78,12 +78,7 @@ use crate::core::parser::ViewStateForm;
 /// body contains a `totpLoginBtn` form; consumed by `login_totp`.
 /// All fields are crate-private so evolving the struct (e.g. adding a
 /// service-code field later) is a non-breaking change.
-///
-/// `#[allow(dead_code)]` covers the fields that are only consumed by
-/// the TOTP orchestrator (chunk 3.3.3) — they're written here but not
-/// read anywhere yet.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct TotpChallenge {
     /// URL the TOTP code POST must target. For the HK Regular flow
     /// this is the same `id-pass_form_newBF.aspx?otp1=…` URL that was
