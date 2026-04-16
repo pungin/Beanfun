@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>beanfun! Next — 關於</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root { --primary:#954A00; --primary-container:#FF8201; --on-primary:#FFFFFF; --on-surface:#221a11; --on-surface-variant:#54443a; }
+  body { font-family:'Plus Jakarta Sans','Inter',sans-serif; background: radial-gradient(1200px 800px at 10% -10%, color-mix(in srgb, var(--primary-container) 30%, transparent), transparent 60%), radial-gradient(900px 700px at 110% 110%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%), linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%); color: var(--on-surface); min-height:100vh; }
+  .glass-panel { background: rgba(255,255,255,.55); backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4); border:1px solid rgba(255,255,255,.6); border-radius:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 10px 30px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04); }
+  .glass-card { background: rgba(255,255,255,.7); backdrop-filter: blur(20px) saturate(1.2); border:1px solid rgba(255,255,255,.8); border-radius:10px; }
+  .btn-gradient { background: linear-gradient(135deg, color-mix(in srgb, var(--primary-container) 85%, white 15%), color-mix(in srgb, var(--primary) 92%, black 8%)); color: var(--on-primary); border-radius:8px; padding:10px 18px; font-weight:600; border:1px solid color-mix(in srgb, var(--primary) 50%, transparent); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent); }
+  .btn-secondary { background: rgba(255,255,255,.6); border:1px solid rgba(0,0,0,.08); color: var(--on-surface); border-radius:8px; padding:10px 18px; font-weight:500; }
+  .btn-secondary:hover { background: rgba(255,255,255,.85); }
+  .logo-hero { width: 112px; height: 112px; border-radius: 28px; background: linear-gradient(135deg, var(--primary-container), var(--primary)); display: grid; place-items: center; color: var(--on-primary); box-shadow: 0 16px 40px color-mix(in srgb, var(--primary) 40%, transparent); }
+  .link-row { padding: 12px 14px; border-radius: 8px; transition: background .15s ease; cursor: pointer; }
+  .link-row:hover { background: color-mix(in srgb, var(--primary-container) 15%, transparent); }
+</style>
+</head>
+<body>
+
+<div class="min-h-screen grid place-items-center p-8">
+  <div class="glass-panel w-[560px] overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-2 border-b border-white/40">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-[20px]" style="color: var(--primary);">info</span>
+        <span class="text-sm font-semibold">關於 beanfun! Next</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-black/5"><span class="material-symbols-outlined text-[18px]">minimize</span></button>
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-red-500/80 hover:text-white"><span class="material-symbols-outlined text-[18px]">close</span></button>
+      </div>
+    </div>
+
+    <div class="p-8 flex flex-col items-center">
+      <div class="logo-hero">
+        <span class="material-symbols-outlined" style="font-size: 64px;">coffee</span>
+      </div>
+      <h1 class="text-3xl font-extrabold tracking-tight mt-5">beanfun! Next</h1>
+      <div class="text-sm mt-1 font-mono" style="color: var(--on-surface-variant);">v5.9.0.2604171200</div>
+
+      <div class="glass-card w-full mt-5 p-4">
+        <div class="grid grid-cols-2 gap-y-3 gap-x-6 text-sm">
+          <div style="color: var(--on-surface-variant);">更新頻道</div>
+          <div class="font-semibold flex items-center gap-2">Stable
+            <span class="text-[10px] px-2 py-0.5 rounded-full" style="background: color-mix(in srgb, var(--primary-container) 35%, transparent); color: var(--primary);">最新</span>
+          </div>
+          <div style="color: var(--on-surface-variant);">前端框架</div>
+          <div class="font-semibold">Vue 3 + Element Plus</div>
+          <div style="color: var(--on-surface-variant);">後端 / Shell</div>
+          <div class="font-semibold">Rust + Tauri v2</div>
+          <div style="color: var(--on-surface-variant);">平台</div>
+          <div class="font-semibold">Windows 10 / 11 (x64)</div>
+          <div style="color: var(--on-surface-variant);">授權</div>
+          <div class="font-semibold">MIT License</div>
+        </div>
+      </div>
+
+      <div class="w-full mt-5">
+        <div class="text-xs font-semibold uppercase tracking-wider mb-2" style="color: var(--on-surface-variant);">連結</div>
+        <div class="space-y-1">
+          <div class="link-row flex items-center gap-3">
+            <span class="material-symbols-outlined" style="color: var(--primary);">link</span>
+            <div class="flex-1">
+              <div class="text-sm font-semibold">GitHub 專案頁</div>
+              <div class="text-xs" style="color: var(--on-surface-variant);">github.com/pungin/beanfun</div>
+            </div>
+            <span class="material-symbols-outlined text-[18px]" style="color: var(--on-surface-variant);">open_in_new</span>
+          </div>
+          <div class="link-row flex items-center gap-3">
+            <span class="material-symbols-outlined" style="color: var(--primary);">bug_report</span>
+            <div class="flex-1">
+              <div class="text-sm font-semibold">回報問題 / 功能建議</div>
+              <div class="text-xs" style="color: var(--on-surface-variant);">Issues &amp; discussions</div>
+            </div>
+            <span class="material-symbols-outlined text-[18px]" style="color: var(--on-surface-variant);">open_in_new</span>
+          </div>
+          <div class="link-row flex items-center gap-3">
+            <span class="material-symbols-outlined" style="color: var(--primary);">group</span>
+            <div class="flex-1">
+              <div class="text-sm font-semibold">貢獻者</div>
+              <div class="text-xs" style="color: var(--on-surface-variant);">@pungin、社群 contributors</div>
+            </div>
+            <span class="material-symbols-outlined text-[18px]" style="color: var(--on-surface-variant);">chevron_right</span>
+          </div>
+          <div class="link-row flex items-center gap-3">
+            <span class="material-symbols-outlined" style="color: var(--primary);">policy</span>
+            <div class="flex-1">
+              <div class="text-sm font-semibold">第三方授權聲明</div>
+              <div class="text-xs" style="color: var(--on-surface-variant);">OSS licenses</div>
+            </div>
+            <span class="material-symbols-outlined text-[18px]" style="color: var(--on-surface-variant);">chevron_right</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="w-full flex gap-3 mt-6">
+        <button class="btn-secondary flex-1 flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">content_copy</span>複製版本資訊
+        </button>
+        <button class="btn-gradient flex-1 flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">system_update</span>檢查更新
+        </button>
+      </div>
+
+      <div class="text-xs mt-6 text-center" style="color: var(--on-surface-variant);">
+        本軟體非 Gamania 官方出品，使用前請自行評估風險。
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

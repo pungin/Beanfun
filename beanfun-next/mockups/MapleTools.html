@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-Hant">
+<head>
+<meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>beanfun! Next — 楓之谷工具箱</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root { --primary:#954A00; --primary-container:#FF8201; --on-primary:#FFFFFF; --on-surface:#221a11; --on-surface-variant:#54443a; }
+  body { font-family:'Plus Jakarta Sans',sans-serif; background: radial-gradient(1200px 800px at 10% -10%, color-mix(in srgb, var(--primary-container) 30%, transparent), transparent 60%), radial-gradient(900px 700px at 110% 110%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%), linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%); color: var(--on-surface); min-height:100vh; }
+  .glass-panel { background: rgba(255,255,255,.55); backdrop-filter: blur(30px) saturate(1.4); border:1px solid rgba(255,255,255,.6); border-radius:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 10px 30px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04); }
+  .tool-card { background: rgba(255,255,255,.7); backdrop-filter: blur(20px) saturate(1.2); border:1px solid rgba(255,255,255,.85); border-radius:12px; padding:20px; cursor:pointer; transition: transform .18s ease, box-shadow .2s ease, background .15s ease; display: flex; flex-direction: column; gap: 10px; }
+  .tool-card:hover { transform: translateY(-3px); background: rgba(255,255,255,.9); box-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 20%, transparent); }
+  .tool-icon { width: 52px; height: 52px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-container), var(--primary)); color: var(--on-primary); display: grid; place-items: center; box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 35%, transparent); }
+  .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,.06); color: var(--on-surface-variant); }
+  .chip-new { background: color-mix(in srgb, var(--primary-container) 30%, transparent); color: var(--primary); font-weight:600; }
+</style>
+</head>
+<body>
+
+<div class="min-h-screen p-8 grid place-items-center">
+  <div class="glass-panel w-[820px] overflow-hidden">
+    <div class="px-6 py-4 flex items-center justify-between border-b border-white/40" style="background: linear-gradient(90deg, color-mix(in srgb, var(--primary-container) 22%, transparent), transparent);">
+      <div class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-[28px]" style="color: var(--primary);">build</span>
+        <div>
+          <h1 class="text-lg font-extrabold leading-tight">楓之谷工具箱</h1>
+          <p class="text-xs" style="color: var(--on-surface-variant);">計算、模擬、分析你的角色配置</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-black/5"><span class="material-symbols-outlined text-[18px]">minimize</span></button>
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-red-500/80 hover:text-white"><span class="material-symbols-outlined text-[18px]">close</span></button>
+      </div>
+    </div>
+
+    <div class="p-6 grid grid-cols-3 gap-4">
+      <div class="tool-card">
+        <div class="flex items-center justify-between">
+          <div class="tool-icon"><span class="material-symbols-outlined text-[28px]">grid_view</span></div>
+          <span class="chip chip-new">常用</span>
+        </div>
+        <div>
+          <div class="font-bold text-base">核心計算機</div>
+          <p class="text-xs mt-1" style="color: var(--on-surface-variant);">V Matrix 核心強化、升級素材模擬、最終配置規劃。</p>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="flex items-center justify-between">
+          <div class="tool-icon"><span class="material-symbols-outlined text-[28px]">shield</span></div>
+          <span class="chip chip-new">常用</span>
+        </div>
+        <div>
+          <div class="font-bold text-base">裝備計算機</div>
+          <p class="text-xs mt-1" style="color: var(--on-surface-variant);">星力、潛能、附加潛能、魂、折開、鍛造總體期望值。</p>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="flex items-center justify-between">
+          <div class="tool-icon"><span class="material-symbols-outlined text-[28px]">query_stats</span></div>
+          <span class="chip">進階</span>
+        </div>
+        <div>
+          <div class="font-bold text-base">傷害公式</div>
+          <p class="text-xs mt-1" style="color: var(--on-surface-variant);">主副屬性 × BUFF × 心情值輸出的分析拆解。</p>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="flex items-center justify-between">
+          <div class="tool-icon"><span class="material-symbols-outlined text-[28px]">auto_awesome</span></div>
+          <span class="chip">新版</span>
+        </div>
+        <div>
+          <div class="font-bold text-base">技能模擬器</div>
+          <p class="text-xs mt-1" style="color: var(--on-surface-variant);">點數分配模擬、職業切換對照。</p>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="flex items-center justify-between">
+          <div class="tool-icon"><span class="material-symbols-outlined text-[28px]">diversity_3</span></div>
+          <span class="chip">連動</span>
+        </div>
+        <div>
+          <div class="font-bold text-base">連結技計算</div>
+          <p class="text-xs mt-1" style="color: var(--on-surface-variant);">Link Skill 收益排序、練功優先度建議。</p>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="flex items-center justify-between">
+          <div class="tool-icon"><span class="material-symbols-outlined text-[28px]">workspace_premium</span></div>
+          <span class="chip">社群</span>
+        </div>
+        <div>
+          <div class="font-bold text-base">角色配置匯出</div>
+          <p class="text-xs mt-1" style="color: var(--on-surface-variant);">一鍵匯出 JSON / 複製到 Discord 分享。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

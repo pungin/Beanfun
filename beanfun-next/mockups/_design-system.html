@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>beanfun! Next — Design System</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --surface: #faf8f6;
+    --on-surface: #221a11;
+    --on-surface-variant: #54443a;
+    --outline: #85736a;
+    --outline-variant: #d7c3b6;
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --danger: #ba1a1a;
+    --success: #3f6b2a;
+  }
+
+  /* 8 theme presets — each with primary / primary-container / on-primary */
+  [data-theme="orange"]    { --primary: #954A00; --primary-container: #FF8201; --on-primary: #FFFFFF; }
+  [data-theme="green"]     { --primary: #4D6A23; --primary-container: #B6DE8E; --on-primary: #FFFFFF; }
+  [data-theme="lightblue"] { --primary: #0B6E99; --primary-container: #ADD8E6; --on-primary: #FFFFFF; }
+  [data-theme="pink"]      { --primary: #B04A70; --primary-container: #FFC0CB; --on-primary: #FFFFFF; }
+  [data-theme="gold"]      { --primary: #7D6608; --primary-container: #FFD700; --on-primary: #1A1A1A; }
+  [data-theme="silver"]    { --primary: #5E5E5E; --primary-container: #C0C0C0; --on-primary: #FFFFFF; }
+  [data-theme="black"]     { --primary: #1A1A1A; --primary-container: #3A3A3A; --on-primary: #FFFFFF; }
+  [data-theme="white"]     { --primary: #555555; --primary-container: #F0F0F0; --on-primary: #FFFFFF; }
+
+  body {
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    background:
+      radial-gradient(1200px 800px at 10% -10%, color-mix(in srgb, var(--primary-container) 30%, transparent) 0%, transparent 60%),
+      radial-gradient(900px 700px at 110% 110%, color-mix(in srgb, var(--primary) 22%, transparent) 0%, transparent 55%),
+      linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%);
+    color: var(--on-surface);
+    min-height: 100vh;
+  }
+
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(30px) saturate(1.4);
+    -webkit-backdrop-filter: blur(30px) saturate(1.4);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.7),
+      0 10px 30px rgba(0, 0, 0, 0.08),
+      0 2px 6px rgba(0, 0, 0, 0.04);
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+
+  .btn-gradient {
+    background: linear-gradient(135deg,
+      color-mix(in srgb, var(--primary-container) 85%, white 15%),
+      color-mix(in srgb, var(--primary) 92%, black 8%));
+    color: var(--on-primary);
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-weight: 600;
+    border: 1px solid color-mix(in srgb, var(--primary) 50%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
+      0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent);
+    transition: transform 150ms ease, box-shadow 200ms ease, filter 150ms ease;
+  }
+  .btn-gradient:hover { filter: brightness(1.05); box-shadow: 0 6px 14px color-mix(in srgb, var(--primary) 35%, transparent); }
+  .btn-gradient:active { transform: translateY(1px); filter: brightness(0.96); }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    color: var(--on-surface);
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-weight: 500;
+    transition: background 150ms ease;
+  }
+  .btn-secondary:hover { background: rgba(255, 255, 255, 0.85); }
+
+  /* Fluent underline input */
+  .fluent-input {
+    background: rgba(255, 255, 255, 0.5);
+    border: none;
+    border-bottom: 1px solid var(--outline);
+    border-radius: 6px 6px 0 0;
+    padding: 10px 12px;
+    width: 100%;
+    font-size: 14px;
+    color: var(--on-surface);
+    transition: border-color 200ms ease, background 200ms ease;
+    outline: none;
+  }
+  .fluent-input:hover { border-bottom-color: var(--on-surface); background: rgba(255, 255, 255, 0.7); }
+  .fluent-input:focus { border-bottom: 2px solid var(--primary-container); padding-bottom: 9px; background: rgba(255, 255, 255, 0.9); }
+
+  /* Reveal Highlight hover (radial gradient that follows cursor – static preview here) */
+  .reveal {
+    position: relative;
+    border-radius: 8px;
+    transition: background 150ms ease;
+  }
+  .reveal:hover {
+    background: radial-gradient(circle at center, color-mix(in srgb, var(--primary-container) 20%, transparent), transparent 70%);
+  }
+
+  /* Swatch card */
+  .swatch {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    transition: transform 180ms ease, box-shadow 200ms ease;
+  }
+  .swatch:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12); }
+  .swatch .primary-bar { background: var(--primary); height: 60px; }
+  .swatch .container-bar { background: var(--primary-container); height: 40px; }
+  .swatch .label { background: rgba(255, 255, 255, 0.75); padding: 10px 12px; font-weight: 600; }
+
+  .section-title { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 18px; color: var(--on-surface); }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.35); }
+</style>
+</head>
+<body data-theme="orange" class="p-10">
+
+<header class="max-w-6xl mx-auto mb-8">
+  <h1 class="text-3xl font-extrabold tracking-tight">beanfun! Next — Design System</h1>
+  <p class="text-sm mt-1" style="color: var(--on-surface-variant);">Glassmorphism + Fluent Design + Soft Depth. Runtime-switchable theme. Light mode only.</p>
+</header>
+
+<!-- 8 Theme Swatches -->
+<section class="max-w-6xl mx-auto mb-10">
+  <h2 class="section-title mb-4">Theme Colors（點擊切換全頁預覽）</h2>
+  <div class="grid grid-cols-4 gap-4">
+    <div class="swatch" onclick="document.body.dataset.theme='orange'">
+      <div class="primary-bar"></div><div class="container-bar"></div>
+      <div class="label flex justify-between"><span>Orange</span><span class="text-xs font-normal opacity-60">#FF8201</span></div>
+    </div>
+    <div class="swatch" onclick="document.body.dataset.theme='green'">
+      <div class="primary-bar"></div><div class="container-bar"></div>
+      <div class="label flex justify-between"><span>Green</span><span class="text-xs font-normal opacity-60">#B6DE8E</span></div>
+    </div>
+    <div class="swatch" onclick="document.body.dataset.theme='lightblue'">
+      <div class="primary-bar"></div><div class="container-bar"></div>
+      <div class="label flex justify-between"><span>Light Blue</span><span class="text-xs font-normal opacity-60">#ADD8E6</span></div>
+    </div>
+    <div class="swatch" onclick="document.body.dataset.theme='pink'">
+      <div class="primary-bar"></div><div class="container-bar"></div>
+      <div class="label flex justify-between"><span>Pink</span><span class="text-xs font-normal opacity-60">#FFC0CB</span></div>
+    </div>
+    <div class="swatch" onclick="document.body.dataset.theme='gold'">
+      <div class="primary-bar"></div><div class="container-bar"></div>
+      <div class="label flex justify-between"><span>Gold</span><span class="text-xs font-normal opacity-60">#FFD700</span></div>
+    </div>
+    <div class="swatch" onclick="document.body.dataset.theme='silver'">
+      <div class="primary-bar"></div><div class="container-bar"></div>
+      <div class="label flex justify-between"><span>Silver</span><span class="text-xs font-normal opacity-60">#C0C0C0</span></div>
+    </div>
+    <div class="swatch" onclick="document.body.dataset.theme='black'">
+      <div class="primary-bar"></div><div class="container-bar"></div>
+      <div class="label flex justify-between"><span>Black</span><span class="text-xs font-normal opacity-60">#000000</span></div>
+    </div>
+    <div class="swatch" onclick="document.body.dataset.theme='white'">
+      <div class="primary-bar"></div><div class="container-bar"></div>
+      <div class="label flex justify-between"><span>White</span><span class="text-xs font-normal opacity-60">#FFFFFF</span></div>
+    </div>
+  </div>
+  <p class="text-xs mt-4" style="color: var(--on-surface-variant);">
+    第 9 個選項（自訂 hex）在 Settings 頁面由顏色對話框輸入，runtime 依 HSL 推算：primary ← seed darken 35% L, primary-container ← seed，若 seed 明度 &gt; 80% 則 on-primary 使用 <code>#1A1A1A</code>。
+  </p>
+</section>
+
+<!-- Utility Preview -->
+<section class="max-w-6xl mx-auto mb-10">
+  <h2 class="section-title mb-4">Core Utilities</h2>
+  <div class="grid grid-cols-2 gap-6">
+    <!-- Glass Panel -->
+    <div class="glass-panel p-6">
+      <h3 class="font-bold mb-2">.glass-panel</h3>
+      <p class="text-sm" style="color: var(--on-surface-variant);">主面板容器：30px blur + 1.4 saturate，頂部 1px 亮色 highlight，外陰影 10/30 + 2/6 疊層。</p>
+    </div>
+    <!-- Glass Card -->
+    <div class="glass-card p-6">
+      <h3 class="font-bold mb-2">.glass-card</h3>
+      <p class="text-sm" style="color: var(--on-surface-variant);">列表項 / 次級卡片：20px blur + 1.2 saturate，白 70% 底，薄陰影。</p>
+    </div>
+    <!-- Buttons -->
+    <div class="glass-panel p-6">
+      <h3 class="font-bold mb-3">Buttons</h3>
+      <div class="flex gap-3 flex-wrap items-center">
+        <button class="btn-gradient">Gradient Primary</button>
+        <button class="btn-secondary">Secondary</button>
+        <button class="reveal px-4 py-2 text-sm" style="color: var(--primary);">Ghost Reveal</button>
+        <button class="btn-gradient" style="opacity: 0.5; cursor: not-allowed;">Disabled</button>
+      </div>
+    </div>
+    <!-- Inputs -->
+    <div class="glass-panel p-6">
+      <h3 class="font-bold mb-3">Fluent Inputs</h3>
+      <div class="space-y-3">
+        <input class="fluent-input" placeholder="帳號 / Account" />
+        <input class="fluent-input" type="password" placeholder="密碼 / Password" value="••••••••" />
+        <input class="fluent-input" placeholder="Focus me to see underline highlight" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Design Tokens -->
+<section class="max-w-6xl mx-auto mb-10">
+  <h2 class="section-title mb-4">Design Tokens</h2>
+  <div class="glass-panel p-6 text-sm font-mono leading-7" style="color: var(--on-surface);">
+<pre style="white-space: pre-wrap;">
+/* Typography */
+font-family: 'Plus Jakarta Sans', 'Inter', 'Segoe UI Variable', sans-serif;
+title      : 28px / 700
+heading    : 18px / 700
+body       : 14px / 400
+caption    : 12px / 500
+
+/* Radius */
+panel: 12px    card: 10px    button: 8px    input: 6px 6px 0 0    avatar: 50%
+
+/* Shadow */
+panel     : 0 10px 30px rgba(0,0,0,.08) + 0 2px 6px rgba(0,0,0,.04)
+card      : 0 4px 12px  rgba(0,0,0,.05)
+elevated  : 0 20px 48px rgba(0,0,0,.18) + 0 4px 12px rgba(0,0,0,.10)
+button    : 0 4px 10px  color-mix(primary 25%, transparent)
+
+/* Blur */
+mica      : blur(60px) saturate(1.8)  — 視窗背景（預留 Tauri 原生）
+acrylic   : blur(30px) saturate(1.4)  — 主 .glass-panel
+card      : blur(20px) saturate(1.2)  — .glass-card
+hover     : blur(16px) saturate(1.1)  — Reveal Highlight 溢光
+
+/* Motion */
+fast    : 150ms cubic-bezier(0.2, 0, 0, 1)
+normal  : 200ms cubic-bezier(0.2, 0, 0, 1)
+emphasized : 400ms cubic-bezier(0.2, 0, 0, 1)
+page-enter : opacity 0→1 + translateY(8px→0) over 200ms
+
+/* Semantic Colors (fixed) */
+danger   : #BA1A1A
+success  : #3F6B2A
+warning  : #8B5E00
+info     : var(--primary)
+</pre>
+  </div>
+</section>
+
+<!-- Runtime color override helper -->
+<section class="max-w-6xl mx-auto mb-10">
+  <h2 class="section-title mb-4">自訂 Hex（示範）</h2>
+  <div class="glass-panel p-6">
+    <div class="flex items-center gap-3">
+      <input id="custom-hex" type="color" value="#FF8201" class="w-16 h-10 rounded cursor-pointer" />
+      <code class="text-sm" id="hex-label">#FF8201</code>
+      <button class="btn-secondary" onclick="applyCustom()">套用到全頁</button>
+    </div>
+    <p class="text-xs mt-3" style="color: var(--on-surface-variant);">套用後整頁 gradient / button / focus 線 / 漸層背景會即時變色；Settings 的自訂色走同一條管道。</p>
+  </div>
+</section>
+
+<script>
+  function hslLighten(hex, deltaL) {
+    const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    let h,s, l=(max+min)/2;
+    if (max===min) { h=s=0; } else {
+      const d = max-min;
+      s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+      switch(max) {
+        case r: h = (g-b)/d + (g<b?6:0); break;
+        case g: h = (b-r)/d + 2; break;
+        default: h = (r-g)/d + 4;
+      }
+      h /= 6;
+    }
+    l = Math.min(1, Math.max(0, l + deltaL));
+    const hue2rgb = (p,q,t) => { if (t<0) t+=1; if (t>1) t-=1; if (t<1/6) return p+(q-p)*6*t; if (t<1/2) return q; if (t<2/3) return p+(q-p)*(2/3-t)*6; return p; };
+    const q = l < 0.5 ? l*(1+s) : l+s-l*s; const p = 2*l-q;
+    const R = hue2rgb(p,q,h+1/3), G = hue2rgb(p,q,h), B = hue2rgb(p,q,h-1/3);
+    const toHex = x => Math.round(x*255).toString(16).padStart(2,'0');
+    return '#' + toHex(R) + toHex(G) + toHex(B);
+  }
+  function applyCustom() {
+    const hex = document.getElementById('custom-hex').value;
+    document.getElementById('hex-label').textContent = hex.toUpperCase();
+    const darker = hslLighten(hex, -0.35);
+    document.body.style.setProperty('--primary-container', hex);
+    document.body.style.setProperty('--primary', darker);
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+    document.body.style.setProperty('--on-primary', lum > 0.8 ? '#1A1A1A' : '#FFFFFF');
+    document.body.removeAttribute('data-theme');
+  }
+  document.getElementById('custom-hex').addEventListener('input', e => {
+    document.getElementById('hex-label').textContent = e.target.value.toUpperCase();
+  });
+</script>
+
+</body>
+</html>

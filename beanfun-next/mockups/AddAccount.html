@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>beanfun! Next — 新增帳號</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root { --primary:#954A00; --primary-container:#FF8201; --on-primary:#FFFFFF; --on-surface:#221a11; --on-surface-variant:#54443a; --outline:#85736a; }
+  body { font-family:'Plus Jakarta Sans',sans-serif; background: radial-gradient(1200px 800px at 10% -10%, color-mix(in srgb, var(--primary-container) 30%, transparent), transparent 60%), radial-gradient(900px 700px at 110% 110%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%), linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%); color: var(--on-surface); min-height:100vh; }
+  .glass-panel { background: rgba(255,255,255,.55); backdrop-filter: blur(30px) saturate(1.4); border:1px solid rgba(255,255,255,.6); border-radius:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 20px 48px rgba(0,0,0,.18), 0 4px 12px rgba(0,0,0,.10); }
+  .btn-gradient { background: linear-gradient(135deg, color-mix(in srgb, var(--primary-container) 85%, white 15%), color-mix(in srgb, var(--primary) 92%, black 8%)); color: var(--on-primary); border-radius:8px; padding:10px 18px; font-weight:600; border:1px solid color-mix(in srgb, var(--primary) 50%, transparent); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent); }
+  .btn-secondary { background: rgba(255,255,255,.6); border:1px solid rgba(0,0,0,.08); color: var(--on-surface); border-radius:8px; padding:10px 18px; font-weight:500; }
+  .btn-secondary:hover { background: rgba(255,255,255,.85); }
+  .fluent-input { background: rgba(255,255,255,.5); border:none; border-bottom:1px solid var(--outline); border-radius:6px 6px 0 0; padding:10px 12px; width:100%; font-size:14px; color: var(--on-surface); outline:none; transition: all .2s ease; }
+  .fluent-input:hover { border-bottom-color: var(--on-surface); background: rgba(255,255,255,.7); }
+  .fluent-input:focus { border-bottom:2px solid var(--primary-container); padding-bottom:9px; background: rgba(255,255,255,.9); }
+  .fluent-input-wrap { position: relative; }
+  .fluent-input-wrap .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--on-surface-variant); }
+  .fluent-input.with-icon { padding-left: 38px; }
+</style>
+</head>
+<body>
+
+<div class="min-h-screen grid place-items-center p-8">
+  <div class="glass-panel w-[440px] overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-2 border-b border-white/40" style="background: linear-gradient(90deg, color-mix(in srgb, var(--primary-container) 22%, transparent), transparent);">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-[20px]" style="color: var(--primary);">person_add</span>
+        <span class="text-sm font-semibold">新增帳號</span>
+      </div>
+      <button class="w-8 h-8 grid place-items-center rounded hover:bg-red-500/80 hover:text-white"><span class="material-symbols-outlined text-[18px]">close</span></button>
+    </div>
+
+    <div class="p-6">
+      <p class="text-sm" style="color: var(--on-surface-variant);">將 beanfun! 帳號加入本機，日後可直接從主頁快速登入。</p>
+
+      <div class="mt-5 space-y-4">
+        <label class="block">
+          <span class="text-xs font-semibold" style="color: var(--on-surface-variant);">帳號</span>
+          <div class="fluent-input-wrap mt-1">
+            <span class="material-symbols-outlined icon text-[18px]">person</span>
+            <input class="fluent-input with-icon" placeholder="輸入 beanfun! 帳號" autofocus />
+          </div>
+        </label>
+
+        <label class="block">
+          <span class="text-xs font-semibold" style="color: var(--on-surface-variant);">密碼</span>
+          <div class="fluent-input-wrap mt-1">
+            <span class="material-symbols-outlined icon text-[18px]">lock</span>
+            <input class="fluent-input with-icon" type="password" placeholder="••••••••" />
+          </div>
+        </label>
+
+        <label class="block">
+          <span class="text-xs font-semibold" style="color: var(--on-surface-variant);">備註（選填）</span>
+          <div class="fluent-input-wrap mt-1">
+            <span class="material-symbols-outlined icon text-[18px]">edit_note</span>
+            <input class="fluent-input with-icon" placeholder="顯示名稱，例如：主號" />
+          </div>
+        </label>
+
+        <label class="flex items-center gap-2 text-sm select-none cursor-pointer">
+          <input type="checkbox" class="rounded" style="accent-color: var(--primary);" checked />
+          <span>記住密碼（DPAPI 加密至本機）</span>
+        </label>
+      </div>
+
+      <div class="mt-5 px-3 py-2 rounded-lg flex items-start gap-2 text-xs" style="background: rgba(0,0,0,.04); color: var(--on-surface-variant);">
+        <span class="material-symbols-outlined text-[16px]" style="color: var(--primary);">shield</span>
+        <span>密碼僅在目前 Windows 使用者之下可解密，不會上傳雲端。</span>
+      </div>
+
+      <div class="flex gap-3 mt-5 justify-end">
+        <button class="btn-secondary">取消</button>
+        <button class="btn-gradient flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">save</span>儲存
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

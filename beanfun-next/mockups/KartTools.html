@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-Hant">
+<head>
+<meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>beanfun! Next — 跑跑卡丁車工具</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root { --primary:#954A00; --primary-container:#FF8201; --on-primary:#FFFFFF; --on-surface:#221a11; --on-surface-variant:#54443a; }
+  body { font-family:'Plus Jakarta Sans',sans-serif; background: radial-gradient(1200px 800px at 10% -10%, color-mix(in srgb, var(--primary-container) 30%, transparent), transparent 60%), radial-gradient(900px 700px at 110% 110%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%), linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%); color: var(--on-surface); min-height:100vh; }
+  .glass-panel { background: rgba(255,255,255,.55); backdrop-filter: blur(30px) saturate(1.4); border:1px solid rgba(255,255,255,.6); border-radius:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 10px 30px rgba(0,0,0,.08); }
+  .glass-card { background: rgba(255,255,255,.7); border:1px solid rgba(255,255,255,.8); border-radius:10px; }
+  .btn-gradient { background: linear-gradient(135deg, color-mix(in srgb, var(--primary-container) 85%, white 15%), color-mix(in srgb, var(--primary) 92%, black 8%)); color: var(--on-primary); border-radius:8px; padding:8px 14px; font-weight:600; border:1px solid color-mix(in srgb, var(--primary) 50%, transparent); font-size:13px; }
+  .btn-secondary { background: rgba(255,255,255,.6); border:1px solid rgba(0,0,0,.08); color: var(--on-surface); border-radius:8px; padding:8px 14px; font-weight:500; font-size:13px; }
+  .btn-secondary:hover { background: rgba(255,255,255,.85); }
+  .tab { padding: 8px 14px; font-size: 13px; font-weight: 500; border-radius: 8px; cursor: pointer; transition: all .15s ease; color: var(--on-surface-variant); }
+  .tab:hover { background: rgba(0,0,0,.05); }
+  .tab.active { background: linear-gradient(135deg, var(--primary-container), var(--primary)); color: var(--on-primary); font-weight: 600; box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent); }
+  .leaderboard-row { display: grid; grid-template-columns: 36px 1fr 90px 80px; align-items: center; padding: 10px 12px; border-radius: 8px; transition: background .12s ease; }
+  .leaderboard-row:hover { background: color-mix(in srgb, var(--primary-container) 12%, transparent); }
+  .rank { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+  .rank.top1 { background: linear-gradient(135deg, #FFD700, #B8860B); color: white; }
+  .rank.top2 { background: linear-gradient(135deg, #C0C0C0, #808080); color: white; }
+  .rank.top3 { background: linear-gradient(135deg, #CD7F32, #8B4513); color: white; }
+  .rank.other { background: rgba(0,0,0,.08); color: var(--on-surface-variant); }
+</style>
+</head>
+<body>
+
+<div class="min-h-screen p-8 grid place-items-center">
+  <div class="glass-panel w-[760px] overflow-hidden">
+    <div class="px-6 py-4 flex items-center justify-between border-b border-white/40" style="background: linear-gradient(90deg, color-mix(in srgb, var(--primary-container) 22%, transparent), transparent);">
+      <div class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-[28px]" style="color: var(--primary);">directions_car</span>
+        <div>
+          <h1 class="text-lg font-extrabold leading-tight">跑跑卡丁車工具</h1>
+          <p class="text-xs" style="color: var(--on-surface-variant);">賽道紀錄、組裝配置、競速排行榜</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-black/5"><span class="material-symbols-outlined text-[18px]">minimize</span></button>
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-red-500/80 hover:text-white"><span class="material-symbols-outlined text-[18px]">close</span></button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="px-6 pt-4 flex items-center gap-2">
+      <div class="tab active">我的紀錄</div>
+      <div class="tab">車輛配置</div>
+      <div class="tab">賽道排行</div>
+      <div class="tab">賽季統計</div>
+    </div>
+
+    <div class="p-6 grid grid-cols-3 gap-4">
+      <!-- Summary cards -->
+      <div class="glass-card p-4">
+        <div class="text-xs" style="color: var(--on-surface-variant);">目前等級</div>
+        <div class="mt-1 font-extrabold text-2xl" style="color: var(--primary);">Lv.58</div>
+        <div class="text-xs font-mono mt-1" style="color: var(--on-surface-variant);">總積分 124,532</div>
+      </div>
+      <div class="glass-card p-4">
+        <div class="text-xs" style="color: var(--on-surface-variant);">本週勝率</div>
+        <div class="mt-1 font-extrabold text-2xl" style="color: #3F6B2A;">68%</div>
+        <div class="text-xs font-mono mt-1" style="color: var(--on-surface-variant);">123 勝 / 58 負</div>
+      </div>
+      <div class="glass-card p-4">
+        <div class="text-xs" style="color: var(--on-surface-variant);">最佳圈速</div>
+        <div class="mt-1 font-extrabold text-2xl font-mono" style="color: var(--primary);">01:42.338</div>
+        <div class="text-xs font-mono mt-1" style="color: var(--on-surface-variant);">— 東京街道 —</div>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="px-6 pb-6">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-bold text-sm">東京街道（限時 · 本週）</div>
+        <button class="btn-secondary flex items-center gap-1">
+          <span class="material-symbols-outlined text-[16px]">refresh</span>重新整理
+        </button>
+      </div>
+      <div class="glass-card p-2">
+        <div class="leaderboard-row">
+          <div class="rank top1">1</div>
+          <div class="flex items-center gap-2"><span class="font-semibold">黑旋風</span><span class="text-xs" style="color: var(--on-surface-variant);">#TW</span></div>
+          <div class="font-mono text-sm" style="color: var(--primary);">01:38.012</div>
+          <div class="text-xs text-right" style="color: var(--on-surface-variant);">2h ago</div>
+        </div>
+        <div class="leaderboard-row">
+          <div class="rank top2">2</div>
+          <div class="flex items-center gap-2"><span class="font-semibold">極速少女</span><span class="text-xs" style="color: var(--on-surface-variant);">#TW</span></div>
+          <div class="font-mono text-sm">01:40.887</div>
+          <div class="text-xs text-right" style="color: var(--on-surface-variant);">5h ago</div>
+        </div>
+        <div class="leaderboard-row">
+          <div class="rank top3">3</div>
+          <div class="flex items-center gap-2"><span class="font-semibold">彎道大師</span><span class="text-xs" style="color: var(--on-surface-variant);">#TW</span></div>
+          <div class="font-mono text-sm">01:41.202</div>
+          <div class="text-xs text-right" style="color: var(--on-surface-variant);">1d ago</div>
+        </div>
+        <div class="leaderboard-row" style="background: color-mix(in srgb, var(--primary-container) 18%, transparent);">
+          <div class="rank other">14</div>
+          <div class="flex items-center gap-2"><span class="font-semibold">我 (dragonlord)</span><span class="text-xs px-1.5 rounded" style="background: var(--primary); color: var(--on-primary);">YOU</span></div>
+          <div class="font-mono text-sm">01:42.338</div>
+          <div class="text-xs text-right" style="color: var(--on-surface-variant);">just now</div>
+        </div>
+        <div class="leaderboard-row">
+          <div class="rank other">15</div>
+          <div class="flex items-center gap-2"><span class="font-semibold">starlight</span></div>
+          <div class="font-mono text-sm">01:42.901</div>
+          <div class="text-xs text-right" style="color: var(--on-surface-variant);">3h ago</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-Hant">
+<head>
+<meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>beanfun! Next — 核心計算機</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root { --primary:#954A00; --primary-container:#FF8201; --on-primary:#FFFFFF; --on-surface:#221a11; --on-surface-variant:#54443a; --outline:#85736a; }
+  body { font-family:'Plus Jakarta Sans',sans-serif; background: radial-gradient(1200px 800px at 10% -10%, color-mix(in srgb, var(--primary-container) 30%, transparent), transparent 60%), radial-gradient(900px 700px at 110% 110%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%), linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%); color: var(--on-surface); min-height:100vh; }
+  .glass-panel { background: rgba(255,255,255,.55); backdrop-filter: blur(30px) saturate(1.4); border:1px solid rgba(255,255,255,.6); border-radius:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 10px 30px rgba(0,0,0,.08); }
+  .glass-card { background: rgba(255,255,255,.7); border:1px solid rgba(255,255,255,.8); border-radius:10px; }
+  .btn-gradient { background: linear-gradient(135deg, color-mix(in srgb, var(--primary-container) 85%, white 15%), color-mix(in srgb, var(--primary) 92%, black 8%)); color: var(--on-primary); border-radius:8px; padding:10px 18px; font-weight:600; border:1px solid color-mix(in srgb, var(--primary) 50%, transparent); }
+  .btn-secondary { background: rgba(255,255,255,.6); border:1px solid rgba(0,0,0,.08); color: var(--on-surface); border-radius:8px; padding:10px 14px; font-weight:500; font-size:13px; }
+  .btn-secondary:hover { background: rgba(255,255,255,.85); }
+  .fluent-input { background: rgba(255,255,255,.5); border:none; border-bottom:1px solid var(--outline); border-radius:6px 6px 0 0; padding:8px 12px; width:100%; font-size:13px; color: var(--on-surface); outline:none; transition: all .2s ease; font-family: 'JetBrains Mono', monospace; }
+  .fluent-input:focus { border-bottom:2px solid var(--primary-container); padding-bottom:7px; background: rgba(255,255,255,.9); }
+  .core-slot { aspect-ratio: 1/1; border-radius: 10px; background: linear-gradient(135deg, color-mix(in srgb, var(--primary-container) 20%, white), white); border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent); padding: 10px; display: flex; flex-direction: column; justify-content: space-between; transition: all .15s ease; cursor: pointer; }
+  .core-slot:hover { border-color: color-mix(in srgb, var(--primary) 50%, transparent); box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 20%, transparent); }
+  .core-slot.empty { background: rgba(255,255,255,.4); border: 2px dashed rgba(0,0,0,.15); color: var(--on-surface-variant); display: grid; place-items: center; }
+  .progress-bar { height: 10px; background: rgba(0,0,0,.08); border-radius: 5px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary-container), var(--primary)); border-radius: 5px; }
+</style>
+</head>
+<body>
+
+<div class="min-h-screen p-8 grid place-items-center">
+  <div class="glass-panel w-[920px] overflow-hidden">
+    <div class="px-6 py-4 flex items-center justify-between border-b border-white/40" style="background: linear-gradient(90deg, color-mix(in srgb, var(--primary-container) 22%, transparent), transparent);">
+      <div class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-[28px]" style="color: var(--primary);">grid_view</span>
+        <div>
+          <h1 class="text-lg font-extrabold leading-tight">V Matrix 核心計算機</h1>
+          <p class="text-xs" style="color: var(--on-surface-variant);">最多 18 格 ／ 強化、升級素材需求估算</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-black/5"><span class="material-symbols-outlined text-[18px]">minimize</span></button>
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-red-500/80 hover:text-white"><span class="material-symbols-outlined text-[18px]">close</span></button>
+      </div>
+    </div>
+
+    <div class="p-6 grid grid-cols-[1fr_320px] gap-6">
+      <!-- Left: core grid -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold">目前配置 (3 / 18)</h2>
+          <div class="flex gap-2">
+            <button class="btn-secondary flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">upload</span>匯入</button>
+            <button class="btn-secondary flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">content_copy</span>分享</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-6 gap-2">
+          <div class="core-slot">
+            <div class="flex justify-between items-start">
+              <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--primary);">強化</span>
+              <span class="text-[10px] px-1.5 rounded font-mono" style="background: var(--primary); color: var(--on-primary);">Lv.25</span>
+            </div>
+            <div class="text-xs font-bold">劍氣縱橫</div>
+            <div class="text-[10px] font-mono" style="color: var(--on-surface-variant);">+35%</div>
+          </div>
+          <div class="core-slot">
+            <div class="flex justify-between items-start">
+              <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--primary);">強化</span>
+              <span class="text-[10px] px-1.5 rounded font-mono" style="background: var(--primary); color: var(--on-primary);">Lv.20</span>
+            </div>
+            <div class="text-xs font-bold">紅月斬</div>
+            <div class="text-[10px] font-mono" style="color: var(--on-surface-variant);">+30%</div>
+          </div>
+          <div class="core-slot">
+            <div class="flex justify-between items-start">
+              <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: #3F6B2A;">技能</span>
+              <span class="text-[10px] px-1.5 rounded font-mono" style="background: #3F6B2A; color: white;">Lv.1</span>
+            </div>
+            <div class="text-xs font-bold">蒼天之怒</div>
+            <div class="text-[10px] font-mono" style="color: var(--on-surface-variant);">— V Skill —</div>
+          </div>
+          <div class="core-slot empty"><span class="material-symbols-outlined">add</span></div>
+          <div class="core-slot empty"><span class="material-symbols-outlined">add</span></div>
+          <div class="core-slot empty"><span class="material-symbols-outlined">add</span></div>
+          <div class="core-slot empty"><span class="material-symbols-outlined">add</span></div>
+          <div class="core-slot empty"><span class="material-symbols-outlined">add</span></div>
+          <div class="core-slot empty"><span class="material-symbols-outlined">add</span></div>
+          <div class="core-slot empty"><span class="material-symbols-outlined">add</span></div>
+          <div class="core-slot empty"><span class="material-symbols-outlined">add</span></div>
+          <div class="core-slot empty"><span class="material-symbols-outlined">add</span></div>
+        </div>
+      </div>
+
+      <!-- Right: stats -->
+      <div class="space-y-4">
+        <div class="glass-card p-4">
+          <div class="text-xs font-semibold uppercase tracking-wider mb-2" style="color: var(--on-surface-variant);">升級至目標</div>
+          <div class="space-y-2">
+            <label class="block">
+              <span class="text-xs" style="color: var(--on-surface-variant);">目標等級</span>
+              <input class="fluent-input" value="Lv.25 全部" />
+            </label>
+          </div>
+          <div class="mt-3">
+            <div class="flex justify-between text-xs mb-1"><span>完成度</span><span class="font-mono">62%</span></div>
+            <div class="progress-bar"><div class="progress-bar-fill" style="width: 62%;"></div></div>
+          </div>
+        </div>
+
+        <div class="glass-card p-4">
+          <div class="text-xs font-semibold uppercase tracking-wider mb-2" style="color: var(--on-surface-variant);">期望素材</div>
+          <div class="grid grid-cols-2 gap-y-2 text-sm font-mono">
+            <div style="color: var(--on-surface-variant);">經驗核心片</div><div class="text-right font-bold">1,248</div>
+            <div style="color: var(--on-surface-variant);">碎片</div><div class="text-right font-bold">8,402</div>
+            <div style="color: var(--on-surface-variant);">楓幣</div><div class="text-right font-bold">2.4 億</div>
+          </div>
+        </div>
+
+        <button class="btn-gradient w-full flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">calculate</span>重新計算
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

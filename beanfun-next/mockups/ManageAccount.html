@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>beanfun! Next — 管理帳號</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root { --primary:#954A00; --primary-container:#FF8201; --on-primary:#FFFFFF; --on-surface:#221a11; --on-surface-variant:#54443a; --outline:#85736a; }
+  body { font-family:'Plus Jakarta Sans','Inter',sans-serif; background: radial-gradient(1200px 800px at 10% -10%, color-mix(in srgb, var(--primary-container) 30%, transparent), transparent 60%), radial-gradient(900px 700px at 110% 110%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%), linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%); color: var(--on-surface); min-height:100vh; }
+  .glass-panel { background: rgba(255,255,255,.55); backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4); border:1px solid rgba(255,255,255,.6); border-radius:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 10px 30px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04); }
+  .glass-card { background: rgba(255,255,255,.7); backdrop-filter: blur(20px) saturate(1.2); border:1px solid rgba(255,255,255,.8); border-radius:10px; }
+  .btn-gradient { background: linear-gradient(135deg, color-mix(in srgb, var(--primary-container) 85%, white 15%), color-mix(in srgb, var(--primary) 92%, black 8%)); color: var(--on-primary); border-radius:8px; padding:8px 14px; font-weight:600; border:1px solid color-mix(in srgb, var(--primary) 50%, transparent); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent); font-size:13px; }
+  .btn-secondary { background: rgba(255,255,255,.6); border:1px solid rgba(0,0,0,.08); color: var(--on-surface); border-radius:8px; padding:8px 14px; font-weight:500; font-size:13px; }
+  .btn-secondary:hover { background: rgba(255,255,255,.85); }
+  .btn-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 1px solid transparent; transition: all .15s ease; cursor: pointer; }
+  .btn-icon:hover { background: color-mix(in srgb, var(--primary-container) 15%, transparent); border-color: color-mix(in srgb, var(--primary) 20%, transparent); }
+  .btn-icon.danger:hover { background: rgba(186, 26, 26, .1); color: #BA1A1A; border-color: rgba(186, 26, 26, .3); }
+  .fluent-input { background: rgba(255,255,255,.5); border:none; border-bottom:1px solid var(--outline); border-radius:6px 6px 0 0; padding:8px 12px; font-size:13px; color: var(--on-surface); outline:none; transition: all .2s ease; }
+  .fluent-input:focus { border-bottom:2px solid var(--primary-container); padding-bottom:7px; background: rgba(255,255,255,.9); }
+  .row { transition: background .12s ease; }
+  .row:hover { background: color-mix(in srgb, var(--primary-container) 12%, transparent); }
+  .row.selected { background: linear-gradient(90deg, color-mix(in srgb, var(--primary-container) 25%, transparent), color-mix(in srgb, var(--primary-container) 8%, transparent)); border-left: 3px solid var(--primary); }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-container), var(--primary)); color: var(--on-primary); display: grid; place-items: center; font-weight: 700; font-size: 13px; box-shadow: 0 2px 6px color-mix(in srgb, var(--primary) 30%, transparent); }
+  .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,.06); color: var(--on-surface-variant); }
+  .chip.primary { background: color-mix(in srgb, var(--primary-container) 30%, transparent); color: var(--primary); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="min-h-screen p-8 grid place-items-center">
+  <div class="glass-panel w-[880px] overflow-hidden">
+    <!-- Header / drag area -->
+    <div class="px-6 py-4 flex items-center justify-between border-b border-white/40" style="background: linear-gradient(90deg, color-mix(in srgb, var(--primary-container) 20%, transparent), transparent);">
+      <div class="flex items-center gap-3">
+        <span class="material-symbols-outlined" style="color: var(--primary);">manage_accounts</span>
+        <div>
+          <h1 class="text-lg font-extrabold leading-tight">管理我的帳號</h1>
+          <p class="text-xs" style="color: var(--on-surface-variant);">新增 / 修改 / 刪除 儲存於本機（DPAPI 加密）的 beanfun! 帳號</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-black/5"><span class="material-symbols-outlined text-[18px]">minimize</span></button>
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-red-500/80 hover:text-white"><span class="material-symbols-outlined text-[18px]">close</span></button>
+      </div>
+    </div>
+
+    <div class="p-6">
+      <!-- Toolbar -->
+      <div class="flex items-center gap-2 mb-4">
+        <div class="relative flex-1 max-w-sm">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px]" style="color: var(--on-surface-variant);">search</span>
+          <input class="fluent-input !pl-9 w-full" placeholder="搜尋帳號或備註..." />
+        </div>
+        <div class="flex-1"></div>
+        <button class="btn-secondary flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[16px]">file_upload</span>匯入
+        </button>
+        <button class="btn-secondary flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[16px]">file_download</span>匯出
+        </button>
+        <button class="btn-gradient flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[16px]">add</span>新增帳號
+        </button>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="glass-card p-3 flex items-center gap-3">
+          <span class="material-symbols-outlined" style="color: var(--primary);">badge</span>
+          <div>
+            <div class="text-xs" style="color: var(--on-surface-variant);">總帳號數</div>
+            <div class="font-bold">5</div>
+          </div>
+        </div>
+        <div class="glass-card p-3 flex items-center gap-3">
+          <span class="material-symbols-outlined" style="color: var(--primary);">lock</span>
+          <div>
+            <div class="text-xs" style="color: var(--on-surface-variant);">加密演算法</div>
+            <div class="font-bold">DPAPI (CurrentUser)</div>
+          </div>
+        </div>
+        <div class="glass-card p-3 flex items-center gap-3">
+          <span class="material-symbols-outlined" style="color: var(--primary);">folder</span>
+          <div>
+            <div class="text-xs" style="color: var(--on-surface-variant);">儲存位置</div>
+            <div class="font-bold text-xs font-mono truncate">%APPDATA%\Beanfun\Users.dat</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="glass-card overflow-hidden">
+        <div class="grid grid-cols-[32px_1fr_1fr_100px_140px_120px] text-xs font-semibold px-4 py-3 border-b border-black/5" style="color: var(--on-surface-variant);">
+          <div></div>
+          <div>帳號</div>
+          <div>備註 / 顯示名稱</div>
+          <div>地區</div>
+          <div>最近登入</div>
+          <div class="text-right">操作</div>
+        </div>
+        <div>
+          <!-- Row 1 selected -->
+          <div class="row selected grid grid-cols-[32px_1fr_1fr_100px_140px_120px] items-center px-4 py-3 border-b border-black/5">
+            <span class="material-symbols-outlined text-[18px] cursor-grab" style="color: var(--on-surface-variant);">drag_indicator</span>
+            <div class="flex items-center gap-2"><div class="avatar">A</div><span class="font-semibold">alice_tw</span></div>
+            <div class="text-sm">主帳號（楓谷）</div>
+            <div><span class="chip primary">TW</span></div>
+            <div class="text-sm font-mono">2026-04-16 18:42</div>
+            <div class="flex items-center justify-end gap-1">
+              <span class="btn-icon" title="修改"><span class="material-symbols-outlined text-[18px]">edit</span></span>
+              <span class="btn-icon" title="複製帳號"><span class="material-symbols-outlined text-[18px]">content_copy</span></span>
+              <span class="btn-icon danger" title="刪除"><span class="material-symbols-outlined text-[18px]">delete</span></span>
+            </div>
+          </div>
+
+          <div class="row grid grid-cols-[32px_1fr_1fr_100px_140px_120px] items-center px-4 py-3 border-b border-black/5">
+            <span class="material-symbols-outlined text-[18px] cursor-grab" style="color: var(--on-surface-variant);">drag_indicator</span>
+            <div class="flex items-center gap-2"><div class="avatar">B</div><span class="font-semibold">bob_hk</span></div>
+            <div class="text-sm">HK 小號</div>
+            <div><span class="chip">HK</span></div>
+            <div class="text-sm font-mono">2026-04-15 23:11</div>
+            <div class="flex items-center justify-end gap-1">
+              <span class="btn-icon"><span class="material-symbols-outlined text-[18px]">edit</span></span>
+              <span class="btn-icon"><span class="material-symbols-outlined text-[18px]">content_copy</span></span>
+              <span class="btn-icon danger"><span class="material-symbols-outlined text-[18px]">delete</span></span>
+            </div>
+          </div>
+
+          <div class="row grid grid-cols-[32px_1fr_1fr_100px_140px_120px] items-center px-4 py-3 border-b border-black/5">
+            <span class="material-symbols-outlined text-[18px] cursor-grab" style="color: var(--on-surface-variant);">drag_indicator</span>
+            <div class="flex items-center gap-2"><div class="avatar">C</div><span class="font-semibold">cathy_tw</span></div>
+            <div class="text-sm italic" style="color: var(--on-surface-variant);">（未設定備註）</div>
+            <div><span class="chip primary">TW</span></div>
+            <div class="text-sm font-mono" style="color: var(--on-surface-variant);">—</div>
+            <div class="flex items-center justify-end gap-1">
+              <span class="btn-icon"><span class="material-symbols-outlined text-[18px]">edit</span></span>
+              <span class="btn-icon"><span class="material-symbols-outlined text-[18px]">content_copy</span></span>
+              <span class="btn-icon danger"><span class="material-symbols-outlined text-[18px]">delete</span></span>
+            </div>
+          </div>
+
+          <div class="row grid grid-cols-[32px_1fr_1fr_100px_140px_120px] items-center px-4 py-3 border-b border-black/5">
+            <span class="material-symbols-outlined text-[18px] cursor-grab" style="color: var(--on-surface-variant);">drag_indicator</span>
+            <div class="flex items-center gap-2"><div class="avatar">D</div><span class="font-semibold">david_tw</span></div>
+            <div class="text-sm">代練專用</div>
+            <div><span class="chip primary">TW</span></div>
+            <div class="text-sm font-mono">2026-03-28 09:08</div>
+            <div class="flex items-center justify-end gap-1">
+              <span class="btn-icon"><span class="material-symbols-outlined text-[18px]">edit</span></span>
+              <span class="btn-icon"><span class="material-symbols-outlined text-[18px]">content_copy</span></span>
+              <span class="btn-icon danger"><span class="material-symbols-outlined text-[18px]">delete</span></span>
+            </div>
+          </div>
+
+          <div class="row grid grid-cols-[32px_1fr_1fr_100px_140px_120px] items-center px-4 py-3">
+            <span class="material-symbols-outlined text-[18px] cursor-grab" style="color: var(--on-surface-variant);">drag_indicator</span>
+            <div class="flex items-center gap-2"><div class="avatar">E</div><span class="font-semibold">emma_tw</span></div>
+            <div class="text-sm">小孩用</div>
+            <div><span class="chip primary">TW</span></div>
+            <div class="text-sm font-mono">2026-02-11 20:04</div>
+            <div class="flex items-center justify-end gap-1">
+              <span class="btn-icon"><span class="material-symbols-outlined text-[18px]">edit</span></span>
+              <span class="btn-icon"><span class="material-symbols-outlined text-[18px]">content_copy</span></span>
+              <span class="btn-icon danger"><span class="material-symbols-outlined text-[18px]">delete</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer hint -->
+      <div class="mt-4 text-xs flex items-center gap-2" style="color: var(--on-surface-variant);">
+        <span class="material-symbols-outlined text-[16px]">tips_and_updates</span>
+        可拖曳最左側圖示調整順序；帳號密碼經 DPAPI 以「目前 Windows 使用者」為範圍加密，無法跨帳號或跨電腦讀取。
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

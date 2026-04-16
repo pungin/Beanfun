@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>beanfun! Next — Mockups 目錄</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --primary: #954A00;
+    --primary-container: #FF8201;
+    --on-primary: #FFFFFF;
+    --on-surface: #221a11;
+    --on-surface-variant: #54443a;
+  }
+  [data-theme="orange"]    { --primary:#954A00; --primary-container:#FF8201; --on-primary:#FFFFFF; }
+  [data-theme="green"]     { --primary:#4D6A23; --primary-container:#B6DE8E; --on-primary:#FFFFFF; }
+  [data-theme="lightblue"] { --primary:#0B6E99; --primary-container:#ADD8E6; --on-primary:#FFFFFF; }
+  [data-theme="pink"]      { --primary:#B04A70; --primary-container:#FFC0CB; --on-primary:#FFFFFF; }
+  [data-theme="gold"]      { --primary:#7D6608; --primary-container:#FFD700; --on-primary:#1A1A1A; }
+  [data-theme="silver"]    { --primary:#5E5E5E; --primary-container:#C0C0C0; --on-primary:#FFFFFF; }
+  [data-theme="black"]     { --primary:#1A1A1A; --primary-container:#3A3A3A; --on-primary:#FFFFFF; }
+  [data-theme="white"]     { --primary:#555555; --primary-container:#F0F0F0; --on-primary:#FFFFFF; }
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background:
+      radial-gradient(1200px 800px at 10% -10%, color-mix(in srgb, var(--primary-container) 30%, transparent), transparent 60%),
+      radial-gradient(900px 700px at 110% 110%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%),
+      linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%);
+    color: var(--on-surface);
+    min-height: 100vh;
+  }
+  .glass-panel {
+    background: rgba(255,255,255,.55);
+    backdrop-filter: blur(30px) saturate(1.4);
+    -webkit-backdrop-filter: blur(30px) saturate(1.4);
+    border: 1px solid rgba(255,255,255,.6);
+    border-radius: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 10px 30px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04);
+  }
+  .card {
+    background: rgba(255,255,255,.7);
+    backdrop-filter: blur(20px) saturate(1.2);
+    border: 1px solid rgba(255,255,255,.85);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex; gap: 12px; align-items: flex-start;
+    transition: transform .18s ease, box-shadow .22s ease, background .15s ease;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    background: rgba(255,255,255,.9);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--primary) 22%, transparent);
+  }
+  .card.highlight {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary-container) 25%, white), white);
+    border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+  .card-icon {
+    flex: 0 0 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary-container), var(--primary));
+    color: var(--on-primary);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 30%, transparent);
+  }
+  .card-body { flex: 1 1 auto; min-width: 0; }
+  .card-title { font-weight: 700; font-size: 14px; line-height: 1.35; }
+  .card-desc { font-size: 12px; line-height: 1.5; margin-top: 2px; color: var(--on-surface-variant); }
+  .card-file { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; margin-top: 4px; color: var(--on-surface-variant); opacity: .7; }
+  .card-arrow { flex: 0 0 auto; color: var(--on-surface-variant); transition: transform .15s ease, color .15s ease; align-self: center; }
+  .card:hover .card-arrow { color: var(--primary); transform: translateX(3px); }
+  .swatch-btn {
+    width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+    border: 2px solid transparent; transition: all .15s ease;
+  }
+  .swatch-btn:hover { transform: scale(1.08); }
+  .swatch-btn.active { border-color: var(--on-surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-container) 30%, transparent); }
+  .section-title { font-weight: 800; font-size: 20px; letter-spacing: -.01em; margin-bottom: 4px; }
+  .section-desc { font-size: 13px; color: var(--on-surface-variant); margin-bottom: 14px; }
+  .chip-count { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--primary-container) 25%, transparent); color: var(--primary); font-weight: 600; margin-left: 8px; vertical-align: middle; }
+</style>
+</head>
+<body data-theme="orange">
+
+<div class="max-w-6xl mx-auto p-8">
+  <!-- Hero -->
+  <div class="glass-panel p-6 mb-6 flex items-center gap-5">
+    <div class="w-16 h-16 rounded-2xl grid place-items-center" style="background: linear-gradient(135deg, var(--primary-container), var(--primary)); color: var(--on-primary); box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 35%, transparent);">
+      <span class="material-symbols-outlined text-[32px]">palette</span>
+    </div>
+    <div class="flex-1">
+      <h1 class="text-3xl font-extrabold tracking-tight">beanfun! Next — Mockups</h1>
+      <p class="text-sm mt-1" style="color: var(--on-surface-variant);">
+        25 個視覺設計稿。Glassmorphism + Fluent + Soft Depth。點卡片在新分頁開啟。
+      </p>
+    </div>
+    <!-- Theme switcher (affects this directory page only) -->
+    <div class="flex items-center gap-1.5">
+      <span class="text-xs mr-2" style="color: var(--on-surface-variant);">本頁預覽主題</span>
+      <button class="swatch-btn active" style="background:#FF8201;" onclick="setTheme('orange', this)" title="Orange"></button>
+      <button class="swatch-btn" style="background:#B6DE8E;" onclick="setTheme('green', this)" title="Green"></button>
+      <button class="swatch-btn" style="background:#ADD8E6;" onclick="setTheme('lightblue', this)" title="Light Blue"></button>
+      <button class="swatch-btn" style="background:#FFC0CB;" onclick="setTheme('pink', this)" title="Pink"></button>
+      <button class="swatch-btn" style="background:#FFD700;" onclick="setTheme('gold', this)" title="Gold"></button>
+      <button class="swatch-btn" style="background:#C0C0C0;" onclick="setTheme('silver', this)" title="Silver"></button>
+      <button class="swatch-btn" style="background:#1A1A1A;" onclick="setTheme('black', this)" title="Black"></button>
+      <button class="swatch-btn" style="background:#F0F0F0; border:1px solid rgba(0,0,0,.1);" onclick="setTheme('white', this)" title="White"></button>
+    </div>
+  </div>
+
+  <!-- Design System highlight -->
+  <section class="mb-8">
+    <div class="section-title">共用資源</div>
+    <div class="section-desc">所有 mockup 的基礎：8 色 palette、utility 預覽、自訂 hex 即時推算。</div>
+    <a class="card highlight" href="./_design-system.html" target="_blank">
+      <div class="card-icon"><span class="material-symbols-outlined">style</span></div>
+      <div class="card-body">
+        <div class="card-title">Design System</div>
+        <div class="card-desc">8 色主題切換 + glass-panel / fluent-input / btn-gradient 完整範例 + 自訂 hex 即時套用</div>
+        <div class="card-file">_design-system.html</div>
+      </div>
+      <span class="material-symbols-outlined card-arrow">arrow_forward</span>
+    </a>
+  </section>
+
+  <!-- Pages -->
+  <section class="mb-8">
+    <div class="section-title">Pages<span class="chip-count">7</span></div>
+    <div class="section-desc">應用程式主要頁面（Stitch 已完成 IdPassForm / AccountList / QrForm / Settings / GameList 另計）</div>
+    <div class="grid grid-cols-2 gap-3">
+      <a class="card" href="./LoginRegionSelection.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">public</span></div><div class="card-body"><div class="card-title">選擇登入地區</div><div class="card-desc">台灣 / 香港 雙卡片選擇</div><div class="card-file">LoginRegionSelection.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./LoginWait.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">hourglass_top</span></div><div class="card-body"><div class="card-title">登入中</div><div class="card-desc">Conic spinner + 4 步驟進度條 + 取消</div><div class="card-file">LoginWait.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./LoginTotp.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">encrypted</span></div><div class="card-body"><div class="card-title">兩階段驗證</div><div class="card-desc">6 格 fluent underline + 計時 + 重寄</div><div class="card-file">LoginTotp.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./GamepassForm.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">verified_user</span></div><div class="card-body"><div class="card-title">GamePass 登入</div><div class="card-desc">4 步驟卡，active step 脈動動畫</div><div class="card-file">GamepassForm.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./VerifyPage.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">shield_lock</span></div><div class="card-body"><div class="card-title">進階驗證</div><div class="card-desc">題目區 + captcha frame + 輸入</div><div class="card-file">VerifyPage.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./ManageAccount.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">manage_accounts</span></div><div class="card-body"><div class="card-title">管理帳號</div><div class="card-desc">搜尋 + 統計 + 可拖曳表格 + 操作列</div><div class="card-file">ManageAccount.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./About.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">info</span></div><div class="card-body"><div class="card-title">關於</div><div class="card-desc">Logo hero + 版本資訊 + 連結列表</div><div class="card-file">About.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./GameList.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">sports_esports</span></div><div class="card-body"><div class="card-title">遊戲列表 (Grid)</div><div class="card-desc">搜尋 + 分類 tab + 4×N 遊戲封面</div><div class="card-file">GameList.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+    </div>
+  </section>
+
+  <!-- Dialogs -->
+  <section class="mb-8">
+    <div class="section-title">Dialogs<span class="chip-count">12</span></div>
+    <div class="section-desc">對話框、彈出視窗、次要操作頁面。</div>
+    <div class="grid grid-cols-2 gap-3">
+      <a class="card" href="./AddAccount.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">person_add</span></div><div class="card-body"><div class="card-title">新增帳號</div><div class="card-desc">帳密輸入 + 記住密碼 (DPAPI)</div><div class="card-file">AddAccount.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./ChangeAccount.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">edit</span></div><div class="card-body"><div class="card-title">修改帳號</div><div class="card-desc">頭像顯示 + 改備註 + 改密 + 刪除</div><div class="card-file">ChangeAccount.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./AddServiceAccount.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">group_add</span></div><div class="card-body"><div class="card-title">新增遊戲帳號</div><div class="card-desc">密碼強度 bar + 遊戲 banner</div><div class="card-file">AddServiceAccount.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./ChangeServiceAccountDisplayName.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">badge</span></div><div class="card-body"><div class="card-title">修改角色暱稱</div><div class="card-desc">單欄大輸入 + 字數計數</div><div class="card-file">ChangeServiceAccountDisplayName.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./CopyBox.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">key</span></div><div class="card-body"><div class="card-title">OTP 密碼</div><div class="card-desc">大字級 OTP + conic progress ring 倒數</div><div class="card-file">CopyBox.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./Contract.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">description</span></div><div class="card-body"><div class="card-title">服務條款</div><div class="card-desc">可捲動條文 + 同意勾選 disabled 狀態</div><div class="card-file">Contract.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./ServiceAccountInfo.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">account_circle</span></div><div class="card-body"><div class="card-title">角色資訊</div><div class="card-desc">大頭像 + 2 張統計卡 + 詳細欄位</div><div class="card-file">ServiceAccountInfo.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./CaptchaWnd.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">image</span></div><div class="card-body"><div class="card-title">圖形驗證</div><div class="card-desc">假 captcha + 換一張 + 輸入欄</div><div class="card-file">CaptchaWnd.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./AccRecovery.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">health_and_safety</span></div><div class="card-body"><div class="card-title">帳號救援</div><div class="card-desc">4 個救援入口卡</div><div class="card-file">AccRecovery.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./WebBrowser.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">public</span></div><div class="card-body"><div class="card-title">內嵌瀏覽器</div><div class="card-desc">Nav + URL bar + loading bar + 頁面區</div><div class="card-file">WebBrowser.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./UnconnectedGame_AddAccount.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">extension</span></div><div class="card-body"><div class="card-title">不連線遊戲 — 新增帳號</div><div class="card-desc">2 步驟表單 + captcha</div><div class="card-file">UnconnectedGame_AddAccount.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./UnconnectedGame_ChangePassword.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">password</span></div><div class="card-body"><div class="card-title">不連線遊戲 — 變更密碼</div><div class="card-desc">舊 / 新 / 確認 三欄</div><div class="card-file">UnconnectedGame_ChangePassword.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+    </div>
+  </section>
+
+  <!-- Tool Windows -->
+  <section class="mb-8">
+    <div class="section-title">遊戲工具視窗<span class="chip-count">4</span></div>
+    <div class="section-desc">楓之谷 / 跑跑卡丁車的進階工具。</div>
+    <div class="grid grid-cols-2 gap-3">
+      <a class="card" href="./MapleTools.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">build</span></div><div class="card-body"><div class="card-title">楓之谷工具箱</div><div class="card-desc">6 張工具卡 dashboard</div><div class="card-file">MapleTools.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./KartTools.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">directions_car</span></div><div class="card-body"><div class="card-title">跑跑卡丁車工具</div><div class="card-desc">Tab + 統計卡 + 賽道排行榜</div><div class="card-file">KartTools.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./CoreCalculator.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">grid_view</span></div><div class="card-body"><div class="card-title">核心計算機</div><div class="card-desc">V Matrix 18 格 + 素材估算</div><div class="card-file">CoreCalculator.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+      <a class="card" href="./EquipCalculator.html" target="_blank"><div class="card-icon"><span class="material-symbols-outlined">shield</span></div><div class="card-body"><div class="card-title">裝備計算機</div><div class="card-desc">25 顆星 + 期望值 + 活動建議</div><div class="card-file">EquipCalculator.html</div></div><span class="material-symbols-outlined card-arrow">arrow_forward</span></a>
+    </div>
+  </section>
+
+  <!-- Footer hint -->
+  <div class="glass-panel p-4 flex items-start gap-3 text-sm" style="color: var(--on-surface-variant);">
+    <span class="material-symbols-outlined" style="color: var(--primary);">tips_and_updates</span>
+    <div>
+      <div><b>提示</b>：上方 8 個色票只切換本目錄頁預覽。各 mockup 子頁面目前都鎖 Orange 主題，正式專案會在 Settings 頁切主題後統一套用到整個 app。</div>
+      <div class="mt-1">Stitch 已完成的 IdPassForm / AccountList / QrForm / Settings / GameList（dialog 版） 未收錄於本目錄。</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function setTheme(name, btn) {
+    document.body.dataset.theme = name;
+    document.querySelectorAll('.swatch-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>beanfun! Next — GamePass 登入</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root { --primary:#954A00; --primary-container:#FF8201; --on-primary:#FFFFFF; --on-surface:#221a11; --on-surface-variant:#54443a; }
+  body { font-family:'Plus Jakarta Sans','Inter',sans-serif; background: radial-gradient(1200px 800px at 10% -10%, color-mix(in srgb, var(--primary-container) 30%, transparent), transparent 60%), radial-gradient(900px 700px at 110% 110%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%), linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%); color: var(--on-surface); min-height:100vh; }
+  .glass-panel { background: rgba(255,255,255,.55); backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4); border:1px solid rgba(255,255,255,.6); border-radius:12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 10px 30px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04); }
+  .btn-gradient { background: linear-gradient(135deg, color-mix(in srgb, var(--primary-container) 85%, white 15%), color-mix(in srgb, var(--primary) 92%, black 8%)); color: var(--on-primary); border-radius:8px; padding:10px 18px; font-weight:600; border:1px solid color-mix(in srgb, var(--primary) 50%, transparent); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent); }
+  .btn-secondary { background: rgba(255,255,255,.6); border:1px solid rgba(0,0,0,.08); color: var(--on-surface); border-radius:8px; padding:10px 18px; font-weight:500; }
+  .btn-secondary:hover { background: rgba(255,255,255,.85); }
+  .step-card { background: rgba(255,255,255,.65); border:1px solid rgba(255,255,255,.8); border-radius:10px; }
+  .step-num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+  .step-active { background: linear-gradient(135deg, var(--primary-container), var(--primary)); color: var(--on-primary); box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 35%, transparent); }
+  .step-done { background: rgba(63, 107, 42, .2); color: #3F6B2A; }
+  .step-idle { background: rgba(0,0,0,.08); color: var(--on-surface-variant); }
+  .pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:.6;} 50% { opacity:1; } }
+</style>
+</head>
+<body>
+
+<div class="min-h-screen grid place-items-center p-8">
+  <div class="glass-panel w-[560px] overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-2 border-b border-white/40">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-[20px]" style="color: var(--primary);">verified_user</span>
+        <span class="text-sm font-semibold">GamePass 登入</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-black/5"><span class="material-symbols-outlined text-[18px]">minimize</span></button>
+        <button class="w-8 h-8 grid place-items-center rounded hover:bg-red-500/80 hover:text-white"><span class="material-symbols-outlined text-[18px]">close</span></button>
+      </div>
+    </div>
+
+    <div class="p-10">
+      <div class="flex items-center justify-center w-16 h-16 rounded-2xl mx-auto" style="background: linear-gradient(135deg, var(--primary-container), var(--primary)); box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 35%, transparent);">
+        <span class="material-symbols-outlined text-[32px]" style="color: var(--on-primary);">key</span>
+      </div>
+      <h1 class="text-2xl font-extrabold text-center mt-4">使用 GamePass 登入</h1>
+      <p class="text-sm text-center mt-1" style="color: var(--on-surface-variant);">系統將開啟登入視窗，完成後會自動返回。</p>
+
+      <!-- Steps -->
+      <div class="mt-7 space-y-3">
+        <div class="step-card flex items-center gap-3 p-3">
+          <div class="step-num step-done"><span class="material-symbols-outlined text-[16px]">check</span></div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold">1. 取得 SKey</div>
+            <div class="text-xs" style="color: var(--on-surface-variant);">已從 beanfun! 取得會話金鑰</div>
+          </div>
+        </div>
+
+        <div class="step-card flex items-center gap-3 p-3 pulse" style="border-color: color-mix(in srgb, var(--primary) 40%, transparent);">
+          <div class="step-num step-active">2</div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold">2. 於 GamePass 視窗完成登入</div>
+            <div class="text-xs" style="color: var(--on-surface-variant);">WebView 已開啟，請完成 GamePass 登入流程…</div>
+          </div>
+          <span class="material-symbols-outlined" style="color: var(--primary);">open_in_new</span>
+        </div>
+
+        <div class="step-card flex items-center gap-3 p-3 opacity-60">
+          <div class="step-num step-idle">3</div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold">3. 取得 bfWebToken</div>
+            <div class="text-xs" style="color: var(--on-surface-variant);">偵測 cookie &amp; 回寫會話</div>
+          </div>
+        </div>
+
+        <div class="step-card flex items-center gap-3 p-3 opacity-60">
+          <div class="step-num step-idle">4</div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold">4. 同步服務帳號</div>
+            <div class="text-xs" style="color: var(--on-surface-variant);">載入角色清單與 remain point</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 px-4 py-3 rounded-lg flex items-start gap-2" style="background: rgba(0,0,0,.04);">
+        <span class="material-symbols-outlined text-[18px]" style="color: var(--primary);">info</span>
+        <span class="text-xs" style="color: var(--on-surface-variant);">若 GamePass 視窗被擋或錯誤，請按「重新開啟」。登入過程不會儲存密碼，僅保留必要的 session cookie。</span>
+      </div>
+
+      <div class="flex gap-3 mt-6">
+        <button class="btn-secondary flex-1">取消登入</button>
+        <button class="btn-gradient flex-1 flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">refresh</span>重新開啟 GamePass 視窗
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
