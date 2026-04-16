@@ -260,11 +260,35 @@ c:\Users\mo030\Desktop\Beanfun\
 
 #### Chunk 3.3 — HK Regular + TOTP + LoginCompleted
 
-- [ ] `login/hk_regular.rs` — GET / POST `id-pass_form_newBF.aspx`、VIEWSTATE/EVENTVALIDATION/GENERATOR 全抓（複用 P2 `extract_viewstate`）、branch：akey / totp / advance / error
-- [ ] `login/totp.rs` — 從 HK response 接手、送 otp1-6、分支同上
-- [ ] `login/completed.rs` — 共用尾巴：POST `return.aspx` with `{ SessionKey, AuthKey=akey }` → 讀 `bfWebToken` cookie
-- [ ] `login/registered_device.rs` — `CheckIsRegisteDevice`（TOTP 回流程用）
-- [ ] Integration tests：HK 成功、HK totp 觸發、HK advance 觸發、TOTP 成功、TOTP advance
+拆成 4 個 sub-chunk：
+
+##### Chunk 3.3.1 — `login_completed` 共用尾巴 ✅
+
+- [x] `login/completed.rs` — `build_completed_form(session_key, akey)` 純函式 + `login_completed(client, session_key, akey, account_id, service_code, service_region) -> Session`（複用 Chunk 3.2 `post_return_aspx`、對齊 WPF L853-858 `{SessionKey, AuthKey, ServiceCode="", ServiceRegion="", ServiceAccountSN="0"}`）
+- [x] Unit tests：欄位順序 / 值 / 長度（6 支）
+- [x] Integration tests `tests/login_completed.rs`（5 支）：TW happy / HK region stamp / POST body 含 SessionKey+AuthKey+ServiceAccountSN=0 / ServiceCode & ServiceRegion 空字串 / MissingWebToken 傳遞
+- **驗收** ✅：105 lib + 5 login_completed + 7 session_key + 4 smoke + 10 tw_login = 131 全綠、`clippy -D warnings` 綠、`fmt --check` 綠
+
+##### Chunk 3.3.2 — HK Regular flow
+
+- [ ] `LoginError::TotpRequired` 從 unit variant → `TotpRequired(Box<TotpChallenge>)`
+- [ ] `login/totp_challenge.rs` — `TotpChallenge { totp_url, viewstate, session_key, account_id }`（Debug redact）
+- [ ] `login/hk_error.rs` — `HkErrorSignal { MsgBox(s) | PollRequest{...} | Unrecognized }` 純函式 + 完整 unit tests
+- [ ] `login/hk_regular.rs` — GET / POST `id-pass_form_newBF.aspx`（VIEWSTATE/EVENTVALIDATION/GENERATOR 複用 P2 `extract_viewstate`）、4 路分支（akey → `login_completed` / totpLoginBtn → Err(TotpRequired) / RELOAD_CAPTCHA_CODE → Err(AdvanceCheck) / MsgBox or pollRequest → Err(ServerMessage)）
+- [ ] Integration tests：HK happy、totp 觸發、advance check、MsgBox 錯誤、pollRequest 錯誤、no akey 且無訊息
+
+##### Chunk 3.3.3 — TOTP flow
+
+- [ ] `login/totp.rs` — `login_totp(client, challenge, otp1, otp2, otp3, otp4, otp5, otp6) -> Session`（對齊 WPF 簽章 6 個獨立 `&str` 參數）
+- [ ] POST 暫存的 `totp_url`（payload：`__EVENTTARGET=""` + `__EVENTARGUMENT=""` + 3 viewstate + `__VIEWSTATEENCRYPTED=""`(HK) + `otpCode1..6` + `totpLoginBtn="登入"`）
+- [ ] 3 路分支（akey → `login_completed` / RELOAD_CAPTCHA_CODE → AdvanceCheck / MsgBox or pollRequest → ServerMessage）複用 `hk_error`
+- [ ] Integration tests：happy、advance check、MsgBox 錯誤、no akey
+
+##### Chunk 3.3.4 — CheckIsRegisteDevice
+
+- [ ] `login/registered_device.rs` — `CheckIsRegisteDevice`（POST `tw.newlogin.beanfun.com/login/bfAPPAutoLogin.ashx`、`LT={LoginToken}`、`IntResult=="2"` 時 extract akey + `login_completed`）
+- [ ] 可能需要：`hk_error::HkErrorSignal::PollRequest` 暴露 LoginToken（重構 3.3.2/3.3.3 outcome type）
+- [ ] Integration tests：device registered 分支、其他 IntResult 分支
 
 #### Chunk 3.4 — QRCode flow
 
