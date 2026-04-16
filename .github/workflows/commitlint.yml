@@ -1,0 +1,27 @@
+name: Commitlint
+
+on:
+  pull_request:
+    branches: [code]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for commit range)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run commitlint
+        uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: commitlint.config.js
+          helpURL: https://www.conventionalcommits.org/
+          failOnWarnings: false
+          failOnErrors: true
