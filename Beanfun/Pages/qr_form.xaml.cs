@@ -80,5 +80,10 @@ namespace Beanfun
             App.LoginMethod = (int)LoginMethod.Regular;
             App.MainWnd.loginMethodChanged();
         }
+
+        private void btn_StartGame_Click(object sender, RoutedEventArgs e)
+        {
+            App.MainWnd.runGame();
+        }
     }
 }

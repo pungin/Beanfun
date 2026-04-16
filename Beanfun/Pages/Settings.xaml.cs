@@ -79,9 +79,7 @@ namespace Beanfun
 
             cb_ThemeColor.Text = ConfigAppSettings.GetValue("ThemeColor", "#FF8201");
 
-            cb_LoginMode.SelectedIndex = ConfigAppSettings.GetValue("loginMethod", "0").Equals("0")
-                ? 0
-                : 1;
+            cb_LoginMode.SelectedIndex = App.LoginMethod == (int)LoginMethod.Regular ? 0 : 1;
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
