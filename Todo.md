@@ -203,13 +203,18 @@ c:\Users\mo030\Desktop\Beanfun\
 
 - **P0 總驗收** ✅：scaffold + lint/fmt + 前後端 smoke tests + CI matrix (win/mac) + commitlint CI + README 齊全
 
-### P1 — Rust `core/wcdes`（DES/ECB/NoPadding）
+### P1 — Rust `core/wcdes`（DES/ECB/NoPadding）✅
 
-- [ ] `core/wcdes/mod.rs`：`encrypt_hex(str: &str, key: &str) -> Result<String>`、`decrypt_hex(hex: &str, key: &str) -> Result<String>`
-- [ ] 行為對齊 C# `DES.Create() + Mode=ECB + Padding=None + Encoding.ASCII`
-- [ ] 單元測試：8-byte / 16-byte / 24-byte plaintext
-- [ ] Fixture 測試：用 WPF 版跑的 (key, plaintext, ciphertext) 三元組驗證
-- **驗收**：`cargo test core::wcdes` 全綠、cipher 字節級等同 WPF
+- [x] `core/wcdes/mod.rs`：`encrypt_hex(plaintext: &str, key: &str) -> Result<String>`、`decrypt_hex(hex_str: &str, key: &str) -> Result<String>` + `WcdesError` typed enum（thiserror）
+- [x] 行為對齊 C# `DES.Create() + Mode=ECB + Padding=None + Encoding.ASCII`
+  - [x] ASCII 編解碼：非 ASCII code point 用 `?` (0x3F) 取代（對齊 `System.Text.Encoding.ASCII` lossy fallback）
+  - [x] hex 輸出大寫（對齊 `BitConverter.ToString(..).Replace("-","")`）、hex 輸入大小寫皆可
+  - [x] 不自動 trim `\0`（保留 C# `otp.Trim('\0')` 由呼叫端決定的語意）
+- [x] 單元測試：8-byte / 16-byte / 24-byte plaintext + trailing-NUL OTP 情境（共 4 組 roundtrip）
+- [x] Fixture 測試：6 組 `(key, plaintext, ciphertext)` 用 Node `crypto.createCipheriv('des-ecb', autoPadding=false)` 產（與 C# DES.Create 位元等同），`encrypt_matches_wpf_fixtures` / `decrypt_matches_wpf_fixtures` 雙向驗證
+- [x] 額外錯誤路徑：key 長度 0/5/7/9、plaintext 非 8 倍數、hex 奇數長度 / 非 16 倍數 / 含非法字元（9 個 error-path tests）
+- [x] 非 ASCII 容錯行為測試：key / plaintext 含 `é` / `中` 對齊 `?` 取代結果
+- **驗收** ✅：`cargo test core::wcdes` 19 passed / 0 failed、`cargo clippy -D warnings` 綠、`cargo fmt --check` 綠、cipher 位元等同 WPF（已以 Node ground-truth fixture 驗證；真實 WPF runtime OTP 回應將於 P3 登入 flow 錄到後再補一組 integration fixture）
 
 ### P2 — Rust `core/version` + `core/parser`
 
