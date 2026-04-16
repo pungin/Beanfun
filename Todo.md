@@ -174,21 +174,22 @@ c:\Users\mo030\Desktop\Beanfun\
 - **Chunk 1 驗收** ✅：`npm run tauri dev` 開空白視窗成功（Rust build 47s + Vite 1.6s）、`cargo check` 全綠
 
 **Chunk 2 — 規範 + 測試 + CI**
-- [ ] **0.4 Lint / Format 設定**
-  - [ ] `beanfun-next/rustfmt.toml`
-  - [ ] `beanfun-next/src-tauri/clippy.toml`
-  - [ ] `beanfun-next/.eslintrc.cjs` + `@vue/eslint-config-typescript` + `eslint-plugin-vue`
-  - [ ] `beanfun-next/.prettierrc`
-  - [ ] `.editorconfig`（repo 根）
-- [ ] **0.5 Smoke tests**
-  - [ ] 前端：`beanfun-next/tests/unit/smoke.spec.ts`
-  - [ ] 後端：`beanfun-next/src-tauri/tests/smoke.rs`
-- [ ] **0.6 GitHub Actions CI**（`.github/workflows/beanfun-next-ci.yml`）
-  - [ ] matrix: `windows-latest` + `macos-latest`
-  - [ ] job: rust fmt + clippy + test
-  - [ ] job: frontend lint + test
-  - [ ] 只在 `beanfun-next/**` 變動或手動觸發
-- **Chunk 2 驗收**：本機 `cargo fmt --check && cargo clippy -- -D warnings && cargo test && npm run lint && npm run test` 全綠
+- [x] **0.4 Lint / Format 設定**
+  - [x] `beanfun-next/rustfmt.toml`（max_width=100 / LF / Default heuristics）
+  - [x] `beanfun-next/src-tauri/clippy.toml`（msrv / thresholds）
+  - [x] `beanfun-next/eslint.config.js`（ESLint 9 flat config + `defineConfigWithVueTs` + `skip-formatting`）
+  - [x] `beanfun-next/.prettierrc.json` + `.prettierignore`
+  - [x] `beanfun-next/.editorconfig`（放 beanfun-next/ 內避免影響舊 WPF 專案）
+  - [x] `package.json` scripts: `lint` / `lint:fix` / `format` / `format:check` / `typecheck` / `test` / `test:watch`
+- [x] **0.5 Smoke tests**
+  - [x] 前端：`beanfun-next/tests/unit/smoke.spec.ts` + `vitest.config.ts`（jsdom）— 3 passed
+  - [x] 後端：`beanfun-next/src-tauri/tests/smoke.rs`（serde_json / reqwest / sha2 / 算術）— 4 passed
+- [x] **0.6 GitHub Actions CI**（`.github/workflows/beanfun-next-ci.yml`）
+  - [x] matrix: `windows-latest` + `macos-latest`
+  - [x] job: rust fmt + clippy + test（Swatinem/rust-cache）
+  - [x] job: frontend lint + format:check + typecheck + test
+  - [x] path filter `beanfun-next/**` + `workflow_dispatch` + concurrency cancel-in-progress
+- **Chunk 2 驗收** ✅：`cargo fmt --check && cargo clippy -- -D warnings && cargo test && npm run lint && npm run format:check && npm run typecheck && npm run test` 全綠、CI YAML 語法驗證 pass
 
 **Chunk 3 — commitlint + README**
 - [ ] **0.7 Commitlint**（CI-only）
