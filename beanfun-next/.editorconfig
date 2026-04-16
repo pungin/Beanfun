@@ -1,0 +1,20 @@
+# EditorConfig (https://editorconfig.org) — beanfun-next
+# Scoped to this subproject only so the legacy Beanfun/ WPF project
+# keeps its existing conventions.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Rust / TOML follow Rust community convention.
+[*.{rs,toml}]
+indent_size = 4
+
+# Markdown allows trailing whitespace (two-space line break).
+[*.md]
+trim_trailing_whitespace = false
