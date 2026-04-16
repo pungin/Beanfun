@@ -305,11 +305,24 @@ c:\Users\mo030\Desktop\Beanfun\
 
 #### Chunk 3.4 — QRCode flow
 
-- [ ] `login/qr_init.rs` — `Login/InitLogin`、回傳 `QrCodeInit { qr_base64, deeplink, verification_token }`
-- [ ] `login/qr_poll.rs` — `QRLogin/CheckLoginStatus` long poll、typed 狀態
-- [ ] `login/qr_finalize.rs` — `QRLogin/QRLogin` + SendLogin + return.aspx（複用 Chunk 3.2 `send_login`/`return_aspx`）
-- [ ] `normalize_beanfun_app_deeplink` helper（WPF L478-504 URL unwrap）
-- [ ] Integration tests：full flow、Token Expired、poll 多次
+##### 3.4.1 — `qr_init` ✅
+- [x] `LoginError::QrUnsupportedRegion` variant（HK region 早退；對齊 WPF `MainWindow.loginMethodInit` L1099-1114 UI guard + `BeanfunClient` QR path 全程硬寫 `https://login.beanfun.com`）
+- [x] `login/qr_init.rs` — `init_qr_login(client, session_key) -> Result<QrLoginInit, LoginError>`：region guard → 複用 `get_login_index`（step 1：GET `Login/Index?pSKey=…` + 抓 `__RequestVerificationToken`）→ GET `Login/InitLogin?pSKey=…`（Accept / X-Requested-With / Origin / Referer 四 header 比照 WPF `getQRCodeStrEncryptData` L455-466）→ JSON 解析 → 層層檢查 `Result==0` / `ResultData` / `QRImage` 非空（對齊 WPF L429-441 + L469）
+- [x] `QrLoginInit { bitmap_base64, deeplink: Option<String>, verification_token }`：保留 WPF 儲存格式 `bitmapBase64 = "data:image/png;base64,…"` 給前端 `<img>` 直用；`deeplink` 用 `Option` 對齊 WPF null/空字串行為
+- [x] `normalize_beanfun_app_deeplink` 純 helper（WPF L478-504）：`play.games.gamania.com/.../deeplink/?url=…` → 解 inner url；非匹配 host/path 或缺 `?url=` → raw 原樣回；host/path 比對 case-insensitive 對齊 WPF `OrdinalIgnoreCase`
+- [x] `login/mod.rs` 註冊 `qr_init` + re-export `init_qr_login` / `QrLoginInit` / `normalize_beanfun_app_deeplink`
+- [x] Unit tests：`normalize_beanfun_app_deeplink` 8 支邊界 + `InitLoginResponse` serde shape 2 支
+- [x] Integration tests `tests/qr_init.rs`（15 支）：happy / data URL prefix / deeplink unwrap / deeplink plain / deeplink missing / deeplink empty / HK region 短路且無 HTTP traffic / step1 缺 token / Result!=0 / Result 缺 / ResultData 缺 / QRImage 缺 / QRImage="" / 非 JSON body / 4 header 完全比對
+- **驗收** ✅：fmt / clippy -D warnings / cargo test (216 pass) / cargo doc 全綠
+- **Divergence**：JSON parse 失敗用 `LoginError::Json(...)` 取代 WPF `JObject.Parse` 未捕例外（與 P3.3.4 同原則，安全性 strictly better）
+
+##### 3.4.2 — `qr_poll`
+- [ ] `login/qr_poll.rs` — `QRLogin/CheckLoginStatus` single-shot：POST 空 body + Origin + RequestVerificationToken header → JSON 解析 → typed `QrPollOutcome { Pending / Approved(akey) / Rejected / Expired / ... }`；未知 ResultMessage → `LoginError::ServerMessage(raw)`；JSON parse fail → `LoginError::QrJsonParseFailed`（對齊 WPF `QRCodeCheckLoginStatus` L609-665）
+- [ ] Integration tests：每個 ResultMessage 一支 + 未知 + 非 JSON
+
+##### 3.4.3 — `qr_finalize`
+- [ ] `login/qr_finalize.rs` — `QRCodeLogin(client, akey, verification_token, session_key) -> Session`：POST `Login/QRLogin/{akey}` → 拿 SendLogin URL → 複用 `send_login` + `return_aspx`（對齊 WPF `QRCodeLogin` L530-607；**跳過** WPF L597-606 的第二次 garbage `AuthKey="OK"` POST，因 `bfWebToken` 已經在第一次 `return.aspx` 拿到）
+- [ ] Integration tests：full QR flow happy + return.aspx 缺 token
 
 #### Chunk 3.5 — Logout + 整合 + 收尾
 

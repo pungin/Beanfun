@@ -115,6 +115,18 @@ pub enum LoginError {
     #[error("QR login status polling returned non-JSON payload")]
     QrJsonParseFailed,
 
+    /// QR login is only supported in the TW region. WPF
+    /// `MainWindow.loginMethodInit` (L1099-1114) explicitly disables the
+    /// `btn_QRCode` button when `App.LoginRegion == "HK"`, and the entire
+    /// `BeanfunClient` QR code path (`getQRCodeStrEncryptData`,
+    /// `QRCodeCheckLoginStatus`, `QRCodeLogin`) hardcodes
+    /// `https://login.beanfun.com/...` regardless of region. We surface a
+    /// dedicated typed error so the orchestrator (and any future
+    /// non-WPF UI) can refuse the call early instead of producing a
+    /// confusing transport / cookie failure deeper in the flow.
+    #[error("QR login is not supported in the HK region")]
+    QrUnsupportedRegion,
+
     // ---------------------------------------------------------------------
     // Device-registration polling (CheckIsRegisteDevice / bfAPPAutoLogin)
     // ---------------------------------------------------------------------
