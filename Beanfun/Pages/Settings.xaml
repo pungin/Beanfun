@@ -97,6 +97,17 @@
                   <ComboBoxItem Content="Silver" />
                 </ComboBox>
               </DockPanel>
+              <DockPanel x:Name="LoginModePanel">
+                <Label Content="{DynamicResource LoginMode}" />
+                <ComboBox
+                  x:Name="cb_LoginMode"
+                  SelectedIndex="0"
+                  SelectionChanged="cb_LoginMode_SelectionChanged"
+                >
+                  <ComboBoxItem Content="{DynamicResource Regular}" />
+                  <ComboBoxItem Content="{DynamicResource QrCode}" />
+                </ComboBox>
+              </DockPanel>
             </StackPanel>
             <StackPanel>
               <CheckBox

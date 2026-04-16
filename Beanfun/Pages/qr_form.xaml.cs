@@ -31,7 +31,14 @@ namespace Beanfun
 
         private void qr_Tip_Click(object sender, RoutedEventArgs e)
         {
-            Process.Start("https://tw.beanfun.com/bfevent/bfApp/Page20160930/PC/index.html");
+            Process.Start(
+                new ProcessStartInfo(
+                    "https://tw.beanfun.com/bfevent/bfApp/Page20160930/PC/index.html"
+                )
+                {
+                    UseShellExecute = true,
+                }
+            );
         }
 
         private void TextBlock_MouseLeave(object sender, MouseEventArgs e)

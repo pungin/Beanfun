@@ -43,7 +43,7 @@ namespace Beanfun
                 SetBaseHeaders(false, "text/html");
                 string indexHtml = this.DownloadString(indexUrl);
                 string formToken = Regex
-                    .Match(indexHtml, "name=\"__RequestVerificationToken\"[^>]+value=\"([^\"]+)\"")
+                    .Match(indexHtml, "__RequestVerificationToken[^>]+value=\"([^\"]+)\"")
                     .Groups[1]
                     .Value;
 
@@ -403,6 +403,7 @@ namespace Beanfun
             public string skey;
             public string bitmapBase64;
             public string deeplink;
+            public string requestVerificationToken;
         }
 
         public QRCodeClass GetQRCodeValue(string skey)
@@ -410,7 +411,14 @@ namespace Beanfun
             SetBaseHeaders(false, "text/html");
             string url = $"https://login.beanfun.com/Login/Index?pSKey={skey}";
             string response = this.DownloadString(url);
-
+            // Extract RequestVerificationToken from login page for QR polling
+            string verificationToken = null;
+            Match tokenMatch = Regex.Match(
+                response,
+                @"__RequestVerificationToken[^>]+value=""([^""]+)"""
+            );
+            if (tokenMatch.Success)
+                verificationToken = tokenMatch.Groups[1].Value;
             JObject strEncryptData = this.getQRCodeStrEncryptData(skey);
             if (strEncryptData == null)
             {
@@ -440,6 +448,7 @@ namespace Beanfun
                 skey = skey,
                 bitmapBase64 = "data:image/png;base64," + base64Image,
                 deeplink = deeplink,
+                requestVerificationToken = verificationToken,
             };
         }
 
@@ -602,15 +611,21 @@ namespace Beanfun
             try
             {
                 string skey = qrcodeclass.skey;
-                string result;
-                this.Headers.Add("User-Agent", "Mozilla/5.0");
-                this.Headers.Add("Accept", "application/json, text/plain, */*");
-                this.Headers.Add("Referer", $"https://login.beanfun.com/Login/Index?pSKey={skey}");
-                this.Headers.Add("Origin", "https://login.beanfun.com");
 
-                string response = this.DownloadString(
-                    $"https://login.beanfun.com/QRLogin/CheckLoginStatus?pSKey={skey}"
+                SetBaseHeaders(
+                    true,
+                    "application/json, text/plain, */*",
+                    $"https://login.beanfun.com/Login/Index?pSKey={skey}"
                 );
+                this.Headers.Set("Origin", "https://login.beanfun.com");
+                this.Headers.Set("RequestVerificationToken", qrcodeclass.requestVerificationToken);
+
+                NameValueCollection payload = new NameValueCollection();
+                string response = this.UploadString(
+                    "https://login.beanfun.com/QRLogin/CheckLoginStatus",
+                    payload
+                );
+
                 JObject jsonData;
                 try
                 {
@@ -622,8 +637,9 @@ namespace Beanfun
                     return -1;
                 }
 
-                result = (string)jsonData["ResultMessage"];
+                string result = (string)jsonData["ResultMessage"];
                 Console.WriteLine(result);
+
                 if (result == "Failed" || result == "Wait Login")
                     return 0;
                 else if (result == "Token Expired")
