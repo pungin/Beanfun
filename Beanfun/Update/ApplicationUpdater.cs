@@ -85,7 +85,33 @@ namespace Beanfun.Update
             public string BrowserDownloadUrl { get; set; }
         }
 
+        private static int _checkRunning;
+
         internal static void CheckApplicationUpdate(bool show)
+        {
+            // Prevent concurrent checks (e.g. startup probe + About-page click collision).
+            if (Interlocked.CompareExchange(ref _checkRunning, 1, 0) != 0)
+                return;
+
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    RunCheck(show);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _checkRunning, 0);
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "UpdateCheck",
+            };
+            thread.Start();
+        }
+
+        private static void RunCheck(bool show)
         {
             string proxy = GetProxy();
             var url = proxy + "https://api.github.com/repos/pungin/beanfun/releases";
