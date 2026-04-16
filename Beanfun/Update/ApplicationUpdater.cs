@@ -101,7 +101,8 @@ namespace Beanfun.Update
                     if (release == null)
                         return;
 
-                    // 解析遠端 Tag (格式: vMajor.Minor.Patch.Timestamp)
+                    // 1. 解析遠端 Tag (格式: vMajor.Minor.Patch.Timestamp)
+                    // Groups: [1]=Major, [2]=Minor, [3]=Patch, [4]=Timestamp
                     var match = Regex.Match(release.TagName, @"^v(\d+)\.(\d+)\.(\d+)\.(\d+)$");
                     if (!match.Success)
                         return;
@@ -110,8 +111,11 @@ namespace Beanfun.Update
                     string minor = match.Groups[2].Value;
                     string patch = match.Groups[3].Value;
                     string timestamp = match.Groups[4].Value;
+
+                    // 2. 準備顯示文字: 5.8.3(2604011114)
                     string newVerDisplay = $"{major}.{minor}.{patch}({timestamp})";
 
+                    // 3. 數值比較邏輯 (傳入 patch 以支援 5.8.9 < 5.8.10)
                     if (IsNewerVersion(App.AssemblyVersion, major, minor, patch, timestamp))
                     {
                         string msg = string.Format(
@@ -182,6 +186,7 @@ namespace Beanfun.Update
 
         /// <summary>
         /// 比較版本號。將 Major, Minor, Patch 全部補齊 3 位後與 Timestamp 拼接進行 Long 比較。
+        /// 確保 5.8.9 < 5.8.10 且 Timestamp 格式永遠大於舊版。
         /// </summary>
         private static bool IsNewerVersion(
             string localVer,
@@ -193,13 +198,16 @@ namespace Beanfun.Update
         {
             try
             {
+                // 提取本地 Timestamp
                 var match = Regex.Match(localVer, @"(\d+)\.(\d+)\.?(\d+)?\.?\((\d+)\)");
 
                 if (match.Success)
                 {
                     string localTimestamp = match.Groups[4].Value;
                     if (timestamp == localTimestamp)
+                    {
                         return false;
+                    }
 
                     long remoteNum = long.Parse(
                         string.Format(
