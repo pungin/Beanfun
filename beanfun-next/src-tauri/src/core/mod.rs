@@ -7,4 +7,5 @@
 //!
 //! HTTP / IO / async orchestration belongs under `services::` (added in P3+).
 
+pub mod version;
 pub mod wcdes;
