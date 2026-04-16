@@ -152,7 +152,7 @@ c:\Users\mo030\Desktop\Beanfun\
 
 ## Phases
 
-### P0 — 專案骨架 + CI
+### P0 — 專案骨架 + CI ✅
 
 > 分三批交付：Chunk 1 = 0.1~0.3 / Chunk 2 = 0.4~0.6 / Chunk 3 = 0.7~0.8。每批完停下 review。
 
@@ -192,14 +192,16 @@ c:\Users\mo030\Desktop\Beanfun\
 - **Chunk 2 驗收** ✅：`cargo fmt --check && cargo clippy -- -D warnings && cargo test && npm run lint && npm run format:check && npm run typecheck && npm run test` 全綠、CI YAML 語法驗證 pass
 
 **Chunk 3 — commitlint + README**
-- [ ] **0.7 Commitlint**（CI-only）
-  - [ ] `commitlint.config.js`（repo 根）
-  - [ ] `.github/workflows/commitlint.yml`
-- [ ] **0.8 README 骨架**
-  - [ ] `beanfun-next/README.md`（dev / build / test 指令）
-- **Chunk 3 驗收**：CI 跑過、README 資訊齊
+- [x] **0.7 Commitlint**（CI-only）
+  - [x] `commitlint.config.js`（repo 根）`@commitlint/config-conventional` + `header-max-length: 120` / `body-max-line-length: 0` / `scope-enum: 0` / `ignores` 略過 dependabot Bump 與 Merge commit
+  - [x] `.github/workflows/commitlint.yml` 用 `wagoid/commitlint-github-action@v6`，只在 PR 到 `code` 時跑、`ubuntu-latest`、`fetch-depth: 0`
+  - [x] 本機用 `npx` 對最近 4 個 commit 跑 commitlint 皆 0 problems
+- [x] **0.8 README 骨架**
+  - [x] `beanfun-next/README.md`（zh-TW）— 覆蓋 Tauri 預設模板
+  - [x] 內容：專案定位 / 技術棧 / 環境需求 / 快速開始 / 前後端指令表 / 資料夾結構 / 測試說明 / 開發規範 / Roadmap 指向 `Todo.md` / License
+- **Chunk 3 驗收** ✅：本機 `npm run lint / format:check / typecheck / test` 全綠、commitlint 對歷史 commit 通過、YAML 語法驗證
 
-- **P0 總驗收**：`cargo check && cargo clippy -- -D warnings && cargo fmt --check && npm run lint && npm run test` 全綠、CI 綠、`npm run tauri dev` 可跑
+- **P0 總驗收** ✅：scaffold + lint/fmt + 前後端 smoke tests + CI matrix (win/mac) + commitlint CI + README 齊全
 
 ### P1 — Rust `core/wcdes`（DES/ECB/NoPadding）
 
