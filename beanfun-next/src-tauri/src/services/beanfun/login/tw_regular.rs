@@ -66,7 +66,15 @@ pub async fn login_tw_regular(
     )
     .await?;
 
-    let form = send_login(client, &index_url).await?;
+    // WPF L124 — TW Regular's SendLogin Accept header. Differs from the
+    // QR flow's Accept (which adds image/avif,image/webp,image/apng);
+    // see `login/send_login.rs` module docs for the comparison.
+    let form = send_login(
+        client,
+        &index_url,
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    )
+    .await?;
     let web_token = post_return_aspx(client, &form).await?;
 
     Ok(Session::new(

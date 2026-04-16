@@ -326,9 +326,17 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] Integration tests `tests/qr_poll.rs`（9 支）：4 個 happy `ResultMessage` / unknown / 缺 ResultMessage / 非 JSON / HK 短路 / wire shape（5 header + 空 body + 確認**不**送 X-Requested-With）
 - **驗收** ✅：fmt / clippy -D warnings / cargo test (228 pass) / cargo doc 全綠
 
-##### 3.4.3 — `qr_finalize`
-- [ ] `login/qr_finalize.rs` — `QRCodeLogin(client, akey, verification_token, session_key) -> Session`：POST `Login/QRLogin/{akey}` → 拿 SendLogin URL → 複用 `send_login` + `return_aspx`（對齊 WPF `QRCodeLogin` L530-607；**跳過** WPF L597-606 的第二次 garbage `AuthKey="OK"` POST，因 `bfWebToken` 已經在第一次 `return.aspx` 拿到）
-- [ ] Integration tests：full QR flow happy + return.aspx 缺 token
+##### 3.4.3 — `qr_finalize` ✅
+- [x] `login/qr_finalize.rs` — `finalize_qr_login(client, &init) -> Result<Session, LoginError>`：region guard → step 1 GET `QRLogin/QRLogin`（handshake，body 丟掉，Accept=`application/json, text/plain, */*` + Referer=`Login/Index?pSKey={skey}`，對齊 WPF L535-541）→ step 2 複用 `send_login` 帶 QR 專用 Accept（`text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8`，對齊 WPF L545，跟 TW Regular L124 多三個 image MIME）→ step 3 複用 `post_return_aspx`（no-redirect，Referer=login_base，raw `Set-Cookie` 抓 `bfWebToken`，對齊 WPF L588-598）→ 回 `Session { region: TW, skey, web_token, account_id: "", service_code/region: TW defaults }`
+- [x] **跳過** WPF `LoginCompleted` 第二次 garbage `AuthKey="OK"` POST（L838-882）：唯一有用副作用（捕 bfWebToken）已在 step 3 完成；`GetAccounts` 留給 P3.5
+- [x] **DRY refactor**：`send_login` 簽名加 `accept: &str` 參數（TW Regular L124 vs QR L545 兩條 Accept 字串不同 → 由 caller 帶；SRP 改進 — Accept 是「自我描述」細節本來就該由 caller 提供）；`tw_regular.rs` callsite 同步更新傳 TW Accept literal
+- [x] **DRY 評估通過**：原本擔心 `Origin from login_base` 會超過 Rule of Three，實測 qr_finalize 不需 Origin（WPF 三步都沒設 Origin），維持 qr_init/qr_poll 兩處不抽 helper
+- [x] **不新增 LoginError variant**：複用 `QrUnsupportedRegion` / `SendLoginNoFormData` / `MissingWebToken` / `Unknown` / `Http`
+- [x] `login/mod.rs` 註冊 `qr_finalize` + re-export `finalize_qr_login`
+- [x] Unit tests（2 支）：`QR_SEND_LOGIN_ACCEPT` byte-for-byte 對齊 WPF L545；QR Accept 是 TW Regular Accept + 三個 image MIME 的嚴格擴充（防止未來改錯）
+- [x] Integration tests `tests/qr_finalize.rs`（9 支）：happy / HK 短路 / step1 5xx / step2 空 form / step3 缺 cookie / step1 wire shape (Accept=JSON + Referer + 確認無 Origin/X-Requested-With/RequestVerificationToken) / step2 wire shape (QR Accept byte-for-byte + Referer) / step3 wire shape (Referer=login_base + form body fragments + Content-Type) / `Session.account_id == ""`（鎖 P3.5 之前的設計）
+- **驗收** ✅：fmt / clippy -D warnings / cargo test (239 pass，+11 = 9 integ + 2 unit) / cargo doc 全綠
+- **Documented divergence**：step 3 `Accept: */*` vs WPF 完全不送 Accept — reqwest 0.12 (via hyper) 自動注入 `Accept: */*` 沒有 public API 抑制；RFC 9110 §12.5.1 規定 Accept 缺省等於 `*/*` → 語意完全等價，無 Beanfun endpoint 對此分支差異敏感。模組 doc 與 step3 wire-shape 測試都明確記錄
 
 #### Chunk 3.5 — Logout + 整合 + 收尾
 
