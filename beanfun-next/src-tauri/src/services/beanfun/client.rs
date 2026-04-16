@@ -103,9 +103,18 @@ pub struct Endpoints {
     /// `https://bfweb.hk.beanfun.com/` (HK). Holds `beanfun_block/bflogin`
     /// and the `return.aspx` redirect target.
     pub portal_base: Url,
-    /// Auxiliary host (TW only): `https://tw.newlogin.beanfun.com/`,
-    /// used by `CheckIsRegisteDevice` and the generic-handler logout
-    /// endpoints. HK sets this to the same value as `login_base`.
+    /// Auxiliary host used by the device-registration polling flow
+    /// (`CheckIsRegisteDevice` / `bfAPPAutoLogin.ashx`) and the
+    /// generic-handler logout endpoints.
+    ///
+    /// **Both regions point at `https://tw.newlogin.beanfun.com/`**
+    /// because WPF `BeanfunClient.Login.cs::CheckIsRegisteDevice`
+    /// L675-676 hardcodes that exact URL regardless of
+    /// `App.LoginRegion`. The HK flow triggers the same polling
+    /// endpoint when the server rendered a `pollRequest(...)` script
+    /// on either the HK Regular or TOTP branch (L273-281 / L378-386),
+    /// so HK must route the poll back to the TW newlogin host to
+    /// match the WPF reference byte-for-byte.
     pub newlogin_base: Url,
 }
 
@@ -120,11 +129,15 @@ impl Endpoints {
     }
 
     /// Hardcoded production endpoints for the HK login flow.
+    ///
+    /// `newlogin_base` intentionally points at the **TW** newlogin
+    /// host — see the [`Endpoints::newlogin_base`] doc comment for
+    /// why this is WPF-correct despite looking cross-region.
     pub fn hk() -> Self {
         Self {
             login_base: Url::parse("https://login.hk.beanfun.com/").expect("static URL"),
             portal_base: Url::parse("https://bfweb.hk.beanfun.com/").expect("static URL"),
-            newlogin_base: Url::parse("https://login.hk.beanfun.com/").expect("static URL"),
+            newlogin_base: Url::parse("https://tw.newlogin.beanfun.com/").expect("static URL"),
         }
     }
 
@@ -378,6 +391,14 @@ mod tests {
         let ep = Endpoints::hk();
         assert_eq!(ep.login_base.as_str(), "https://login.hk.beanfun.com/");
         assert_eq!(ep.portal_base.as_str(), "https://bfweb.hk.beanfun.com/");
+        // WPF `CheckIsRegisteDevice` L675-676 hardcodes
+        // tw.newlogin.beanfun.com even when App.LoginRegion == "HK",
+        // so the HK endpoint set must route the device-poll host to
+        // the TW newlogin server to preserve WPF byte-parity.
+        assert_eq!(
+            ep.newlogin_base.as_str(),
+            "https://tw.newlogin.beanfun.com/"
+        );
     }
 
     #[test]

@@ -11,7 +11,7 @@
 //! | Happy path (akey redirect)    | `totp_happy_path_returns_session`          |
 //! | Advance-check (captcha)       | `totp_advance_check_returns_advance_check_required` |
 //! | MsgBox error                  | `totp_msgbox_error_surfaces_server_message`|
-//! | pollRequest error             | `totp_poll_request_error_concats_url_and_param` |
+//! | pollRequest error             | `totp_poll_request_surfaces_device_registration_required` |
 //! | Unrecognised error body       | `totp_unrecognised_body_no_akey_returns_missing_akey` |
 //! | HK wire shape (w/ encrypted)  | `totp_hk_post_body_has_six_otps_and_viewstate_encrypted` |
 //! | TW wire shape (no encrypted)  | `totp_tw_post_body_drops_viewstate_encrypted` |
@@ -327,10 +327,13 @@ async fn totp_msgbox_error_surfaces_server_message() {
 }
 
 #[tokio::test]
-async fn totp_poll_request_error_concats_url_and_param() {
-    // WPF `TotpLogin` L378-386 ? pollRequest fallback. The display
-    // string concat mirrors `HkRegularLogin` exactly, which the
-    // shared classifier already enforces.
+async fn totp_poll_request_surfaces_device_registration_required() {
+    // Chunk 3.3.4 contract: the TOTP `pollRequest` branch ? WPF
+    // `TotpLogin` L378-386 ? now surfaces
+    // `LoginError::DeviceRegistrationRequired`, preserving the
+    // triple `(login_token, poll_url, param)` captured from the
+    // server's `pollRequest(...)` script so the caller can drive
+    // `login_registered_device`.
     let body = r#"<div>pollRequest("/poll/ashx","TOK_TOTP","extra");</div>"#;
     let server = MockServer::start().await;
     mount_session_key(&server).await;
@@ -345,11 +348,19 @@ async fn totp_poll_request_error_concats_url_and_param() {
         &client, &challenge, OTPS[0], OTPS[1], OTPS[2], OTPS[3], OTPS[4], OTPS[5],
     )
     .await
-    .expect_err("pollRequest body must surface as ServerMessage");
+    .expect_err("pollRequest body must surface as DeviceRegistrationRequired");
 
     match err {
-        LoginError::ServerMessage(msg) => assert_eq!(msg, "/poll/ashx\",\"extra"),
-        other => panic!("expected ServerMessage, got {other:?}"),
+        LoginError::DeviceRegistrationRequired {
+            login_token,
+            poll_url,
+            param,
+        } => {
+            assert_eq!(login_token, "TOK_TOTP");
+            assert_eq!(poll_url, "/poll/ashx");
+            assert_eq!(param, "extra");
+        }
+        other => panic!("expected DeviceRegistrationRequired, got {other:?}"),
     }
 }
 

@@ -13,7 +13,7 @@
 //! | TOTP required               | `hk_regular_totp_triggered_returns_challenge` |
 //! | Advance-check (captcha)     | `hk_regular_advance_check_returns_advance_check_required` |
 //! | MsgBox error                | `hk_regular_msgbox_error_surfaces_server_message` |
-//! | pollRequest error           | `hk_regular_poll_request_error_concats_url_and_param` |
+//! | pollRequest error           | `hk_regular_poll_request_surfaces_device_registration_required` |
 //! | Missing `__VIEWSTATE`       | `hk_regular_missing_viewstate_returns_parser_error` |
 //! | Missing generator/event val.| `hk_regular_missing_viewstate_generator_returns_error` |
 //! | Unrecognised error body     | `hk_regular_unrecognised_body_no_akey_returns_missing_akey` |
@@ -350,7 +350,13 @@ async fn hk_regular_msgbox_error_surfaces_server_message() {
 }
 
 #[tokio::test]
-async fn hk_regular_poll_request_error_concats_url_and_param() {
+async fn hk_regular_poll_request_surfaces_device_registration_required() {
+    // Chunk 3.3.4 contract: the HK Regular `pollRequest` branch now
+    // surfaces `LoginError::DeviceRegistrationRequired`, preserving
+    // all three regex groups (WPF L274-281 `this.LoginToken` +
+    // `this.errmsg`). Callers drive the
+    // `bfAPPAutoLogin.ashx` polling loop via
+    // `login_registered_device`.
     let body = r#"<div>pollRequest("/poll/url","TOKEN_HK","extra_param");</div>"#;
     let server = MockServer::start().await;
     mount_hk_session_key(&server).await;
@@ -360,14 +366,19 @@ async fn hk_regular_poll_request_error_concats_url_and_param() {
     let client = client_for(&server);
     let err = run_hk_regular(&client)
         .await
-        .expect_err("pollRequest body must surface as ServerMessage");
+        .expect_err("pollRequest body must surface as DeviceRegistrationRequired");
 
     match err {
-        LoginError::ServerMessage(msg) => {
-            // WPF L277-280 exact concatenation: g1 + `","` + g3.
-            assert_eq!(msg, "/poll/url\",\"extra_param");
+        LoginError::DeviceRegistrationRequired {
+            login_token,
+            poll_url,
+            param,
+        } => {
+            assert_eq!(login_token, "TOKEN_HK");
+            assert_eq!(poll_url, "/poll/url");
+            assert_eq!(param, "extra_param");
         }
-        other => panic!("expected ServerMessage, got {other:?}"),
+        other => panic!("expected DeviceRegistrationRequired, got {other:?}"),
     }
 }
 

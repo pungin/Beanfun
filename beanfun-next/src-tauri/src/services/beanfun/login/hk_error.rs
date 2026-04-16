@@ -40,12 +40,11 @@
 //!
 //! # Why we keep `token` in the return type
 //!
-//! Chunks 3.3.2 / 3.3.3 only need the human-readable message, so they
-//! read `url` + `param` and drop `token`. Chunk 3.3.4
-//! (`CheckIsRegisteDevice`) **does** need `token` — it's the
-//! `LoginToken` used by the mobile-app auto-login polling flow.
-//! Having a single canonical return type means 3.3.4 can wire the
-//! token through without the parser being touched again.
+//! Chunk 3.3.4 (`CheckIsRegisteDevice`) wires `token` through as the
+//! `LoginToken` sent with the `LT=` form field on every
+//! `bfAPPAutoLogin.ashx` poll. Keeping `token` on
+//! [`HkErrorSignal::PollRequest`] means the classifier has one
+//! canonical shape regardless of which flow consumed it.
 
 use regex::Regex;
 use std::sync::OnceLock;
@@ -65,11 +64,14 @@ pub enum HkErrorSignal {
     /// Matched `MsgBox.Show('…');`. The captured string is the
     /// human-readable error text meant for direct display.
     MsgBox(String),
-    /// Matched `pollRequest("…","(\w+)","…");`. Caller is expected
-    /// to surface a `ServerMessage` with a display-formatted text
-    /// (WPF concatenates `url + '","' + param`) and — when the
-    /// mobile-app polling flow is wired up — stash `token` for use
-    /// with `CheckIsRegisteDevice`.
+    /// Matched `pollRequest("…","(\w+)","…");`. The shared
+    /// `classify_missing_akey_body` wraps this into
+    /// [`LoginError::DeviceRegistrationRequired`] so callers can:
+    /// (a) feed `token` into
+    /// [`login_registered_device`](super::registered_device::login_registered_device)
+    /// as the `LoginToken`, (b) log `url` + `param` for diagnostics —
+    /// WPF's display string concatenates them into `errmsg` via
+    /// `url + '","' + param` (L277-280 / L383-385).
     PollRequest {
         /// First group — a URL the page intends to poll. In practice
         /// almost always an opaque ashx / handler endpoint.
@@ -125,23 +127,32 @@ pub(super) fn is_advance_check(body: &str) -> bool {
 /// Shared by `login_hk_regular` and `login_totp` because WPF emits
 /// the same failure-body shape in both flows (`TotpLogin` literally
 /// pastes the `HkRegularLogin` classification block). Keeping them
-/// on one function means any future tweak — e.g. `pollRequest.token`
-/// wiring in chunk 3.3.4 — takes one edit instead of two.
+/// on one function means any future tweak takes one edit instead of
+/// two.
+///
+/// # `pollRequest` continuation contract
+///
+/// The `pollRequest` branch surfaces
+/// [`LoginError::DeviceRegistrationRequired`] rather than a flat
+/// `ServerMessage`, preserving all three regex capture groups:
+///
+/// - `login_token` (WPF L281 / L385 → `this.LoginToken`) — the
+///   identifier the caller sends as the `LT=` form field to
+///   `bfAPPAutoLogin.ashx` when driving `login_registered_device`.
+/// - `poll_url` (group 1) and `param` (group 3) — WPF formats them
+///   into a display-only `errmsg` via `url + '","' + param`
+///   (L277-280 / L383-385). We preserve them as separate strings so
+///   the caller can choose whether to show the same WPF-style
+///   concat string or present them independently.
 pub(super) fn classify_missing_akey_body(body: &str) -> LoginError {
     match extract_hk_error_signal(body) {
         HkErrorSignal::MsgBox(msg) => LoginError::ServerMessage(msg),
-        HkErrorSignal::PollRequest { url, param, .. } => {
-            // WPF concat: `group1 + '","' + group3` — a display-only
-            // string that the UI shows verbatim. The `","` separator
-            // is literal: four bytes (`"`, `,`, `"`) bracketed by
-            // format-string punctuation that survives into the
-            // rendered message.
-            //
-            // `token` (group 2) is intentionally dropped here: the
-            // mobile-app polling flow that consumes it lives in
-            // chunk 3.3.4 (`CheckIsRegisteDevice`). Both the HK
-            // Regular and TOTP callers accept the same tradeoff.
-            LoginError::ServerMessage(format!("{url}\",\"{param}"))
+        HkErrorSignal::PollRequest { url, token, param } => {
+            LoginError::DeviceRegistrationRequired {
+                login_token: token,
+                poll_url: url,
+                param,
+            }
         }
         // WPF L264 / L368 pre-sets `errmsg = "LoginNoAkey"` before
         // the script-scan; if neither regex matches, that default
@@ -356,14 +367,24 @@ mod tests {
     }
 
     #[test]
-    fn classify_poll_request_concats_url_and_param() {
+    fn classify_poll_request_surfaces_device_registration_required() {
+        // Chunk 3.3.4 refactor: pollRequest now routes to
+        // `DeviceRegistrationRequired` with all three regex groups
+        // preserved, superseding the earlier `ServerMessage(concat)`
+        // shape. Callers that want WPF's display string can still
+        // format it as `format!("{poll_url}\",\"{param}")`.
         let body = r#"pollRequest("/poll/url","TOK","extra_param");"#;
         match classify_missing_akey_body(body) {
-            LoginError::ServerMessage(msg) => {
-                // WPF concat: group1 + '","' + group3.
-                assert_eq!(msg, "/poll/url\",\"extra_param");
+            LoginError::DeviceRegistrationRequired {
+                login_token,
+                poll_url,
+                param,
+            } => {
+                assert_eq!(login_token, "TOK");
+                assert_eq!(poll_url, "/poll/url");
+                assert_eq!(param, "extra_param");
             }
-            other => panic!("expected ServerMessage, got {other:?}"),
+            other => panic!("expected DeviceRegistrationRequired, got {other:?}"),
         }
     }
 

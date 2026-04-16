@@ -291,11 +291,17 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] Integration tests：7 支（happy、advance check、MsgBox、pollRequest、unrecognized、HK wire shape、TW wire shape）
 - [x] Quality gates：fmt / clippy -D warnings / 175 tests pass / doc 0 warnings
 
-##### Chunk 3.3.4 — CheckIsRegisteDevice
+##### Chunk 3.3.4 — CheckIsRegisteDevice ✅
 
-- [ ] `login/registered_device.rs` — `CheckIsRegisteDevice`（POST `tw.newlogin.beanfun.com/login/bfAPPAutoLogin.ashx`、`LT={LoginToken}`、`IntResult=="2"` 時 extract akey + `login_completed`）
-- [ ] 可能需要：`hk_error::HkErrorSignal::PollRequest` 暴露 LoginToken（重構 3.3.2/3.3.3 outcome type）
-- [ ] Integration tests：device registered 分支、其他 IntResult 分支
+- [x] `LoginError` 新增 `DeviceRegistrationRequired { login_token, poll_url, param }` / `DeviceLoginTimeout` / `DeviceLoginRejected` 三個 variant（對齊 WPF L2400-2441 bfAPPAutoLogin_Tick switch branches）
+- [x] 重構 `hk_error::classify_missing_akey_body`：`pollRequest` 路徑改回 `DeviceRegistrationRequired` 並保留 `login_token` + `poll_url` + `param`（原本只丟 display-only `ServerMessage`；chunk 3.3.2 / 3.3.3 測試同步更新）
+- [x] 修正 `Endpoints::hk().newlogin_base` → `https://tw.newlogin.beanfun.com/`（對齊 WPF `CheckIsRegisteDevice` L675-676 在 HK region 也硬寫 TW host 的行為；`endpoints_hk_has_production_urls` test 補上 assertion）
+- [x] `login/registered_device.rs` — 新模組 + `login_registered_device(client, login_token, session_key, account_id, service_code, service_region) -> Result<Option<Session>, LoginError>`（single-shot API：`Ok(Some(session))` / `Ok(None)` keep-polling / 各 IntResult 錯誤 variant；WPF `CheckIsRegisteDevice` L667-700 + `MainWindow.bfAPPAutoLogin_Tick` L2418-2439 對齊）
+- [x] `IntResult=="2"` 路徑：內部呼叫 `login_completed`（side-effect GET `{newlogin_base}login/{StrReslut}` + `extract_akey` on StrReslut）；AKeyParseFailed 時回 `Ok(None)` 保 WPF 靜默 retry 行為
+- [x] `login/mod.rs` 註冊 `registered_device` + re-export `login_registered_device`
+- [x] Unit tests：`PollResponse` serde shape（2 支）
+- [x] Integration tests `tests/registered_device.rs`（11 支）：happy IntResult==2 / akey-less 2 / 0 / 1 / -1 / -2 / -3 / 未知 IntResult / missing IntResult / POST 帶 LT= / host 路由到 newlogin_base
+- **驗收** ✅：所有 fmt / clippy -D warnings / cargo test / cargo doc 全綠
 
 #### Chunk 3.4 — QRCode flow
 

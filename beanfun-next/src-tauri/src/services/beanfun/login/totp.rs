@@ -21,7 +21,8 @@
 //!    - final URL carries `akey=…`
 //!      → call [`login_completed`] to obtain the `bfWebToken`
 //!    - else → `classify_missing_akey_body` splits MsgBox /
-//!      pollRequest / Unrecognized to `ServerMessage` / `MissingAkey`
+//!      pollRequest / Unrecognized to `ServerMessage` /
+//!      `DeviceRegistrationRequired` / `MissingAkey`
 //!      ([`super::hk_error`] module — `pub(super)` so plain backticks
 //!      avoid public-docs-link-to-private warnings).
 //!
@@ -111,9 +112,12 @@ use crate::services::beanfun::{
 ///
 /// - [`LoginError::AdvanceCheckRequired`] — server flipped into the
 ///   captcha / advance-check flow (WPF L359-362).
-/// - [`LoginError::ServerMessage`] — server rendered a MsgBox or
-///   pollRequest error body (WPF L368-388 via
-///   `classify_missing_akey_body`).
+/// - [`LoginError::ServerMessage`] — server rendered a MsgBox error
+///   body (WPF L368-376 via `classify_missing_akey_body`).
+/// - [`LoginError::DeviceRegistrationRequired`] — server rendered a
+///   `pollRequest(…)` triplet (WPF L378-388); caller drives the
+///   mobile-app auto-login polling loop via
+///   [`login_registered_device`](super::registered_device::login_registered_device).
 /// - [`LoginError::MissingAkey`] — final redirect URL had no
 ///   `akey=…` and the body held neither error pattern (WPF L368
 ///   default).

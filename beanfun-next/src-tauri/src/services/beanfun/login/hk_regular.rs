@@ -19,9 +19,10 @@
 //!      → call [`login_completed`] to obtain the `bfWebToken`
 //!    - else → classify via `classify_missing_akey_body`:
 //!      - `MsgBox` → [`LoginError::ServerMessage`] with the inner text
-//!      - `PollRequest` → [`LoginError::ServerMessage`] with WPF's
-//!        `"url\",\"param"` concat (the `token` is currently dropped;
-//!        chunk 3.3.4 will wire it to `CheckIsRegisteDevice`)
+//!      - `PollRequest` → [`LoginError::DeviceRegistrationRequired`]
+//!        preserving `login_token`, `poll_url`, and `param`; the
+//!        caller is expected to drive the mobile-app auto-login poll
+//!        via [`login_registered_device`](super::registered_device::login_registered_device)
 //!      - `Unrecognized` → [`LoginError::MissingAkey`] (= WPF's
 //!        `errmsg = "LoginNoAkey"` default on L264)
 //!

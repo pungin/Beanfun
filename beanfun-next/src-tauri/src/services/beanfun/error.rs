@@ -116,6 +116,44 @@ pub enum LoginError {
     QrJsonParseFailed,
 
     // ---------------------------------------------------------------------
+    // Device-registration polling (CheckIsRegisteDevice / bfAPPAutoLogin)
+    // ---------------------------------------------------------------------
+    /// WPF `pollRequest(...)` branch on HK Regular (L273-281) and TOTP
+    /// (L377-386) — the server rendered a `pollRequest("url","TOKEN","param")`
+    /// script tag signalling that the user must authorise this device via
+    /// an out-of-band channel (Beanfun mobile app / email). Semantically a
+    /// **continuation**: the caller is expected to loop over
+    /// `login_registered_device(client, login_token, ...)` until the user
+    /// approves the request (`Ok(Some(session))`), rejects it
+    /// ([`DeviceLoginRejected`](Self::DeviceLoginRejected)), or it expires
+    /// ([`DeviceLoginTimeout`](Self::DeviceLoginTimeout)).
+    ///
+    /// WPF stashes the token on `this.LoginToken` and concatenates the
+    /// url + param into `this.errmsg` for display only (L277-281 and
+    /// L383-385). We preserve all three pieces in this variant so
+    /// callers can drive the polling loop via `login_token` and log /
+    /// show the url + param for diagnostics.
+    #[error("device registration required; poll bfAPPAutoLogin.ashx with LT={login_token}")]
+    DeviceRegistrationRequired {
+        login_token: String,
+        poll_url: String,
+        param: String,
+    },
+
+    /// WPF `MainWindow.bfAPPAutoLogin_Tick` IntResult=`"-2"` (L2424-2427) —
+    /// the polling loop returned a timeout status. The user did not
+    /// approve or reject the device registration in the server-enforced
+    /// window.
+    #[error("device registration polling timed out")]
+    DeviceLoginTimeout,
+
+    /// WPF `MainWindow.bfAPPAutoLogin_Tick` IntResult=`"-3"` (L2420-2423) —
+    /// the user (or some upstream policy) explicitly rejected the login
+    /// request.
+    #[error("device registration rejected")]
+    DeviceLoginRejected,
+
+    // ---------------------------------------------------------------------
     // Transport-level errors
     // ---------------------------------------------------------------------
     /// Wrapped `reqwest::Error` — network, TLS, connect, or body-read
