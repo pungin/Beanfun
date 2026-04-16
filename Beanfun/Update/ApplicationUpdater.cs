@@ -11,6 +11,49 @@ namespace Beanfun.Update
 {
     class ApplicationUpdater
     {
+        private static readonly string[] GH_PROXIES = new[]
+        {
+            "https://ghproxy.vip/",
+            "https://ghproxy.net/",
+            "https://ghfast.top/",
+        };
+
+        private static string _cachedProxy;
+
+        private static string GetProxy()
+        {
+            if (_cachedProxy != null)
+                return _cachedProxy;
+
+            // Test direct GitHub access first
+            try
+            {
+                var req = WebRequest.CreateHttp("https://api.github.com");
+                req.Method = "HEAD";
+                req.Timeout = 5000;
+                req.UserAgent = "Beanfun";
+                using (req.GetResponse()) { }
+                return _cachedProxy = "";
+            }
+            catch { }
+
+            // Direct access failed, try proxies
+            foreach (var proxy in GH_PROXIES)
+            {
+                try
+                {
+                    var req = WebRequest.CreateHttp(proxy + "https://api.github.com");
+                    req.Method = "HEAD";
+                    req.Timeout = 5000;
+                    req.UserAgent = "Beanfun";
+                    using (req.GetResponse()) { }
+                    return _cachedProxy = proxy;
+                }
+                catch { }
+            }
+            return _cachedProxy = "";
+        }
+
         public class GitHubRelease
         {
             [JsonProperty("name")]
@@ -37,7 +80,8 @@ namespace Beanfun.Update
 
         internal static void CheckApplicationUpdate(bool show)
         {
-            var url = "https://api.github.com/repos/pungin/beanfun/releases";
+            string proxy = GetProxy();
+            var url = proxy + "https://api.github.com/repos/pungin/beanfun/releases";
 
             try
             {
@@ -53,8 +97,7 @@ namespace Beanfun.Update
                     if (release == null)
                         return;
 
-                    // 1. 解析遠端 Tag (格式: vMajor.Minor.Patch.Timestamp)
-                    // Groups: [1]=Major, [2]=Minor, [3]=Patch, [4]=Timestamp
+                    // 解析遠端 Tag (格式: vMajor.Minor.Patch.Timestamp)
                     var match = Regex.Match(release.TagName, @"^v(\d+)\.(\d+)\.(\d+)\.(\d+)$");
                     if (!match.Success)
                         return;
@@ -63,11 +106,8 @@ namespace Beanfun.Update
                     string minor = match.Groups[2].Value;
                     string patch = match.Groups[3].Value;
                     string timestamp = match.Groups[4].Value;
-
-                    // 2. 準備顯示文字: 5.8.3(2604011114)
                     string newVerDisplay = $"{major}.{minor}.{patch}({timestamp})";
 
-                    // 3. 數值比較邏輯 (傳入 patch 以支援 5.8.9 < 5.8.10)
                     if (IsNewerVersion(App.AssemblyVersion, major, minor, patch, timestamp))
                     {
                         string msg = string.Format(
@@ -91,7 +131,7 @@ namespace Beanfun.Update
                         {
                             string downloadUrl =
                                 (release.Assets != null && release.Assets.Count > 0)
-                                    ? release.Assets[0].BrowserDownloadUrl
+                                    ? proxy + release.Assets[0].BrowserDownloadUrl
                                     : $"https://github.com/pungin/Beanfun/releases/tag/{release.TagName}";
 
                             Process.Start(
@@ -138,7 +178,6 @@ namespace Beanfun.Update
 
         /// <summary>
         /// 比較版本號。將 Major, Minor, Patch 全部補齊 3 位後與 Timestamp 拼接進行 Long 比較。
-        /// 確保 5.8.9 < 5.8.10 且 Timestamp 格式永遠大於舊版。
         /// </summary>
         private static bool IsNewerVersion(
             string localVer,
@@ -150,16 +189,13 @@ namespace Beanfun.Update
         {
             try
             {
-                // 提取本地 Timestamp
                 var match = Regex.Match(localVer, @"(\d+)\.(\d+)\.?(\d+)?\.?\((\d+)\)");
 
                 if (match.Success)
                 {
                     string localTimestamp = match.Groups[4].Value;
                     if (timestamp == localTimestamp)
-                    {
                         return false;
-                    }
 
                     long remoteNum = long.Parse(
                         string.Format(
