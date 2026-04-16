@@ -15,7 +15,7 @@
 //! - The decoder does **not** strip trailing NUL bytes; callers decide (the
 //!   C# caller does `otp.Trim('\0')` after `DecryStrHex`).
 
-use cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
+use cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, BlockSizeUser, KeyInit};
 use des::Des;
 use thiserror::Error;
 
@@ -24,6 +24,9 @@ const BLOCK_SIZE: usize = 8;
 
 /// Byte used by `System.Text.Encoding.ASCII` to replace code points > 0x7F.
 const ASCII_REPLACEMENT: u8 = b'?';
+
+/// Convenience alias for a DES input/output block (`GenericArray<u8, U8>`).
+type DesBlock = GenericArray<u8, <Des as BlockSizeUser>::BlockSize>;
 
 /// Errors surfaced by `encrypt_hex` / `decrypt_hex`.
 ///
@@ -61,16 +64,7 @@ pub fn encrypt_hex(plaintext: &str, key: &str) -> Result<String> {
     }
 
     let cipher = des_from_key(&key_bytes)?;
-
-    let mut out = vec![0u8; pt_bytes.len()];
-    for (in_chunk, out_chunk) in pt_bytes
-        .chunks_exact(BLOCK_SIZE)
-        .zip(out.chunks_exact_mut(BLOCK_SIZE))
-    {
-        let mut block = GenericArray::clone_from_slice(in_chunk);
-        cipher.encrypt_block(&mut block);
-        out_chunk.copy_from_slice(&block);
-    }
+    let out = process_blocks(&cipher, &pt_bytes, |c, b| c.encrypt_block(b));
 
     Ok(bytes_to_upper_hex(&out))
 }
@@ -88,16 +82,7 @@ pub fn decrypt_hex(hex_str: &str, key: &str) -> Result<String> {
     }
 
     let cipher = des_from_key(&key_bytes)?;
-
-    let mut out = vec![0u8; ct_bytes.len()];
-    for (in_chunk, out_chunk) in ct_bytes
-        .chunks_exact(BLOCK_SIZE)
-        .zip(out.chunks_exact_mut(BLOCK_SIZE))
-    {
-        let mut block = GenericArray::clone_from_slice(in_chunk);
-        cipher.decrypt_block(&mut block);
-        out_chunk.copy_from_slice(&block);
-    }
+    let out = process_blocks(&cipher, &ct_bytes, |c, b| c.decrypt_block(b));
 
     Ok(bytes_to_ascii_string(&out))
 }
@@ -105,6 +90,24 @@ pub fn decrypt_hex(hex_str: &str, key: &str) -> Result<String> {
 // -----------------------------------------------------------------------------
 // Helpers (private)
 // -----------------------------------------------------------------------------
+
+/// Apply a per-block DES operation (encrypt or decrypt) across a slice whose
+/// length is already known to be a multiple of [`BLOCK_SIZE`].
+///
+/// Centralises the block-by-block loop shared by [`encrypt_hex`] and
+/// [`decrypt_hex`]: only the `op` closure differs between the two.
+fn process_blocks(cipher: &Des, data: &[u8], mut op: impl FnMut(&Des, &mut DesBlock)) -> Vec<u8> {
+    let mut out = vec![0u8; data.len()];
+    for (in_chunk, out_chunk) in data
+        .chunks_exact(BLOCK_SIZE)
+        .zip(out.chunks_exact_mut(BLOCK_SIZE))
+    {
+        let mut block = GenericArray::clone_from_slice(in_chunk);
+        op(cipher, &mut block);
+        out_chunk.copy_from_slice(&block);
+    }
+    out
+}
 
 /// Encode a `&str` as ASCII bytes, replacing any code point > 0x7F with `?`.
 ///
