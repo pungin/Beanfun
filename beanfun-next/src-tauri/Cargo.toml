@@ -60,6 +60,9 @@ base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 html-escape = "0.2"
 
+# Secret handling — zero password / token buffers on drop
+zeroize = { version = "1", features = ["derive"] }
+
 [target.'cfg(windows)'.dependencies]
 # Win32 API bindings — features will be expanded per phase (DPAPI in P5, WMI/PostMessage in P8/P9).
 windows = { version = "0.58", features = [

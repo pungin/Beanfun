@@ -231,24 +231,52 @@ c:\Users\mo030\Desktop\Beanfun\
 
 ### P3 — Rust `services/beanfun` Login
 
-- [ ] `services/beanfun/client.rs`：`BeanfunClient`（`reqwest` + `cookie_store` + header helpers）
-- [ ] `services/beanfun/headers.rs`：`SetBaseHeaders` / `SetJsonHeaders` 等價
-- [ ] `services/beanfun/login_tw.rs`：Regular TW 完整 flow（`CheckAccountType` → `AccountLogin` → `SendLogin` → `return.aspx` 取 `bfWebToken`）
-- [ ] `services/beanfun/login_hk.rs`：Regular HK 完整 flow（含 VIEWSTATE）
-- [ ] `services/beanfun/totp.rs`：TOTP 6 格 flow
-- [ ] `services/beanfun/qrcode.rs`：`init_login` / `get_qr_image` / `check_login_status` / `qrcode_login` / `send_login`
-- [ ] `services/beanfun/gamepass.rs`：接收前端傳來的 cookies + webtoken，完成 `get_accounts` + `get_remain_point`
-- [ ] `services/beanfun/session.rs`：`get_sessionkey` / `logout`
-- [ ] `services/beanfun/misc.rs`：`ping` / `get_remain_point` / `get_email`
-- [ ] 錄製 wiremock fixture（從現行 WPF 版跑出真實回應）
-- [ ] Integration tests（wiremock）：
-  - [ ] Regular TW 成功 / 密碼錯 / AdvanceCheck 觸發
-  - [ ] Regular HK 成功 / TOTP 觸發 / 驗證碼觸發
-  - [ ] QR 完整 flow（InitLogin → poll 3 次 → Success）
-  - [ ] QR Token Expired
-  - [ ] Logout
-  - [ ] Ping / getRemainPoint / getEmail
-- **驗收**：15+ integration cases pass
+範圍：TW Regular + HK Regular + TOTP + QRCode + Logout。切 5 chunk：
+
+#### Chunk 3.1 — Client skeleton + session_key ✅
+
+- [x] `Cargo.toml` 新增 `zeroize`（reqwest/tokio/url/serde/wiremock 在 P0 已備）
+- [x] `services/mod.rs` + `services/beanfun/mod.rs` — layer docs + `pub use` re-export
+- [x] `services/beanfun/error.rs` — `LoginError` enum（18 variants 覆蓋所有 WPF errmsg）
+- [x] `services/beanfun/session.rs` — `Credentials`（zeroize + redact Debug）/ `Session`（redact Debug）
+- [x] `services/beanfun/client.rs` — `BeanfunClient`（雙 reqwest client 共享 cookie store、follow / no-follow redirect）、`ClientConfig`（timeout 30s、body cap 16 MiB、固定 UA）、`Endpoints`（TW / HK / custom）、`LoginRegion` enum、`bounded_text` 串流防 OOM
+- [x] `services/beanfun/login/session_key.rs` — region-aware `get_session_key`（TW 抓 redirect URL query / HK 抓 body span）
+- [x] Integration tests `tests/session_key.rs`（wiremock）：TW 302→URL 抓 key / TW missing / HK span 抓 key / HK missing span / HK empty body / body-cap / UA 比對
+- **驗收** ✅：77 lib tests + 7 session_key integration + 4 smoke = 88 全綠、`clippy -D warnings` 綠、`fmt --check` 綠
+
+#### Chunk 3.2 — TW Regular 完整 flow
+
+- [ ] `login/index.rs` — GET `Login/Index?pSKey=…`、複用 P2 `extract_verification_token`
+- [ ] `login/check_account_type.rs` — POST `Login/CheckAccountType`、拆出 captcha token
+- [ ] `login/account_login.rs` — POST `Login/AccountLogin`、typed `AccountLoginOutcome { Success, AdvanceCheck, Totp, ServerError }`
+- [ ] `login/send_login.rs` — GET `Login/SendLogin`、scrape `<input>` 組 payload
+- [ ] `login/return_aspx.rs` — POST `return.aspx`（no-redirect client）、從 Set-Cookie 撈 `bfWebToken`
+- [ ] `login/tw_regular.rs` — orchestrator `login_tw_regular(client, creds) -> Session`
+- [ ] Integration tests：happy path、密碼錯、AdvanceCheck、SendLoginNoFormData、MissingWebToken
+
+#### Chunk 3.3 — HK Regular + TOTP + LoginCompleted
+
+- [ ] `login/hk_regular.rs` — GET / POST `id-pass_form_newBF.aspx`、VIEWSTATE/EVENTVALIDATION/GENERATOR 全抓（複用 P2 `extract_viewstate`）、branch：akey / totp / advance / error
+- [ ] `login/totp.rs` — 從 HK response 接手、送 otp1-6、分支同上
+- [ ] `login/completed.rs` — 共用尾巴：POST `return.aspx` with `{ SessionKey, AuthKey=akey }` → 讀 `bfWebToken` cookie
+- [ ] `login/registered_device.rs` — `CheckIsRegisteDevice`（TOTP 回流程用）
+- [ ] Integration tests：HK 成功、HK totp 觸發、HK advance 觸發、TOTP 成功、TOTP advance
+
+#### Chunk 3.4 — QRCode flow
+
+- [ ] `login/qr_init.rs` — `Login/InitLogin`、回傳 `QrCodeInit { qr_base64, deeplink, verification_token }`
+- [ ] `login/qr_poll.rs` — `QRLogin/CheckLoginStatus` long poll、typed 狀態
+- [ ] `login/qr_finalize.rs` — `QRLogin/QRLogin` + SendLogin + return.aspx（複用 Chunk 3.2 `send_login`/`return_aspx`）
+- [ ] `normalize_beanfun_app_deeplink` helper（WPF L478-504 URL unwrap）
+- [ ] Integration tests：full flow、Token Expired、poll 多次
+
+#### Chunk 3.5 — Logout + 整合 + 收尾
+
+- [ ] `login/logout.rs` — region-aware 兩支 endpoint + `erase_token.ashx`（TW only）
+- [ ] Top-level `login(method, creds)` 入口函式、回傳 `Session`
+- [ ] cookie jar 清空 helper
+- [ ] 跨流程 integration test：login → session available → logout → cookies cleared
+- **驗收**：全 P3 integration test 15+ cases pass
 
 ### P4 — Rust `services/beanfun` Account / OTP / Verify
 
