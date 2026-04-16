@@ -78,6 +78,10 @@ namespace Beanfun
                 : 1;
 
             cb_ThemeColor.Text = ConfigAppSettings.GetValue("ThemeColor", "#FF8201");
+
+            cb_LoginMode.SelectedIndex = ConfigAppSettings.GetValue("loginMethod", "0").Equals("0")
+                ? 0
+                : 1;
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
@@ -247,6 +251,18 @@ namespace Beanfun
                 ConfigAppSettings.SetValue("ThemeColor", cb_ThemeColor.Text);
             }
             catch { }
+        }
+
+        private void cb_LoginMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (
+                App.MainWnd == null
+                || App.MainWnd.settingPage == null
+                || cb_LoginMode.SelectedIndex
+                    == (ConfigAppSettings.GetValue("loginMethod", "0").Equals("0") ? 0 : 1)
+            )
+                return;
+            ConfigAppSettings.SetValue("loginMethod", cb_LoginMode.SelectedIndex == 0 ? "0" : "1");
         }
 
         private void ManageAcc_Click(object sender, RoutedEventArgs e)

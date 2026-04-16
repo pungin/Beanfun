@@ -124,6 +124,8 @@
   <system:String x:Key="UpdateChannel">更新通道</system:String>
   <system:String x:Key="Stable">穩定版</system:String>
   <system:String x:Key="Development">測試版</system:String>
+  <system:String x:Key="Regular">一般登入</system:String>
+  <system:String x:Key="QrCode">QR登入</system:String>
   <system:String x:Key="ThemeColor">主題顏色</system:String>
   <system:String x:Key="AutoCheckUpdate">有新版本時提示更新</system:String>
   <system:String x:Key="RunAfterLogin">登入完成後開啟遊戲</system:String>
@@ -424,6 +426,7 @@
     >檢測到新版本 {0} 當前: {1}\r\n\r\n{2}\r\n\r\n是否打開下載頁面？</system:String
   >
   <system:String x:Key="Language">程式語言</system:String>
+  <system:String x:Key="LoginMode">登入方式</system:String>
   <system:String x:Key="InputTotp">輸入應用程式內顯示的雙重驗證碼</system:String>
   <system:String x:Key="CopyDeeplink">複製 Deeplink</system:String>
   <system:String x:Key="CopyDeeplinkSuccess">Deeplink 已複製到剪貼簿。</system:String>

@@ -141,6 +141,8 @@
   <system:String x:Key="UpdateChannel">Update Channel</system:String>
   <system:String x:Key="Stable">Stable</system:String>
   <system:String x:Key="Development">Beta</system:String>
+  <system:String x:Key="Regular">Regular</system:String>
+  <system:String x:Key="QrCode">QrCode</system:String>
   <system:String x:Key="ThemeColor">Theme Color</system:String>
   <system:String x:Key="AutoCheckUpdate">Notify when a new version is available</system:String>
   <system:String x:Key="RunAfterLogin">Launch game after login</system:String>
@@ -489,6 +491,7 @@
     >New version {0} detected. Current: {1}\r\n\r\n{2}\r\n\r\nOpen the download page?</system:String
   >
   <system:String x:Key="Language">Language</system:String>
+  <system:String x:Key="LoginMode">LoginMode</system:String>
   <system:String x:Key="InputTotp"
     >Enter the two-factor authentication code from your app</system:String
   >

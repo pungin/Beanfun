@@ -379,8 +379,10 @@ namespace Beanfun
                 if (loginMethod < (int)LoginMethod.Regular)
                     loginMethod = int.Parse(ConfigAppSettings.GetValue("loginMethod", "0"));
                 // Don't restore QRCode/GamePass on startup — they require active auth sessions
-                if (loginMethod > (int)LoginMethod.Regular)
-                    loginMethod = (int)LoginMethod.Regular;
+                loginMethod = Math.Min(
+                    loginMethod,
+                    App.LoginRegion == "TW" ? (int)LoginMethod.QRCode : (int)LoginMethod.Regular
+                );
 
                 loginMethodInit();
 
@@ -1013,9 +1015,12 @@ namespace Beanfun
 
         public void loginMethodChanged()
         {
+            if (qrWorker.IsBusy)
+                qrWorker.CancelAsync();
             qrCheckLogin.IsEnabled = false;
             btn_Region.IsEnabled = true;
-
+            settingPage.LoginModePanel.Visibility =
+                (App.LoginRegion == "TW") ? Visibility.Visible : Visibility.Collapsed;
             if (App.LoginRegion == "TW")
             {
                 loginPage.id_pass.btn_GamePass.Visibility = Visibility.Visible;
@@ -1025,9 +1030,10 @@ namespace Beanfun
                         btn_Region.IsEnabled = false;
                         loginPage.qr.qr_image.Source = qr_default;
                         loginPage.login_form.Content = loginPage.qr;
-                        qrWorker.RunWorkerAsync(
-                            loginPage == null || loginPage.qr == null ? false : true
-                        );
+                        if (!qrWorker.IsBusy)
+                            qrWorker.RunWorkerAsync(
+                                loginPage == null || loginPage.qr == null ? false : true
+                            );
                         break;
                     case (int)LoginMethod.GamePass:
                         btn_Region.IsEnabled = false;
@@ -2314,6 +2320,11 @@ namespace Beanfun
 
         private void qrWorker_DoWork(object sender, DoWorkEventArgs e)
         {
+            if (qrWorker.CancellationPending)
+            {
+                e.Cancel = true;
+                return;
+            }
             this.bfClient = new BeanfunClient();
             string skey = this.bfClient.GetSessionkey();
             this.qrcodeClass = this.bfClient.GetQRCodeValue(skey);
@@ -2358,7 +2369,8 @@ namespace Beanfun
 
         public void refreshQRCode()
         {
-            qrWorker.RunWorkerAsync(loginPage == null || loginPage.qr == null ? false : true);
+            if (!qrWorker.IsBusy)
+                qrWorker.RunWorkerAsync(loginPage == null || loginPage.qr == null ? false : true);
         }
 
         public bool updateQRCodeImage()
