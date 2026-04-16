@@ -1,0 +1,82 @@
+[package]
+name = "beanfun-next"
+version = "0.1.0"
+description = "beanfun! Next — Rust/Tauri reimplementation of Beanfun launcher"
+authors = ["Beanfun Next contributors"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "beanfun_next_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri core
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging / tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# HTTP client (rustls — avoid OpenSSL dependency)
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "cookies",
+  "rustls-tls",
+  "gzip",
+  "deflate",
+] }
+reqwest_cookie_store = "0.8"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Crypto
+des = "0.8"
+cipher = "0.4"
+sha2 = "0.10"
+
+# Parsing / text
+quick-xml = { version = "0.37", features = ["serialize"] }
+regex = "1"
+url = "2"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+
+[target.'cfg(windows)'.dependencies]
+# Win32 API bindings — features will be expanded per phase (DPAPI in P5, WMI/PostMessage in P8/P9).
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Cryptography",
+  "Win32_System_Threading",
+  "Win32_System_ProcessStatus",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Shell",
+] }
+winreg = "0.52"
+wmi = "0.14"
+
+[dev-dependencies]
+wiremock = "0.6"
+axum = "0.8"
+assert_matches = "1"
+tempfile = "3"
+pretty_assertions = "1"
+tokio-test = "0.4"
