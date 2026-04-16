@@ -18,7 +18,26 @@ namespace Beanfun.Update
             "https://ghfast.top/",
         };
 
+        private const int ProbeTimeoutMs = 5000;
+
         private static string _cachedProxy;
+
+        private static bool TryProbe(string url)
+        {
+            try
+            {
+                var req = WebRequest.CreateHttp(url);
+                req.Method = "HEAD";
+                req.Timeout = ProbeTimeoutMs;
+                req.UserAgent = $"Beanfun(V{App.AssemblyVersion})";
+                using (req.GetResponse()) { }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         private static string GetProxy()
         {
@@ -26,31 +45,16 @@ namespace Beanfun.Update
                 return _cachedProxy;
 
             // Test direct GitHub access first
-            try
-            {
-                var req = WebRequest.CreateHttp("https://api.github.com");
-                req.Method = "HEAD";
-                req.Timeout = 5000;
-                req.UserAgent = "Beanfun";
-                using (req.GetResponse()) { }
+            if (TryProbe("https://api.github.com"))
                 return _cachedProxy = "";
-            }
-            catch { }
 
             // Direct access failed, try proxies
             foreach (var proxy in GH_PROXIES)
             {
-                try
-                {
-                    var req = WebRequest.CreateHttp(proxy + "https://api.github.com");
-                    req.Method = "HEAD";
-                    req.Timeout = 5000;
-                    req.UserAgent = "Beanfun";
-                    using (req.GetResponse()) { }
+                if (TryProbe(proxy + "https://api.github.com"))
                     return _cachedProxy = proxy;
-                }
-                catch { }
             }
+
             return _cachedProxy = "";
         }
 
