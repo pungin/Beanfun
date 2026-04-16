@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows;
 using Newtonsoft.Json;
 
@@ -20,7 +21,10 @@ namespace Beanfun.Update
 
         private const int ProbeTimeoutMs = 5000;
 
-        private static string _cachedProxy;
+        private static readonly Lazy<string> _cachedProxy = new Lazy<string>(
+            DiscoverProxy,
+            LazyThreadSafetyMode.ExecutionAndPublication
+        );
 
         private static bool TryProbe(string url)
         {
@@ -39,24 +43,23 @@ namespace Beanfun.Update
             }
         }
 
-        private static string GetProxy()
+        private static string DiscoverProxy()
         {
-            if (_cachedProxy != null)
-                return _cachedProxy;
-
             // Test direct GitHub access first
             if (TryProbe("https://api.github.com"))
-                return _cachedProxy = "";
+                return "";
 
             // Direct access failed, try proxies
             foreach (var proxy in GH_PROXIES)
             {
                 if (TryProbe(proxy + "https://api.github.com"))
-                    return _cachedProxy = proxy;
+                    return proxy;
             }
 
-            return _cachedProxy = "";
+            return "";
         }
+
+        private static string GetProxy() => _cachedProxy.Value;
 
         public class GitHubRelease
         {
