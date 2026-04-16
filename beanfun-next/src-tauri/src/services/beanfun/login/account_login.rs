@@ -26,7 +26,7 @@
 //! zero on drop. Zeroising the **request body** is a larger design
 //! change (custom serde adapter + intercepting reqwest's internal
 //! buffer) that we explicitly defer to a later pass; the zeroise-on-drop
-//! of [`Credentials`](crate::services::beanfun::Credentials) itself
+//! of [`Credentials`] itself
 //! still prevents the plaintext from lingering on the caller's stack
 //! after the call returns.
 

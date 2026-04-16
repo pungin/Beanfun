@@ -1,7 +1,7 @@
 //! Step 2 of the TW Regular flow: `POST Login/CheckAccountType`.
 //!
 //! The server uses this call to decide whether a captcha challenge is
-//! required for the following [`account_login`](super::account_login)
+//! required for the following [`account_login`](super::account_login())
 //! step. We forward whatever captcha token the server returns (empty
 //! string when not required) verbatim into the next payload.
 //!

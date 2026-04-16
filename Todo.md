@@ -269,13 +269,16 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] Integration tests `tests/login_completed.rs`（5 支）：TW happy / HK region stamp / POST body 含 SessionKey+AuthKey+ServiceAccountSN=0 / ServiceCode & ServiceRegion 空字串 / MissingWebToken 傳遞
 - **驗收** ✅：105 lib + 5 login_completed + 7 session_key + 4 smoke + 10 tw_login = 131 全綠、`clippy -D warnings` 綠、`fmt --check` 綠
 
-##### Chunk 3.3.2 — HK Regular flow
+##### Chunk 3.3.2 — HK Regular flow ✅
 
-- [ ] `LoginError::TotpRequired` 從 unit variant → `TotpRequired(Box<TotpChallenge>)`
-- [ ] `login/totp_challenge.rs` — `TotpChallenge { totp_url, viewstate, session_key, account_id }`（Debug redact）
-- [ ] `login/hk_error.rs` — `HkErrorSignal { MsgBox(s) | PollRequest{...} | Unrecognized }` 純函式 + 完整 unit tests
-- [ ] `login/hk_regular.rs` — GET / POST `id-pass_form_newBF.aspx`（VIEWSTATE/EVENTVALIDATION/GENERATOR 複用 P2 `extract_viewstate`）、4 路分支（akey → `login_completed` / totpLoginBtn → Err(TotpRequired) / RELOAD_CAPTCHA_CODE → Err(AdvanceCheck) / MsgBox or pollRequest → Err(ServerMessage)）
-- [ ] Integration tests：HK happy、totp 觸發、advance check、MsgBox 錯誤、pollRequest 錯誤、no akey 且無訊息
+- [x] `LoginError::TotpRequired` 從 unit variant → `TotpRequired(Box<TotpChallenge>)`（附新 doc block 說明「continuation 用 Err channel surface 理由」）
+- [x] `login/totp_challenge.rs` — `TotpChallenge { totp_url, viewstate, session_key, account_id }`（Debug redact session_key + viewstate、accessor only 給 totp_url + account_id、3 支 unit tests）
+- [x] `login/hk_error.rs` — `HkErrorSignal { MsgBox(s) | PollRequest{url,token,param} | Unrecognized }` 純函式 + 9 支 unit tests（含 MsgBox 中文 / MsgBox vs PollRequest 優先序 / 空 token 拒絕等）
+- [x] `login/hk_regular.rs` — GET / POST `id-pass_form_newBF.aspx`（loose viewstate regex + HK 強制三欄 Some）、4 路分支照 WPF L247-285 優先序（RELOAD_CAPTCHA_CODE → AdvanceCheck / totpLoginBtn → TotpRequired / final URL akey → `login_completed` / MsgBox or pollRequest → ServerMessage / Unrecognized → MissingAkey）、9 支 unit tests（URL build / form order / is_advance_check / is_totp / classify_missing_akey）
+- [x] `login/mod.rs` 暴露 `TotpChallenge`, `login_hk_regular`, `HkErrorSignal`, `extract_hk_error_signal`
+- [x] Integration tests `tests/hk_login.rs`（10 支）：HK happy / totp 觸發 + 驗 challenge fields / advance check / MsgBox / pollRequest / MissingViewState / MissingViewStateGenerator / MissingEventValidation / Unrecognized no-akey / POST body 含 credentials + viewstate
+- [x] 順手清 3.2 遺漏的 5 支 rustdoc warnings（redundant explicit link + ambiguous fn/mod）
+- **驗收** ✅：127 lib + 5 login_completed + 7 session_key + 4 smoke + 10 tw_login + 10 hk_login = 163 全綠、`clippy -D warnings` 綠、`fmt --check` 綠、`cargo doc` 0 warning
 
 ##### Chunk 3.3.3 — TOTP flow
 

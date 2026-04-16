@@ -4,7 +4,7 @@
 //! whose `<form>` holds all the opaque session tokens the portal expects
 //! when the browser POSTs over to `beanfun_block/bflogin/return.aspx`.
 //! WPF scrapes every non-submit `<input>` from that form — we do the
-//! same via [`extract_hidden_inputs`](crate::core::parser::extract_hidden_inputs).
+//! same via [`extract_hidden_inputs`].
 //!
 //! WPF reference: `Beanfun/Tools/BeanfunClient.Login.cs::TwRegularLogin`
 //! L114-146.

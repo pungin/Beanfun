@@ -22,8 +22,8 @@ pub struct LoginIndex {
     /// `__RequestVerificationToken` value from the returned HTML.
     pub verification_token: String,
     /// URL of the Index page, including the `?pSKey=…` query. Re-used as
-    /// the `Referer` header by [`super::check_account_type`] and
-    /// [`super::account_login`].
+    /// the `Referer` header by [`super::check_account_type()`] and
+    /// [`super::account_login()`].
     pub index_url: Url,
 }
 

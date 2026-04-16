@@ -17,6 +17,7 @@
 use thiserror::Error;
 
 use crate::core::parser::ParserError;
+use crate::services::beanfun::login::totp_challenge::TotpChallenge;
 
 /// Everything that can go wrong during a Beanfun login or session call.
 #[derive(Debug, Error)]
@@ -63,10 +64,18 @@ pub enum LoginError {
     AdvanceCheckRequired { url: Option<String> },
 
     /// WPF `need_totp` — the server response contained a `totpLoginBtn`
-    /// form, meaning the account has TOTP 2FA enabled. The caller must
-    /// follow up with [`login::totp`] once it has the 6-digit code.
+    /// form, meaning the account has TOTP 2FA enabled. Carries a
+    /// [`TotpChallenge`] with the viewstate + URL the caller must
+    /// forward into `login_totp` once it has the 6-digit code.
+    ///
+    /// Semantically this is a **continuation**, not an error —
+    /// `login_hk_regular` can't produce a `Session` without the user
+    /// supplying the OTP, so it surfaces through the `Err` channel of
+    /// `Result<Session, LoginError>` to keep the caller's
+    /// happy-path type signature consistent with TW Regular. The
+    /// challenge is boxed to keep the `LoginError` variants compact.
     #[error("TOTP one-time password required")]
-    TotpRequired,
+    TotpRequired(Box<TotpChallenge>),
 
     /// Server returned a freeform error `ResultMessage` — we surface the raw
     /// text verbatim so the UI can localise / display it.

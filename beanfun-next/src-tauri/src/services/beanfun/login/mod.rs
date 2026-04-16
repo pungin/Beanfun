@@ -22,19 +22,25 @@
 pub mod account_login;
 pub mod check_account_type;
 pub mod completed;
+pub mod hk_error;
+pub mod hk_regular;
 pub mod index;
 pub mod return_aspx;
 pub mod send_login;
 pub mod session_key;
+pub mod totp_challenge;
 pub mod tw_regular;
 
 pub use account_login::account_login;
 pub use check_account_type::check_account_type;
 pub use completed::login_completed;
+pub use hk_error::{extract_hk_error_signal, HkErrorSignal};
+pub use hk_regular::login_hk_regular;
 pub use index::{get_login_index, LoginIndex};
 pub use return_aspx::post_return_aspx;
 pub use send_login::send_login;
 pub use session_key::get_session_key;
+pub use totp_challenge::TotpChallenge;
 pub use tw_regular::login_tw_regular;
 
 use crate::services::beanfun::LoginError;
