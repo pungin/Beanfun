@@ -17,6 +17,7 @@
 
 pub mod account;
 pub mod akey;
+pub mod form;
 pub mod token;
 pub mod viewstate;
 
@@ -68,5 +69,6 @@ pub type Result<T> = std::result::Result<T, ParserError>;
 // reaching into submodules individually.
 pub use account::{extract_account_limit_notice, extract_service_accounts, ServiceAccountRow};
 pub use akey::extract_akey;
+pub use form::{extract_hidden_inputs, HiddenInput};
 pub use token::extract_verification_token;
 pub use viewstate::{extract_viewstate, ViewStateForm};

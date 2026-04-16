@@ -19,6 +19,62 @@
 //!   methods without duplicating code.
 //! - Surface per-step errors via the typed [`super::LoginError`] enum.
 
+pub mod account_login;
+pub mod check_account_type;
+pub mod index;
+pub mod return_aspx;
+pub mod send_login;
 pub mod session_key;
+pub mod tw_regular;
 
+pub use account_login::account_login;
+pub use check_account_type::check_account_type;
+pub use index::{get_login_index, LoginIndex};
+pub use return_aspx::post_return_aspx;
+pub use send_login::send_login;
 pub use session_key::get_session_key;
+pub use tw_regular::login_tw_regular;
+
+use crate::services::beanfun::LoginError;
+
+// -----------------------------------------------------------------------------
+// Shared request helpers
+// -----------------------------------------------------------------------------
+
+/// Fail with [`LoginError::Unknown`] when `resp` is not a 2xx. Keeps
+/// every login step's "non-success shortcut" to one line so the error
+/// text stays consistent across the flow.
+///
+/// Does **not** handle 3xx as success — the one step that needs that
+/// (`return.aspx`) inspects the status itself.
+pub(crate) fn ensure_success(resp: &reqwest::Response, step: &str) -> Result<(), LoginError> {
+    if !resp.status().is_success() {
+        return Err(LoginError::Unknown(format!(
+            "{step} returned HTTP {}",
+            resp.status()
+        )));
+    }
+    Ok(())
+}
+
+/// Apply the exact header set that WPF's `SetJsonHeaders` installs before
+/// any JSON-bodied login call (CheckAccountType, AccountLogin).
+///
+/// Factored out here because both call sites send the **same** four
+/// headers; keeping a single helper means a future protocol tweak only
+/// needs to be applied in one place.
+///
+/// Note: `Content-Type: application/json; charset=utf-8` is **not** set
+/// explicitly — reqwest's `.json(&body)` adds it automatically, which
+/// byte-matches what WPF's `Headers[HttpRequestHeader.ContentType]`
+/// assignment emits.
+pub(crate) fn apply_json_headers(
+    rb: reqwest::RequestBuilder,
+    verification_token: &str,
+    referer: &str,
+) -> reqwest::RequestBuilder {
+    rb.header(reqwest::header::ACCEPT, "application/json, text/plain, */*")
+        .header(reqwest::header::REFERER, referer)
+        .header("X-Requested-With", "XMLHttpRequest")
+        .header("RequestVerificationToken", verification_token)
+}

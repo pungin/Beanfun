@@ -253,6 +253,41 @@ impl BeanfunClient {
         Arc::clone(&self.cookie_store)
     }
 
+    /// Build a URL rooted at `endpoints.login_base`, e.g.
+    /// `login_url("Login/Index")` →
+    /// `https://login.beanfun.com/Login/Index`.
+    pub(crate) fn login_url(&self, path: &str) -> Result<url::Url, LoginError> {
+        self.config
+            .endpoints
+            .login_base
+            .join(path)
+            .map_err(|e| LoginError::InvalidUrl(format!("login URL `{path}`: {e}")))
+    }
+
+    /// Build a `login_base`-rooted URL with a `pSKey=…` query parameter
+    /// appended, URL-encoding the value for us. The vast majority of
+    /// login calls need this shape.
+    pub(crate) fn login_url_with_skey(
+        &self,
+        path: &str,
+        skey: &str,
+    ) -> Result<url::Url, LoginError> {
+        let mut url = self.login_url(path)?;
+        url.query_pairs_mut().append_pair("pSKey", skey);
+        Ok(url)
+    }
+
+    /// Build a URL rooted at `endpoints.portal_base`, e.g.
+    /// `portal_url("beanfun_block/bflogin/return.aspx")` →
+    /// `https://tw.beanfun.com/beanfun_block/bflogin/return.aspx`.
+    pub(crate) fn portal_url(&self, path: &str) -> Result<url::Url, LoginError> {
+        self.config
+            .endpoints
+            .portal_base
+            .join(path)
+            .map_err(|e| LoginError::InvalidUrl(format!("portal URL `{path}`: {e}")))
+    }
+
     /// Read `resp`'s body as UTF-8, capping the accumulated bytes at
     /// [`ClientConfig::max_body_size`].
     ///
@@ -369,6 +404,41 @@ mod tests {
     fn client_constructs_and_exposes_config() {
         let client = BeanfunClient::new(ClientConfig::default()).expect("client builds");
         assert_eq!(client.config().region, LoginRegion::TW);
+    }
+
+    #[test]
+    fn login_url_joins_onto_login_base() {
+        let client = BeanfunClient::new(ClientConfig::default()).unwrap();
+        let url = client.login_url("Login/Index").unwrap();
+        assert_eq!(url.as_str(), "https://login.beanfun.com/Login/Index");
+    }
+
+    #[test]
+    fn login_url_with_skey_url_encodes_value() {
+        let client = BeanfunClient::new(ClientConfig::default()).unwrap();
+        let url = client
+            .login_url_with_skey("Login/Index", "A B/C=D")
+            .unwrap();
+        // url crate encodes ` ` → `+`, `/` → `%2F`, `=` → `%3D` via
+        // `form_urlencoded` semantics. We assert on the shape, not the
+        // exact byte-for-byte, so a future url bump that switches `+` to
+        // `%20` would not spuriously break the test.
+        let encoded = url.query().unwrap();
+        assert!(encoded.starts_with("pSKey="));
+        assert!(!encoded.contains(' '), "space must be encoded: {encoded}");
+        assert!(!encoded.contains('/'), "slash must be encoded: {encoded}");
+    }
+
+    #[test]
+    fn portal_url_joins_onto_portal_base() {
+        let client = BeanfunClient::new(ClientConfig::default()).unwrap();
+        let url = client
+            .portal_url("beanfun_block/bflogin/return.aspx")
+            .unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://tw.beanfun.com/beanfun_block/bflogin/return.aspx"
+        );
     }
 
     #[test]

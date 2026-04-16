@@ -244,15 +244,18 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] Integration tests `tests/session_key.rs`（wiremock）：TW 302→URL 抓 key / TW missing / HK span 抓 key / HK missing span / HK empty body / body-cap / UA 比對
 - **驗收** ✅：77 lib tests + 7 session_key integration + 4 smoke = 88 全綠、`clippy -D warnings` 綠、`fmt --check` 綠
 
-#### Chunk 3.2 — TW Regular 完整 flow
+#### Chunk 3.2 — TW Regular 完整 flow ✅
 
-- [ ] `login/index.rs` — GET `Login/Index?pSKey=…`、複用 P2 `extract_verification_token`
-- [ ] `login/check_account_type.rs` — POST `Login/CheckAccountType`、拆出 captcha token
-- [ ] `login/account_login.rs` — POST `Login/AccountLogin`、typed `AccountLoginOutcome { Success, AdvanceCheck, Totp, ServerError }`
-- [ ] `login/send_login.rs` — GET `Login/SendLogin`、scrape `<input>` 組 payload
-- [ ] `login/return_aspx.rs` — POST `return.aspx`（no-redirect client）、從 Set-Cookie 撈 `bfWebToken`
-- [ ] `login/tw_regular.rs` — orchestrator `login_tw_regular(client, creds) -> Session`
-- [ ] Integration tests：happy path、密碼錯、AdvanceCheck、SendLoginNoFormData、MissingWebToken
+- [x] `core/parser/form.rs` — `extract_hidden_inputs` 共用 SendLogin HTML scrape（8 unit tests）
+- [x] `BeanfunClient::{login_url, login_url_with_skey, portal_url}` helper + `login::ensure_success` / `login::apply_json_headers` 共用減 DRY
+- [x] `login/index.rs` — GET `Login/Index?pSKey=…`、remap `ParserError::MissingRequestVerificationToken` → `LoginError::MissingVerificationToken`
+- [x] `login/check_account_type.rs` — POST `Login/CheckAccountType`、JSON body sniff（非 `{` 視同無 captcha）、typed DTO
+- [x] `login/account_login.rs` — POST `Login/AccountLogin`、`classify_outcome(code, result, msg)` 純函式 + 5 unit tests 對應 4 分支
+- [x] `login/send_login.rs` — GET `Login/SendLogin`、空 form 直接 `SendLoginNoFormData`
+- [x] `login/return_aspx.rs` — POST `return.aspx`（no-redirect）、raw Set-Cookie 掃 `bfWebToken`（4 unit tests）
+- [x] `login/tw_regular.rs` — orchestrator `login_tw_regular(client, creds) -> Session`
+- [x] Integration tests `tests/tw_login.rs`：7 支（happy path、wrong password → `ServerMessage`、advance check 1/1 → `AdvanceCheckRequired{None}`、advance check 2 + http URL、SendLogin 空 → `SendLoginNoFormData`、return.aspx 無 cookie → `MissingWebToken`、Index 無 token → `MissingVerificationToken`）
+- **驗收** ✅：97 lib tests + 7 session_key + 4 smoke + 7 tw_login = 115 全綠、`clippy -D warnings` 綠、`fmt --check` 綠
 
 #### Chunk 3.3 — HK Regular + TOTP + LoginCompleted
 
