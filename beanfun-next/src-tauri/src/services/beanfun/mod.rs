@@ -11,7 +11,7 @@
 //! | [`error`]    | `LoginError` — typed error enum mapping WPF `errmsg`    |
 //! | [`session`]  | `Credentials`, `Session` (zeroize'd where sensitive)    |
 //! | [`login`]    | Login flows: session-key, TW/HK regular, TOTP, QRCode   |
-//! | [`account`]  | Account list + JSON management (gamezone.ashx)          |
+//! | [`account`]  | Account list + JSON management (gamezone.ashx) + WebForms add-account / change-password |
 //! | [`otp`]      | OTP retrieval (5 HTTP + WCDES decrypt)                  |
 //! | [`verify`]   | Advance-check captcha re-auth (3 HTTP, TW only)         |
 //!
@@ -39,7 +39,11 @@ pub mod verify;
 
 pub use account::{
     add_service_account, change_service_account_display_name, get_accounts, get_service_contract,
-    AccountListResult, AmountLimitNotice, ServiceAccount,
+    unconnected_game_add_account, unconnected_game_add_account_check,
+    unconnected_game_add_account_check_nickname, unconnected_game_change_password,
+    unconnected_game_init_add_account_payload, AccountListResult, AddAccountInit,
+    AddAccountOutcome, AddAccountSession, AmountLimitNotice, ChangePasswordOutcome, CheckOutcome,
+    ServiceAccount,
 };
 pub use client::{BeanfunClient, ClientConfig, Endpoints, LoginRegion};
 pub use error::LoginError;

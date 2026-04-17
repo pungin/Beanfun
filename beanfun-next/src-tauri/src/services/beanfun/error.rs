@@ -273,6 +273,62 @@ pub enum LoginError {
     VerifyCaptchaImageTooSmall { actual: usize },
 
     // ---------------------------------------------------------------------
+    // WebForms account-management (`BeanfunClient.Account.cs`
+    // `UnconnectedGame_*`, P4.4)
+    // ---------------------------------------------------------------------
+    //
+    // The five `*Missing*` variants below mirror the five distinct
+    // `errmsg = "LoginNo*"` strings WPF raises while parsing the
+    // accounts-management WebForms HTML
+    // (`UnconnectedGame_InitAccountPayload` /
+    // `_InitAddAccountPayload` / `_AddAccountCheck` /
+    // `_AddAccountCheckNickName` / `_ChangePassword`). They share the
+    // same Naming pattern as the verify chunk's `Verify*Missing*`
+    // variants for grep-friendliness; consolidating both groups under
+    // a generic `MissingHiddenField { context, name }` is left for a
+    // potential P10 cross-cutting refactor.
+    /// WPF `LoginNoViewstate` raised inside any of the
+    /// accounts-management `UnconnectedGame_*` flows
+    /// (`Account.cs` L191 / L240 / L326 / L397 / L507 / L561) —
+    /// the WebForms HTML page returned by `auth.aspx` /
+    /// `01.aspx` / `01Accounts.aspx` / `02.aspx` / `03.aspx` did
+    /// not contain a `__VIEWSTATE` hidden input.
+    #[error("accounts-management page missing __VIEWSTATE")]
+    AccountMgmtMissingViewState,
+
+    /// WPF `LoginNoViewstategenerator` (`Account.cs` L198 / L247
+    /// / L333 / L404 / L514 / L568) — the WebForms HTML did not
+    /// contain a `__VIEWSTATEGENERATOR` hidden input.
+    #[error("accounts-management page missing __VIEWSTATEGENERATOR")]
+    AccountMgmtMissingViewStateGenerator,
+
+    /// WPF `LoginNoEventvalidation` (`Account.cs` L253 / L340 /
+    /// L411 / L521 / L575) — the WebForms HTML did not contain an
+    /// `__EVENTVALIDATION` hidden input. Note that
+    /// `UnconnectedGame_InitAccountPayload` (`auth.aspx` GET, L191
+    /// / L198) does **not** check this field; only the post-`02.aspx`
+    /// / `01Accounts.aspx` / `03.aspx` parses do.
+    #[error("accounts-management page missing __EVENTVALIDATION")]
+    AccountMgmtMissingEventValidation,
+
+    /// WPF `LoginNoGameName` (`Account.cs` L269) — the
+    /// `UnconnectedGame_InitAddAccountPayload` POST response did not
+    /// contain the `<span id="lblGameName">…</span>` element that
+    /// the AddAccount UI shows. Surfaces only from
+    /// [`super::unconnected_game_init_add_account_payload`].
+    #[error("accounts-management init-add-account page missing lblGameName")]
+    AccountMgmtMissingGameName,
+
+    /// WPF `LoginNoAccountLen` (`Account.cs` L277) — the
+    /// `UnconnectedGame_InitAddAccountPayload` POST response did not
+    /// contain the `<span id="lblAccountLen">…</span>` element that
+    /// drives the AddAccount UI's per-game length range
+    /// (e.g. `"6 - 12"`). Surfaces only from
+    /// [`super::unconnected_game_init_add_account_payload`].
+    #[error("accounts-management init-add-account page missing lblAccountLen")]
+    AccountMgmtMissingAccountLen,
+
+    // ---------------------------------------------------------------------
     // Transport-level errors
     // ---------------------------------------------------------------------
     /// Wrapped `reqwest::Error` — network, TLS, connect, or body-read

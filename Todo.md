@@ -425,10 +425,26 @@ c:\Users\mo030\Desktop\Beanfun\
 - **outcome classification 對齊 `verifyWorker_DoWork` L2634-2661**：先 `alert\\('(.*)'\\);` 抓出訊息 → 含 `資料已驗證成功` → `Success`；否則 → `ServerMessage(msg)`。無 alert 再看 `圖形驗證碼輸入錯誤` → `WrongCaptcha` / 否則 → `WrongAuthInfo`
 
 #### Chunk 4.4 — `services/beanfun/account.rs` WebForms 管理 endpoints
-- [ ] `unconnected_game_init_add_account_payload(...)`（含私有 `unconnected_game_init_account_payload` helper）
-- [ ] `unconnected_game_add_account_check(...)` + `check_nickname(...)`（DRY 候選：兩個只差 `__EVENTTARGET`）
-- [ ] `unconnected_game_add_account(...)`
-- [ ] `unconnected_game_change_password(...)`（4-step flow）
+- [x] D-step 1：error.rs 加 5 個 `AccountMgmtMissing*` typed variants（ViewState / ViewStateGenerator / EventValidation / GameName / AccountLen）
+- [x] D-step 2：account.rs 加 5 個 public types（`AddAccountSession` / `AddAccountInit` / `CheckOutcome` / `AddAccountOutcome` / `ChangePasswordOutcome`）
+- [x] D-step 3：account.rs 加 private helpers（`mgmt_url` / `change_password_url` / `parse_viewstate_triplet` / `build_viewstate_payload_prefix` / `push_account_dn` / `add_account_check_inner` / `build_add_account_form` / `extract_lbl_error_message` / `extract_verify_code_from_url` + `init_account_payload`）
+- [x] D-step 4：實作 `unconnected_game_init_add_account_payload(...)`（含內部 `init_account_payload` helper：GET `auth.aspx?channel=accounts_management...`）
+- [x] D-step 5：實作 `unconnected_game_add_account_check(...)` + `unconnected_game_add_account_check_nickname(...)`（共用 `add_account_check_inner`）
+- [x] D-step 6：實作 `unconnected_game_add_account(...)`
+- [x] D-step 7：實作 `unconnected_game_change_password(...)`（5-step flow + HK `http://` deviation candidate doc）
+- [x] D-step 8：mod.rs re-exports 更新
+- [x] D-step 9：20 unit tests（pure helpers + region URL prefix + HK `__VIEWSTATEENCRYPTED` toggle + 5 missing-field errors + outcome classification + verify_code extraction）
+- [x] D-step 10：15 integration tests in `tests/account_management.rs`（init TW/HK + 3 missing-field errors + check TW/HK + check_nickname + add success/error/empty + change_password 5-step + lblErrorMessage + Unknown outcome）
+- [x] D-step 11：quality gates（fmt / clippy / test 全綠 — 237 lib unit + 13 integration binaries 0 failed / doc 0 warning）
+- [x] D-step 12：Todo.md 標記完成 + P4.4 設計決議段落
+- [ ] D-step 13：single commit `feat(next): add WebForms account-management endpoints (P4 chunk 4.4)`
+
+##### Chunk 4.4 設計決議（事先記錄，實作後若有調整再 update）
+- **D1 → A2 結構化 typed types**：`AddAccountSession` 持 viewstate 三件組 + region；`AddAccountInit` 含 session + game_name + account_len + check_nickname_supported；`CheckOutcome { session, error_message }`；`AddAccountOutcome { Success | ErrorMessage(String) }`；`ChangePasswordOutcome { VerifyCodeSent(String) | ErrorMessage(String) }`。caller 不會誤塞欄位，HK `__VIEWSTATEENCRYPTED` 由 service 內部處理
+- **D2 → B1 private helper**：`accounts_management_url(client, suffix)` 在 account.rs 內，不擴張 BeanfunClient surface
+- **D3 → C3 1:1 用 `http://` + doc**：HK `change_password` step 3/4 對齊 WPF L549-555/L597-600 用 `http://`（其餘所有 HK 路徑都是 https）。看似 typo 但功能對齊優先；module doc 加 `# WPF deviation candidate` 段落留 trace 給 P10 安全 review
+- **D4 → E1 5 typed variants**：對齊 verify chunk 的 `VerifyMissing*` 命名 pattern。未來重構成通用 `MissingHiddenField` 留給 P10
+- **D5 → F1 兩 public + 一 private inner**：public surface 對齊 WPF caller，內部共用 `add_account_check_inner(client, mgmt_session, event_target, account_id, dn)`
 
 ##### 跨 chunk 設計決議
 - **State model**：P4 函式統一 `(client: &BeanfunClient, session: &Session, ...)`，沿用 P3 的 split（`BeanfunClient` 只管 HTTP plumbing、`Session` 由 caller 持有）
