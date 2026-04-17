@@ -459,19 +459,76 @@ c:\Users\mo030\Desktop\Beanfun\
 
 ### P5 — Rust `services/storage` DPAPI + `services/config` XML
 
-- [ ] `services/storage/dpapi.rs`：`protect(plain: &[u8], entropy: &[u8]) -> Vec<u8>` / `unprotect(...)`（`CryptProtectData` / `CryptUnprotectData` + `CurrentUser` scope）
-- [ ] `services/storage/entropy.rs`：`winreg` 讀寫 `HKCU\SOFTWARE\BEANFUN\Entropy`（格式與 WPF `ModifyRegistry` 相同）
-- [ ] `services/storage/users_dat.rs`：
-  - [ ] `save(records: &Records)`：serde_json → DPAPI protect → 寫 `%APPDATA%\Beanfun\Users.dat`
-  - [ ] `load() -> Result<Records>`：讀檔 → unprotect → serde_json parse
-  - [ ] `import(json: &str)` / `export() -> String`
-- [ ] `services/config/xml.rs`：`quick-xml` 讀寫 `AppSettings` 格式；與 .NET `ExeConfigurationFileMap` 相容（`<appSettings><add key="..." value="..."/></appSettings>`）
-- [ ] 損毀自動刪除重建（對齊 WPF `ConfigAppSettings` catch 行為）
-- [ ] 互操作測試：
-  - [ ] WPF 版寫的 `Users.dat` → Rust 讀，資料一致
-  - [ ] Rust 版寫的 `Users.dat` → WPF 讀，資料一致（需另啟 WPF 驗證）
-  - [ ] WPF 寫的 `Config.xml` → Rust 讀，所有 key 可取
-- **驗收**：互操作測試全綠
+#### Chunk 5.1 — `services/storage/dpapi.rs` + `services/storage/entropy.rs`（底層 primitive）
+- [x] D-step 1：新增 `services/storage/mod.rs` + `StorageError` error enum（4 variants：`Dpapi { operation, message }` / `Registry(io::Error)` / `EntropyMissing` / `EntropyShape`；DPAPI protect / unprotect 共用單一 variant 用 `operation` 欄位辨識）
+- [x] D-step 2：`services/storage/dpapi.rs` 實作 `dpapi_protect(plain, entropy) -> Vec<u8>` / `dpapi_unprotect(cipher, entropy) -> Vec<u8>`（`windows` crate `CryptProtectData` / `CryptUnprotectData`，`CurrentUser` scope，無 flags / description，`LocalFree` 釋放 Win32 allocated buffer）
+- [x] D-step 3：`services/storage/entropy.rs` 實作 `Entropy(String)` newtype + `generate()`（`OsRng` 8 char `[A-Z0-9]` CHARSET 36 char）/ `parse()` / `as_bytes()` / `as_str()` + `read_from_registry()` / `write_to_registry()`（`winreg` 讀寫 `HKCU\SOFTWARE\BEANFUN\ENTROPY`，key / value 大寫 hardcode）+ `_at(subkey, value_name)` 變體供測試隔離用
+- [x] D-step 4：lib re-exports（`mod.rs` pub use）+ `services/mod.rs` 加 `pub mod storage;`
+- [x] D-step 5：15 unit tests（entropy: 10 tests 含 generate 3 / parse 4 / debug redacted / registry constants / charset 常數對齊；dpapi: 5 tests 含 round-trip / wrong entropy / empty / large / no-entropy）
+- [x] D-step 6：7 integration tests in `tests/storage_dpapi.rs`（end-to-end save/load、EntropyMissing sub-key 缺、EntropyMissing value 缺、EntropyShape 畸形值、大 payload 256KB、entropy 篡改失敗、精確值 round-trip；registry 用 `SOFTWARE\BEANFUN_NEXT_TEST\<name>_<pid>` 隔離不污染 production）
+- [x] D-step 7：quality gates（fmt / clippy `-D warnings` / test `252 lib + 7 integration 0 failed` / doc 0 warning 全綠）
+- [ ] D-step 8：commit `feat(next): add DPAPI + entropy storage primitives (P5 chunk 5.1)`
+
+#### Chunk 5.2 — `services/storage/users_dat.rs`（Records + JSON save/load + legacy hook）
+- [ ] D-step 1：public types — `Account` struct（7 欄位：region / account_id / account_name / password / verify / method / auto_login）+ `Records` container（`Vec<Account>`）+ `Default` impl 空列表
+- [ ] D-step 2：wire format adapter — `WireRecords`（parallel columns 與 WPF byte-byte 相容）+ `From<Records>` / `TryFrom<WireRecords>`
+- [ ] D-step 3：normalize helper 對齊 WPF `accRecInit()`（region 缺省 `"TW"`、其他 list 缺省空字串 / `0` / `false`、length 對齊 `accountList.len()`）
+- [ ] D-step 4：新增 `StorageError::{Io, JsonParse, Utf8Decode, LegacyDataDetected { raw_bytes }}` 4 個 variants
+- [ ] D-step 5：`save_records(path, records)` async：normalize → JSON serialize → `Entropy::generate()` + `write_to_registry()` → `dpapi_protect()` → `tokio::fs::write()`（內部 `spawn_blocking` 或 tokio-fs）
+- [ ] D-step 6：`load_records(path)` async：
+  - [ ] file 不存在 → `Ok(Records::default())`
+  - [ ] `tokio::fs::read()` → `Entropy::read_from_registry()` → `dpapi_unprotect()` 任一失敗 → 刪檔（`tokio::fs::remove_file`）+ 回 `Ok(Records::default())`（對齊 WPF L215-229）
+  - [ ] UTF-8 decode 失敗 → 同上刪檔路徑
+  - [ ] `serde_json::from_str::<WireRecords>(plain)` 成功 → normalize 後回 `Ok(Records)`
+  - [ ] JSON parse 失敗 → 試 `base64::decode(plain)` 成功 → `Err(LegacyDataDetected { raw_bytes })`（P6 接手）
+  - [ ] JSON + base64 皆失敗 → **保留檔案** 回 `Ok(Records::default())`（對齊 WPF L182-187 不刪檔，下次 save 才覆寫）
+- [ ] D-step 7：`import_records(json)` / `export_records(records) -> String`（對齊 WPF `importRecord` / `exportRecord`）
+- [ ] D-step 8：`default_users_dat_path() -> PathBuf` helper（從 `%APPDATA%\Beanfun\Users.dat` 解析）
+- [ ] D-step 9：lib re-exports + doc
+- [ ] D-step 10：~15 unit tests（normalize / WireRecords round-trip / Account 欄位 / empty default / WPF fixture JSON parse）
+- [ ] D-step 11：~12 integration tests in `tests/storage_users_dat.rs`（save/load round-trip / missing file / DPAPI fail 刪檔 / base64 legacy detect / invalid JSON 不刪檔 / path helper）
+- [ ] D-step 12：quality gates（fmt / clippy / test / doc 全綠）
+- [ ] D-step 13：commit `feat(next): add Users.dat JSON + DPAPI storage (P5 chunk 5.2)`
+
+#### Chunk 5.3 — `services/config/xml.rs`（AppSettings XML 讀寫 + 損毀重建）
+- [ ] D-step 1：新增 `services/config/mod.rs` + `ConfigError` error enum（至少 `Io` / `XmlParse` / `XmlWrite` 3 個 variants）
+- [ ] D-step 2：XML reader — `parse_app_settings(xml: &str) -> Result<HashMap<String, String>, ConfigError>`（quick-xml reader，只處理固定 `<configuration><appSettings><add key value />` schema）
+- [ ] D-step 3：XML writer — `write_app_settings(map: &BTreeMap<String, String>) -> String`（固定 schema，`<?xml version="1.0" encoding="utf-8"?>`、`BTreeMap` 確保 key 排序穩定）
+- [ ] D-step 4：`get_value(path, key)` async / `get_value_or(path, key, default)` async（對齊 WPF `GetValue(key)` / `GetValue(key, def)` 兩個 signature）
+- [ ] D-step 5：`set_value(path, key, value: Option<&str>)` async（`None` = remove key，對齊 WPF `value == null ⇒ Remove`）
+- [ ] D-step 6：損毀重建 — parse / write 失敗 → 刪檔 + 重試**一次**（限一次避免無限遞迴，差異於 WPF 的無限遞迴設計寫進 module doc）
+- [ ] D-step 7：`default_config_xml_path() -> PathBuf` helper
+- [ ] D-step 8：lib re-exports + doc
+- [ ] D-step 9：~10 unit tests（parser / writer / round-trip / schema 未知 element 忽略 / XML escape / missing key default）
+- [ ] D-step 10：~8 integration tests in `tests/config_xml.rs`（missing file 自動建立 / set then get / remove key / 損毀檔案重建 / 16 個已知 key 的 default）
+- [ ] D-step 11：quality gates（fmt / clippy / test / doc 全綠）
+- [ ] D-step 12：commit `feat(next): add AppSettings XML config store (P5 chunk 5.3)`
+
+#### Chunk 5.x 設計決議（事前記錄，實作後若有調整再 update）
+
+##### 共用決議
+- **Records API shape**：Rust 內部用 `Vec<Account>` struct，serde adapter 讓 wire 繼續是 parallel columns JSON（與 WPF byte-byte 相容）。`WireRecords` 是內部 helper 不對外暴露，確保 round-trip invariance
+- **async API + 內部 `spawn_blocking`**：storage / config 兩層都是 `async fn` 對齊 P4 風格，內部用 `tokio::fs` 或 `tokio::task::spawn_blocking` 包同步 Win32 API（DPAPI / registry / file I/O）
+- **`Entropy` 升級到 `OsRng`**：WPF 用 `new Random()` time-seeded PRNG 是原有瑕疵；DPAPI ciphertext 本身已經有強熵，entropy 只是 salt，升級 RNG 不影響互通性，每次 save 重新生成行為不變
+- **Legacy BinaryFormatter fallback 留 P6 接手**：P5 的 load 流程在 `serde_json::from_str` 失敗 + `base64::decode` 成功時，回 typed `StorageError::LegacyDataDetected { raw_bytes }`，P6 `core/legacy/nrbf.rs` 接管 parser 並走相同 save 路徑覆寫成 JSON
+- **Registry sub-key hardcode `"BEANFUN"`**：WPF 用 `Application.ResourceAssembly.GetName().Name.ToUpper()`，我們 Rust `beanfun-next` crate 名不同但對 external WPF byte-byte 相容需要 hardcode；hardcode 在 `entropy.rs` 常數 + module doc 註明來歷
+- **Config XML 損毀重建限 1 次重試**：WPF L58 遞迴呼叫 `SetValue` 沒有終止條件，理論上無限遞迴（實務上第二次一定成功因為剛刪了檔）；Rust 嚴謹限 1 次，第二次失敗直接回 `ConfigError`，差異寫進 module doc
+- **File paths 由 caller 傳入**：`load_records(path: &Path)` / `get_value(path: &Path, key)` 接受 path 參數方便測試；另外提供 `default_users_dat_path()` / `default_config_xml_path()` helper 給 production caller 使用（內部用 `dirs::config_dir()` 或 `std::env::var("APPDATA")` 對齊 WPF `SpecialFolder.ApplicationData`）
+- **Thread-safety**：P5 不加 lock；caller（P10 Tauri commands）若需要序列化多路 save 呼叫，由上層用 `tokio::sync::Mutex` 包裝。storage 函式本身 stateless（每次 open file）
+
+##### Crate 依賴新增（`Cargo.toml`）
+- `windows` (0.5x) with features `["Win32_Security_Cryptography", "Win32_Foundation"]` — DPAPI
+- `winreg` — registry
+- `quick-xml` — config XML parser/writer
+- `base64` — legacy 偵測用 base64 decode 嘗試
+- `rand` (如果尚未引入) + `rand::rngs::OsRng` / `rand::distributions::Alphanumeric` — entropy 產生
+- 所有新依賴放 `[target.'cfg(windows)'.dependencies]` 若 platform-gated，但我們 beanfun-next 本來就 Windows-only（Tauri app target）→ 可直接放 `[dependencies]`
+
+##### 驗收條件
+- **Chunk 5.1**：DPAPI protect / unprotect round-trip OK；registry entropy 讀寫 OK；`OsRng` 產生的 entropy 每次呼叫都不同
+- **Chunk 5.2**：save → load round-trip 欄位 byte-byte 相同；normalize 補齊短 list 與 WPF `accRecInit` 等價；base64 legacy 觸發 typed error；DPAPI 失敗觸發刪檔行為
+- **Chunk 5.3**：16 個已知 key + default 的 get/set 行為全 OK；`set_value(key, None)` 真的移除該節點；損毀檔案觸發刪除 + 重試一次成功；remaining WPF-written XML fixture 可以 parse
+- **P5 總驗收**：約 33 個 unit tests + 25 個 integration tests 全綠，quality gates 全綠
 
 ### P6 — Rust `core/legacy` BinaryFormatter parser
 
