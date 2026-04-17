@@ -82,10 +82,12 @@ rand = "0.8"
 windows = { version = "0.58", features = [
   "Win32_Foundation",
   "Win32_Globalization",
+  "Win32_Graphics_Gdi",
   "Win32_Security",
   "Win32_Security_Cryptography",
   "Win32_System_Threading",
   "Win32_System_ProcessStatus",
+  "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Shell",
 ] }

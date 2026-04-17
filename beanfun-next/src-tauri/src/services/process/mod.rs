@@ -38,12 +38,18 @@ pub mod find;
 pub mod kill;
 pub mod patcher;
 pub mod play_page;
+pub mod post_string;
 
 pub use error::ProcessError;
 pub use find::{find_processes_by_name, ProcessInfo};
 pub use kill::kill_process;
 pub use patcher::{check_and_kill_patcher, PATCHER_EXE_NAME};
 pub use play_page::{close_play_window, PLAY_WINDOW_CLASS, PLAY_WINDOW_TITLE};
+pub use post_string::{
+    client_to_screen, find_window, get_client_area_size, get_cursor_pos, post_key,
+    post_message_raw, post_string, set_cursor_pos, set_foreground_window, Point, Size,
+    WindowHandle,
+};
 
 /// UTF-16 encode `s` with a trailing NUL, the shape
 /// [`windows::core::PCWSTR`][PCWSTR] expects.

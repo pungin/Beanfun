@@ -780,31 +780,71 @@ Review 發現 6 個問題，依風險高中低切 5 個 R-step 修改 + 1 個 ga
 - [x] D-step 7：unit tests — `quote_in_name_returns_empty` / `process_info_equality_rejects_path_casing_sloppiness` / `kill_pid_zero_errors_on_open_not_terminate` / `kill_implausible_pid_errors_on_open` / `read_known_present_value_returns_some`（HKCU\Environment@TEMP）/ `read_missing_subkey_returns_none` / `read_missing_value_in_existing_key_returns_none` / `read_hklm_known_value`（HKLM ProductName）/ `hive_display_name_matches_reg_syntax`
 - [x] D-step 8：integration test `tests/process_find_kill.rs`（`#[cfg(target_os = "windows")]`）— `find_processes_by_name_finds_our_spawned_cmd` / `kill_process_terminates_spawned_cmd` / `find_then_kill_round_trip` / `kill_nonexistent_pid_surfaces_open_process_error`（4/4）；spawn 用 `cmd /c ping -n 30 127.0.0.1 -w 1000`（避開 `timeout` stdin 已關閉時立刻退出的坑）
 - [x] D-step 9：quality gates 全綠 — `cargo fmt --check` ✓ / `cargo clippy --all-targets -- -D warnings` ✓ / `cargo test --lib` 409/409 / `cargo test --test process_find_kill` 4/4 / `cargo test --test updater` 8/8 / `cargo test --test game_locale_remulator` 6/6 / `cargo test --test storage_legacy --features test-fixtures` 9/9 / `cargo test --tests` 全綠 / `RUSTDOCFLAGS=-D warnings cargo doc --no-deps --document-private-items` ✓
-- [ ] D-step 10：commit `feat(next): add registry game_path + process find/kill (P9 chunk 9.1)` — 待填 hash
+- [x] D-step 10：commit `feat(next): add registry game_path + process find/kill (P9 chunk 9.1)` — amended into `75774ed`（pre-amend `cb5db2b`；Todo.md 1-step drift 同 P7/P8 模式）
+
+##### 9.1 review follow-up — amended into `75774ed`
+
+- [x] R9.1-1：`kill.rs` exit code `1` → `u32::MAX`（== .NET `Process.Kill()` `-1` bit-equivalent）；module doc `# Exit code semantics` 整段更新；integration test 加 `ExitStatus::code() == Some(-1)` 斷言鎖防 regression
+- [x] R9.1-2：`game_path.rs` module doc `# Unicode` 段修正 — winreg 遇無效 UTF-16 是 `io::ErrorKind::InvalidData` 直接 surface 為 `RegistryError::ReadValue`，不是靜默 lossy 轉換
+- [x] R9.1-3：砍 `read_raw_value`（投機 API、`#[allow(dead_code)]`、無 consumer）+ `use winreg::types::FromRegValue`；YAGNI 對齊 SRP
+- [x] R9.1-4：`find_processes_by_name` 與 `kill_process` 分別補 `# Async runtime guidance`（對齊 P8.2 R8.2-4 `launch_via_lr` 模式）
+- [x] R9.1-5：`find_processes_by_name` 補 `# COM apartment mode` 段（`CoInitializeEx` 與 `APARTMENTTHREADED` UI thread 衝突說明 → `ProcessError::WmiInit`）
+- [x] R9.1-6：quality gates 全綠 — fmt / clippy -D warnings / lib 409/409 / process_find_kill 4/4 / 其他整合測試無 regression / rustdoc -D warnings ✓
 
 #### Chunk 9.2 — `process/{patcher,play_page}.rs`（Patcher 一次呼叫 + PlayPage 視窗一次關閉）
 
-- [ ] D-step 1：scaffold — `services/process/patcher.rs` + `services/process/play_page.rs`；`mod.rs` 加入；Win32 features 檢查（需 `Win32_UI_WindowsAndMessaging` for FindWindowW + PostMessageW + WM_CLOSE「已有」）
-- [ ] D-step 2：`check_and_kill_patcher(game_path: &Path) -> Result<Option<u32>, ProcessError>` — 對齊 WPF `checkPatcher_Tick` L2455-2614 的 **kill 部分**（去掉版本檢查與下載邏輯，那些歸 P10/updater）；流程：`game_path.parent()?.join("Patcher.exe")` 算出預期路徑 → `find_processes_by_name("Patcher")` → filter executable_path 等於預期路徑 → `kill_process(pid)` → 回被殺的 pid
-- [ ] D-step 3：`close_play_window() -> Result<bool, ProcessError>` — 對齊 WPF `checkPlayPage_Tick` L2443-2453；用 `FindWindowW(Some(PCWSTR("StartUpDlgClass")), Some(PCWSTR("MapleStory")))` → 若 HWND valid → `PostMessageW(hwnd, WM_CLOSE, 0, 0)` → `Ok(true)`；若 `FindWindow` 回 NULL → `Ok(false)`；`PostMessage` 錯誤 → `Err`；UTF-16 轉換沿用 P8 的 `to_wide_null` 模式
-- [ ] D-step 4：module docs — `patcher.rs` / `play_page.rs` 各寫 WPF 行號對應 + "timer 歸 P10" 聲明 + StartUpDlgClass lock-in；`mod.rs` 在 call graph 加 Patcher / PlayPage branch
-- [ ] D-step 5：unit tests — `check_and_kill_patcher` 靠 `find_processes_by_name` 做 DI，所以其實是 integration-ish；`close_play_window` 針對 HWND=NULL 路徑可直接測；大部分測試推到 integration
-- [ ] D-step 6：integration test 追加到 `tests/process_find_kill.rs` 或另開 `tests/process_patcher_playpage.rs`（Windows-only）— spawn dummy Patcher（`cmd /c timeout + 重命名 exe` 困難，可跳過 end-to-end 只測函式 pure 部分）
-- [ ] D-step 7：quality gates 全綠（列表同 9.1）
-- [ ] D-step 8：commit `feat(next): add patcher kill + play_page close (P9 chunk 9.2)` — 待填 hash
+##### 9.2 pre-flight decisions（2026-04-17）— Q1-Q5 全確認
+
+- **Q1=A3**：`check_and_kill_patcher` 回 `Result<Vec<u32>, ProcessError>`（killed pids；`!is_empty()` == WPF `found`；caller 可 log）— 比 `Option<u32>` 誠實，比 `bool` 豐富
+- **Q2=B2**：per-pid kill best-effort（失敗 silently skip，對齊 WPF nested `try/catch {}`）；`find_processes_by_name` 失敗 fail-fast（WMI 壞掉是系統級問題）
+- **Q3=C1**：新增 `ProcessError::PostMessage { hwnd: isize, #[source] source: windows::core::Error }`（不重用現有 variant、不吞錯）
+- **Q4=D1**：`to_wide_null` 抽到 `services/process/mod.rs` 當 `pub(crate)`（所有 process/ 內模組共用，locale_remulator 的 copy 暫留 — 未來第三 caller 出現才整併到 `services/util/`）
+- **Q5=E1**：patcher 跳 end-to-end integration（spawn 假 Patcher.exe 成本高）；play_page 只做 `Ok(_)` smoke test（不 strict-assert `false`，避免誤關開發者 live session）
+
+- [x] D-step 1：scaffold — `services/process/patcher.rs` + `services/process/play_page.rs` 新增；`process/mod.rs` 加 `pub mod patcher` / `pub mod play_page` + 私有 `pub(crate) fn to_wide_null`；Win32 features `Win32_UI_WindowsAndMessaging` 已有，0 新增 Cargo 依賴
+- [x] D-step 2：`ProcessError::PostMessage { hwnd: isize, #[source] source: windows::core::Error }` 新增 + doc table 多一行
+- [x] D-step 3：`patcher::check_and_kill_patcher(game_path: &Path) -> Result<Vec<u32>, ProcessError>` — `PATCHER_EXE_NAME = "Patcher.exe"`；`game_path.parent()` None → `Ok(Vec::new())` 短路（不打 WMI）；`find_processes_by_name(PATCHER_EXE_NAME)` → `matches_expected_path` 過濾 → `kill_process` best-effort；**DI 變體** `check_and_kill_patcher_with<F, K>` 讓 unit test 可注入 fake find + kill（對齊 P7 `check_update_at` 模式）
+- [x] D-step 4：`play_page::close_play_window() -> Result<bool, ProcessError>` — `PLAY_WINDOW_CLASS = "StartUpDlgClass"` / `PLAY_WINDOW_TITLE = "MapleStory"` 公開常量鎖住 WPF 字面值；`FindWindowW` → `Ok(HWND)` 且 `!is_invalid()` → `PostMessageW(WM_CLOSE)` → `Ok(true)`；`Ok(invalid)` 或 `Err(_)` → `Ok(false)`（對齊 WPF `hWnd == IntPtr.Zero` 分支 + `try/catch {}`）；`PostMessage` 失敗 → `Err(ProcessError::PostMessage)`（不吞錯，對齊 Q3=C1）
+- [x] D-step 5：module docs — `patcher.rs` WPF L2455-2477 C# source 嵌入 + Q2=B2 best-effort 說明 + # Async runtime guidance；`play_page.rs` WPF L2443-2453 C# source 嵌入 + 三種回傳情境說明 + `StartUpDlgClass` / `MapleStory` 字面值鎖定 + # Async runtime guidance；`process/mod.rs` chunk 表微調、`to_wide_null` helper 的 SRP/DRY 設計說明（未來整併閾值 = 第三 caller）
+- [x] D-step 6：unit tests — `patcher`：`matches_expected_path_exact_match` / `matches_expected_path_different_directory` / `matches_expected_path_none_executable_path_is_false` / `game_path_without_parent_returns_empty`（含 short-circuit 斷言） / `kills_only_matching_processes` / `best_effort_skips_kill_failures` / `find_failure_propagates` / `empty_process_list_returns_empty_kill_list`（8 tests）；`play_page`：`window_class_literal_matches_wpf` / `window_title_literal_matches_wpf`（2 tests）；`process/mod.rs` 的 `to_wide_null`：`to_wide_null_terminates_with_zero` / `to_wide_null_empty_string_is_just_nul`（2 tests）
+- [x] D-step 7：integration test `tests/process_find_kill.rs` — 追加 `check_and_kill_patcher_no_patcher_running_returns_empty`（production WMI 路徑 smoke）+ `close_play_window_smoke_returns_ok`（`Ok(_)` 斷言而非 `== Ok(false)`，避免誤關開發者 live session）；既有 4 個 P9.1 測試沿用；合計 6/6
+- [x] D-step 8：quality gates 全綠 — `cargo fmt --check` ✓ / `cargo clippy --all-targets -- -D warnings` ✓（`collapsible_if` 一個提示已修正） / `cargo test --lib` 421/421（9.1 的 409 基礎 + 9.2 的 +12 新測試）/ `cargo test --test process_find_kill` 6/6 / `cargo test --test updater` 8/8 / `cargo test --test game_locale_remulator` 6/6 / `cargo test --test storage_legacy --features test-fixtures` 9/9 / `RUSTDOCFLAGS=-D warnings cargo doc --no-deps --document-private-items` ✓（`redundant-explicit-links` 兩個提示已修正）
+- [x] D-step 9：commit `feat(next): add patcher kill + play_page close (P9 chunk 9.2)` — amended into `104dbb8`（pre-amend `c6d5a22`；Todo.md 1-step drift 沿用 P7/P8/P9.1 模式）
+
+##### 9.2 review follow-up — amended into `104dbb8`
+
+- [x] R9.2-1（medium）：`check_and_kill_patcher` fn doc 「short-circuit」描述修正 — `Path::parent()` 對 empty/pure-root path 回 `None`（觸發短路），對 bare filename 回 `Some("")`（仍打 WMI，但因 `Win32_Process.ExecutablePath` 絕對路徑而自然回空），文字精準化、不過度承諾
+- [x] R9.2-2（low）：`ProcessError::PostMessage::hwnd` 型別 `isize` → `usize`（HWND 為 pointer-sized opaque，usize 是更窄的語意表達；Display 行為不變；`play_page.rs` cast 同步換）
+- [x] R9.2-3（medium）：`check_and_kill_patcher` / `close_play_window` 兩個 fn 各補 `# Async runtime guidance` 段（模組層已有，但 rustdoc fn 頁面 + IDE hover 需要 fn 層級才顯示，對齊 P9.1 `find_processes_by_name` / `kill_process` 模式）
+- [x] R9.2-4（low）：`patcher.rs` unit test `find_failure_propagates` 加 inline comment 說明 `ProcessError::OpenProcess` 只是 transport（因 `wmi::WMIError` 沒有公開 unit-test constructor），並非語意宣稱 find-side 會回這個 variant
+- [x] R9.2-5（low）：`process/mod.rs` 的 `to_wide_null` visibility 由 `pub(crate)` 收回為 default private（`fn`）— 只有 process/ 的子模組透過 `super::to_wide_null` 使用；crate 內其他模組無 legitimate use case，收窄更貼近 Q4=D1 的「internal to process/」設計意圖
 
 #### Chunk 9.3 — `process/post_string.rs`（Win32 thin wrappers for auto-paste）
 
-- [ ] D-step 1：scaffold `services/process/post_string.rs`（`#[cfg(windows)]` 整檔或精細 gating 決策點）；`mod.rs` 加入
-- [ ] D-step 2：`find_window(class_name: Option<&str>, window_name: Option<&str>) -> Option<isize>` — `FindWindowW` wrapper；回 `Option<HWND as isize>`，NULL → None
-- [ ] D-step 3：`set_foreground_window(hwnd: isize) -> bool` — `SetForegroundWindow` wrapper，回傳 BOOL 原樣
-- [ ] D-step 4：`post_string_ascii(hwnd: isize, s: &str) -> Result<(), ProcessError>` — 對齊 WPF `PostString` L22-30：`ASCIIEncoding.GetBytes` → 對每 byte `PostMessageW(hwnd, WM_CHAR, byte as usize, 0)`；非 ASCII 字元怎麼處理 = 對齊 WPF（`ASCIIEncoding` 會把非 ASCII 變 `?`）
-- [ ] D-step 5：`post_key(hwnd: isize, vk: u32) -> Result<(), ProcessError>` — 對齊 WPF `PostKey` L32-35：`MapVirtualKey(vk, MAPVK_VK_TO_VSC)` 算 scan code 做 lParam 的高字組，發 `WM_KEYDOWN` / `WM_KEYUP`（或僅 WM_KEYDOWN，看 WPF 實際做啥）
-- [ ] D-step 6：cursor + rect helpers — `get_client_rect(hwnd) -> Option<Rect>` / `client_to_screen(hwnd, point) -> Option<Point>` / `get_cursor_pos() -> Option<Point>` / `set_cursor_pos(point)`（對應 WPF L40-47）
-- [ ] D-step 7：module docs — WPF 行號對應表 + ASCII-only 警告段（`# ASCII-only` doc section lock parity quirk）+ 非 Windows stub 策略說明
-- [ ] D-step 8：unit tests — `find_window` 測找 "Shell_TrayWnd"（Windows 必存在）回 Some；`get_cursor_pos` / `set_cursor_pos` round-trip（Windows-only）；`post_string_ascii` 跑 ASCII 轉換 pure 層（byte 序列驗證）
-- [ ] D-step 9：quality gates 全綠
-- [ ] D-step 10：commit `feat(next): add auto-paste Win32 wrappers (P9 chunk 9.3)` — 待填 hash
+##### 9.3 pre-flight decisions（2026-04-18）— Q1-Q7 全確認
+
+- **Q1=scope_paste_only**：P9.3 只收 auto-paste 主流程那 9 個 fn（`FindWindow` / `SetForegroundWindow` / `MapVirtualKeyW` / `PostString` / `PostKey` / `PostMessage` / `ClientToScreen` / `GetCursorPos` / `SetCursorPos` / `GetClientAreaSize`）。**Out of scope**：sysmenu (`GetWindowLong/SetWindowLong` MainWindow L202-205 → Tauri 接管) / window composition (`SetWindowCompositionAttribute` → CSS / `tauri-plugin-window-vibrancy`) / `AttachConsole` (Tauri 自管) / process introspection (`GetCurrentProcess` / `GetModuleHandle` / `IsWow64Process` / `GetBinaryType` / `GetWindowThreadProcessId` → 將來若需要走獨立 `services/process/info.rs` chunk)
+- **Q2=bug_fix_correct**：PostKey lParam = `(MapVirtualKey(vk, 0) as u32) << 16 | 1`（WPF L34 是 C# operator-precedence 意外 `<< 17`，非設計）。Module doc 標 "Diverges from WPF L34 (operator-precedence bug)"
+- **Q3=ascii_surface_err**：PostString 非 ASCII 字元 → `Err(ProcessError::NonAscii { offset, ch })`（不吞錯，沿 P9.2 Q3=C1 規則）
+- **Q4=hwnd_nonzero**：API parameter 用 `WindowHandle(NonZeroUsize)` newtype（type-safe non-null）；error variant 仍 `usize`（post-mortem 識別不適用 NonZero）
+- **Q5=pr_wrap_domain**：`Point { x: i32, y: i32 }` + `Size { width: i32, height: i32 }` newtype；RECT 完全藏起來；`#[derive(Serialize, Deserialize)]` 給 P10 IPC
+- **Q6=chunk_single**：P9.3 一次出（13 D-steps）
+- **Q7=tests_full + full_pragmatic**：medium baseline（unit + cursor_pos round-trip + `find_window("Shell_TrayWnd")` smoke）+ `#[ignore]` notepad spawn smoke（不讀回字元，信任 Win32 PostMessage 契約；Win11 graceful skip）
+
+- [x] D-step 1：scaffold — `services/process/post_string.rs` 新增；`process/mod.rs` 加 `pub mod post_string`；Cargo.toml 加 `Win32_UI_Input_KeyboardAndMouse` + `Win32_Graphics_Gdi`（後者為 `ClientToScreen`，windows-0.58 的 API 位置是 Gdi 而非 WindowsAndMessaging）
+- [x] D-step 2：`ProcessError::NonAscii { offset: usize, ch: char }` variant 新增 + `Win32Call { name: &'static str, source: windows::core::Error }` variant 新增（for `GetClientRect` / `ClientToScreen` 的 must-succeed 失敗）+ WPF mapping table 多兩列
+- [x] D-step 3：newtypes — `WindowHandle(NonZeroUsize)` + `Point { x: i32, y: i32 }` + `Size { width: i32, height: i32 }`；`pub(crate) from_raw(HWND) -> Option<Self>` / `pub(crate) as_hwnd() -> HWND` / `pub as_raw() -> usize`（對稱 P9.2 R9.2-2 `usize`-for-logging 共識）；Point/Size `#[derive(Serialize, Deserialize, Hash)]`
+- [x] D-step 4：`find_window(class: Option<&str>, title: Option<&str>) -> Option<WindowHandle>`（**drift**：FindWindowW 的 `NULL` 返回與內部失敗不可區分 → Q5 hybrid 決策歸「best-effort」，直接回 `Option`）+ `set_foreground_window(handle: WindowHandle) -> bool`
+- [x] D-step 5：`get_client_area_size(handle: WindowHandle) -> Result<Size, ProcessError::Win32Call>` + `client_to_screen(handle: WindowHandle, point: Point) -> Result<Point, ProcessError::Win32Call>`（`ClientToScreen` 回 Win32 `BOOL`，手動經 `windows::core::Error::from_win32()` 合成 source）
+- [x] D-step 6：`get_cursor_pos() -> Option<Point>` + `set_cursor_pos(point: Point) -> bool`（**drift**：cursor save/restore 失敗是美學問題非資料損失，Q5 hybrid 歸「best-effort」→ `Option` + `bool` 而非 `Result`）
+- [x] D-step 7：`post_string(handle: WindowHandle, s: &str) -> Result<(), ProcessError>` — 用 `str::char_indices` 預檢，第一個非 ASCII 字元 surface `NonAscii { offset, ch }` 即中斷、不發出任何 `WM_CHAR`（原子性只限於 content-level 失敗；`PostMessageW` 中段失敗已 enqueued 的 byte 不回滾——本就無法 unsend）
+- [x] D-step 8：`post_key(handle: WindowHandle, msg: u32, vk: u8) -> Result<(), ProcessError>`（lParam 透過私有 `compute_post_key_lparam(vk) -> isize` 計算 `(scan_code << 16) | 1`，doc 標 Q2 divergence 與 C# 運算優先級意外解析）+ `post_message_raw(handle: WindowHandle, msg: u32, wparam: usize, lparam: isize) -> Result<(), ProcessError>`
+- [x] D-step 9：module docs — WPF `WindowsAPI.cs` L11-86 對應表 + Out of scope 表 + Q1-Q7 設計決策段 + Error surface must-succeed vs best-effort 段 + Async runtime guidance 段（rustdoc 私有 item intra-doc link 用 backtick 而非 `[]`-link，避開 `private-intra-doc-links` lint）
+- [x] D-step 10：unit tests — 9 條（`WindowHandle::from_raw(NULL)` / round-trip / Point+Size serialize 形狀 + JSON 來回 / `compute_post_key_lparam` repeat-count 結構斷言 + WPF bug divergence 斷言 / `ProcessError::NonAscii` Display 含 offset + char）；模組內全綠、`process/mod.rs::wide_tests` 已覆蓋 `to_wide_null` 無需重複
+- [x] D-step 11：integration test `tests/process_post_string.rs`（Windows-only） — 3 baseline 全綠：`find_window_locates_shell_tray` / `get_client_area_size_returns_positive_dimensions_for_shell_tray`（順手驗 `client_to_screen((0,0))`）/ `cursor_round_trips_within_a_pixel`（原位置 ±1px，還原後再斷言避免 panic 遺留滑鼠位移，±2px tolerance for DPI / cursor-snap）；`#[ignore] spawn_notepad_full_paste_smoke`：spawn notepad → 5s poll `find_window(Some("Notepad"), None)` → `set_foreground_window` → `post_string("abc") Ok` → `post_key(WM_KEYDOWN, VK_END) Ok` → `ChildGuard` Drop 回收；VK_END 對齊 `MainWindow.xaml.cs` L2222；不讀回字元（Q7 contract）
+- [x] D-step 12：quality gates 全綠 — `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings` / `cargo test --lib`（430 passed 含 P9.3 新增 9 條）/ `cargo test --tests`（全 integration files 0 failed，含 `process_post_string` 3 baseline + 1 ignored）/ `cargo doc -D warnings`（順手修一處 `error.rs` intra-doc link：D11 re-export 後 `crate::services::process::post_string` 變成 fn+module 同名，拉到具名 fn 路徑 `crate::services::process::get_cursor_pos` 消歧）
+- [x] **bonus**：`services/process/mod.rs` 補 `pub use post_string::{ find_window, set_foreground_window, get_client_area_size, client_to_screen, get_cursor_pos, set_cursor_pos, post_string, post_key, post_message_raw, Point, Size, WindowHandle }`（對齊 P9.2 `play_page` 的 explicit re-export 風格；P10 command layer 整批用得到）
+- [ ] D-step 13：commit `feat(next): add auto-paste Win32 wrappers (P9 chunk 9.3)` — 待填 hash
 
 - **P9 總驗收**：`services/process/*.rs` + `services/registry/game_path.rs` 對齊 WPF 對應點，timer 驅動保留給 P10 Tauri command layer
 
@@ -934,7 +974,7 @@ Review 發現 6 個問題，依風險高中低切 5 個 R-step 修改 + 1 個 ga
 **已由 Stitch 完成（視覺由 Stitch 提供）**
 - [x] `IdPassForm` / `AccountList` / `QrForm` / `GameList`（以 dialog 切法）/ `Settings`
 
-**本輪自行補齊**
+**自行補齊**
 - [x] `LoginRegionSelection.html`
 - [x] `LoginWait.html`
 - [x] `LoginTotp.html`
