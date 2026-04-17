@@ -16,3 +16,9 @@ pub mod config;
 pub mod game;
 pub mod storage;
 pub mod updater;
+
+#[cfg(target_os = "windows")]
+pub mod process;
+
+#[cfg(target_os = "windows")]
+pub mod registry;

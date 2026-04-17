@@ -752,18 +752,61 @@ Review 發現 6 個問題，依風險高中低切 5 個 R-step 修改 + 1 個 ga
 - [x] R8.2-4：**launch_via_lr doc 補 spawn_blocking**（R5）— `launch_via_lr` doc 加 `# Async runtime guidance` 段說明 P10 Tauri command 在 Tokio runtime 上必須用 `tokio::task::spawn_blocking` 包裹（對齊 WPF L1923 `new Thread(...)` 避免 UI 卡死在 UAC prompt），service 層自身保持 sync
 - [x] R8.2-5：**integration test 匯入清理**（R3）— `tests/game_locale_remulator.rs` 刪掉 `use locale_remulator::{self};` 以及最後一行的 `let _ = locale_remulator::LR_GUID;` workaround（那兩個合在一起只是為了避 unused-import 警告硬塞的 no-op，`LR_GUID` 在該測試檔根本沒真的用到）
 - [x] R8.2-6：quality gates 全綠 — `cargo fmt --check` ✓ / `cargo clippy --all-targets -- -D warnings` ✓ / `cargo test --lib` **400/400**（較 P8.2 原本 397 多 3：2 Debug redaction + 1 TOCTOU lock-in）✓ / `cargo test --test game_locale_remulator` 6/6 ✓ / `cargo test --test updater` 8/8 ✓ / `cargo test --test storage_legacy --features test-fixtures` 9/9 ✓ / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items` ✓
-- [ ] R8.2-7：commit `fix(next): apply P8.2 review follow-ups (redact Debug, tighten release_file, enrich ShellExecute error)` — 待填 hash
+- [x] R8.2-7：commit `fix(next): apply P8.2 review follow-ups (redact Debug, tighten release_file, enrich ShellExecute error)` — `c029174`
 
 ### P9 — Rust `services/process` + `services/registry`
 
-- [ ] `services/registry/game_path.rs`：對齊 WPF `ModifyRegistry` + `HKCU/HKLM` 讀取 `dir_value_name`
-- [ ] `services/process/find.rs`：WMI `Select * from Win32_Process where ProcessId = ?` 比對 `executablepath`
-- [ ] `services/process/kill.rs`：kill by pid（`TerminateProcess`）
-- [ ] `services/process/patcher.rs`：輪詢關 Patcher.exe（對齊 WPF `checkPatcher` 100ms interval）
-- [ ] `services/process/play_page.rs`：輪詢關 PlayNowPage 視窗（對齊 WPF `checkPlayPage`）
-- [ ] `services/process/post_string.rs`：`FindWindowW` + `PostMessageW(WM_CHAR)` 自動貼帳密
-- [ ] Integration tests：spawn 假進程（`cmd /c timeout`）測試 find + kill
-- **驗收**：功能對齊 WPF
+升級成 P5/P7/P8 風格的 chunk 切分。WPF reference 探勘於 2026-04-17 由 explore subagent 完成，以下 calibration 是展開後的共識。
+
+#### P9 pre-flight calibration（2026-04-17）— C1 ~ C8 全接受
+
+- **C1**（`services/registry/game_path.rs` scope）：WPF `ModifyRegistry` 有 Read/Write 兩面，但遊戲路徑**實際只讀一次** seed 到 `ConfigAppSettings`（Config.xml）；寫回是寫 Config.xml 不是 Registry。Rust 端 `services/registry/game_path.rs` **只實作 read**，寫路徑歸 P11 Config
+- **C2**（HKCU vs HKLM）：`ModifyRegistry` 預設 hive 是 `LocalMachine`，但 `selectedGameChanged` L584-593 讀遊戲路徑用的是 `Registry.CurrentUser`。Rust 版本提供兩個 hive 的查詢函式，順序以 WPF 實際行為（HKCU 優先）為準
+- **C3**（`kill.rs` 實作）：WPF 用 `Process.Kill()`（.NET），沒走 P/Invoke。但 Rust `std` 不支援 kill-by-external-PID。**必要升級**：用 `windows::Win32::System::Threading::{OpenProcess, TerminateProcess}` Win32 API；行為等價、接口新
+- **C4**（Patcher timer 所有權）：WPF `checkPatcher` 是 `DispatcherTimer 100ms` 耦合 UI（建構子 + selectedGameChanged 啟停 + Settings 頁勾選），Tick 內還做版本檢查與下載提示。**Service 層只做 pure 單次呼叫**：`check_and_kill_patcher(game_path) -> Option<killed_pid>`；timer 驅動 + 版本/下載 UI 歸 P10/P12
+- **C5**（PlayPage 實際視窗）：WPF 原始碼**沒有 `PlayNowPage`**；實際關的是 `FindWindow("StartUpDlgClass", "MapleStory")` + `PostMessage(WM_CLOSE)`。模組名維持 `play_page.rs`（語義），但 doc 要明記實際 class/title；timer 同 C4，service 只做一次呼叫
+- **C6**（post_string scope）：除了 `PostString`（WM_CHAR + ASCII），還相依：`FindWindow` / `SetForegroundWindow` / `MapVirtualKey` / `ClientToScreen` / `GetCursorPos` / `SetCursorPos` / `GetClientRect` / `PostKey`。service 層提供 Win32 thin wrappers；業務編排（trad login 分支、Sleep 時機）歸 P10
+- **C7**（find.rs 用 WMI）：WPF 用 `ManagementObjectSearcher` + `executablepath`，不是 `EnumProcesses`。Rust 照 WMI 路徑走（`wmi` crate 已在 Cargo.toml）
+- **C8**（post_string ASCII-only）：WPF `PostString` 用 `ASCIIEncoding`，中文帳密不 work（原設計如此）。Rust 維持 ASCII-only parity，用 doc 鎖定而非升級到 UTF-16
+
+#### Chunk 9.1 — `registry/game_path.rs` + `process/{error,find,kill}.rs`（registry read + 進程查詢 + pid kill）
+
+- [x] D-step 1：scaffold — `services/registry/{mod,error,game_path}.rs` + `services/process/{mod,error,find,kill}.rs`；`services/mod.rs` 以 `#[cfg(target_os = "windows")]` 註冊兩個 module；Cargo.toml 0 新增依賴（winreg/wmi/windows 全已備）
+- [x] D-step 2：`ProcessError` + `RegistryError` enums — `WmiInit` / `WmiConnect` / `WmiQuery { query, #[source] }` / `OpenProcess { pid, #[source] }` / `TerminateProcess { pid, #[source] }`；registry 端 `OpenKey` / `ReadValue`（帶 `hive\subkey[@value_name]` context）；`thiserror` derive + `#[source]` 保留 error chain
+- [x] D-step 3：`services/registry/{mod,game_path}.rs` — `read_game_path(hive: Hive, subkey, value_name) -> Result<Option<String>, RegistryError>`；`Hive::{CurrentUser,LocalMachine}` 帶 `as_reg_key` / `display_name`；missing key / missing value / 空字串 → `Ok(None)` parity with `ModifyRegistry.Read` L73-99；另備 `read_raw_value<T: FromRegValue>` 逃生門
+- [x] D-step 4：`services/process/find.rs` — `find_processes_by_name(name: &str) -> Result<Vec<ProcessInfo>, ProcessError>` 用 `wmi::{COMLibrary, WMIConnection}` + `SELECT ProcessId, Name, ExecutablePath FROM Win32_Process WHERE Name = '?'`；`ProcessInfo { pid, name, executable_path: Option<PathBuf> }`；單引號 input 回空（WQL 注入防線）
+- [x] D-step 5：`services/process/kill.rs` — `kill_process(pid: u32) -> Result<(), ProcessError>` 用 `OpenProcess(PROCESS_TERMINATE, false, pid)` + `TerminateProcess(handle, 1)` + `CloseHandle`（三個路徑都 close）；exit-code 1 偏離 .NET `-1` 作 doc 說明
+- [x] D-step 6：module docs — `services/process/mod.rs` 9.1/9.2/9.3 chunk 表 + timer 所有權歸 P10 說明；`services/registry/mod.rs` 只讀 + Hive 設計理由；每檔 WPF 行號對應表
+- [x] D-step 7：unit tests — `quote_in_name_returns_empty` / `process_info_equality_rejects_path_casing_sloppiness` / `kill_pid_zero_errors_on_open_not_terminate` / `kill_implausible_pid_errors_on_open` / `read_known_present_value_returns_some`（HKCU\Environment@TEMP）/ `read_missing_subkey_returns_none` / `read_missing_value_in_existing_key_returns_none` / `read_hklm_known_value`（HKLM ProductName）/ `hive_display_name_matches_reg_syntax`
+- [x] D-step 8：integration test `tests/process_find_kill.rs`（`#[cfg(target_os = "windows")]`）— `find_processes_by_name_finds_our_spawned_cmd` / `kill_process_terminates_spawned_cmd` / `find_then_kill_round_trip` / `kill_nonexistent_pid_surfaces_open_process_error`（4/4）；spawn 用 `cmd /c ping -n 30 127.0.0.1 -w 1000`（避開 `timeout` stdin 已關閉時立刻退出的坑）
+- [x] D-step 9：quality gates 全綠 — `cargo fmt --check` ✓ / `cargo clippy --all-targets -- -D warnings` ✓ / `cargo test --lib` 409/409 / `cargo test --test process_find_kill` 4/4 / `cargo test --test updater` 8/8 / `cargo test --test game_locale_remulator` 6/6 / `cargo test --test storage_legacy --features test-fixtures` 9/9 / `cargo test --tests` 全綠 / `RUSTDOCFLAGS=-D warnings cargo doc --no-deps --document-private-items` ✓
+- [ ] D-step 10：commit `feat(next): add registry game_path + process find/kill (P9 chunk 9.1)` — 待填 hash
+
+#### Chunk 9.2 — `process/{patcher,play_page}.rs`（Patcher 一次呼叫 + PlayPage 視窗一次關閉）
+
+- [ ] D-step 1：scaffold — `services/process/patcher.rs` + `services/process/play_page.rs`；`mod.rs` 加入；Win32 features 檢查（需 `Win32_UI_WindowsAndMessaging` for FindWindowW + PostMessageW + WM_CLOSE「已有」）
+- [ ] D-step 2：`check_and_kill_patcher(game_path: &Path) -> Result<Option<u32>, ProcessError>` — 對齊 WPF `checkPatcher_Tick` L2455-2614 的 **kill 部分**（去掉版本檢查與下載邏輯，那些歸 P10/updater）；流程：`game_path.parent()?.join("Patcher.exe")` 算出預期路徑 → `find_processes_by_name("Patcher")` → filter executable_path 等於預期路徑 → `kill_process(pid)` → 回被殺的 pid
+- [ ] D-step 3：`close_play_window() -> Result<bool, ProcessError>` — 對齊 WPF `checkPlayPage_Tick` L2443-2453；用 `FindWindowW(Some(PCWSTR("StartUpDlgClass")), Some(PCWSTR("MapleStory")))` → 若 HWND valid → `PostMessageW(hwnd, WM_CLOSE, 0, 0)` → `Ok(true)`；若 `FindWindow` 回 NULL → `Ok(false)`；`PostMessage` 錯誤 → `Err`；UTF-16 轉換沿用 P8 的 `to_wide_null` 模式
+- [ ] D-step 4：module docs — `patcher.rs` / `play_page.rs` 各寫 WPF 行號對應 + "timer 歸 P10" 聲明 + StartUpDlgClass lock-in；`mod.rs` 在 call graph 加 Patcher / PlayPage branch
+- [ ] D-step 5：unit tests — `check_and_kill_patcher` 靠 `find_processes_by_name` 做 DI，所以其實是 integration-ish；`close_play_window` 針對 HWND=NULL 路徑可直接測；大部分測試推到 integration
+- [ ] D-step 6：integration test 追加到 `tests/process_find_kill.rs` 或另開 `tests/process_patcher_playpage.rs`（Windows-only）— spawn dummy Patcher（`cmd /c timeout + 重命名 exe` 困難，可跳過 end-to-end 只測函式 pure 部分）
+- [ ] D-step 7：quality gates 全綠（列表同 9.1）
+- [ ] D-step 8：commit `feat(next): add patcher kill + play_page close (P9 chunk 9.2)` — 待填 hash
+
+#### Chunk 9.3 — `process/post_string.rs`（Win32 thin wrappers for auto-paste）
+
+- [ ] D-step 1：scaffold `services/process/post_string.rs`（`#[cfg(windows)]` 整檔或精細 gating 決策點）；`mod.rs` 加入
+- [ ] D-step 2：`find_window(class_name: Option<&str>, window_name: Option<&str>) -> Option<isize>` — `FindWindowW` wrapper；回 `Option<HWND as isize>`，NULL → None
+- [ ] D-step 3：`set_foreground_window(hwnd: isize) -> bool` — `SetForegroundWindow` wrapper，回傳 BOOL 原樣
+- [ ] D-step 4：`post_string_ascii(hwnd: isize, s: &str) -> Result<(), ProcessError>` — 對齊 WPF `PostString` L22-30：`ASCIIEncoding.GetBytes` → 對每 byte `PostMessageW(hwnd, WM_CHAR, byte as usize, 0)`；非 ASCII 字元怎麼處理 = 對齊 WPF（`ASCIIEncoding` 會把非 ASCII 變 `?`）
+- [ ] D-step 5：`post_key(hwnd: isize, vk: u32) -> Result<(), ProcessError>` — 對齊 WPF `PostKey` L32-35：`MapVirtualKey(vk, MAPVK_VK_TO_VSC)` 算 scan code 做 lParam 的高字組，發 `WM_KEYDOWN` / `WM_KEYUP`（或僅 WM_KEYDOWN，看 WPF 實際做啥）
+- [ ] D-step 6：cursor + rect helpers — `get_client_rect(hwnd) -> Option<Rect>` / `client_to_screen(hwnd, point) -> Option<Point>` / `get_cursor_pos() -> Option<Point>` / `set_cursor_pos(point)`（對應 WPF L40-47）
+- [ ] D-step 7：module docs — WPF 行號對應表 + ASCII-only 警告段（`# ASCII-only` doc section lock parity quirk）+ 非 Windows stub 策略說明
+- [ ] D-step 8：unit tests — `find_window` 測找 "Shell_TrayWnd"（Windows 必存在）回 Some；`get_cursor_pos` / `set_cursor_pos` round-trip（Windows-only）；`post_string_ascii` 跑 ASCII 轉換 pure 層（byte 序列驗證）
+- [ ] D-step 9：quality gates 全綠
+- [ ] D-step 10：commit `feat(next): add auto-paste Win32 wrappers (P9 chunk 9.3)` — 待填 hash
+
+- **P9 總驗收**：`services/process/*.rs` + `services/registry/game_path.rs` 對齊 WPF 對應點，timer 驅動保留給 P10 Tauri command layer
 
 ### P10 — Tauri commands + IPC 型別
 

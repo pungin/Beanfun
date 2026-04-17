@@ -1,0 +1,71 @@
+//! Typed errors for [`services/process`][`super`].
+//!
+//! Declared up-front for chunk 9.1 so the enum shape is stable across
+//! 9.1 / 9.2 / 9.3. Variants that the auto-paste Win32 wrappers (9.3)
+//! will add land here when that chunk opens; 9.1 only surfaces the
+//! first five.
+//!
+//! # WPF mapping
+//!
+//! | Variant                | WPF origin                                                                |
+//! | ---------------------- | ------------------------------------------------------------------------- |
+//! | [`WmiInit`]            | **beanfun-next exclusive** — `ManagementObjectSearcher` inits COM for us  |
+//! | [`WmiConnect`]         | **beanfun-next exclusive** — same                                         |
+//! | [`WmiQuery`]           | `MainWindow.xaml.cs` L1775-1795 `ManagementObjectSearcher.Get()` throwing |
+//! | [`OpenProcess`]        | `MainWindow.xaml.cs` L1823 `Process.GetProcessById(pid)` throwing         |
+//! | [`TerminateProcess`]   | `MainWindow.xaml.cs` L1831 `Process.Kill()` throwing                      |
+//!
+//! [`WmiInit`]: ProcessError::WmiInit
+//! [`WmiConnect`]: ProcessError::WmiConnect
+//! [`WmiQuery`]: ProcessError::WmiQuery
+//! [`OpenProcess`]: ProcessError::OpenProcess
+//! [`TerminateProcess`]: ProcessError::TerminateProcess
+
+/// Every failure that [`services/process`][`super`] can surface.
+#[derive(Debug, thiserror::Error)]
+pub enum ProcessError {
+    /// `COMLibrary::new()` failed — another COM apartment mode was
+    /// already active on this thread, or `CoInitializeEx` ran out of
+    /// system resources. Rare in practice; callers retrying on a fresh
+    /// thread usually recover.
+    #[error("failed to initialize COM for WMI")]
+    WmiInit(#[source] wmi::WMIError),
+
+    /// `WMIConnection::new(com)` failed — typically "Windows Management
+    /// Instrumentation" service is stopped/disabled, or the caller lacks
+    /// permission on the `root\cimv2` namespace.
+    #[error("failed to connect to WMI namespace")]
+    WmiConnect(#[source] wmi::WMIError),
+
+    /// A WQL query returned non-success. `query` is the exact WQL string
+    /// sent to WMI (useful for diagnostics, no secrets inside — the
+    /// input to WMI queries in this module is always a process name).
+    #[error("WMI query failed: {query}")]
+    WmiQuery {
+        query: String,
+        #[source]
+        source: wmi::WMIError,
+    },
+
+    /// `OpenProcess(PROCESS_TERMINATE, _, pid)` failed — `pid` no longer
+    /// exists, the calling process lacks SE_DEBUG_NAME / lacks
+    /// permission, or `pid` points at a protected/critical system
+    /// process (e.g. `System` = 4). `source` carries the raw
+    /// `GetLastError` via [`windows::core::Error`].
+    #[error("OpenProcess failed for pid {pid}")]
+    OpenProcess {
+        pid: u32,
+        #[source]
+        source: windows::core::Error,
+    },
+
+    /// `OpenProcess` succeeded but `TerminateProcess` failed before we
+    /// could close the handle. Rare (the primary cause would be a
+    /// critical-process mark set after `OpenProcess` returned).
+    #[error("TerminateProcess failed for pid {pid}")]
+    TerminateProcess {
+        pid: u32,
+        #[source]
+        source: windows::core::Error,
+    },
+}
