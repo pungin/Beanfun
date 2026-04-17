@@ -16,6 +16,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# SHA-256 hashing of LocaleRemulator blobs at build time — result is
+# emitted into `$OUT_DIR/lr_sha256.rs` and `include!`'d by the
+# `services::game::locale_remulator` module so runtime integrity
+# checks need no hex-string parsing. Mirrors the runtime `sha2` version
+# to avoid double-compiling the crate (P8 chunk 8.2).
+sha2 = "0.10"
 
 [dependencies]
 # Tauri core

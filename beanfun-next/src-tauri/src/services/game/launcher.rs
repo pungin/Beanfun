@@ -1,7 +1,9 @@
-//! Game-launch primitives + Normal-mode dispatch.
+//! Game-launch primitives + Normal-mode dispatch + top-level
+//! orchestrator.
 //!
-//! Pure helpers that cover chunk 8.1's slice of WPF's
-//! `btn_Run_Game_Click` (`Beanfun/MainWindow.xaml.cs` L1727-1900):
+//! Covers chunk 8.1's primitives (WPF `btn_Run_Game_Click`
+//! `Beanfun/MainWindow.xaml.cs` L1727-1900) and chunk 8.2's
+//! orchestration + LR dispatch (L1883-1885 → [`startByLR`][src-wpf]):
 //!
 //! | Helper                          | WPF origin                                                |
 //! | ------------------------------- | --------------------------------------------------------- |
@@ -12,10 +14,9 @@
 //! | [`resolve_mode`]                | L1838-1864 overall Auto-resolution                        |
 //! | [`substitute_credentials`]      | L1866-1879 `%s` double-replace                            |
 //! | [`launch_normal`]               | L1886-1891 `Process.Start(startInfo)` with WorkingDirectory |
-//!
-//! The LocaleRemulator branch (L1883-1885 → [`startByLR`][src-wpf])
-//! and the top-level `launch_game` orchestrator arrive in chunk 8.2 —
-//! this file intentionally stops short of dispatching by mode.
+//! | [`launch_game`]                 | L1882-1899 mode-dispatch (Normal / LR) + validate shell   |
+//! | [`LaunchRequest`]               | call-site struct (WPF passes individual locals)           |
+//! | [`default_target_dir`]          | `App.xaml.cs` L127-129 `App.AppDir`                       |
 //!
 //! [src-wpf]: https://github.com/pungin/Beanfun/blob/main/Beanfun/MainWindow.xaml.cs#L1902
 //!
@@ -50,9 +51,10 @@
 //! back to [`ResolvedMode::LocaleRemulator`], matching the "unknown
 //! locale → LR" branch of WPF's switch.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::error::GameError;
+use super::locale_remulator;
 
 // ---------------------------------------------------------------------------
 // Mode enums
@@ -359,6 +361,104 @@ pub fn launch_normal(path: &Path, command_line: &str) -> Result<(), GameError> {
 }
 
 // ---------------------------------------------------------------------------
+// Top-level orchestration: LaunchRequest + launch_game + default_target_dir
+// ---------------------------------------------------------------------------
+
+/// Everything a single `launch_game` call needs.
+///
+/// Shape mirrors WPF `btn_Run_Game_Click` locals (L1727-1888):
+/// `gamePath` (`Settings.t_GamePath.Text`), `commandLine` (post-`%s`
+/// substitution), `mode` (`GameStartMode`), plus a `target_dir` that
+/// identifies where LocaleRemulator artifacts get released to
+/// (`App.AppDir` in WPF, but injected for testability here).
+///
+/// Constructor-free by design: the Tauri command layer (P10) will
+/// build the struct via a direct field-init, and unit tests can do
+/// the same without factory boilerplate.
+#[derive(Debug, Clone)]
+pub struct LaunchRequest {
+    /// Absolute path to the game binary (e.g. `MapleStory.exe`). Must
+    /// pass [`validate_path`].
+    pub game_path: PathBuf,
+    /// Post-substitution command-line string to forward to the game.
+    /// Callers should already have run [`substitute_credentials`] on
+    /// the template from settings.
+    pub command_line: String,
+    /// Requested launch mode — may be [`GameStartMode::Auto`] and
+    /// will be resolved to a concrete [`ResolvedMode`] via
+    /// [`resolve_mode`] during dispatch.
+    pub mode: GameStartMode,
+    /// Directory that houses (or will house) the 5 LocaleRemulator
+    /// binaries + `LRProc.exe`. In production this is the beanfun-next
+    /// installation directory; tests inject a `tempdir()` to isolate.
+    pub target_dir: PathBuf,
+}
+
+/// Resolve the default LocaleRemulator staging directory — the
+/// directory next to the running `beanfun-next.exe`, matching WPF's
+/// `App.AppDir` at `App.xaml.cs` L127-129.
+///
+/// The Tauri command layer (P10) calls this once at startup and
+/// either passes the result into every [`LaunchRequest`] or caches it.
+/// Exposed as a helper so tests can inject a custom target_dir without
+/// monkey-patching `env::current_exe`.
+///
+/// Fails when `std::env::current_exe()` fails (very rare — only
+/// platform-level failures like the main binary being deleted while
+/// running), or when the exe somehow has no parent directory (hypothetical
+/// — Windows paths always have a parent).
+pub fn default_target_dir() -> std::io::Result<PathBuf> {
+    let exe = std::env::current_exe()?;
+    exe.parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "exe has no parent dir"))
+}
+
+/// Top-level launch dispatcher — validate, resolve, dispatch.
+///
+/// Flow:
+///
+/// ```text
+/// launch_game
+///     │
+///     ├─ validate_path(game_path)              // reject empty / missing / non-ASCII
+///     ├─ resolve_mode(mode)
+///     │
+///     ├── Normal ──────────────────────────────▶ launch_normal
+///     └── LocaleRemulator ─── release_all ─────▶ launch_via_lr  (Windows)
+///                              (5 SHA-256     (ShellExecuteW + runas)
+///                              integrity
+///                              checks)
+/// ```
+///
+/// On non-Windows, the `LocaleRemulator` arm falls back to
+/// [`launch_normal`] after [`locale_remulator::release_all`]. The LR
+/// path is a dev-build convenience — production (Tauri v2 Windows-only
+/// runtime) always hits the `#[cfg(windows)]` branch — but exercising
+/// `release_all` keeps the file-integrity half of the pipeline under
+/// test on every platform.
+pub fn launch_game(req: &LaunchRequest) -> Result<(), GameError> {
+    validate_path(&req.game_path)?;
+
+    match resolve_mode(req.mode) {
+        ResolvedMode::Normal => launch_normal(&req.game_path, &req.command_line),
+        #[cfg(windows)]
+        ResolvedMode::LocaleRemulator => {
+            locale_remulator::release_all(&req.target_dir)?;
+            locale_remulator::launch_via_lr(&req.target_dir, &req.game_path, &req.command_line)
+        }
+        #[cfg(not(windows))]
+        ResolvedMode::LocaleRemulator => {
+            // Dev / CI path: still exercise release_all so integrity
+            // regressions show up cross-platform; fall back to a
+            // Normal-mode spawn since we can't invoke ShellExecuteW.
+            locale_remulator::release_all(&req.target_dir)?;
+            launch_normal(&req.game_path, &req.command_line)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -618,6 +718,93 @@ mod tests {
             let _ = launch_normal(Path::new("/nope/missing-binary"), "");
             // No assertion: behaviour differs by kernel and the test
             // only exists to keep non-Windows builds from drifting.
+        }
+    }
+
+    // ---- default_target_dir ---------------------------------------------
+
+    #[test]
+    fn default_target_dir_returns_parent_of_current_exe() {
+        // Smoke: `current_exe()` always has a parent on a running
+        // cargo test harness. The point of the test is to lock in the
+        // `parent()` semantics so a future refactor doesn't swap to
+        // `current_dir()` (which would be wrong — test harness CWD
+        // differs from the exe dir).
+        let dir = default_target_dir().unwrap();
+        let exe = std::env::current_exe().unwrap();
+        assert_eq!(dir, exe.parent().unwrap());
+    }
+
+    // ---- launch_game (orchestrator) -------------------------------------
+
+    #[test]
+    fn launch_game_surfaces_validate_path_errors() {
+        let req = LaunchRequest {
+            game_path: PathBuf::from(""),
+            command_line: String::new(),
+            mode: GameStartMode::Normal,
+            target_dir: PathBuf::from("."),
+        };
+        assert_matches!(launch_game(&req), Err(GameError::PathEmpty));
+    }
+
+    #[test]
+    fn launch_game_rejects_non_ascii_game_path() {
+        // Create a real file with a non-ASCII name so we reach the
+        // non-ASCII guard rather than the earlier PathNotFound arm.
+        let dir = TempDir::new().unwrap();
+        let game = tempfile_with_name(&dir, "遊戲.exe");
+        let req = LaunchRequest {
+            game_path: game,
+            command_line: String::new(),
+            mode: GameStartMode::Normal,
+            target_dir: PathBuf::from("."),
+        };
+        assert_matches!(launch_game(&req), Err(GameError::PathNonAscii { .. }));
+    }
+
+    #[test]
+    fn launch_game_rejects_missing_game_path() {
+        let dir = TempDir::new().unwrap();
+        let req = LaunchRequest {
+            game_path: dir.path().join("does-not-exist.exe"),
+            command_line: String::new(),
+            mode: GameStartMode::Normal,
+            target_dir: PathBuf::from("."),
+        };
+        assert_matches!(launch_game(&req), Err(GameError::PathNotFound { .. }));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn launch_game_normal_spawns_cmd_exe() {
+        let req = LaunchRequest {
+            game_path: PathBuf::from(r"C:\Windows\System32\cmd.exe"),
+            command_line: "/c exit 0".to_string(),
+            mode: GameStartMode::Normal,
+            target_dir: std::env::temp_dir(),
+        };
+        launch_game(&req).expect("spawn must succeed");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn launch_game_lr_mode_releases_five_assets_on_non_windows_fallback() {
+        // Non-Windows dev fallback: the LR branch must still run
+        // release_all so integrity regressions are caught cross-platform.
+        // We avoid asserting on launch_normal's Result (Unix fork + exec
+        // quirks mean it may Ok but fail inside the child) — the only
+        // invariant under test is "release_all writes 5 files".
+        let dir = TempDir::new().unwrap();
+        let req = LaunchRequest {
+            game_path: PathBuf::from("/usr/bin/true"),
+            command_line: String::new(),
+            mode: GameStartMode::LocaleRemulator,
+            target_dir: dir.path().to_path_buf(),
+        };
+        let _ = launch_game(&req);
+        for (name, _) in super::locale_remulator::LR_ASSETS {
+            assert!(dir.path().join(name).exists(), "{name} missing");
         }
     }
 }

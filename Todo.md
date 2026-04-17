@@ -717,20 +717,30 @@ c:\Users\mo030\Desktop\Beanfun\
 
 #### Chunk 8.2 — `locale_remulator.rs` + SHA-256 embed + `launch_game` orchestrator
 
-- [ ] D-step 1：`Cargo.toml` 加 `[build-dependencies] sha2 = "0.10"`；確認 `windows` crate 已有 `Win32_UI_Shell`（7.x 已有）
-- [ ] D-step 2：`build.rs` 擴充 — read 5 檔 from `../Beanfun/LocaleRemulator/*`、compute SHA-256、write `$OUT_DIR/lr_sha256.rs` 含 `pub const LR_SHA256: [(&str, [u8; 32]); 5]`；`cargo:rerun-if-changed=` 每檔 + build.rs 自身；檔案不存在時 `panic!` 清楚訊息
-- [ ] D-step 3：`services/game/locale_remulator.rs` scaffold with `#[cfg(windows)]` 全檔；`include_bytes!` 5 檔 + `include!(concat!(env!("OUT_DIR"), "/lr_sha256.rs"))` 引 SHA-256 const；`pub const LR_ASSETS: [(&str, &[u8], &[u8; 32]); 5]` 組合 name / bytes / hash 三元組
-- [ ] D-step 4：`verify_file(path: &Path, expected_sha256: &[u8; 32]) -> io::Result<bool>` pure — 讀檔 → SHA-256 → compare；檔不存在回 `false`（非 error，呼叫方判斷）
-- [ ] D-step 5：`release_file(target_dir: &Path, name: &str, bytes: &[u8], expected_sha256: &[u8; 32]) -> Result<ReleaseOutcome, GameError>` — `ReleaseOutcome { Skipped, Rewritten, Created }`；檔存在 + hash 符 → Skipped；檔存在 + hash 不符 → `fs::remove_file` 後 write；檔不存在 → 建立 parent dir + write；對齊 WPF L138-163 但 hash-based 而非 length-based
-- [ ] D-step 6：`release_all(target_dir: &Path) -> Result<[ReleaseOutcome; 5], GameError>` — loop LR_ASSETS；任一失敗立即 short-circuit（對齊 WPF L1904-1914 short-circuit 語意）
-- [ ] D-step 7：`pub const LR_GUID: &str = "ef3e7b42-a87c-4c07-ae3e-eeebeef12762";` + `build_lr_arguments(game_path: &Path, command_line: &str) -> String` — 對齊 WPF L1917-1918 quoting policy（`game_path.starts_with('"')` 判斷要不要另加 quotes；command_line 尾綴空白）
-- [ ] D-step 8：`launch_via_lr(target_dir: &Path, game_path: &Path, command_line: &str) -> Result<(), GameError>` — `ShellExecuteW` with `runas` verb + `SW_SHOWNORMAL`；`lpFile = target_dir/LRProc.exe`；`lpParameters = "{GUID} {quoted_path} {cmd}"`；`lpDirectory = game_path.parent()`；UTF-16 wide string 轉換 via helper；error_code < 32 → `GameError::ShellExecute`
-- [ ] D-step 9：`launcher.rs` 加 top-level `launch_game(request: LaunchRequest) -> Result<(), GameError>` orchestrator — `LaunchRequest { game_path, command_line, mode }`；`validate_path` → `resolve_mode` → Normal call `launch_normal` / LR call `launch_via_lr`（LR case 先 `locale_remulator::release_all(target_dir)`）；`target_dir` = 從 Tauri config 或 `env::current_exe().parent()` 拿（放 8.1 或 8.2 合適時機討論）
-- [ ] D-step 10：module docs — `locale_remulator.rs` WPF 行號對應表（L1902-1947 + App.xaml.cs L131-167）+ SHA-256 upgrade rationale（對 WPF length-only 的 rejection）+ TOCTOU not-handled rationale；`launcher.rs` 加 `launch_game` 的 dispatch 流程圖
-- [ ] D-step 11：~10 unit tests — `verify_file` 4 case（檔不存在 / 存在 hash 符 / 存在 hash 不符 / 讀取失敗 io::Error）+ `release_file` 4 case（創新檔 / skip 符合 hash / rewrite 不符 hash / 父 dir 自動建立）+ `build_lr_arguments` 2 case（含空白 path / 已有引號 path）
-- [ ] D-step 12：1 integration test `tests/game_locale_remulator.rs`（`#[cfg(windows)]`）— release_all 到 tempdir 產出 5 檔驗 hash；再次 release_all 應 5 檔都 Skipped；篡改一 byte 再 release_all 應 1 Rewritten + 4 Skipped
-- [ ] D-step 13：quality gates 全綠
-- [ ] D-step 14：commit `feat(next): add LocaleRemulator embed + SHA-256 release + runas launch (P8 chunk 8.2)`
+##### 8.2 pre-flight 校準決策（2026-04-17）
+
+- **cfg gating = B 精細**：只有 `launch_via_lr`（ShellExecuteW）+ wide-string helper `#[cfg(windows)]`；`verify_file` / `release_file` / `release_all` / `build_lr_arguments` / `LR_ASSETS` / `LR_GUID` 全部 cross-platform（unit + integration test 在 macOS/Linux 也跑得動）
+- **LaunchRequest = B 4 欄位**：`LaunchRequest { game_path, command_line, mode, target_dir }`；另外提供 `default_target_dir() -> io::Result<PathBuf>`（包 `env::current_exe()?.parent()`）給 Tauri command 層（P10）用；service 層 `launch_game` 完全 pure，test 可任意 mock target_dir
+- **Chunking = A 單一 commit**：14 D-steps 合成一個 commit，與 P6.2 / P7.3 量級一致
+- **Release skip 判定 = A 總是 hash**：不做 length fast-path 捷徑（240KB × 5 在 i3 上 <1ms，分支省不回來、程式碼更清爽）
+
+- [x] D-step 1：`Cargo.toml` 加 `[build-dependencies] sha2 = "0.10"`；確認 `windows` crate 已有 `Win32_UI_Shell`（Cargo.toml 的 features 列表檢查）；runtime 端 `sha2` 應該已在（P5 DPAPI 用）但再確認一次
+- [x] D-step 2：`build.rs` 擴充 — read 5 檔 from `../../Beanfun/LocaleRemulator/*`（`CARGO_MANIFEST_DIR` 相對兩級 up）、compute SHA-256、write `$OUT_DIR/lr_sha256.rs` 含 `pub(crate) const LR_SHA256: [(&str, [u8; 32]); 5]`；`cargo:rerun-if-changed=` 每檔 + build.rs 自身；檔案不存在 `panic!` 清楚訊息含絕對路徑
+- [x] D-step 3：`services/game/locale_remulator.rs` scaffold（**非全檔 `#[cfg(windows)]`**，只有 `launch_via_lr` + `to_wide_null` cfg-gated）；`include_bytes!` 5 檔（`../../../../../Beanfun/LocaleRemulator/*` 相對五級 up，從 src/services/game/locale_remulator.rs 算）+ `include!(concat!(env!("OUT_DIR"), "/lr_sha256.rs"))`；`pub const LR_ASSETS: [(&str, &[u8]); 5]`（bytes 與 hash 拆兩表，hash 另掛 `pub(crate) LR_SHA256` 經 `expected_sha256()` 查）；`pub const LR_GUID: &str = "ef3e7b42-a87c-4c07-ae3e-eeebeef12762";`
+- [x] D-step 4：`verify_file(path: &Path, expected: &[u8; 32]) -> io::Result<bool>` pure — `fs::read(path)` → `Sha256::digest` → 比較；`NotFound` 特殊 case 回 `Ok(false)`（非 error，讓呼叫方用 outcome 判斷）；其他 io::Error 原樣 propagate
+- [x] D-step 5：`pub enum ReleaseOutcome { Skipped, Created, Rewritten }`（`Copy + PartialEq + Debug`）；`release_file(target_dir, name, bytes, expected) -> Result<ReleaseOutcome, GameError>` — 先 `verify_file` → 若 `Ok(true)` 回 Skipped；若 path 存在但 hash 不符 → `fs::remove_file` 後 write `Rewritten`；若 path 不存在 → 建 parent dir（`fs::create_dir_all`）+ `fs::write` → `Created`；io::Error 全部包成 `GameError::LocaleRemulatorRelease { name: static_name, source }`
+- [x] D-step 6：`release_all(target_dir: &Path) -> Result<[ReleaseOutcome; 5], GameError>` — 依 `LR_ASSETS` 順序 loop；任一失敗 short-circuit（對齊 WPF L1904-1914 `|| chain` 語意）；回 5-element array 帶每檔的 outcome（diagnostic 用）
+- [x] D-step 7：`build_lr_arguments(game_path: &Path, command_line: &str) -> String` — 對齊 WPF L1917-1918：`path_str = game_path.to_string_lossy();` `let path_part = if path_str.starts_with('"') { format!("{path_str} ") } else { format!("\"{path_str}\" ") };`；最終 `format!("{LR_GUID} {path_part}{command_line}")`（注意 path_part 已帶尾綴空白）
+- [x] D-step 8：`launch_via_lr(target_dir: &Path, game_path: &Path, command_line: &str) -> Result<(), GameError>` `#[cfg(windows)]` 限定 — `ShellExecuteW` + `runas` verb + `SW_SHOWNORMAL`；`lpFile = target_dir.join("LRProc.exe")`；`lpParameters = build_lr_arguments(...)`；`lpDirectory = game_path.parent()`（若 None fallback `Path::new(".")`）；UTF-16 轉換經 `to_wide_null` helper；返回值 `HINSTANCE`，cast 成 `isize`，`<= 32` → `GameError::ShellExecute { source: windows::core::Error::from_win32() }`
+- [x] D-step 9：`launcher.rs` 頂層新增：
+    - `pub struct LaunchRequest { game_path: PathBuf, command_line: String, mode: GameStartMode, target_dir: PathBuf }`
+    - `pub fn default_target_dir() -> io::Result<PathBuf>` — `env::current_exe()?.parent().ok_or(NotFound).to_path_buf()`
+    - `pub fn launch_game(req: &LaunchRequest) -> Result<(), GameError>` orchestrator — `validate_path(&req.game_path)?;` → `resolve_mode(req.mode)` → `Normal` arm call `launch_normal`；`LocaleRemulator` arm `#[cfg(windows)]` 分支 call `release_all` + `launch_via_lr`；`#[cfg(not(windows))]` 分支 也呼 `release_all` 再 fallback 到 `launch_normal`（dev/CI 用；production LR 永遠在 Windows）
+- [x] D-step 10：module docs — `locale_remulator.rs` WPF 行號對應表 + SHA-256 upgrade rationale + TOCTOU not-handled rationale；`launcher.rs` 表格加入 `launch_game` / `LaunchRequest` / `default_target_dir`；`mod.rs` 加 top-level call graph ASCII 圖 + SHA-256 security upgrade section
+- [x] D-step 11：**27 unit tests**（超出計畫的 15）— locale_remulator 18 + launcher.rs 新增 9（覆蓋 LR_ASSETS/LR_SHA256 平行、SHA-256 byte match、GUID lock-in、verify_file 4 案、release_file 5 案含 length-match-but-hash-differs security lock-in、release_all 3 案、build_lr_arguments 4 案、ShellExecute 錯誤映射、launch_game 4 案含 validate/non-ASCII/missing/normal smoke、default_target_dir smoke 等）
+- [x] D-step 12：1 integration test `tests/game_locale_remulator.rs`（cross-platform，**6 tests**）— release_all 綠燈 5 案、SHA-256 驗 5 檔、再次 Skipped、tamper → Rewritten only、delete → Created only、embedded length sanity
+- [x] D-step 13：quality gates 全綠 — `cargo fmt --check` ✓ / `cargo clippy --all-targets -- -D warnings`（default + test-fixtures 兩輪）✓ / `cargo test --lib` **397/397**（較 P8.1 的 370 多 27）✓ / `cargo test --test game_locale_remulator` 6/6 ✓ / `cargo test --test updater` 8/8 ✓ / `cargo test --test storage_legacy --features test-fixtures` 9/9 ✓ / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib` ✓（修 2 處 `LR_SHA256` / `expected_sha256` private-item link → plain backtick + 1 處 doc list indent warning）
+- [x] D-step 14：commit `feat(next): add LocaleRemulator embed + SHA-256 release + runas launch (P8 chunk 8.2)` — `6fbf8be`
 
 ### P9 — Rust `services/process` + `services/registry`
 
