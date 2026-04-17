@@ -1,12 +1,15 @@
-//! Shared "login tail" — the final hop that every non-QR login flow
+//! Shared "login tail" — the final hop that **every** login flow
 //! funnels through.
 //!
 //! # WPF reference
 //!
 //! Ports `BeanfunClient.Login.cs::LoginCompleted` (L838-882). WPF signs
-//! off every successful HK Regular / TOTP flow (and the QR flow inside
-//! `QRCodeCompleted`) with the **exact same five-field form** posted to
-//! `…/beanfun_block/bflogin/return.aspx`:
+//! off every successful HK Regular / TOTP / QR flow with the **exact
+//! same five-field form** posted to
+//! `…/beanfun_block/bflogin/return.aspx`. (TW Regular is the lone
+//! exception — see "Why this is a 'shared tail'" below for why it
+//! still has its own inline `return.aspx` step.) The five-field form
+//! shape:
 //!
 //! | Field              | Value                                          |
 //! |--------------------|------------------------------------------------|
@@ -67,8 +70,10 @@ use super::post_return_aspx;
 ///
 /// - `session_key` — the `pSKey` the orchestrator obtained from
 ///   `get_session_key`. Stored on the final `Session.skey`.
-/// - `akey` — the `AuthKey` scraped from the redirect URL of whichever
-///   branch we came from (HK Regular / TOTP / QR).
+/// - `akey` — the `AuthKey` for whichever branch we came from. HK
+///   Regular and TOTP scrape it from the redirect URL after their
+///   login POST; the QR flow passes the literal sentinel `"OK"`
+///   that `QRCodeLogin` returns on success (WPF L600 / L774-782).
 /// - `account_id` — the user-facing login id, propagated onto
 ///   `Session.account_id` for UI purposes (not sent on the wire here).
 /// - `service_code` / `service_region` — MapleStory service metadata.

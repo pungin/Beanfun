@@ -3,20 +3,24 @@
 //!
 //! Each test stands up a fresh [`wiremock::MockServer`], points a
 //! [`BeanfunClient`] at it, and drives [`finalize_qr_login`] against
-//! one canned three-step response chain that exercises one branch of
-//! the WPF `QRCodeLogin` flow (`BeanfunClient.Login.cs` L530-607).
+//! one canned **four-step** response chain that exercises one branch
+//! of the WPF QR flow (`BeanfunClient.Login.cs::QRCodeLogin` L530-607
+//! plus `LoginCompleted` L838-882).
 //!
-//! | WPF branch / wire-shape detail                           | Covered by                                                |
-//! |----------------------------------------------------------|-----------------------------------------------------------|
-//! | happy path → Session populated                           | `happy_path_returns_session`                              |
-//! | HK region guard, no HTTP traffic                         | `hk_region_returns_qr_unsupported_without_http_traffic`   |
-//! | step 1 (`QRLogin/QRLogin`) HTTP 5xx                      | `qrlogin_handshake_failure_propagates_as_unknown`         |
-//! | step 2 (`Login/SendLogin`) empty form                    | `send_login_empty_form_yields_send_login_no_form_data`    |
-//! | step 3 (`return.aspx`) missing bfWebToken cookie         | `return_aspx_missing_set_cookie_yields_missing_web_token` |
-//! | step 1 wire shape — Accept=JSON, Referer=Index URL       | `step1_qrlogin_handshake_sends_expected_headers`          |
-//! | step 2 wire shape — Accept=QR-specific HTML, Referer     | `step2_send_login_sends_qr_specific_html_accept`          |
-//! | step 3 wire shape — Referer=login_base, form body, …    | `step3_return_aspx_sends_login_base_referer_and_form_body`|
-//! | Session.account_id is empty (deferred to GetAccounts)    | `session_account_id_is_empty_pending_get_accounts`        |
+//! | WPF branch / wire-shape detail                                  | Covered by                                                       |
+//! |-----------------------------------------------------------------|------------------------------------------------------------------|
+//! | happy path → Session populated, web_token comes from step 4     | `happy_path_returns_session_with_step4_web_token`                |
+//! | HK region guard, no HTTP traffic                                | `hk_region_returns_qr_unsupported_without_http_traffic`          |
+//! | step 1 (`QRLogin/QRLogin`) HTTP 5xx                             | `qrlogin_handshake_failure_propagates_as_unknown`                |
+//! | step 2 (`Login/SendLogin`) empty form                           | `send_login_empty_form_yields_send_login_no_form_data`           |
+//! | step 3 (`return.aspx` SendLogin form) missing bfWebToken cookie | `step3_missing_set_cookie_yields_missing_web_token`              |
+//! | step 4 (`return.aspx` AuthKey=OK form) missing bfWebToken cookie| `step4_login_completed_missing_token_yields_missing_web_token`   |
+//! | step 1 wire shape — Accept=JSON, Referer=Index URL              | `step1_qrlogin_handshake_sends_expected_headers`                 |
+//! | step 2 wire shape — Accept=QR-specific HTML, Referer            | `step2_send_login_sends_qr_specific_html_accept`                 |
+//! | step 3 wire shape — SendLogin form body + Referer=login_base    | `step3_return_aspx_posts_send_login_form_with_login_base_referer`|
+//! | step 4 wire shape — 5-field AuthKey=OK form                     | `step4_login_completed_posts_five_field_form_with_authkey_ok`    |
+//! | step 3 → step 4 sequencing                                      | `steps_3_and_4_post_return_aspx_in_that_order`                   |
+//! | Session.account_id is empty (deferred to GetAccounts)           | `session_account_id_is_empty_pending_get_accounts`               |
 //!
 //! Pure-helper unit tests (Accept-string locks) live next to the
 //! source module; this file covers the HTTP orchestration end-to-end.
@@ -26,12 +30,22 @@ use beanfun_next_lib::services::beanfun::{
     BeanfunClient, ClientConfig, Endpoints, LoginError, LoginRegion,
 };
 use url::Url;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const SESSION_KEY: &str = "SKEY_QR_FIN";
 const VERIFICATION_TOKEN: &str = "VTOKEN_qr_fin_xyz";
-const WEB_TOKEN: &str = "BFWT_qr_fin_happy";
+
+/// Token returned by the **canonical** step (4). This is what should
+/// end up on `Session.web_token` after a happy roundtrip — step 3's
+/// token is intentionally discarded by `finalize_qr_login`. See the
+/// `qr_finalize` module docs for the WPF L868 alignment rationale.
+const STEP4_WEB_TOKEN: &str = "BFWT_qr_fin_step4_canonical";
+
+/// Token returned by step 3. We mount it with a *distinct* value from
+/// [`STEP4_WEB_TOKEN`] so tests can prove `finalize_qr_login` returns
+/// the step 4 value (and not accidentally surface step 3's).
+const STEP3_DISCARDED_TOKEN: &str = "BFWT_qr_fin_step3_discarded";
 
 /// Accept string WPF's `QRCodeLogin` sends on the SendLogin GET
 /// (L545). Reproduced here verbatim so the wire-shape test asserts
@@ -121,11 +135,19 @@ async fn mount_send_login_happy(server: &MockServer) {
     mount_send_login_with_html(server, html).await;
 }
 
-/// `POST /beanfun_block/bflogin/return.aspx` — 302 redirect carrying
-/// a `bfWebToken=…` Set-Cookie.
-async fn mount_return_aspx_with_token(server: &MockServer, token: &str) {
+/// `POST /beanfun_block/bflogin/return.aspx` for **step 3** (the
+/// SendLogin-form POST inside `QRCodeLogin`, WPF L588-591). The form
+/// body always carries `AuthKey=AUTH_INNER` — the value we hardcode
+/// inside [`mount_send_login_happy`]'s HTML — so we discriminate on
+/// that fragment and let step 4's mock handle the `AuthKey=OK` POST.
+///
+/// Returns a 302 with `bfWebToken={token}; Path=/; HttpOnly`. Pass
+/// [`STEP3_DISCARDED_TOKEN`] in happy tests so a regression that
+/// surfaces step 3's token on `Session.web_token` is observable.
+async fn mount_return_aspx_step3_with_token(server: &MockServer, token: &str) {
     Mock::given(method("POST"))
         .and(path("/beanfun_block/bflogin/return.aspx"))
+        .and(body_string_contains("AuthKey=AUTH_INNER"))
         .respond_with(
             ResponseTemplate::new(302)
                 .append_header("Location", format!("{}/after", server.uri()).as_str())
@@ -138,12 +160,52 @@ async fn mount_return_aspx_with_token(server: &MockServer, token: &str) {
         .await;
 }
 
-/// `POST /beanfun_block/bflogin/return.aspx` — 302 redirect *without*
-/// the `bfWebToken` cookie. Drives the [`LoginError::MissingWebToken`]
-/// branch.
-async fn mount_return_aspx_without_token(server: &MockServer) {
+/// Step 3 mock that responds **without** a `bfWebToken` cookie.
+/// Drives the per-step `MissingWebToken` failure surface.
+async fn mount_return_aspx_step3_without_token(server: &MockServer) {
     Mock::given(method("POST"))
         .and(path("/beanfun_block/bflogin/return.aspx"))
+        .and(body_string_contains("AuthKey=AUTH_INNER"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .append_header("Location", format!("{}/after", server.uri()).as_str()),
+        )
+        .mount(server)
+        .await;
+}
+
+/// `POST /beanfun_block/bflogin/return.aspx` for **step 4** (the
+/// `LoginCompleted` POST with the 5-field `AuthKey=OK` payload, WPF
+/// L853-864). Discriminator: `AuthKey=OK` in the URL-encoded body.
+///
+/// Pass [`STEP4_WEB_TOKEN`] in happy tests so the assertion that
+/// `Session.web_token == STEP4_WEB_TOKEN` proves we propagated step
+/// 4's value (not step 3's).
+async fn mount_return_aspx_step4_with_token(server: &MockServer, token: &str) {
+    Mock::given(method("POST"))
+        .and(path("/beanfun_block/bflogin/return.aspx"))
+        .and(body_string_contains("AuthKey=OK"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .append_header("Location", format!("{}/after", server.uri()).as_str())
+                .append_header(
+                    "Set-Cookie",
+                    format!("bfWebToken={token}; Path=/; HttpOnly").as_str(),
+                ),
+        )
+        .mount(server)
+        .await;
+}
+
+/// Step 4 mock that responds **without** a `bfWebToken` cookie.
+/// Drives the canonical `MissingWebToken` failure surface (this is
+/// the only path that actually surfaces to the caller because step
+/// 3's token is discarded; if step 3 succeeds and step 4 fails, the
+/// returned error is the one users would see).
+async fn mount_return_aspx_step4_without_token(server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/beanfun_block/bflogin/return.aspx"))
+        .and(body_string_contains("AuthKey=OK"))
         .respond_with(
             ResponseTemplate::new(302)
                 .append_header("Location", format!("{}/after", server.uri()).as_str()),
@@ -153,10 +215,14 @@ async fn mount_return_aspx_without_token(server: &MockServer) {
 }
 
 /// One-stop shop for tests that just need a fully-mounted happy path.
+/// Mounts both step 3 (with [`STEP3_DISCARDED_TOKEN`]) and step 4
+/// (with [`STEP4_WEB_TOKEN`]) so the happy path can prove which one
+/// ends up on `Session.web_token`.
 async fn mount_happy_path(server: &MockServer) {
     mount_qrlogin_handshake_ok(server).await;
     mount_send_login_happy(server).await;
-    mount_return_aspx_with_token(server, WEB_TOKEN).await;
+    mount_return_aspx_step3_with_token(server, STEP3_DISCARDED_TOKEN).await;
+    mount_return_aspx_step4_with_token(server, STEP4_WEB_TOKEN).await;
 }
 
 // -----------------------------------------------------------------------------
@@ -164,7 +230,7 @@ async fn mount_happy_path(server: &MockServer) {
 // -----------------------------------------------------------------------------
 
 #[tokio::test]
-async fn happy_path_returns_session() {
+async fn happy_path_returns_session_with_step4_web_token() {
     let server = MockServer::start().await;
     mount_happy_path(&server).await;
     let client = client_for(&server, LoginRegion::TW);
@@ -175,7 +241,20 @@ async fn happy_path_returns_session() {
 
     assert_eq!(session.region, LoginRegion::TW);
     assert_eq!(session.skey, SESSION_KEY);
-    assert_eq!(session.web_token, WEB_TOKEN);
+    // Critical assertion: web_token must be the value from step 4
+    // (LoginCompleted), NOT step 3. Mirrors WPF L868
+    // `this.webtoken = this.GetCookie("bfWebToken")` — the cookie
+    // jar value AFTER the second POST. If a refactor ever flips
+    // back to "use step 3's token and skip step 4", this assertion
+    // will fail loudly.
+    assert_eq!(
+        session.web_token, STEP4_WEB_TOKEN,
+        "web_token must come from step 4 (LoginCompleted), not step 3"
+    );
+    assert_ne!(
+        session.web_token, STEP3_DISCARDED_TOKEN,
+        "step 3's transient token must not surface on the Session"
+    );
     // QR has no user-typed account id; surfaced as empty until the
     // P3.5 `GetAccounts` step fills it. See `qr_finalize` module docs.
     assert_eq!(session.account_id, "");
@@ -265,21 +344,67 @@ async fn send_login_empty_form_yields_send_login_no_form_data() {
 }
 
 #[tokio::test]
-async fn return_aspx_missing_set_cookie_yields_missing_web_token() {
+async fn step3_missing_set_cookie_yields_missing_web_token() {
     // Steps 1 & 2 succeed; step 3 returns 302 without a
-    // `bfWebToken` cookie → `post_return_aspx` returns
-    // MissingWebToken. This is the WPF "logged in but cookie not
-    // captured" failure surface (WPF would silently leave
-    // this.webtoken null and the next call would fail).
+    // `bfWebToken` cookie. Even though `finalize_qr_login` discards
+    // step 3's *value*, the underlying `post_return_aspx` helper
+    // still requires a cookie to be present (otherwise it raises
+    // MissingWebToken). This locks the strictness of step 3 — a
+    // future refactor that loosens it (e.g. tolerating a missing
+    // cookie because we don't use the value anyway) would be a real
+    // behaviour change worth a deliberate decision, not a silent
+    // drift, so we want the test to catch it.
+    //
+    // Step 4's mock is intentionally NOT mounted: if step 3 errors,
+    // step 4 must short-circuit. The trailing `received_requests`
+    // check belt-and-braces the assertion.
     let server = MockServer::start().await;
     mount_qrlogin_handshake_ok(&server).await;
     mount_send_login_happy(&server).await;
-    mount_return_aspx_without_token(&server).await;
+    mount_return_aspx_step3_without_token(&server).await;
     let client = client_for(&server, LoginRegion::TW);
 
     let err = finalize_qr_login(&client, &fake_init())
         .await
-        .expect_err("missing Set-Cookie must error");
+        .expect_err("missing Set-Cookie on step 3 must error");
+    assert!(
+        matches!(err, LoginError::MissingWebToken),
+        "expected MissingWebToken, got {err:?}"
+    );
+
+    let received = server.received_requests().await.unwrap();
+    let return_aspx_hits = received
+        .iter()
+        .filter(|r| r.url.path() == "/beanfun_block/bflogin/return.aspx")
+        .count();
+    assert_eq!(
+        return_aspx_hits, 1,
+        "step 3 failure must short-circuit step 4 (saw {return_aspx_hits} return.aspx calls)"
+    );
+}
+
+#[tokio::test]
+async fn step4_login_completed_missing_token_yields_missing_web_token() {
+    // Steps 1, 2, and 3 succeed; step 4 (LoginCompleted's POST)
+    // returns 302 without a `bfWebToken` cookie. This is the
+    // **canonical** MissingWebToken failure surface: step 4 is
+    // where we extract the user-facing token, so any cookie issue
+    // here propagates to the caller verbatim.
+    //
+    // WPF parallel: `LoginCompleted` L868-873 sets `errmsg =
+    // "LoginNoWebtoken"` when `GetCookie("bfWebToken") == ""` after
+    // the POST. We surface the same condition as
+    // `LoginError::MissingWebToken`.
+    let server = MockServer::start().await;
+    mount_qrlogin_handshake_ok(&server).await;
+    mount_send_login_happy(&server).await;
+    mount_return_aspx_step3_with_token(&server, STEP3_DISCARDED_TOKEN).await;
+    mount_return_aspx_step4_without_token(&server).await;
+    let client = client_for(&server, LoginRegion::TW);
+
+    let err = finalize_qr_login(&client, &fake_init())
+        .await
+        .expect_err("missing Set-Cookie on step 4 must error");
     assert!(
         matches!(err, LoginError::MissingWebToken),
         "expected MissingWebToken, got {err:?}"
@@ -381,12 +506,28 @@ async fn step2_send_login_sends_qr_specific_html_accept() {
     );
 }
 
+/// Find the first `return.aspx` POST whose body contains
+/// `discriminator`. Both step 3 and step 4 hit the same path; the
+/// only practical way to tell them apart from `received_requests` is
+/// the body content.
+fn find_return_aspx_request<'a>(
+    requests: &'a [wiremock::Request],
+    discriminator: &str,
+) -> Option<&'a wiremock::Request> {
+    requests.iter().find(|r| {
+        r.url.path() == "/beanfun_block/bflogin/return.aspx"
+            && std::str::from_utf8(&r.body)
+                .map(|body| body.contains(discriminator))
+                .unwrap_or(false)
+    })
+}
+
 #[tokio::test]
-async fn step3_return_aspx_sends_login_base_referer_and_form_body() {
+async fn step3_return_aspx_posts_send_login_form_with_login_base_referer() {
     // WPF L588-591:
     //   SetBaseHeaders(true, null, "https://login.beanfun.com/");
     //   UploadString("https://tw.beanfun.com/beanfun_block/bflogin/return.aspx",
-    //                payload);
+    //                payload);  // payload = SendLogin form scrape
     //
     // The `accept = null` argument means `SetBaseHeaders` skips the
     // `Accept` header entirely. We don't *explicitly* set Accept in
@@ -408,10 +549,8 @@ async fn step3_return_aspx_sends_login_base_referer_and_form_body() {
         .expect("happy roundtrip so we can inspect the request");
 
     let received = server.received_requests().await.expect("requests recorded");
-    let req = received
-        .iter()
-        .find(|r| r.url.path() == "/beanfun_block/bflogin/return.aspx")
-        .expect("step 3 request was sent");
+    let req = find_return_aspx_request(&received, "AuthKey=AUTH_INNER")
+        .expect("step 3 (SendLogin form) POST was sent");
 
     // Referer = login_base with trailing slash. We point all bases at
     // the same mock origin; `Url::as_str()` canonicalises the trailing
@@ -440,7 +579,7 @@ async fn step3_return_aspx_sends_login_base_referer_and_form_body() {
     ] {
         assert!(
             body_str.contains(fragment),
-            "form body missing `{fragment}`; got: {body_str}"
+            "step 3 form body missing `{fragment}`; got: {body_str}"
         );
     }
     // `.form()` sets Content-Type for us — verify so a future
@@ -448,6 +587,113 @@ async fn step3_return_aspx_sends_login_base_referer_and_form_body() {
     assert_eq!(
         header_value(req, "Content-Type"),
         Some("application/x-www-form-urlencoded"),
+    );
+}
+
+#[tokio::test]
+async fn step4_login_completed_posts_five_field_form_with_authkey_ok() {
+    // WPF L853-864 (LoginCompleted):
+    //   payload.Add("SessionKey", this.SessionKey);
+    //   payload.Add("AuthKey", akey);              // akey = "OK" for QR
+    //   payload.Add("ServiceCode", "");
+    //   payload.Add("ServiceRegion", "");
+    //   payload.Add("ServiceAccountSN", "0");
+    //   UploadString("https://tw.beanfun.com/beanfun_block/bflogin/return.aspx",
+    //                payload);
+    //
+    // SessionKey here is the *outer* skey (init.skey == SESSION_KEY),
+    // NOT the SendLogin-form's `SessionKey=SKEY_INNER` from step 3.
+    // ServiceCode/Region are blank on the wire by design — see
+    // `login/completed.rs` module docs L19-23.
+    let server = MockServer::start().await;
+    mount_happy_path(&server).await;
+    let client = client_for(&server, LoginRegion::TW);
+
+    finalize_qr_login(&client, &fake_init())
+        .await
+        .expect("happy roundtrip so we can inspect the request");
+
+    let received = server.received_requests().await.expect("requests recorded");
+    let req = find_return_aspx_request(&received, "AuthKey=OK")
+        .expect("step 4 (LoginCompleted AuthKey=OK form) POST was sent");
+
+    // Same Referer + Accept divergence story as step 3 — they share
+    // the `post_return_aspx` helper.
+    let expected_referer = format!("{}/", server.uri());
+    assert_eq!(
+        header_value(req, "Referer"),
+        Some(expected_referer.as_str()),
+    );
+
+    let body_str = std::str::from_utf8(&req.body).expect("form body is utf-8");
+    // Five-field LoginCompleted form. Use `SessionKey={SESSION_KEY}`
+    // to disambiguate from step 3's `SessionKey=SKEY_INNER`. Bind
+    // the formatted fragment to a `String` first so the array below
+    // is uniformly `&str` (otherwise type inference on `contains`
+    // gets ambiguous with a mixed `&String`/`&str` array).
+    let session_key_fragment = format!("SessionKey={SESSION_KEY}");
+    for fragment in [
+        session_key_fragment.as_str(),
+        "AuthKey=OK",
+        "ServiceCode=&",
+        "ServiceRegion=&",
+        "ServiceAccountSN=0",
+    ] {
+        assert!(
+            body_str.contains(fragment),
+            "step 4 form body missing `{fragment}`; got: {body_str}"
+        );
+    }
+    // The SendLogin-form fields from step 3 must NOT leak into
+    // step 4's body. Catches an accidental form-reuse refactor.
+    assert!(
+        !body_str.contains("SKEY_INNER"),
+        "step 4 form body must not contain step 3's SKEY_INNER; got: {body_str}"
+    );
+    assert!(
+        !body_str.contains("AUTH_INNER"),
+        "step 4 form body must not contain step 3's AUTH_INNER; got: {body_str}"
+    );
+}
+
+#[tokio::test]
+async fn steps_3_and_4_post_return_aspx_in_that_order() {
+    // Both steps hit the same path; the only way to verify ordering
+    // is to walk `received_requests` (which preserves arrival order)
+    // and assert the AuthKey fragments appear in the right sequence.
+    // A regression that swapped the two posts (or accidentally
+    // skipped step 4 by reverting to the old "redundant" reading)
+    // would fail this test loudly.
+    let server = MockServer::start().await;
+    mount_happy_path(&server).await;
+    let client = client_for(&server, LoginRegion::TW);
+
+    finalize_qr_login(&client, &fake_init())
+        .await
+        .expect("happy roundtrip");
+
+    let received = server.received_requests().await.expect("requests recorded");
+    let return_aspx_posts: Vec<_> = received
+        .iter()
+        .filter(|r| r.url.path() == "/beanfun_block/bflogin/return.aspx")
+        .collect();
+
+    assert_eq!(
+        return_aspx_posts.len(),
+        2,
+        "expected exactly two return.aspx POSTs (step 3 + step 4), got {}",
+        return_aspx_posts.len()
+    );
+
+    let body0 = std::str::from_utf8(&return_aspx_posts[0].body).unwrap();
+    let body1 = std::str::from_utf8(&return_aspx_posts[1].body).unwrap();
+    assert!(
+        body0.contains("AuthKey=AUTH_INNER"),
+        "first return.aspx POST should be step 3 (SendLogin form), got body: {body0}"
+    );
+    assert!(
+        body1.contains("AuthKey=OK"),
+        "second return.aspx POST should be step 4 (LoginCompleted), got body: {body1}"
     );
 }
 

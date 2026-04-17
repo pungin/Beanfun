@@ -327,16 +327,21 @@ c:\Users\mo030\Desktop\Beanfun\
 - **驗收** ✅：fmt / clippy -D warnings / cargo test (228 pass) / cargo doc 全綠
 
 ##### 3.4.3 — `qr_finalize` ✅
-- [x] `login/qr_finalize.rs` — `finalize_qr_login(client, &init) -> Result<Session, LoginError>`：region guard → step 1 GET `QRLogin/QRLogin`（handshake，body 丟掉，Accept=`application/json, text/plain, */*` + Referer=`Login/Index?pSKey={skey}`，對齊 WPF L535-541）→ step 2 複用 `send_login` 帶 QR 專用 Accept（`text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8`，對齊 WPF L545，跟 TW Regular L124 多三個 image MIME）→ step 3 複用 `post_return_aspx`（no-redirect，Referer=login_base，raw `Set-Cookie` 抓 `bfWebToken`，對齊 WPF L588-598）→ 回 `Session { region: TW, skey, web_token, account_id: "", service_code/region: TW defaults }`
-- [x] **跳過** WPF `LoginCompleted` 第二次 garbage `AuthKey="OK"` POST（L838-882）：唯一有用副作用（捕 bfWebToken）已在 step 3 完成；`GetAccounts` 留給 P3.5
+- [x] `login/qr_finalize.rs` — `finalize_qr_login(client, &init) -> Result<Session, LoginError>`：region guard → step 1 GET `QRLogin/QRLogin`（handshake，body 丟掉，Accept=`application/json, text/plain, */*` + Referer=`Login/Index?pSKey={skey}`，對齊 WPF L535-541）→ step 2 複用 `send_login` 帶 QR 專用 Accept（`text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8`，對齊 WPF L545，跟 TW Regular L124 多三個 image MIME）→ step 3 複用 `post_return_aspx`（no-redirect，Referer=login_base，POST SendLogin form 並丟掉 transient bfWebToken，對齊 WPF L588-598）→ step 4 複用 `login_completed`（5-field `AuthKey="OK"` form POST，從 cookie jar 重抓 canonical bfWebToken，對齊 WPF L838-882 / L774-782）→ 回 `Session { region: TW, skey, web_token: step4 token, account_id: "", service_code/region: TW defaults }`
 - [x] **DRY refactor**：`send_login` 簽名加 `accept: &str` 參數（TW Regular L124 vs QR L545 兩條 Accept 字串不同 → 由 caller 帶；SRP 改進 — Accept 是「自我描述」細節本來就該由 caller 提供）；`tw_regular.rs` callsite 同步更新傳 TW Accept literal
-- [x] **DRY 評估通過**：原本擔心 `Origin from login_base` 會超過 Rule of Three，實測 qr_finalize 不需 Origin（WPF 三步都沒設 Origin），維持 qr_init/qr_poll 兩處不抽 helper
+- [x] **DRY 複用 step 4**：直接複用 HK Regular / TOTP 的 `login_completed`（不重抄 5-field form），唯一 QR 專屬參數是 `akey="OK"` sentinel + `account_id=""`
+- [x] **DRY 評估通過**：原本擔心 `Origin from login_base` 會超過 Rule of Three，實測 qr_finalize 不需 Origin（WPF 四步都沒設 Origin），維持 qr_init/qr_poll 兩處不抽 helper
 - [x] **不新增 LoginError variant**：複用 `QrUnsupportedRegion` / `SendLoginNoFormData` / `MissingWebToken` / `Unknown` / `Http`
 - [x] `login/mod.rs` 註冊 `qr_finalize` + re-export `finalize_qr_login`
 - [x] Unit tests（2 支）：`QR_SEND_LOGIN_ACCEPT` byte-for-byte 對齊 WPF L545；QR Accept 是 TW Regular Accept + 三個 image MIME 的嚴格擴充（防止未來改錯）
-- [x] Integration tests `tests/qr_finalize.rs`（9 支）：happy / HK 短路 / step1 5xx / step2 空 form / step3 缺 cookie / step1 wire shape (Accept=JSON + Referer + 確認無 Origin/X-Requested-With/RequestVerificationToken) / step2 wire shape (QR Accept byte-for-byte + Referer) / step3 wire shape (Referer=login_base + form body fragments + Content-Type) / `Session.account_id == ""`（鎖 P3.5 之前的設計）
-- **驗收** ✅：fmt / clippy -D warnings / cargo test (239 pass，+11 = 9 integ + 2 unit) / cargo doc 全綠
-- **Documented divergence**：step 3 `Accept: */*` vs WPF 完全不送 Accept — reqwest 0.12 (via hyper) 自動注入 `Accept: */*` 沒有 public API 抑制；RFC 9110 §12.5.1 規定 Accept 缺省等於 `*/*` → 語意完全等價，無 Beanfun endpoint 對此分支差異敏感。模組 doc 與 step3 wire-shape 測試都明確記錄
+- [x] Integration tests `tests/qr_finalize.rs`（12 支，**+3 by chunk 3.4 review**）：happy（**鎖 web_token == step 4 token，且 != step 3 token**）/ HK 短路 / step1 5xx / step2 空 form / step3 缺 cookie 短路（驗證 step 4 不被觸發）/ **step4 缺 cookie → MissingWebToken（canonical 失敗面）** / step1 wire shape / step2 wire shape / step3 wire shape (SendLogin form body) / **step4 wire shape (5-field AuthKey=OK form, 鎖 step3 不洩漏到 step4)** / **step3→step4 sequencing** / `Session.account_id == ""`（鎖 P3.5 之前的設計）
+- **驗收** ✅：fmt / clippy -D warnings / cargo test 全綠 / cargo doc 全綠
+- **Documented divergence**：step 3 + step 4 `Accept: */*` vs WPF 完全不送 Accept — reqwest 0.12 (via hyper) 自動注入 `Accept: */*` 沒有 public API 抑制；RFC 9110 §12.5.1 規定 Accept 缺省等於 `*/*` → 語意完全等價，無 Beanfun endpoint 對此分支差異敏感。模組 doc 與 step3 / step4 wire-shape 測試都明確記錄
+
+###### Chunk 3.4 review — 對齊修正
+- 初版誤判 WPF `LoginCompleted` 第二次 `return.aspx` POST 為「冗餘」並跳過。Re-read WPF L838-882：`LoginCompleted` 在 POST 完之後 **重抓** cookie jar 的 `bfWebToken`（L868），意味著開發者預期此 POST 可能輪換 token / 影響 session。在無實機 fixture 驗證的前提下，遵守 1:1 對齊原則必須打進此 POST，否則承擔 stale token 風險
+- Fix：`finalize_qr_login` 改成 4 step（加 `login_completed("OK", ...)`），`step3` 的 token 顯式 discard。模組 doc 整段重寫（移除「skip redundant POST」段、加「Why we run step 4」說明）
+- 同步修 `completed.rs` doc bug：原本誤寫成存在於 `QRCodeCompleted`（不存在的方法），實際上 QR / HK Regular / TOTP 三條都共用 `LoginCompleted`，只有 TW Regular 用 inline `return.aspx`（form 不同所以無法共用）；`akey` 參數說明補上 QR 用 `"OK"` literal sentinel
 
 #### Chunk 3.5 — Logout + 整合 + 收尾
 

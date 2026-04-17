@@ -1,4 +1,4 @@
-//! QR-code login **finalize** step — runs the three HTTP calls that
+//! QR-code login **finalize** step — runs the four HTTP calls that
 //! turn an "approved" QR scan into a [`Session`].
 //!
 //! Run *after* [`super::poll_qr_login_status`] has returned
@@ -6,14 +6,23 @@
 //!
 //! # WPF reference
 //!
-//! `BeanfunClient.Login.cs::QRCodeLogin` (L530-607). The original
-//! method is a single 80-line `try` block; we split it into three
-//! discrete round-trips below so each step can be wiremock-tested in
-//! isolation, and so we can reuse [`super::send_login()`] /
-//! [`super::post_return_aspx()`] verbatim from the TW Regular flow
-//! (same endpoints, identical response shapes — only the `Accept`
-//! string for SendLogin differs and is parameterised in
-//! `send_login`).
+//! Two WPF methods compose the QR finalize sequence:
+//!
+//! - `BeanfunClient.Login.cs::QRCodeLogin` (L530-607) — steps 1-3
+//!   (handshake → SendLogin → first `POST return.aspx`).
+//! - `BeanfunClient.Login.cs::LoginCompleted` (L838-882) — step 4
+//!   (second `POST return.aspx` with the `AuthKey="OK"` sentinel,
+//!   re-reading `bfWebToken` from the cookie jar afterwards).
+//!
+//! Both methods run unconditionally for QR: `QRCodeLogin` returns the
+//! string `"OK"` on success (L600), the enclosing `Login(...)` then
+//! calls `LoginCompleted("OK", ...)` (L774-782), and
+//! `LoginCompleted`'s `akey == null` early-exit (L844) does not fire
+//! because `"OK"` is non-null. Splitting the WPF flow into per-step
+//! functions lets each step be wiremock-tested in isolation and lets
+//! us reuse [`super::send_login()`] / [`super::post_return_aspx()`] /
+//! [`super::login_completed()`] verbatim from the HK Regular and TOTP
+//! flows.
 //!
 //! ## Step 1 — `GET QRLogin/QRLogin` (handshake, body discarded)
 //!
@@ -43,47 +52,64 @@
 //! Returns [`LoginError::SendLoginNoFormData`] when the page comes
 //! back empty (WPF L582-586 `errmsg = "SendLoginNoFormData"`).
 //!
-//! ## Step 3 — `POST return.aspx` (no-redirect)
+//! ## Step 3 — `POST return.aspx` with the SendLogin form (no-redirect)
 //!
 //! WPF L588-598. `redirect = false` → no-redirect client; `Referer:
-//! https://login.beanfun.com/`; raw `Set-Cookie` header scrape for
-//! `bfWebToken` (the cookie jar would also carry it but WPF reads
-//! the raw header so we do too — see
-//! `login/return_aspx.rs` for the rationale).
+//! https://login.beanfun.com/`; payload is the `<input>`s scraped
+//! from step 2's HTML form.
 //!
-//! Returns [`LoginError::MissingWebToken`] when the response carries
-//! no `bfWebToken` cookie. Both the no-cookie and unparseable-cookie
-//! cases are handled by the shared [`super::post_return_aspx()`] helper
-//! we reuse here.
+//! WPF scrapes `Set-Cookie` here for `bfWebToken` (L592-598), but
+//! that captured value is **transient**: `LoginCompleted` (step 4
+//! below) re-reads `bfWebToken` from the cookie jar after its own
+//! POST, which means whatever value the jar holds *after step 4*
+//! is the canonical one used by every subsequent API call (WPF
+//! L868). We mirror that lifetime: we call [`super::post_return_aspx()`]
+//! to perform the request (so the cookie jar is primed and the
+//! transport-level `MissingWebToken` failure mode still surfaces if
+//! the response is malformed), then **deliberately discard** the
+//! returned token — the canonical webtoken comes from step 4.
 //!
-//! ### Documented divergence: `Accept: */*` on step 3
+//! ## Step 4 — shared `LoginCompleted` tail (`AuthKey="OK"`)
+//!
+//! WPF L838-882. The same five-field `return.aspx` POST that HK
+//! Regular and TOTP funnel through, with `AuthKey="OK"` and a blank
+//! `account_id`. We delegate to [`super::login_completed()`] verbatim
+//! — see `login/completed.rs` module docs for the wire shape and the
+//! intentional divergences from WPF (skipping the auto-redirect chase
+//! at L865, deferring `GetAccounts`/`getRemainPoint` to higher-level
+//! callers).
+//!
+//! ### Why we run step 4 even though step 3 already returned a token
+//!
+//! An earlier draft of this module skipped step 4 on the assumption
+//! that "the second POST is redundant — bfWebToken was already
+//! captured in step 3". A line-by-line re-read of `LoginCompleted`
+//! turned that into an unverified assumption: WPF deliberately does
+//! the second POST + reads the cookie jar afterwards (L853-868),
+//! which means the WPF developers expected the second POST to
+//! either rotate the token or carry session-rotation state we don't
+//! observe. Strictly aligning with WPF's wire shape eliminates the
+//! risk of stale-token surprises in the absence of a real-server
+//! test bed. See the chunk 3.4 review notes in `Todo.md`.
+//!
+//! ### Documented divergence: `Accept: */*` on steps 3 & 4
 //!
 //! WPF's `SetBaseHeaders(true, null, "https://login.beanfun.com/")`
-//! sends **no** `Accept` header on the wire (L911-925). reqwest 0.12
-//! (via hyper) auto-injects `Accept: */*` on every request and
-//! exposes no public API to suppress it short of swapping HTTP
-//! clients. The shared [`super::post_return_aspx()`] helper does not
-//! set `Accept` itself, so step 3 ends up with `Accept: */*` instead
-//! of "absent". The two are semantically equivalent — RFC 9110
-//! §12.5.1 specifies `*/*` as the implicit default when `Accept` is
-//! omitted — and no Beanfun endpoint observed in WPF's traffic
-//! switches on this difference. The integration test
-//! `step3_return_aspx_sends_login_base_referer_and_form_body`
-//! locks the divergence so a real wire-shape regression elsewhere
+//! sends **no** `Accept` header on the wire (L911-925) for both
+//! `return.aspx` POSTs. reqwest 0.12 (via hyper) auto-injects
+//! `Accept: */*` on every request and exposes no public API to
+//! suppress it short of swapping HTTP clients. The shared
+//! [`super::post_return_aspx()`] helper (used by both step 3 and step
+//! 4 via [`super::login_completed()`]) does not set `Accept` itself,
+//! so both POSTs end up with `Accept: */*` instead of "absent". The
+//! two are semantically equivalent — RFC 9110 §12.5.1 specifies
+//! `*/*` as the implicit default when `Accept` is omitted — and no
+//! Beanfun endpoint observed in WPF's traffic switches on this
+//! difference. The integration tests
+//! `step3_return_aspx_posts_send_login_form_with_login_base_referer`
+//! and `step4_login_completed_posts_five_field_form_with_authkey_ok`
+//! lock the divergence so a real wire-shape regression elsewhere
 //! still trips an assertion.
-//!
-//! ## Skipped — second `LoginCompleted` POST
-//!
-//! WPF's enclosing `Login(...)` (L746-801) calls `LoginCompleted`
-//! after `QRCodeLogin` returns "OK", which fires a *second*
-//! `POST return.aspx` with `AuthKey="OK"` + a hand-rolled payload
-//! (L838-882). That call's only useful side effect — capturing
-//! `bfWebToken` — is already done in step 3 above (WPF L592-598
-//! captures the cookie raw inside `QRCodeLogin` itself). Per the
-//! P3.4 design decision, we **skip** that redundant round-trip; the
-//! `Session` we return already carries the `bfWebToken`. A future
-//! `GetAccounts` step (P3.5) will populate the user's actual account
-//! list, mirroring `LoginCompleted`'s only other responsibility.
 //!
 //! # Region scope
 //!
@@ -108,8 +134,16 @@
 use reqwest::header;
 
 use super::qr_init::QrLoginInit;
-use super::{ensure_success, post_return_aspx, send_login};
+use super::{ensure_success, login_completed, post_return_aspx, send_login};
 use crate::services::beanfun::{BeanfunClient, LoginError, LoginRegion, Session};
+
+/// `akey` sentinel WPF passes to `LoginCompleted` for the QR flow.
+/// `QRCodeLogin` returns the literal string `"OK"` on success
+/// (`BeanfunClient.Login.cs::QRCodeLogin` L600), and `Login(...)` then
+/// forwards that as the `akey` argument to `LoginCompleted` (L774-782).
+/// Surfacing the value as a named constant keeps the WPF reference
+/// trivially greppable from both this module and `login_completed`.
+const QR_LOGIN_COMPLETED_AKEY: &str = "OK";
 
 /// `Accept` header value WPF's `QRCodeLogin` sends on the SendLogin
 /// GET (L545). Differs from the TW Regular value (L124) by adding
@@ -118,15 +152,17 @@ use crate::services::beanfun::{BeanfunClient, LoginError, LoginRegion, Session};
 /// string sent on the wire.
 const QR_SEND_LOGIN_ACCEPT: &str = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8";
 
-/// Run the three-step QR finalize sequence and assemble a [`Session`].
+/// Run the four-step QR finalize sequence and assemble a [`Session`].
 ///
 /// `init` carries the `skey` (used to rebuild the `Login/Index`
-/// `Referer` URL) and the `verification_token` (currently unused in
-/// finalize, but kept on the bundle so callers don't have to thread
-/// the value separately between [`super::poll_qr_login_status`] and
-/// this function).
+/// `Referer` URL and as the `SessionKey` field in step 4's form) and
+/// the `verification_token` (currently unused in finalize, but kept
+/// on the bundle so callers don't have to thread the value separately
+/// between [`super::poll_qr_login_status`] and this function).
 ///
-/// See module docs for the per-step header / payload contracts.
+/// See module docs for the per-step header / payload contracts and
+/// the rationale for running step 4 even after step 3 already
+/// captured a transient `bfWebToken`.
 pub async fn finalize_qr_login(
     client: &BeanfunClient,
     init: &QrLoginInit,
@@ -144,18 +180,31 @@ pub async fn finalize_qr_login(
     qrlogin_handshake(client, &index_url).await?;
 
     let form = send_login(client, &index_url, QR_SEND_LOGIN_ACCEPT).await?;
-    let web_token = post_return_aspx(client, &form).await?;
 
-    Ok(Session::new(
-        LoginRegion::TW,
+    // Step 3 — `POST return.aspx` with the SendLogin form (WPF L588-598).
+    // We deliberately discard the captured `bfWebToken` here: this POST
+    // exists to advance server-side session state and prime the cookie
+    // jar, but the *canonical* token is the one captured in step 4
+    // below. WPF reads `this.webtoken = this.GetCookie("bfWebToken")`
+    // (L868) AFTER `LoginCompleted`'s second POST, which means the jar
+    // value at that point — not the value scraped here — is what every
+    // subsequent API call uses. See module-level "Step 4" docs for the
+    // alignment rationale.
+    let _step3_token = post_return_aspx(client, &form).await?;
+
+    // Step 4 — shared `LoginCompleted` tail (WPF L838-882). Mirrors
+    // what HK Regular and TOTP also do; the QR-specific bits are the
+    // hardcoded `"OK"` akey sentinel and the empty `account_id` (QR
+    // has no user-typed account; populated by GetAccounts in P3.5).
+    login_completed(
+        client,
         &init.skey,
-        web_token,
-        // QR has no user-typed account id — populated by GetAccounts
-        // in P3.5. See module docs.
+        QR_LOGIN_COMPLETED_AKEY,
         "",
         LoginRegion::TW.default_service_code(),
         LoginRegion::TW.default_service_region(),
-    ))
+    )
+    .await
 }
 
 /// Step 1 — `GET QRLogin/QRLogin`. Body intentionally discarded; the
