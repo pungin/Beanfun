@@ -430,6 +430,7 @@
   <system:String x:Key="InputTotp">輸入應用程式內顯示的雙重驗證碼</system:String>
   <system:String x:Key="CopyDeeplink">複製 Deeplink</system:String>
   <system:String x:Key="CopyQRCode">複製 QR Code 圖片</system:String>
+  <system:String x:Key="CopyQRCodeSuccess">QR Code 已複製</system:String>
   <system:String x:Key="EnlargeQRCode">放大 QR Code</system:String>
   <system:String x:Key="CopyDeeplinkSuccess">Deeplink 已複製到剪貼簿。</system:String>
   <system:String x:Key="CopyDeeplinkNotReady"

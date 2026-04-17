@@ -1387,6 +1387,7 @@ namespace Beanfun
         {
             try
             {
+                loginPage.qr.CloseEnlargeWindow();
                 frame.Content = accountList;
                 btn_Region.Visibility = Visibility.Collapsed;
 

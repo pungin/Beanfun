@@ -94,8 +94,23 @@ namespace Beanfun
                 try
                 {
                     Clipboard.SetImage(bmp);
+                    ShowToast(
+                        Application.Current.TryFindResource("CopyQRCodeSuccess") as string
+                            ?? "QR Code copied!"
+                    );
                 }
                 catch { }
+            }
+        }
+
+        private Window _enlargeWnd;
+
+        public void CloseEnlargeWindow()
+        {
+            if (_enlargeWnd != null)
+            {
+                _enlargeWnd.Close();
+                _enlargeWnd = null;
             }
         }
 
@@ -104,21 +119,40 @@ namespace Beanfun
             if (qr_image.Source == null)
                 return;
 
-            var wnd = new Window
+            CloseEnlargeWindow();
+
+            _enlargeWnd = new Window
             {
                 Title = "QR Code",
-                SizeToContent = SizeToContent.WidthAndHeight,
+                Width = 350,
+                Height = 350,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Owner = Window.GetWindow(this),
-                ResizeMode = ResizeMode.NoResize,
+                ResizeMode = ResizeMode.CanResize,
                 Content = new Image
                 {
                     Source = qr_image.Source,
-                    Width = 300,
-                    Height = 300,
+                    Stretch = System.Windows.Media.Stretch.Uniform,
                 },
             };
-            wnd.ShowDialog();
+            _enlargeWnd.Closed += (s, _) => _enlargeWnd = null;
+            _enlargeWnd.Show();
+        }
+
+        private void ShowToast(string message)
+        {
+            toastText.Text = message;
+            toastBorder.Visibility = Visibility.Visible;
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2),
+            };
+            timer.Tick += (s, _) =>
+            {
+                timer.Stop();
+                toastBorder.Visibility = Visibility.Collapsed;
+            };
+            timer.Start();
         }
     }
 }

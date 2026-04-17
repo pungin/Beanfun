@@ -497,6 +497,7 @@
   >
   <system:String x:Key="CopyDeeplink">Copy Deeplink</system:String>
   <system:String x:Key="CopyQRCode">Copy QR Code Image</system:String>
+  <system:String x:Key="CopyQRCodeSuccess">QR Code copied</system:String>
   <system:String x:Key="EnlargeQRCode">Enlarge QR Code</system:String>
   <system:String x:Key="CopyDeeplinkSuccess">Deeplink copied to clipboard.</system:String>
   <system:String x:Key="CopyDeeplinkNotReady"
