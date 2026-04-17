@@ -470,25 +470,36 @@ c:\Users\mo030\Desktop\Beanfun\
 - [ ] D-step 8：commit `feat(next): add DPAPI + entropy storage primitives (P5 chunk 5.1)`
 
 #### Chunk 5.2 — `services/storage/users_dat.rs`（Records + JSON save/load + legacy hook）
-- [ ] D-step 1：public types — `Account` struct（7 欄位：region / account_id / account_name / password / verify / method / auto_login）+ `Records` container（`Vec<Account>`）+ `Default` impl 空列表
-- [ ] D-step 2：wire format adapter — `WireRecords`（parallel columns 與 WPF byte-byte 相容）+ `From<Records>` / `TryFrom<WireRecords>`
-- [ ] D-step 3：normalize helper 對齊 WPF `accRecInit()`（region 缺省 `"TW"`、其他 list 缺省空字串 / `0` / `false`、length 對齊 `accountList.len()`）
-- [ ] D-step 4：新增 `StorageError::{Io, JsonParse, Utf8Decode, LegacyDataDetected { raw_bytes }}` 4 個 variants
-- [ ] D-step 5：`save_records(path, records)` async：normalize → JSON serialize → `Entropy::generate()` + `write_to_registry()` → `dpapi_protect()` → `tokio::fs::write()`（內部 `spawn_blocking` 或 tokio-fs）
-- [ ] D-step 6：`load_records(path)` async：
-  - [ ] file 不存在 → `Ok(Records::default())`
-  - [ ] `tokio::fs::read()` → `Entropy::read_from_registry()` → `dpapi_unprotect()` 任一失敗 → 刪檔（`tokio::fs::remove_file`）+ 回 `Ok(Records::default())`（對齊 WPF L215-229）
-  - [ ] UTF-8 decode 失敗 → 同上刪檔路徑
-  - [ ] `serde_json::from_str::<WireRecords>(plain)` 成功 → normalize 後回 `Ok(Records)`
-  - [ ] JSON parse 失敗 → 試 `base64::decode(plain)` 成功 → `Err(LegacyDataDetected { raw_bytes })`（P6 接手）
-  - [ ] JSON + base64 皆失敗 → **保留檔案** 回 `Ok(Records::default())`（對齊 WPF L182-187 不刪檔，下次 save 才覆寫）
-- [ ] D-step 7：`import_records(json)` / `export_records(records) -> String`（對齊 WPF `importRecord` / `exportRecord`）
-- [ ] D-step 8：`default_users_dat_path() -> PathBuf` helper（從 `%APPDATA%\Beanfun\Users.dat` 解析）
-- [ ] D-step 9：lib re-exports + doc
-- [ ] D-step 10：~15 unit tests（normalize / WireRecords round-trip / Account 欄位 / empty default / WPF fixture JSON parse）
-- [ ] D-step 11：~12 integration tests in `tests/storage_users_dat.rs`（save/load round-trip / missing file / DPAPI fail 刪檔 / base64 legacy detect / invalid JSON 不刪檔 / path helper）
-- [ ] D-step 12：quality gates（fmt / clippy / test / doc 全綠）
-- [ ] D-step 13：commit `feat(next): add Users.dat JSON + DPAPI storage (P5 chunk 5.2)`
+
+##### 校準後的設計決議（vs WPF `AccountManager.cs`）
+
+- **A — `import_records` 走 IO 對齊 WPF**：WPF `importRecord` 是 user-facing 入口、contract 含「import 完馬上覆寫檔案」。`import_records(path, json)` 內部串 parse → normalize → save → return；額外提供 `parse_records(json)` 純 parser、`export_records(records)` 純 serializer
+- **B — `StorageError` 簡化 3 個 variant**：對齊 WPF L226-229 catch-all → DPAPI / registry / UTF-8 / JSON parse 失敗都 swallow + 刪檔 + 回 `Ok(Records::default())` 不對外 propagate；對外只新增 `Io` / `JsonSerialize` / `LegacyDataDetected { raw_bytes }`
+- **C — `LegacyDataDetected` 維持 typed Err（caller 處理 fallback）**：P5 階段沒 NRBF parser，現在引入 trait 會 dangle；module doc 明確規範「caller 收到後若 NRBF parse 失敗 → 回空 records 不刪檔」對齊 WPF L494-550；P6 上線後若需內聚 fallback 再評估加 wrapper API
+- **D — path 用 `std::env::var_os("APPDATA")`**：不加 `dirs` dep，直接對齊 WPF `SpecialFolder.ApplicationData`；`default_users_dat_path()` 用 `#[cfg(target_os = "windows")]` gate
+- **Wire format**：`WireRecords` 7 欄位全用 `Option<Vec<...>>`（兼容 WPF write 的 null fields）+ `#[serde(rename)]` 對齊 C# camelCase（含 `passwdList`）；不對外暴露
+- **normalize 等價 WPF `accRecInit()`**：region→`"TW"`、其他→`""`/`0`/`false`、補齊到 `account_list.len()`；內聚到 `WireRecords::normalize()`
+
+##### D-steps
+
+- [x] D-step 1：public types — `Account` struct（7 欄位：region / account_id / account_name / password / verify / method / auto_login）+ `Records(Vec<Account>)` + `Default` impl 空列表
+- [x] D-step 2：wire format adapter — `WireRecords`（7 個 `Option<Vec<...>>` 對齊 WPF camelCase + `#[serde(rename)]`）+ `From<&Records>` / `From<WireRecords>`（含 normalize）
+- [x] D-step 3：normalize 內聚到 `WireRecords::normalize()`（region 缺省 `"TW"`、其他 list 缺省 `""` / `0` / `false`、length 對齊 `account_list.len()`、`None` 補空 Vec）
+- [x] D-step 4：新增 `StorageError::{Io, Json, LegacyDataDetected { raw_bytes }}` 3 個 variants（`Json` 涵蓋 serialize + deserialize 兩路徑）
+- [x] D-step 5：`save_records(path, &Records)` async（+ `save_records_at` test variant 注入 entropy subkey）— `spawn_blocking`(records → WireRecords → normalize → JSON serialize → `Entropy::generate()` + `write_to_registry_at()` → `dpapi_protect()` → mkdir_p parent → `std::fs::write()` `FileMode.Create` 等價)
+- [x] D-step 6：`load_records(path)` async（+ `load_records_at` test variant）— `spawn_blocking`:
+  - [x] file 不存在 → `Ok(Records::default())`（不刪檔）
+  - [x] `std::fs::read` 失敗 → `Err(StorageError::Io)`
+  - [x] `read_from_registry_at` / `dpapi_unprotect` / UTF-8 decode 任一失敗 → log warn + `std::fs::remove_file` + `Ok(Records::default())` 對齊 WPF L226-229
+  - [x] `serde_json::from_str::<WireRecords>(plain)` 成功 → `WireRecords::normalize()` → `Records` → `Ok(Records)`
+  - [x] JSON parse 失敗 → 試 `BASE64.decode(plain)`：成功 → `Err(LegacyDataDetected { raw_bytes })` / 失敗 → log warn + 不刪檔 + `Ok(Records::default())` 對齊 WPF
+- [x] D-step 7：`parse_records(json)` 純 parser / `export_records(&Records) -> Result<String, _>` 純 serializer / `import_records(path, json)` async（+ `import_records_at` test variant）對齊 WPF `importRecord`（parse → save → return；JSON fail + base64 OK → `Err(LegacyDataDetected)`；JSON + base64 皆 fail → `Err(Json)` 讓 user 看到錯誤）
+- [x] D-step 8：`default_users_dat_path() -> Result<PathBuf, StorageError>` Windows-only helper（`%APPDATA%\Beanfun\Users.dat`）
+- [x] D-step 9：lib re-exports（`mod.rs` pub use `Account` / `Records` / pure parsers cross-platform；IO-bearing async + `_at` 變體 + `default_users_dat_path` Windows-only）+ module doc（fallback 規範清楚寫在 `users_dat` doc）
+- [x] D-step 10：15 unit tests（Account default 1 / Records default 1 / WireRecords round-trip 2 / normalize 4 / parse_records 4 / export_records 3）
+- [x] D-step 11：13 integration tests in `tests/storage_users_dat.rs`（save/load round-trip / save mkdir_p parent / file 不存在 / 篡改 entropy 刪檔 / 刪 registry entropy 刪檔 / UTF-8 損壞刪檔 / valid base64 非 JSON → `LegacyDataDetected` 不刪檔 / 純垃圾 → 不刪檔回空 / `import_records` JSON 寫檔成功 / `import_records` base64 → `LegacyDataDetected` 不寫檔 / `import_records` 純垃圾 → `Json` 不寫檔 / `export_records` → `import_records` round-trip / `default_users_dat_path` 解析；registry 用 `SOFTWARE\BEANFUN_NEXT_TEST\users_<name>_<pid>` 隔離不污染 production）
+- [x] D-step 12：quality gates（fmt / clippy `-D warnings` / test `267 lib + 13 storage_users_dat + 7 storage_dpapi + 其他 0 failed` / doc 0 warning 全綠）
+- [x] D-step 13：commit `feat(next): add Users.dat JSON + DPAPI storage (P5 chunk 5.2)`
 
 #### Chunk 5.3 — `services/config/xml.rs`（AppSettings XML 讀寫 + 損毀重建）
 - [ ] D-step 1：新增 `services/config/mod.rs` + `ConfigError` error enum（至少 `Io` / `XmlParse` / `XmlWrite` 3 個 variants）
