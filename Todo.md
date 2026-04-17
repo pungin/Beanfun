@@ -345,11 +345,20 @@ c:\Users\mo030\Desktop\Beanfun\
 
 #### Chunk 3.5 — Logout + 整合 + 收尾
 
-- [ ] `login/logout.rs` — region-aware 兩支 endpoint + `erase_token.ashx`（TW only）
-- [ ] Top-level `login(method, creds)` 入口函式、回傳 `Session`
-- [ ] cookie jar 清空 helper
-- [ ] 跨流程 integration test：login → session available → logout → cookies cleared
-- **驗收**：全 P3 integration test 15+ cases pass
+- [x] `login/logout.rs` — 3-step region-aware（GET `remove_bflogin_session.ashx` → GET `logout.aspx?service=999999_T0` → POST `erase_token.ashx`，TW only），best-effort all-steps + return first error
+- [x] `BeanfunClient::newlogin_url(path)` helper（對齊既有 `portal_url` / `login_url` API；首批用戶為 logout step 2 TW + step 3）
+- [x] Top-level `login_with(client, method, &creds)` dispatcher（`login/orchestrator.rs`）。`LoginMethod` enum 只列 single-shot password flow（`TwRegular` / `HkRegular { service_code, service_region }`）
+  - **TOTP / QR 不進 enum**：TOTP 需 mid-flow 互動式 6-digit code 輸入、QR 是 3-step UI-driven flow（init → poll → finalize）。兩者 input/output shape 與單呼叫 dispatcher 不相容；模組 doc 完整說明。device-registered re-login 屬 TOTP 錯誤恢復路徑、不算頂層方法
+- ~~cookie jar 清空 helper~~：嚴格對齊 WPF（`Logout()` 從不清自家 `WebClient` cookie jar）。長期隔離靠 drop + 重建 `BeanfunClient`，不另開 `clear_cookies` API
+- [x] `tests/logout.rs` — 10 支 per-step 測試（TW happy / HK happy 驗 step3 不被打 / step2 wire shape `service=999999_T0` / step3 wire shape `web_token=1` + form CT / 三 step 各一支 5xx + 驗 best-effort 跑完 / multi-step fail 驗 first error / TW vs HK step2 host routing）
+- [x] `tests/login_then_logout.rs` — 2 支 cross-flow（TW Regular login → logout 3 step / HK Regular login → logout 2 step）；額外 lock cookie jar 在 logout 後仍非空（never_clear policy 對齊）
+- [x] `tests/orchestrator.rs` — 3 支 dispatch 測試（TW dispatch / HK dispatch 帶 region defaults / HK 自訂 service args plumb-through）
+- **驗收**：全 P3 integration test 全綠（合計 ~258 tests）
+
+###### Chunk 3.5 設計決議
+- **Logout error policy**：best-effort all-steps + return first error。WPF callers 全部用 `try { } catch { }`（`App.xaml.cs` L72-76、`MainWindow.xaml.cs` L237-241），等同 fire-and-forget；我們改成回 first error 一方面提供 diagnostic value（後續 step 失敗常是同源 cascade），另一方面 caller 想忠實對齊 WPF 直接 `let _ = logout(&client).await;` 即可
+- **Cookie jar policy**：never_clear（嚴格對齊 WPF）。WPF `Logout()` 不清 cookie，session 失效靠 server-side 端點處理；我們的 client 想開新 session 就 drop 後重建（已寫進 `client.rs` 模組 doc）。cross-flow test 在 logout 後 assert `bfWebToken` 仍在 jar，鎖死此設計
+- **Dispatcher 範圍**：只放 TW Regular + HK Regular。TOTP / QR 因 input/output shape 與單呼叫 dispatcher 不相容（多步 + 互動 / UI-driven）必須直接呼叫對應的 `login_*` / `init_qr_login` / `poll_qr_login_status` / `finalize_qr_login`
 
 ### P4 — Rust `services/beanfun` Account / OTP / Verify
 
