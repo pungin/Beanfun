@@ -14,3 +14,4 @@
 pub mod beanfun;
 pub mod config;
 pub mod storage;
+pub mod updater;

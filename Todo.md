@@ -607,23 +607,68 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] D-step 7：6 unit tests（cross-platform pure）— `migrate_new_records_shape_preserves_all_seven_fields` / `migrate_legacy_account_records_pads_account_name_list_to_empty_strings` / `migrate_empty_lists_yields_default_records` / `migrate_short_lists_normalize_pads_up_to_account_list_length` / `legacy_migrate_error_display_formats_nrbf_and_storage_variants` / `legacy_migrate_error_from_impl_wires_nrbf_and_storage`；chunk 6.1 的 `mod fixture` 升 `pub mod fixture` 並套 `#[cfg(any(test, feature = "test-fixtures"))]` gate 供跨 module DRY reuse
 - [x] D-step 8：9 integration tests in `tests/storage_legacy.rs`（end-to-end real DPAPI + 手刻 NRBF bytes via chunk 6.1 `fixture::build_root_class` + 註冊表隔離 `SOFTWARE\BEANFUN_NEXT_TEST\legacy_<name>_<pid>`）— `migrate_and_save_writes_json_format_round_trippable_by_load_records` / `migrate_and_save_creates_parent_directory_when_missing` / `migrate_and_save_handles_legacy_account_records_padding_account_name_list` / `load_with_migration_auto_upgrades_legacy_users_dat_to_json` / `load_with_migration_on_malformed_nrbf_returns_empty_and_preserves_file` / `load_with_migration_on_new_json_format_skips_migrator_entirely` / `load_with_migration_on_pure_garbage_plaintext_falls_through_p5_default` / `load_with_migration_on_missing_file_returns_empty_and_no_side_effects` / `migrated_json_matches_export_records_byte_for_byte`；Cargo.toml 加 `[features] test-fixtures = []` + `[[test]] storage_legacy required-features = ["test-fixtures"]`（SRP：fixture code 不進 release binary）
 - [x] D-step 9：quality gates — `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings`（feature on/off 兩輪）/ `cargo test --lib` 295/295 / `cargo test --test storage_legacy --features test-fixtures` 9/9 / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib`（兩輪）
-- [ ] D-step 10：commit `feat(next): add legacy Users.dat migration (P6 chunk 6.2)`
+- [x] D-step 10：commit `feat(next): add legacy Users.dat migration (P6 chunk 6.2)` — `88aff85`
 
 ### P7 — Rust `services/updater` + GH proxy
 
-- [ ] `services/updater/proxy_probe.rs`：對應 WPF `_cachedProxy` Lazy + `TryProbe` HEAD（5 秒 timeout）
-- [ ] 代理清單常數：`ghproxy.vip` / `ghproxy.net` / `ghfast.top`
-- [ ] `services/updater/github.rs`：fetch `api.github.com/repos/pungin/beanfun/releases`（加 `Beanfun(V{version})` UA）
-- [ ] `services/updater/checker.rs`：`check_update(channel) -> Option<UpdateInfo>`（Stable/Beta 切換）
-- [ ] `services/updater/parser.rs`：TagName `v{major}.{minor}.{patch}.{timestamp}` 解析
-- [ ] Integration tests：
-  - [ ] 直連成功 → 不用 proxy
-  - [ ] 直連失敗 → fallback 到第一個 proxy
-  - [ ] 前兩個 proxy 失敗 → 用第三個
-  - [ ] 全部失敗 → 回空字串（靜默）
-  - [ ] Stable / Beta channel
-  - [ ] 版本格式變化（pre-5.8 舊格式、v5.8.13 timestamp 格式）
-- **驗收**：8+ cases pass
+##### 共用設計決議（chunk 7.1 / 7.2 / 7.3 共同）
+
+- **對應 WPF**：`Beanfun/Update/ApplicationUpdater.cs`（294 行全貌）
+- **Service-layer only**：MessageBox / `Process.Start(downloadUrl)` 留 P10/P11 commands + UI。Service 只回傳 `Option<UpdateInfo>`
+- **A — Proxy cache**：`OnceLock<String>` process-lifecycle 只 probe 一次（對齊 WPF `Lazy<string> _cachedProxy`）
+- **B — Probe 成功判定**：嚴格 2xx（對齊 WPF `WebRequest.GetResponse()` 對 4xx/5xx throw `WebException` 的語意）
+- **C — 版本比較**：`u128`（WPF `long == i64` 已逼近上限；`{M:D3}{N:D3}{P:D3}{T}` 最大可達 ~1e19，改 `u128` 絕不 overflow）
+- **D — Error shape**：top-level `check_update` 回 `Option<UpdateInfo>`（對齊 WPF silent 行為，錯誤走 `tracing::warn!` 吃掉）；下層 `fetch_releases_at` / `proxy_probe_at` / `parse_tag` / `is_newer_version` 回 typed `Result<_, UpdaterError>` 供 test + caller 細控
+- **E — Channel**：`enum Channel { Stable, Beta }` + `fn from_config_value(&str)` tolerate 未知 string（fallback `Stable`），對應 WPF `"Beta"` / `"Preview"` 兩個都 → `isBeta = true`
+- **F — Probe DI**：`_at` 變體 `proxy_probe_at(direct_url, proxy_urls)` 接 URL 注入（跟 P5 / P6 `_at` pattern 一致）；top-level `proxy_probe()` 包 `const DIRECT_URL = "https://api.github.com"` + `const GH_PROXIES = [...]`
+- **G — Concurrent guard**：service 層不管（WPF `Interlocked.CompareExchange` 防 startup + About 重入交 P10 Tauri command 端用 `tokio::sync::Mutex` 處理）
+- **H — User-Agent**：`format!("Beanfun(V{})", env!("CARGO_PKG_VERSION"))` compile-time 產
+- **I — Release selection tolerance**：`releases` 空陣列 → `None`；`release.tag_name` 不符 `^v(\d+)\.(\d+)\.(\d+)\.(\d+)$` → `None`（對齊 WPF `match.Success == false` 靜默）
+
+##### 驗收條件
+
+- **Chunk 7.1**：`ParsedVersion` / `parse_tag` / `is_newer_version` 對 pre-5.8 老格式 `v5.7` + `v5.8.13(2604011114)` + 新 timestamp 格式三路 `IsNewerVersion` 都能正確比較；`proxy_probe_at` 對 wiremock 模擬的「直連 OK」/「直連 fail + proxy 1 OK」/「前 2 proxy fail + 第 3 OK」/「全 fail → `None`」四 case pass
+- **Chunk 7.2**：`fetch_releases_at` 對合法 GH API JSON 能解出 `Vec<GitHubRelease>` + assets[0].browser_download_url；`Channel::from_config_value` 對 `"Stable"` / `"Beta"` / `"Preview"` / 未知 string 行為一致；`select_release` 對 Stable / Beta channel 的 prerelease 篩選邏輯對齊 WPF
+- **Chunk 7.3**：`check_update` 的 happy path（有新版）/ up-to-date / 錯誤 silent 三路都 pass；整合 wiremock 測全鏈路（probe → fetch → select → parse → compare）
+- **P7 總驗收**：至少 8 cases integration pass；`UpdaterError` 完整 surface；service 層不含 UI 呼叫
+
+#### Chunk 7.1 — `parser.rs` + `proxy_probe.rs`（pure 版本邏輯 + 網路 probe）
+
+- [x] D-step 1：`services/updater/{mod.rs, error.rs, parser.rs, proxy_probe.rs}` scaffold；`services/mod.rs` 掛 `pub mod updater;`；`mod.rs` re-export `UpdaterError` / `ParsedVersion` / `parse_tag` / `is_newer_version` / `proxy_probe` / `proxy_probe_at`
+- [x] D-step 2：`UpdaterError` enum — `Probe(reqwest::Error)` / `Fetch(reqwest::Error)` / `JsonDecode(serde_json::Error)` / `UnsupportedTag(String)` 四 variants（用 `#[source]` 保留 chain）；放 `services/updater/error.rs`（`thiserror::Error` derive，不需手寫 `From` impl — variant 上的 `#[from]` 等 7.2/7.3 真正用到時再補，保持 YAGNI）
+- [x] D-step 3：`ParsedVersion { major: u32, minor: u32, patch: u32, timestamp: String }` + `parse_tag(&str) -> Result<ParsedVersion, UpdaterError>`（regex `^v(\d+)\.(\d+)\.(\d+)\.(\d+)$`；失敗回 `UnsupportedTag(tag.to_owned())`）；**timestamp 選 `String` 而非 `u64`**：保留原始 digit 數量，`pack_version` 才能 byte-for-byte 對齊 WPF `{0:D3}{1:D3}{2:D3}{3}` 輸出（10 vs 11 digit timestamp 不會被 silently pad）
+- [x] D-step 4：`is_newer_version(local: &str, remote: &ParsedVersion) -> bool` — 兩條路：Path A display form (`(\d+)\.(\d+)\.?(\d+)?\.?\((\d+)\)`) 走 u128 packed 比較 + timestamp 相等短路 false（對齊 WPF L236-239）；Path B fallback 走「去非數字 + pad-left 19 + u128 parse」；解析失敗一律回 false 對齊 WPF `catch`（L287-291）；**`pack_version` 選 u128 而非 i64**：WPF `long.Parse` 對 19 digit 字串接近 i64 上限，未來 major/minor 擴張可能溢位；u128 上限 3.4×10³⁸ 安全
+- [x] D-step 5：`proxy_probe_at(direct_url: &str, proxies: &[&str]) -> String` async — HEAD request + `error_for_status()` 嚴格 2xx + 5s timeout；回 `""` 表直連 OK 或全 fail（對齊 WPF `DiscoverProxy` L48-50 / L59）、proxy prefix 表該 proxy OK；**`build_probe_client` 失敗也回 `""`** 對齊 WPF `catch`
+- [x] D-step 6：`proxy_probe() -> &'static str` — `static OnceLock<String>` 包 top-level（`get → get_or_init` pattern，允許初始化期間 race 但收斂到同一答案）+ `const DIRECT_URL = "https://api.github.com"` / `const GH_PROXIES = ["https://ghproxy.vip/", "https://ghproxy.net/", "https://ghfast.top/"]` / `const PROBE_TIMEOUT = Duration::from_secs(5)`；User-Agent `Beanfun(V{CARGO_PKG_VERSION})` 對齊 WPF L36 / L123 shape
+- [x] D-step 7：module doc — `mod.rs` + `error.rs` + `parser.rs` + `proxy_probe.rs` 各附 WPF 行號對應表（L15-62 / L220-292 / L135-137 / L40-43, 195-198）+ strict 2xx rationale + OnceLock race semantic + u128 safety rationale + Path A/B 使用情境說明（referrencing `App.xaml.cs::ConvertVersion` L80-102 — `App.AssemblyVersion` 永遠回傳 display form）
+- [x] D-step 8：23 unit tests — `parse_tag` 5 case（canonical / double-digit / 缺 v / 3 component / 尾巴 garbage）/ `is_newer_version` 6 case（display-form upgrade / display-form same-timestamp 短路 / display-form 缺 patch / Path A patch-bump numeric ordering `5.8.9 < 5.8.10` / Path B lossy-concat WPF-bug lock-in（older remote 被誤判為 newer — 保 WPF parity，任何未來「修 bug」會 trip test）/ garbage local fallthrough）+ `pack_version` zero-pad / `left_pad_to` 2 case + `proxy_probe_at` 5 case via wiremock（direct 200 / direct fail + proxy B OK / 全 503 / 非 2xx 拒絕 / 連線拒絕 transport fail）+ 常數 assertion 4 case（`GH_PROXIES` literal / `DIRECT_URL` literal / `PROBE_TIMEOUT` 5000ms / UA shape）
+- [x] D-step 9：quality gates 全綠 — `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings`（feature on/off 兩輪）/ `cargo test --lib` 318/318（較 P6.2 的 295 多 23 個 updater tests）/ `cargo test --test storage_legacy --features test-fixtures` 9/9 / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib`
+- [ ] D-step 10：commit `feat(next): add updater parser + proxy probe (P7 chunk 7.1)`
+
+#### Chunk 7.2 — `github.rs` + Channel（fetch releases + prerelease 篩選）
+
+- [ ] D-step 1：`services/updater/github.rs` scaffold + mount
+- [ ] D-step 2：`GitHubRelease { name, tag_name, prerelease, body, assets: Vec<GitHubAsset> }` + `GitHubAsset { browser_download_url }` with serde `#[serde(rename_all = "snake_case")]`（對 `tag_name` / `browser_download_url` 取 WPF `JsonProperty` 屬性）
+- [ ] D-step 3：`Channel { Stable, Beta }` enum + `Channel::from_config_value(&str)`（`"Beta"` / `"Preview"` → `Beta`；其他 → `Stable`，對齊 WPF L203-204）
+- [ ] D-step 4：`fetch_releases_at(base_url, user_agent) -> Result<Vec<GitHubRelease>, UpdaterError>` async — reqwest GET + `Accept: application/vnd.github.v3+json` + `User-Agent`
+- [ ] D-step 5：`fetch_releases(proxy_prefix) -> Result<Vec<GitHubRelease>, UpdaterError>` — 用 const `GH_API_RELEASES_PATH = "https://api.github.com/repos/pungin/beanfun/releases"` + UA `Beanfun(V{env!("CARGO_PKG_VERSION")})`
+- [ ] D-step 6：`select_release(releases: &[GitHubRelease], channel: Channel) -> Option<&GitHubRelease>`（對齊 WPF L201-214 — Beta 拿第一個、Stable 拿第一個非 prerelease）
+- [ ] D-step 7：module doc + WPF L64-127 + L201-214 行號對應
+- [ ] D-step 8：~6 unit tests — `Channel::from_config_value` 4 case / `select_release` Stable+Beta / GitHubRelease JSON deserialize + `fetch_releases_at` 用 wiremock
+- [ ] D-step 9：quality gates
+- [ ] D-step 10：commit `feat(next): add updater GitHub fetch + channel selection (P7 chunk 7.2)`
+
+#### Chunk 7.3 — `checker.rs`（top-level `check_update` 組合）
+
+- [ ] D-step 1：`services/updater/checker.rs` scaffold + mount；`UpdateInfo { new_version_display, body, download_url, tag_name }`
+- [ ] D-step 2：`check_update(channel: Channel, local_version: &str) -> Option<UpdateInfo>` async — 組合 `proxy_probe → fetch_releases → select_release → parse_tag → is_newer_version`；任一錯 `tracing::warn!` 吃掉回 `None`（對齊 WPF 全 catch silent）
+- [ ] D-step 3：`UpdateInfo.download_url` 邏輯對齊 WPF L169-172 — `assets[0].browser_download_url`（prefix with proxy）fallback `https://github.com/pungin/Beanfun/releases/tag/{tag_name}`
+- [ ] D-step 4：`check_update_at(probe_urls, fetch_base_url, channel, local_version, user_agent)` 下層 DI 版本供 test
+- [ ] D-step 5：module doc — WPF L114-199 `RunCheck` 行號對應 + silent error rationale
+- [ ] D-step 6：~5 unit tests — `UpdateInfo::new_version_display` format / happy path full-chain（mock probe + fetch）/ no updates / parse_tag fail → None / fetch fail → None
+- [ ] D-step 7：~8 integration tests in `tests/updater.rs`（wiremock 模擬 GH + proxies）— 直連 OK + 有新版 / 直連 OK + 沒新版 / 直連 fail → proxy 1 OK / 前 2 proxy fail → proxy 3 OK / 全 probe fail → None / Stable channel 略過 prerelease / Beta channel 拿 prerelease / pre-5.8 old format local version 比較
+- [ ] D-step 8：quality gates
+- [ ] D-step 9：commit `feat(next): add updater check_update composition (P7 chunk 7.3)`
 
 ### P8 — Rust `services/game` 啟動 + LR（SHA-256 安全升級）
 
