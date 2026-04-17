@@ -12,6 +12,7 @@
 //! | [`session`]  | `Credentials`, `Session` (zeroize'd where sensitive)    |
 //! | [`login`]    | Login flows: session-key, TW/HK regular, TOTP, QRCode   |
 //! | [`account`]  | Account list + JSON management (gamezone.ashx)          |
+//! | [`otp`]      | OTP retrieval (5 HTTP + WCDES decrypt)                  |
 //!
 //! # Safety posture
 //!
@@ -31,6 +32,7 @@ pub mod account;
 pub mod client;
 pub mod error;
 pub mod login;
+pub mod otp;
 pub mod session;
 
 pub use account::{
@@ -39,4 +41,5 @@ pub use account::{
 };
 pub use client::{BeanfunClient, ClientConfig, Endpoints, LoginRegion};
 pub use error::LoginError;
+pub use otp::get_otp;
 pub use session::{Credentials, Session};

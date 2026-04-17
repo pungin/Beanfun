@@ -166,6 +166,70 @@ pub enum LoginError {
     DeviceLoginRejected,
 
     // ---------------------------------------------------------------------
+    // OTP retrieval (`BeanfunClient.OTP.cs::GetOTP`, P4.2)
+    // ---------------------------------------------------------------------
+    /// WPF `OTPNoLongPollingKey:{response}` (L39-40) — step 1
+    /// (`game_start_step2.aspx`) returned a body that did **not** contain
+    /// the expected `GetResultByLongPolling&key=...` substring.
+    ///
+    /// We carry a bounded `snippet` of the body for diagnostics
+    /// (matching WPF's behaviour of dumping the whole response into
+    /// `errmsg`) without holding the full body indefinitely.
+    #[error("OTP step 1 missing long-polling key (snippet: {snippet:?})")]
+    OtpMissingLongPollingKey { snippet: String },
+
+    /// WPF `OTPNoUnkData` (L50-51) — step 1 (TW only) failed to extract
+    /// the `MyAccountData.ServiceAccountCreateTime + "key=value";`
+    /// fragment that becomes a per-account form field on step 3
+    /// (`record_service_start.ashx`). HK does not parse this field.
+    #[error("OTP step 1 missing TW per-account form fragment")]
+    OtpMissingUnkData,
+
+    /// WPF `OTPNoCreateTime` (L61-62) — the caller passed a
+    /// `ServiceAccount` whose `screatetime` was `None` *and* the
+    /// fallback regex (`ServiceAccountCreateTime: "..."`) on step 1's
+    /// response also failed to match. WPF mutates the input account
+    /// here; we keep the input immutable and surface this typed error
+    /// instead.
+    #[error("OTP step 1 missing service-account create time (fallback also failed)")]
+    OtpMissingCreateTime,
+
+    /// WPF `OTPNoSecretCode` (L73-74) — step 2 (`get_cookies.ashx`)
+    /// returned a body without the `var m_strSecretCode = '...';`
+    /// fragment that step 5 needs.
+    #[error("OTP step 2 missing m_strSecretCode")]
+    OtpMissingSecretCode,
+
+    /// WPF `OTPNoResponse` (L105-112) — step 5
+    /// (`get_webstart_otp.ashx`) returned an empty body **or** a body
+    /// that did not split into at least 2 segments by `;`. Both
+    /// branches surface here because they are semantically the same
+    /// outcome ("server gave us nothing parseable").
+    #[error("OTP step 5 returned empty or unparseable response")]
+    OtpEmptyResponse,
+
+    /// WPF `GetOtpError\r\n{message}` (L117-124) — step 5 returned
+    /// `parts[0] != "1"`, signalling that the server rejected the
+    /// request (typically maintenance, account lock, or service
+    /// unavailable). Carries the raw server message verbatim so the
+    /// UI can display / localise as needed; matching the P4.1
+    /// `AmountLimitNotice` convention, the service layer does **not**
+    /// prepend the localised "Get OTP failed" prefix.
+    #[error("OTP step 5 server rejected: {message}")]
+    OtpServerRejected { message: String },
+
+    /// WPF `DecryptOTPError` (L136) — step 6 (`WCDESComp.DecryStrHex`)
+    /// returned `null`. In our Rust port [`crate::core::wcdes::decrypt_hex`]
+    /// surfaces typed [`crate::core::wcdes::WcdesError`] values for
+    /// the underlying cause (invalid key length, invalid hex,
+    /// non-block-aligned ciphertext); we collapse them all into this
+    /// single variant with the underlying error's `Display` text in
+    /// the `cause` field for diagnostics, matching WPF's
+    /// "give up and report decryption failure" posture.
+    #[error("OTP step 6 decryption failed: {cause}")]
+    OtpDecryptionFailed { cause: String },
+
+    // ---------------------------------------------------------------------
     // Transport-level errors
     // ---------------------------------------------------------------------
     /// Wrapped `reqwest::Error` — network, TLS, connect, or body-read

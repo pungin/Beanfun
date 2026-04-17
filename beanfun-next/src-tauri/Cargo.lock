@@ -317,6 +317,7 @@ dependencies = [
  "cipher",
  "des",
  "html-escape",
+ "percent-encoding",
  "pretty_assertions",
  "quick-xml 0.37.5",
  "regex",

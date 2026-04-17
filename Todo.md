@@ -387,9 +387,26 @@ c:\Users\mo030\Desktop\Beanfun\
 - **`gamezone.ashx` JSON `intResult` 解析**：對齊 WPF `JObject.Parse` + `jsonData["intResult"] == null || (int) jsonData["intResult"] != 1`，empty body / null 都算 `Ok(false)`，invalid JSON 才回 `LoginError::Json`
 - **`get_create_time` N+1 失敗靜默**：對齊 WPF `try { ... } catch { return null; }`，不污染 `get_accounts` 的回傳，而是各 row `screatetime: None`
 
-#### Chunk 4.2 — `services/beanfun/otp.rs`
-- [ ] `get_otp(client, session, account, service_code, service_region) -> Result<String>`：6 步 long-polling，呼叫 `core/wcdes::decrypt_hex`
-- [ ] WPF dev artifact 一律不移植（`Expect100Continue = false` 與 reqwest 預設等價、commented `Thread.Sleep` 是 dead code）
+#### Chunk 4.2 — `services/beanfun/otp.rs` ✅
+- [x] `get_otp(client, session, account, service_code, service_region) -> Result<String>`：5 HTTP step + WCDES decrypt 共 6 步 orchestration，呼叫 `core/wcdes::decrypt_hex`
+- [x] WPF dev artifact 一律不移植（`Expect100Continue = false` 與 reqwest 預設等價、commented `Thread.Sleep` 是 dead code）
+- [x] `error.rs` 加 7 個 OTP 專屬 `LoginError` variants（1:1 對應 WPF errmsg：`OTPNoLongPollingKey` / `OTPNoUnkData` / `OTPNoCreateTime` / `OTPNoSecretCode` / `OTPNoResponse` / `GetOtpError` / `DecryptOTPError`）
+- [x] `tests/otp.rs` 12 cases pass：TW happy + HK happy + 4 step1 errors + 1 step2 error + 3 step5 errors + 1 step6 decrypt error + 2 wire-shape locks
+- [x] Quality gates：fmt / clippy `-D warnings` / cargo test 全綠 / cargo doc 0 warnings
+
+##### chunk 4.2 設計決議
+- **5 step 拆 5 個 private helper（SRP）**：`step_1_init` / `step_2_get_secret_code` / `step_3_record_start` / `step_4_long_poll` / `step_5_get_otp` + 純函式 `step_6_decrypt`。每步的純解析邏輯獨立成 `parse_long_polling_key` / `parse_unk_data` / `parse_screatetime_fallback` / `parse_secret_code` 並有 unit test
+- **OTP step 2 `loginHost` 區域不對稱**：TW=`tw.newlogin.beanfun.com`、HK=`login.hk.beanfun.com`；既有 `Endpoints` 的 `newlogin_base` 兩 region 都指 TW（給 QR poll 用），所以 `step_2_get_secret_code` 內部 `match client.config().region` 切換 `newlogin_url` (TW) / `login_url` (HK)，**不**改 `Endpoints` schema（單一 caller，wiremock 測試一個 mock server 同時 serve 兩 host 沒問題）
+- **`account.screatetime` 缺值 fallback**：WPF 會 mutate `acc.screatetime`（L64），我們改用 local `String` 存於 `Step1Data.screatetime`，`&ServiceAccount` 維持 immutable borrow；fallback 用 `core::parser::extract_service_account_create_time`（DRY，同 P4.1 的 regex）
+- **WPF greedy regex `(.*)"` 1:1 移植**：保留 WPF 行為（line-bound greedy match），doc 標注；測試 fixture 用換行讓 greedy 不跨行（生產 response 本身就是多行 JS）
+- **`build_get_webstart_otp_url` 用 `format!` 字串拼**：step 5 URL 必須 byte-for-byte match WPF（`CreateTime` 用 `%20` 而非 form-encoded `+`、`ppppp=` 64-char hex literal verbatim），reqwest `.query()` 會把空格編成 `+` 不符；其他參數都已 URL-safe 不需要額外 encode
+- **`tick_count_ms()` 對應 `Environment.TickCount`**：用 `chrono::Local::now().timestamp_millis() as i32`（保留 i32 wrap-around 語意）；server 不驗證，純 cache buster
+- **`OtpServerRejected.message` 不帶 i18n prefix**：WPF 拼 `(localized GetOtpError) + "\r\n" + serverMsg`；service layer 只回 server 原文，"Get OTP failed:" prefix 留給 UI（同 P4.1 `AmountLimitNotice` 的責任分離）
+- **`OtpDecryptionFailed { cause: String }`**：把 `WcdesError::Display` 收進 `cause`，UI 拿到的是 typed error + 結構化 diagnostics（WPF 只給單一 `DecryptOTPError` 字串）
+- **`step_3_record_start` / `step_4_long_poll` response 丟棄但仍檢 status**：WPF 在 non-2xx 會 throw 進外層 catch → `errmsg = "GetOtpError" + StackTrace`；我們用 `ensure_success` 把 non-2xx 包成 `LoginError::Unknown`，等價結果
+- **`OtpMissingLongPollingKey { snippet }` 截斷至 256 chars**：WPF 把整個 response 塞進 errmsg；我們用 char-boundary-safe truncation 避免 multi-MB HTML 一直留在 error chain
+- **`urlencoding` 不引入新 dep**：用 `percent-encoding`（`url` 的 transitive dep）的 `percent_decode_str`，行為與 .NET `Uri.UnescapeDataString` 等價（只解 `%XX`、`+` 視為 literal）
+- **regex 用 `std::sync::OnceLock<Regex>`**：對齊 codebase 既有 convention（`core/parser/*` / `services/beanfun/login/*`），不引入 `once_cell` dep
 
 #### Chunk 4.3 — `services/beanfun/verify.rs`
 - [ ] `get_verify_page_info(client, advance_check_url) -> VerifyPage`：解 `LoginError::AdvanceCheckRequired` 後 caller 走的恢復路徑
