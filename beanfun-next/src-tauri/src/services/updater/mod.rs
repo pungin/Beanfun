@@ -15,22 +15,28 @@
 //!   `is_newer_version`) return `Result<_, UpdaterError>` for tests
 //!   and discriminating callers.
 //!
-//! # Layers (chunk 7.1 scope)
+//! # Layers (chunks 7.1 + 7.2 scope)
 //!
-//! | Module             | Responsibility                                                       |
-//! | ------------------ | -------------------------------------------------------------------- |
-//! | [`error`]          | `UpdaterError` — typed failures across the updater pipeline          |
-//! | [`parser`]         | `ParsedVersion` / `parse_tag` / `is_newer_version` (pure, cross-OS)  |
-//! | [`mod@proxy_probe`] | `proxy_probe` / `proxy_probe_at` — proxy discovery (HEAD + strict 2xx) |
+//! | Module               | Responsibility                                                        |
+//! | -------------------- | --------------------------------------------------------------------- |
+//! | [`error`]            | `UpdaterError` — typed failures across the updater pipeline           |
+//! | [`parser`]           | `ParsedVersion` / `parse_tag` / `is_newer_version` (pure, cross-OS)   |
+//! | [`mod@proxy_probe`]  | `proxy_probe` / `proxy_probe_at` — proxy discovery (HEAD + strict 2xx)|
+//! | [`github`]           | `GitHubRelease` / `Channel` / `fetch_releases` / `select_release`     |
 //!
-//! Chunks 7.2 (`github.rs` + `Channel`) and 7.3 (`checker.rs`) land
-//! in follow-up commits; this module will grow `pub use` re-exports
-//! as they arrive.
+//! Chunk 7.3 (`checker.rs`) lands in a follow-up commit; this module
+//! will grow one more `pub use` for the top-level `check_update`
+//! entry point once it arrives.
 
 pub mod error;
+pub mod github;
 pub mod parser;
 pub mod proxy_probe;
 
 pub use error::UpdaterError;
+pub use github::{
+    fetch_releases, fetch_releases_at, select_release, Channel, GitHubAsset, GitHubRelease,
+    GH_API_RELEASES_URL, GITHUB_ACCEPT_HEADER,
+};
 pub use parser::{is_newer_version, parse_tag, ParsedVersion};
 pub use proxy_probe::{proxy_probe, proxy_probe_at};

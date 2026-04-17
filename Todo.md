@@ -643,19 +643,19 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] D-step 7：module doc — `mod.rs` + `error.rs` + `parser.rs` + `proxy_probe.rs` 各附 WPF 行號對應表（L15-62 / L220-292 / L135-137 / L40-43, 195-198）+ strict 2xx rationale + OnceLock race semantic + u128 safety rationale + Path A/B 使用情境說明（referrencing `App.xaml.cs::ConvertVersion` L80-102 — `App.AssemblyVersion` 永遠回傳 display form）
 - [x] D-step 8：23 unit tests — `parse_tag` 5 case（canonical / double-digit / 缺 v / 3 component / 尾巴 garbage）/ `is_newer_version` 6 case（display-form upgrade / display-form same-timestamp 短路 / display-form 缺 patch / Path A patch-bump numeric ordering `5.8.9 < 5.8.10` / Path B lossy-concat WPF-bug lock-in（older remote 被誤判為 newer — 保 WPF parity，任何未來「修 bug」會 trip test）/ garbage local fallthrough）+ `pack_version` zero-pad / `left_pad_to` 2 case + `proxy_probe_at` 5 case via wiremock（direct 200 / direct fail + proxy B OK / 全 503 / 非 2xx 拒絕 / 連線拒絕 transport fail）+ 常數 assertion 4 case（`GH_PROXIES` literal / `DIRECT_URL` literal / `PROBE_TIMEOUT` 5000ms / UA shape）
 - [x] D-step 9：quality gates 全綠 — `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings`（feature on/off 兩輪）/ `cargo test --lib` 318/318（較 P6.2 的 295 多 23 個 updater tests）/ `cargo test --test storage_legacy --features test-fixtures` 9/9 / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib`
-- [ ] D-step 10：commit `feat(next): add updater parser + proxy probe (P7 chunk 7.1)`
+- [x] D-step 10：commit `feat(next): add updater parser + proxy probe (P7 chunk 7.1)` — `cdb374b`
 
 #### Chunk 7.2 — `github.rs` + Channel（fetch releases + prerelease 篩選）
 
-- [ ] D-step 1：`services/updater/github.rs` scaffold + mount
-- [ ] D-step 2：`GitHubRelease { name, tag_name, prerelease, body, assets: Vec<GitHubAsset> }` + `GitHubAsset { browser_download_url }` with serde `#[serde(rename_all = "snake_case")]`（對 `tag_name` / `browser_download_url` 取 WPF `JsonProperty` 屬性）
-- [ ] D-step 3：`Channel { Stable, Beta }` enum + `Channel::from_config_value(&str)`（`"Beta"` / `"Preview"` → `Beta`；其他 → `Stable`，對齊 WPF L203-204）
-- [ ] D-step 4：`fetch_releases_at(base_url, user_agent) -> Result<Vec<GitHubRelease>, UpdaterError>` async — reqwest GET + `Accept: application/vnd.github.v3+json` + `User-Agent`
-- [ ] D-step 5：`fetch_releases(proxy_prefix) -> Result<Vec<GitHubRelease>, UpdaterError>` — 用 const `GH_API_RELEASES_PATH = "https://api.github.com/repos/pungin/beanfun/releases"` + UA `Beanfun(V{env!("CARGO_PKG_VERSION")})`
-- [ ] D-step 6：`select_release(releases: &[GitHubRelease], channel: Channel) -> Option<&GitHubRelease>`（對齊 WPF L201-214 — Beta 拿第一個、Stable 拿第一個非 prerelease）
-- [ ] D-step 7：module doc + WPF L64-127 + L201-214 行號對應
-- [ ] D-step 8：~6 unit tests — `Channel::from_config_value` 4 case / `select_release` Stable+Beta / GitHubRelease JSON deserialize + `fetch_releases_at` 用 wiremock
-- [ ] D-step 9：quality gates
+- [x] D-step 1：`services/updater/github.rs` scaffold + mount；`services/updater/mod.rs` 擴充 `pub mod github;` + re-exports (`GitHubRelease` / `GitHubAsset` / `Channel` / `fetch_releases` / `fetch_releases_at` / `select_release` / `GH_API_RELEASES_URL` / `GITHUB_ACCEPT_HEADER`)
+- [x] D-step 2：`GitHubRelease { name, tag_name, prerelease, body, assets: Vec<GitHubAsset> }` + `GitHubAsset { browser_download_url }`；**選 `#[serde(default)]`** per field（而非全 struct `rename_all = "snake_case"`）— GitHub API 本來就用 snake_case 不需 rename，`#[serde(default)]` 讓 optional fields（name/body/prerelease/assets）在缺席時不 panic，對齊 WPF `JsonProperty` + nullable-class-field 預設行為
+- [x] D-step 3：`Channel { Stable, Beta }` enum + `Channel::from_config_value(&str)`（`"Beta"` / `"Preview"` → `Beta`；其他 → `Stable`，對齊 WPF L203-204）；**case-sensitive** 對齊 WPF `string.Equals` 無 `OrdinalIgnoreCase`（測試鎖住 `"beta"` / `"BETA"` 都回 `Stable`）；額外 `impl Default for Channel` 回 `Stable`
+- [x] D-step 4：`fetch_releases_at(base_url: &str, user_agent: &str) -> Result<Vec<GitHubRelease>, UpdaterError>` async — 每次呼叫建新 `reqwest::Client`（無 cookies / 無 redirect config / 無 timeout — 由 OS 預設接管；不 DRY 到 P2 `BeanfunClient`，因為那個是 login-specific 有 cookie jar）+ GET + `Accept: application/vnd.github.v3+json` + `error_for_status()` + `bytes().await` → `serde_json::from_slice` → Fetch / JsonDecode 明確區分
+- [x] D-step 5：`fetch_releases(proxy_prefix: &str) -> Result<Vec<GitHubRelease>, UpdaterError>` — 用 const `GH_API_RELEASES_URL = "https://api.github.com/repos/pungin/beanfun/releases"` + const `GITHUB_ACCEPT_HEADER = "application/vnd.github.v3+json"` + UA `Beanfun(V{env!("CARGO_PKG_VERSION")})`
+- [x] D-step 6：`select_release(releases: &[GitHubRelease], channel: Channel) -> Option<&GitHubRelease>`（對齊 WPF L201-214 — Beta 拿第一個、Stable `find(!prerelease)`）；edge case 全 prerelease + Stable → `None`
+- [x] D-step 7：module doc — WPF 行號對應表（L64-86 schema / L117 URL / L121-127 GET headers / L201-214 selection） + channel case-sensitive rationale + headers pinning rationale + 與 `proxy_probe` 的 `{proxy}{url}` convention 說明
+- [x] D-step 8：15 unit tests（超過目標 ~6）— Channel 4 case（Beta/Preview/Stable/default + case-sensitive 鎖 WPF parity）+ `select_release` 4 case（Stable skip prerelease / Beta first / Stable 全 prerelease None / 空 list）+ `GitHubRelease` deserialize real-shape JSON（含額外 GitHub 欄位忽略 + missing optional defaults + assets 巢狀）+ `fetch_releases_at` 4 case via wiremock（happy path 驗 UA+Accept header / 403 Fetch / bad JSON JsonDecode / connect refused Fetch）+ 2 常數 assertion（URL / Accept header 對 WPF literal）
+- [x] D-step 9：quality gates 全綠 — `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings` / `cargo test --lib` 333/333（7.1 後 318 → 現 333）/ `cargo test --test storage_legacy --features test-fixtures` 9/9 / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib`（修 `super::proxy_probe` ambiguous-link 成 `mod@super::proxy_probe` × 2 處）
 - [ ] D-step 10：commit `feat(next): add updater GitHub fetch + channel selection (P7 chunk 7.2)`
 
 #### Chunk 7.3 — `checker.rs`（top-level `check_update` 組合）
