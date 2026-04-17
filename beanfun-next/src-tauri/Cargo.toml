@@ -62,6 +62,9 @@ chrono = { version = "0.4", features = ["serde"] }
 html-escape = "0.2"
 indexmap = "2"
 
+# MS-NRBF (.NET BinaryFormatter) reader — legacy Users.dat migration (P6)
+nrbf = "0.2"
+
 # Secret handling — zero password / token buffers on drop
 zeroize = { version = "1", features = ["derive"] }
 

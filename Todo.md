@@ -561,15 +561,53 @@ c:\Users\mo030\Desktop\Beanfun\
 - **P5 總驗收**：約 33 個 unit tests + 25 個 integration tests 全綠，quality gates 全綠
 - [x] P5 全章節 post-implementation review — 對齊 WPF `AccountManager.cs` / `ModifyRegistry.cs` / `ConfigAppSettings.cs`，整體功能 1:1，找到 3 項 polish 已 commit `bbd5f85`（F2 save 對 registry write failure 比 WPF 嚴格的 deviation doc / F5 `load_records_blocking` 把 NotFound 當 file missing 省 syscall + 防 TOCTOU / F6 `StorageError::AppDataMissing` variant 與 `ConfigError::AppDataMissing` 對齊 API shape）
 
-### P6 — Rust `core/legacy` BinaryFormatter parser
+### P6 — Rust `core/legacy` NRBF parser + `services/storage/legacy` migrator
 
-- [ ] 實作 MS-NRBF 最小 parser（只需解 `AccountRecords` / `Records`）
-- [ ] `core/legacy/nrbf.rs`：reader + record types（SerializedStreamHeader / ClassWithMembersAndTypes / ObjectNull / ArraySingleString / MemberReference / ...）
-- [ ] `core/legacy/migrator.rs`：偵測舊格式 → parse → 轉為新 `Records`
-- [ ] Fixture：`fixtures/legacy_users.dat`（用 WPF 版舊 code 產生）
-- [ ] 單元測試：parse fixture → `Records` 內容正確
-- [ ] 整合測試：storage 層發現舊格式時自動升級 + 立即儲存為 JSON 格式
-- **驗收**：能 100% 相容讀取舊版 Users.dat；若 fixture 解析失敗立即停下討論（不得 workaround）
+#### Chunk 6.x 共用決議（vs WPF `AccountManager.TryAutoMigrateLegacyData` L494-551）
+
+- **A — Parser 策略**：用 `nrbf = "0.2"` crate（MIT OR Apache-2.0）解低層 MS-NRBF binary → `Value` enum；自寫 thin adapter `Value → LegacyPayload → Records`。Crate 處理 binary spec（record types、string encoding、length prefix、nom 8 parser combinator），我們負責 Beanfun 專用的 class shape semantic mapping。最小攻擊面（不 hand-roll spec parser）+ 不需要 WPF 環境
+- **B — Module 位置**：`core::legacy::nrbf`（pure, framework-agnostic, 產 `LegacyPayload` pure domain model）+ `services::storage::legacy`（IO-bound migrator，呼 `save_records` 覆寫 JSON）；`core` 不 depend on `services`，`LegacyPayload` 與 `Records` 解耦
+- **C — Error shape**：`NrbfError`（core 層，parse 錯誤）+ `LegacyMigrateError`（services 層，`Nrbf` / `Storage` variants）；不污染 `StorageError` enum，SRP 分層
+- **D — Records.Change 對齊策略**：`LegacyPayload` enum = `Records(LegacyRecords) | AccountRecords(LegacyAccountRecords)`；映射到 `WireRecords` 讓 `AccountRecords` 缺 `accountNameList` 自動走 `None` → `WireRecords::normalize()` 補 `""`。對齊 WPF JSON-as-bridge 的 **結果**（null field → empty list），但跳過雙重 JSON round-trip；複用 P5 `WireRecords::normalize` DRY
+- **E — Auto-save**：`migrate_and_save` 內部呼 `save_records`，對齊 WPF L526 `storeRecord()` 立刻覆寫 JSON 格式；UI 層不用知道舊格式存在
+- **F — load 層 wrapper**：新 API `load_records_with_legacy_migration(path)`；P5 既有 `load_records` 保持不動（P5 typed error contract / test 不破壞）。P10 Tauri command 選用 wrapper
+- **G — Fixture 來源**：全手刻 NRBF bytes（依 MS-[MS-NRBF] spec），每段 bytes const 搭 docstring 標 record type + spec 章節；完全可控 + 不需要 .NET 環境 + edge case 可手造
+- **H — MessageBox 不移植**：WPF L536 成功時彈 `LegacyDataMigrateSuccess` MessageBox；service layer 一律不觸 UI，改用 `tracing::info!`；通知 UI 留給 P10/P11
+
+##### Crate 依賴新增（`Cargo.toml`）
+- `nrbf = "0.2"`（MIT OR Apache-2.0，transitive: `nom` 8 / `bitflags` 2 / `rust_decimal` 1）
+
+##### 驗收條件
+- **Chunk 6.1**：手刻 NRBF bytes fixtures 全數 parse 通過；WPF legacy 6 欄位 `AccountRecords` + new 7 欄位 `Records` 兩種 class 都能正確分派並抽出；edge case（null list / `_size` < `_items.len()` / unknown class / malformed header）走對應 typed error
+- **Chunk 6.2**：`LegacyPayload → Records` 轉換對齊 `accRecInit` 結果；`migrate_and_save` 成功後磁碟上 Users.dat 是 JSON 格式且 round-trip 可讀；`load_records_with_legacy_migration` 對合法 legacy file 自動升級；對 migrate 失敗的 legacy file 對齊 WPF L546-548 回空 records 不刪檔
+- **P6 總驗收**：能 100% 相容讀取舊版 Users.dat；若 fixture 解析失敗立即停下討論（不得 workaround）
+
+#### Chunk 6.1 — `core/legacy/nrbf.rs`（NRBF → `LegacyPayload`，pure）
+
+- [x] D-step 1：`Cargo.toml` 加 `nrbf = "0.2"`
+- [x] D-step 2：`core/legacy/{mod.rs, error.rs, nrbf.rs}` scaffold + `core/mod.rs` 掛 `pub mod legacy;`
+- [x] D-step 3：`NrbfError` 5 variants（`Internal(String)` / `UnsupportedClass { name }` / `MissingMember { class, member }` / `TypeMismatch { class, member, expected }` / `InconsistentListSize { class, member, size, items }`）— `Internal` 用 `String` 而非 `#[from] nrbf::Error<'i>`，避開 borrowed lifetime 跨 owned error 的問題（見 `error.rs` doc）
+- [x] D-step 4：pure domain types — `LegacyRecords`（7 欄位 Vec：region / account / account_name / passwd / verify / method / auto_login）+ `LegacyAccountRecords`（6 欄位，**無** `account_name_list`）
+- [x] D-step 5：`LegacyPayload` enum（`Records(LegacyRecords) | AccountRecords(LegacyAccountRecords)`）
+- [x] D-step 6：`parse_legacy_payload(bytes: &[u8]) -> Result<LegacyPayload, NrbfError>` — 用 `nrbf::RemotingMessage::parse`（非 serde 版本，避開 crate 對 `List<T>` 寫死 3-member 的假設）；match root `Value::Object` class name 分派到 `parse_records` / `parse_account_records`
+- [x] D-step 7：extract helpers — `extract_list_of_strings` / `extract_list_of_i32` / `extract_list_of_bool` 共用 `extract_list<T>` generic；統一處理 `null list → empty vec` / `null item → T::default`（對齊 WPF JSON round-trip 結果）/ `_size > items.len()` → `InconsistentListSize` / `_size < items.len()` 取前 `_size` slots
+- [x] D-step 8：module doc 含 WPF `TryAutoMigrateLegacyData` 行號對應表（L501-503 / L506-512 / L513-521 / L526 / L536 / L546-548）+ `null → empty` 的 WPF JSON-bridge 邏輯說明 + 為何 refuse arbitrary root classes（NRBF security posture）+ 為何不用 crate 的 serde feature（`List<T>` 3-member 寫死）；re-exports 到 `core::legacy::{NrbfError, LegacyPayload, LegacyRecords, LegacyAccountRecords, parse_legacy_payload}`
+- [x] D-step 9：11 unit tests with hand-crafted NRBF byte fixtures — `parse_records_all_null_lists` / `parse_records_two_accounts` / `parse_records_empty_lists` / `parse_records_string_list_with_null_element_maps_to_empty_string` / `parse_records_takes_first_size_elements_when_items_longer` / `parse_records_size_greater_than_items_returns_inconsistent` / `parse_account_records_six_fields` / `parse_unknown_class_returns_unsupported` / `parse_malformed_header_returns_internal` / `parse_records_missing_member_returns_missing_member` / `parse_records_wrong_member_type_returns_type_mismatch`；fixture builder `mod fixture`（僅 `#[cfg(test)]`）emit SerializedStreamHeader / BinaryLibrary / Class/SystemClassWithMembersAndTypes / MemberReference / ArraySingleString / ArraySinglePrimitive / BinaryObjectString / ObjectNull / MessageEnd，符合 MS-NRBF §2.3 layout（_items 走 MemberReference → 後續 top-level ArraySingle* referenceable，_size/_version 走 MemberPrimitiveUnTyped）
+- [x] D-step 10：quality gates 全綠 — `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings` / `cargo test --lib` 289/289 / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib`
+- [ ] D-step 11：commit `feat(next): add NRBF parser for legacy Users.dat (P6 chunk 6.1)`
+
+#### Chunk 6.2 — `services/storage/legacy/`（migrator + auto-save wrapper）
+
+- [ ] D-step 1：`services/storage/legacy/{mod.rs, error.rs, migrator.rs, load_with_migration.rs}` scaffold；`services/storage/mod.rs` 掛 `pub mod legacy;`
+- [ ] D-step 2：`LegacyMigrateError` 2 variants（`Nrbf(NrbfError)` / `Storage(StorageError)`）+ 對應 `From` impl
+- [ ] D-step 3：`migrate_legacy_payload(bytes) -> Result<Records, LegacyMigrateError>` pure — `parse_legacy_payload` → match `LegacyPayload` → 映射 `WireRecords`（`AccountRecords` 缺 `accountNameList` → `None`）→ `WireRecords::normalize()` → `Records`
+- [ ] D-step 4：`migrate_and_save(path, bytes) -> Result<Records, LegacyMigrateError>` async — `migrate_legacy_payload` → `save_records` → `tracing::info!` → `Ok(records)`；亦支援 `_at` 變體（test registry 隔離）
+- [ ] D-step 5：`load_records_with_legacy_migration(path) -> Result<Records, StorageError>` async — 呼 P5 `load_records`；match `Err(LegacyDataDetected { raw_bytes })` → `migrate_and_save`；migrate OK → `Ok(records)`；migrate 失敗 → `tracing::warn!` + `Ok(Records::default())`（**不刪檔** 對齊 WPF L546-548）；其他 Err 直接 propagate；亦支援 `_at` 變體
+- [ ] D-step 6：re-exports（`services/storage/mod.rs`）+ module doc（標 WPF L494-551 行號對應 + auto-save semantics + fail-soft 規範）
+- [ ] D-step 7：~6 unit tests（pure conversions）— new Records 完整轉 / legacy AccountRecords 缺 accountNameList 補 "" / null list normalize 補空 / length 對齊到 account_list.len() / LegacyMigrateError Display / From impl chain
+- [ ] D-step 8：~8 integration tests in `tests/storage_legacy.rs`（end-to-end with real DPAPI + 手刻 NRBF bytes + registry 隔離 `SOFTWARE\BEANFUN_NEXT_TEST\legacy_<name>_<pid>`）— `migrate_and_save` 寫成 JSON + round-trip 可讀 / `load_records_with_legacy_migration` 對 legacy Users.dat 自動升級 + 檔案升級為 JSON / migrate 失敗（malformed NRBF）不刪檔回空 / new JSON Users.dat 走一般路徑不觸 migrator / 垃圾 base64 走 P5 既有 fall-back / `migrate_and_save` parent dir 不存在 mkdir_p
+- [ ] D-step 9：quality gates（fmt / clippy / test 全套 + doc `-D warnings`）
+- [ ] D-step 10：commit `feat(next): add legacy Users.dat migration (P6 chunk 6.2)`
 
 ### P7 — Rust `services/updater` + GH proxy
 
