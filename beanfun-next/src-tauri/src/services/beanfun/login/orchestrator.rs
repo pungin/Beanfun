@@ -56,14 +56,31 @@ use super::{login_hk_regular, login_tw_regular};
 /// layer. See module docs for what's in scope and what's not.
 #[derive(Debug, Clone)]
 pub enum LoginMethod<'a> {
-    /// TW Regular login. The TW flow scrapes its own
-    /// `service_code` / `service_region` from the SendLogin form's
-    /// hidden inputs, so no service args are needed here.
+    /// TW Regular login.
+    ///
+    /// No `service_code` / `service_region` here because
+    /// [`super::login_tw_regular`]'s signature doesn't accept
+    /// them — the returned [`Session`] is populated with
+    /// [`super::super::LoginRegion::default_service_code`] /
+    /// [`super::super::LoginRegion::default_service_region`].
+    ///
+    /// WPF's `TwRegularLogin` (Login.cs L29-35) does take them, but
+    /// only forwards them to its inline `GetAccounts(...)` call at
+    /// L173 — and our `GetAccounts` port is deferred to P4. Once
+    /// that lands, callers will pass the user's selected service to
+    /// `get_accounts(...)` separately; the dispatcher signature
+    /// stays unchanged because the login flow itself never reads
+    /// them.
     TwRegular,
 
-    /// HK Regular login. HK has no equivalent server-driven
-    /// scrape, so the caller must specify which game service to
-    /// log into. Pass `LoginRegion::HK.default_service_code()` /
+    /// HK Regular login.
+    ///
+    /// `service_code` / `service_region` are required here because
+    /// [`super::login_hk_regular`]'s signature requires them — they
+    /// flow into [`super::login_completed`]'s POST and (on the TOTP
+    /// branch) get captured into [`super::TotpChallenge`] so
+    /// `login_totp` can forward them when the OTP round-trip
+    /// completes. Pass `LoginRegion::HK.default_service_code()` /
     /// `default_service_region()` for the WPF default
     /// (`new MapleStory` — `610074` / `T9`).
     HkRegular {

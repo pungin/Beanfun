@@ -360,6 +360,12 @@ c:\Users\mo030\Desktop\Beanfun\
 - **Cookie jar policy**：never_clear（嚴格對齊 WPF）。WPF `Logout()` 不清 cookie，session 失效靠 server-side 端點處理；我們的 client 想開新 session 就 drop 後重建（已寫進 `client.rs` 模組 doc）。cross-flow test 在 logout 後 assert `bfWebToken` 仍在 jar，鎖死此設計
 - **Dispatcher 範圍**：只放 TW Regular + HK Regular。TOTP / QR 因 input/output shape 與單呼叫 dispatcher 不相容（多步 + 互動 / UI-driven）必須直接呼叫對應的 `login_*` / `init_qr_login` / `poll_qr_login_status` / `finalize_qr_login`
 
+###### Chunk 3.5 review — doc 修正
+- `orchestrator.rs::LoginMethod::TwRegular` doc 原本誤寫成「TW 從 SendLogin form 的 hidden inputs scrape service_code」。實情：`login_tw_regular` 簽名根本不收 service args、Session 永遠用 region defaults，真正原因是 GetAccounts 整體延到 P4 才會用到 service args；修正為描述「為何簽名沒收」與「P4 GetAccounts 落地後的相容路徑」
+- `logout.rs` failure policy doc 原本只講「我們 vs WPF 對 error 的處理差異」，漏講「WPF 內部其實第一個 step 拋 `WebException` 就直接出方法、後續 step 不跑」。修正為明列兩個 intentional divergence（all-steps vs short-circuit、return-first-error vs 全吞），並補一節說明為什麼選 first error 而不是 `Vec<LoginError>`
+- `client.rs::cookie_store()` 的 doc 原本寫「(logout)」，但 chunk 3.5 拍板 never_clear 後 logout 已不使用此 API，整個 codebase 唯一 caller 是 cross-flow test。重寫為誠實描述「正常 caller 不該需要、目前唯一實際 caller 是 lock never_clear policy 的 test」、把 invariant rationale 指回 `logout.rs` module doc。`pub` visibility 保留（integ tests 只看得到 `pub`，且未來 P4/P6 多 session 診斷可能合理需要）
+- `logout.rs` 模組 doc 原本 hardcode `client.rs` 行號 `L20-22`；改成指向 `client.rs` 的 "Cookie jar" section
+
 ### P4 — Rust `services/beanfun` Account / OTP / Verify
 
 - [ ] `services/beanfun/account.rs`：

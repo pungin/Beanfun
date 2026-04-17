@@ -46,19 +46,40 @@
 //! # Failure policy
 //!
 //! Best-effort: if any step fails we capture the error but **still
-//! attempt the remaining steps**. WPF's callers wrap the entire
-//! method in `try { } catch { }` (`App.xaml.cs` L72-76,
-//! `MainWindow.xaml.cs` L237-241) so it functionally treats Logout
-//! as fire-and-forget.
+//! attempt the remaining steps**, then return the **first** error
+//! encountered.
 //!
-//! We diverge slightly from WPF: instead of silently swallowing
-//! errors, we return the **first** error encountered. The first
-//! error is generally the most diagnostic — subsequent failures
-//! are typically cascades from the same network or session issue
-//! (e.g. step 1 dies on a TLS error and steps 2/3 fail for the
-//! same reason; the step 1 error is what the human needs to see).
-//! Callers that want exact WPF-equivalent fire-and-forget semantics
-//! can do `let _ = logout(&client).await;`.
+//! ## Two intentional divergences from WPF
+//!
+//! 1. **WPF short-circuits internally.** `WebClient.DownloadString`
+//!    throws `WebException` on any non-2xx response, and WPF's
+//!    `Logout()` (Login.cs L884-909) is a flat sequence of
+//!    `DownloadString` / `UploadString` calls with no `try`/`catch`
+//!    inside the method itself — so a failed step 1 means steps 2
+//!    and 3 never run. We deliberately do the opposite: every
+//!    server-side cleanup endpoint gets a chance to fire even if a
+//!    transient blip kills the first one. The thing we're trying to
+//!    do (server-side session invalidation) is naturally idempotent
+//!    and the steps are independent, so running all three is
+//!    strictly safer than the WPF behaviour.
+//!
+//! 2. **WPF's callers swallow the error.** `App.xaml.cs` L72-76 and
+//!    `MainWindow.xaml.cs` L237-241 both wrap `Logout()` in
+//!    `try { } catch { }`, treating it as fire-and-forget. We
+//!    return `Result<(), LoginError>` so callers can log / surface
+//!    failures if they want. Callers wanting exact WPF semantics
+//!    (run + ignore everything) can simply do
+//!    `let _ = logout(&client).await;`.
+//!
+//! ## Why FIRST error and not all
+//!
+//! The first error is generally the most diagnostic — subsequent
+//! failures are typically cascades from the same network or
+//! session issue (e.g. step 1 dies on a TLS error and steps 2/3
+//! fail for the same reason; the step 1 error is what the human
+//! needs to see). Returning a `Vec<LoginError>` would be more
+//! complete but would force every caller to write reduction logic
+//! for a payload that, in practice, has one root cause.
 //!
 //! # Cookie jar
 //!
@@ -67,7 +88,8 @@
 //! relies on the server-side endpoints invalidating the session.
 //! For our long-lived process the supported pattern for fully
 //! isolating a new session is to drop the [`BeanfunClient`] and
-//! construct a fresh one (see `client.rs` module docs L20-22).
+//! construct a fresh one — see the "Cookie jar" section of the
+//! [`client`](super::super::client) module docs.
 
 use crate::services::beanfun::{BeanfunClient, LoginError, LoginRegion};
 

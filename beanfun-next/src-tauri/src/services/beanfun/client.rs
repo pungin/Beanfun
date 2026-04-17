@@ -260,8 +260,21 @@ impl BeanfunClient {
         &self.config
     }
 
-    /// Shared reference to the cookie store, for the few call sites that
-    /// need to inspect / clear cookies directly (logout).
+    /// Shared reference to the cookie store.
+    ///
+    /// Most callers shouldn't need this — outbound requests pick up
+    /// cookies from the jar automatically, and inbound `Set-Cookie`
+    /// headers populate it automatically. The accessor exists as
+    /// an escape hatch for the rare case that needs direct jar
+    /// access without going through reqwest's request loop.
+    ///
+    /// Currently the only caller is `tests/login_then_logout.rs`,
+    /// which inspects the jar after [`super::login::logout()`]
+    /// returns to lock the deliberate "logout never clears the jar"
+    /// policy — see the "Cookie jar" section in
+    /// [`mod@super::login::logout`]'s module docs for the rationale.
+    /// Future flows that need jar inspection (e.g. multi-session
+    /// diagnostics) can use this same accessor.
     pub fn cookie_store(&self) -> Arc<CookieStoreMutex> {
         Arc::clone(&self.cookie_store)
     }
