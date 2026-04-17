@@ -301,6 +301,20 @@ impl BeanfunClient {
             .map_err(|e| LoginError::InvalidUrl(format!("portal URL `{path}`: {e}")))
     }
 
+    /// Build a URL rooted at `endpoints.newlogin_base`, e.g.
+    /// `newlogin_url("generic_handlers/erase_token.ashx")` →
+    /// `https://tw.newlogin.beanfun.com/generic_handlers/erase_token.ashx`.
+    /// Mirrors the existing [`Self::login_url`] / [`Self::portal_url`]
+    /// pattern; first user is the logout flow's `erase_token.ashx`
+    /// POST and the TW-region `logout.aspx` GET.
+    pub(crate) fn newlogin_url(&self, path: &str) -> Result<url::Url, LoginError> {
+        self.config
+            .endpoints
+            .newlogin_base
+            .join(path)
+            .map_err(|e| LoginError::InvalidUrl(format!("newlogin URL `{path}`: {e}")))
+    }
+
     /// Read `resp`'s body as UTF-8, capping the accumulated bytes at
     /// [`ClientConfig::max_body_size`].
     ///
@@ -459,6 +473,21 @@ mod tests {
         assert_eq!(
             url.as_str(),
             "https://tw.beanfun.com/beanfun_block/bflogin/return.aspx"
+        );
+    }
+
+    #[test]
+    fn newlogin_url_joins_onto_newlogin_base() {
+        let client = BeanfunClient::new(ClientConfig::default()).unwrap();
+        let url = client
+            .newlogin_url("generic_handlers/erase_token.ashx")
+            .unwrap();
+        // Both TW and HK Endpoints point newlogin_base at the same TW
+        // host — see the `Endpoints::newlogin_base` doc for why HK is
+        // intentionally cross-region here.
+        assert_eq!(
+            url.as_str(),
+            "https://tw.newlogin.beanfun.com/generic_handlers/erase_token.ashx"
         );
     }
 
