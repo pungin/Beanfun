@@ -13,5 +13,6 @@
 
 pub mod beanfun;
 pub mod config;
+pub mod game;
 pub mod storage;
 pub mod updater;

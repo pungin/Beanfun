@@ -75,6 +75,7 @@ rand = "0.8"
 # Win32 API bindings — features will be expanded per phase (DPAPI in P5, WMI/PostMessage in P8/P9).
 windows = { version = "0.58", features = [
   "Win32_Foundation",
+  "Win32_Globalization",
   "Win32_Security",
   "Win32_Security_Cryptography",
   "Win32_System_Threading",

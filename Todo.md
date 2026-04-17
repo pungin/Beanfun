@@ -672,18 +672,65 @@ c:\Users\mo030\Desktop\Beanfun\
 
 ### P8 — Rust `services/game` 啟動 + LR（SHA-256 安全升級）
 
-- [ ] `services/game/launcher.rs`：
-  - [ ] Normal 模式：`std::process::Command::new(path).arg(commandLine)`
-  - [ ] 非 ASCII 路徑偵測 → 回傳 Error 訊息（對齊 WPF `MsgGamePathHaveWChar`）
-- [ ] `services/game/locale_remulator.rs`：
-  - [ ] 內嵌 5 個 LR 檔（`include_bytes!` for LRConfig.xml / LRHookx32.dll / LRHookx64.dll / LRProc.exe / LRSubMenus.dll）
-  - [ ] build.rs：計算 LR 檔 SHA-256 並產生 `LR_SHA256: [(&str, [u8; 32]); 5]` 常數
-  - [ ] 釋出流程：若目標檔存在→驗 SHA-256→不符合則刪除重建
-  - [ ] `ShellExecuteW` + `runas` verb 提升權限啟動 `LRProc.exe`
-  - [ ] GUID `ef3e7b42-a87c-4c07-ae3e-eeebeef12762`（與 WPF 相同）
-- [ ] 單元測試：SHA-256 驗證邏輯（用測試 fixture DLL，故意改一 byte 必須被拒）
-- [ ] 整合測試：釋出流程（用 `tempfile` 當目標目錄）
-- **驗收**：SHA-256 拒絕被竄改 DLL、5 檔釋出與 WPF 行為等價
+##### 共用設計決議（chunk 8.1 / 8.2 共同）
+
+- **對應 WPF**：`Beanfun/MainWindow.xaml.cs::btn_Run_Game_Click` (L1727-1900) + `startByLR` (L1902-1947) + `Beanfun/App.xaml.cs::ReleaseResource` (L131-167)
+- **Service-layer only**：UI dialog（MsgGamePathHaveWChar / MsgLocalePluginReleaseError / MsgLocalePluginRunError / MsgGameAlreadyRun / MsgCantFindGame / MsgLEDoNotSupportXP）留給 P10/P12 Tauri commands + Vue pages。Service 回 typed `GameError`，UI 決定顯示什麼訊息
+- **Out of scope**：process find/kill（P9 `services/process`）、register 遊戲路徑偵測（P9 `services/registry`）—— launcher.rs 只接 `game_path: &Path` 已定值，不自己查登錄檔
+- **A — LR 5 檔來源**：`include_bytes!("../../../../Beanfun/LocaleRemulator/{LRConfig.xml,LRHookx32.dll,LRHookx64.dll,LRProc.exe,LRSubMenus.dll}")` 直接相對參照 WPF tree（DRY；WPF 端更新自動流入 beanfun-next）
+- **B — SHA-256 安全升級**：WPF `ReleaseResource` L140-142 只比 `FileInfo.Length == stream.Length`；我們升級成 SHA-256 byte-level 比對，防止同長度但內容被竄改（Todo.md 明示「SHA-256 安全升級」，WPF 原行為被**刻意**拋棄，並在 doc 說明）
+- **C — TOCTOU 不處理**：release-time verify + overwrite 足夠；launch 前不 re-verify（runas 彈 UAC 的世界觀下 over-engineer，且 WPF 也沒做）
+- **D — Auto 模式 resolve 位置**：launcher.rs 內部 `resolve_mode(Auto)` → `GetSystemDefaultLocaleName()`（Win32）→ `zh-TW / zh-CHT / zh-Hant / zh-HK / zh-MO` → Normal，否則 LocaleRemulator（對齊 WPF L1838-1860，UI 不用預 resolve）
+- **E — XP check 砍掉**：WPF L1850-1853 `OSVersion < WinVista` 的錯誤路徑是 dead code（Tauri 最低 Windows 7 SP1），砍掉並於 module doc 標記對應 WPF 行號
+- **F — 非 ASCII 偵測**：`path.chars().any(|c| (c as u32) > 128)` Unicode scalar value（對齊 WPF UTF-16 code unit `> 128` 語意；遊戲路徑無 surrogate pair realistic scenarios 下等價）
+- **G — Error shape**：`services/game/error.rs` 單一 `GameError` enum（對齊 P7 `UpdaterError` shape），variants：
+  - `PathEmpty` / `PathNotFound(PathBuf)` / `PathNonAscii { path, offending_char, position }`
+  - `LocaleRemulatorRelease { name, source: io::Error }`
+  - `LocaleRemulatorSha256Mismatch { name }`（既有檔 hash 不符但「刪除」step 失敗才會冒出；正常情況會靜默覆蓋）
+  - `ShellExecute { source: windows::core::Error }`
+  - `Spawn(io::Error)`
+  - `LocalePluginUnsupported`（Windows locale query 失敗時的防禦）
+- **H — GUID**：`const LR_GUID: &str = "ef3e7b42-a87c-4c07-ae3e-eeebeef12762"`（與 WPF L1931 + LRConfig.xml Profile Guid 字符對應）
+- **I — `%s` 替換**：`substitute_credentials(template, account, password)` pure helper；兩次 `replacen("%s", ..., 1)`（對齊 WPF L1876-1878 `Regex.Replace(..., 1)` 行為）
+- **J — 非 Windows 編譯**：`services/game/launcher.rs` 保持 cross-platform（Normal 模式 spawn + path validate 都跨平台，locale 查詢有 `#[cfg(windows)]` + `#[cfg(not(windows))]` stub 回 `Normal`）；`services/game/locale_remulator.rs` 全檔 `#[cfg(windows)]`（5 個 DLL 只在 Windows 有意義）
+- **K — build.rs SHA-256**：把 5 檔 hash 在 build-time 計算並寫到 `$OUT_DIR/lr_sha256.rs` 的 `pub const LR_SHA256: [(&str, [u8; 32]); 5]`；build-deps 加 `sha2`（與 runtime deps 已有的 sha2 不衝突）；`println!("cargo:rerun-if-changed=...");` 5 檔 + build.rs 自身
+
+##### 驗收條件
+
+- **Chunk 8.1**：`validate_path` / `resolve_mode` / `substitute_credentials` / `launch_normal` 四 pure primitives 全綠；Auto→Normal（zh-TW locale 模擬）/ Auto→LR（en-US locale 模擬）/ explicit Normal / explicit LR 四路 resolve 正確；non-ASCII 路徑（繁中 / 日文 / emoji）全被 reject；`%s` 替換 1/2 個 / 0 個 / template 空 五個邊界都對
+- **Chunk 8.2**：`release_all` 於 tempdir 產出 5 檔且 SHA-256 一致；既有檔 hash 符合 → skip；篡改一 byte → 自動覆寫；`build_lr_arguments` 對含空白 / 特殊字元 game_path 正確 quote；`launch_game` 完整 orchestrator（validate → resolve → Normal/LR dispatch）三路 happy + 錯誤 surface 都正確
+- **P8 總驗收**：至少 25 unit tests + 1 integration test；`GameError` 完整 surface；service 層不含 UI 呼叫；SHA-256 拒絕被竄改 DLL；5 檔釋出與 WPF 行為等價（內容） + 升級（驗證強度）
+
+#### Chunk 8.1 — `launcher.rs` primitives + Normal 模式
+
+- [x] D-step 1：`services/game/{mod.rs, error.rs, launcher.rs}` scaffold；`services/mod.rs` 掛 `pub mod game;`；`Cargo.toml` 加 `Win32_Globalization` feature 到 `windows` crate（`GetSystemDefaultLocaleName` 用）
+- [x] D-step 2：`GameError` enum in `services/game/error.rs` — 完整 7 variants declared up-front（8.2 未用的先 declare 避免 enum breaking change）：`PathEmpty` / `PathNotFound { path: PathBuf }` / `PathNonAscii { path, offending_char, position }` / `LocaleRemulatorRelease { name, source: io::Error }` / `LocaleRemulatorSha256Mismatch { name }` / `ShellExecute { source }` `#[cfg(windows)]` / `Spawn(#[from] io::Error)`；`thiserror` derive + `#[source]` chain + `{ path.display() }` 格式化；module doc 附 WPF 行號對應表；**`LocalePluginUnsupported` 砍掉**（Win32 locale 查詢失敗時 fallback 到 LR 更安全，對齊 WPF L1857 default 臂，不 surface error）
+- [x] D-step 3：`GameStartMode { Auto = 0, Normal = 1, LocaleRemulator = 2 }` `#[repr(i32)]` 對齊 WPF enum int；`TryFrom<i32>` 0/1→對映、`>=2` → clamp LR（對齊 WPF L1863-1864，3/999 同落 LR）、`<0` → `Err(i32)` 讓 caller 決定 fallback；`ResolvedMode { Normal, LocaleRemulator }` 是 Auto resolve 產出
+- [x] D-step 4：`validate_path(path: &Path) -> Result<(), GameError>` — 空 / 不存在 / `chars().enumerate().find((c as u32) > 128)` 三 check；`path.to_str()` None case 也吞進 `PathNonAscii`（U+FFFD 替代字符 + 位置 0）；回 `PathNonAscii { path, offending_char, position }` 帶診斷資訊
+- [x] D-step 5：`resolve_mode(mode) -> ResolvedMode`（無 Result，fail-soft）+ `locale_to_resolved_mode(locale: &str) -> ResolvedMode` 拆 pure helper（單測不碰 Win32）+ `query_system_locale()` 私有 `#[cfg(windows)]` 用 `GetSystemDefaultLocaleName` + inline `LOCALE_NAME_MAX_LENGTH = 85`（winnls.h 常數；該 feature 未 re-export，inline + source ref 而非多拉 feature flag）；`#[cfg(not(windows))]` stub 回 `None` → resolve 到 LR；Win32 call 失敗也 fallback LR（對齊 WPF L1857 pessimistic default）
+- [x] D-step 6：`substitute_credentials(template, account, password) -> String` pure — 兩次 `replacen("%s", _, 1)`；對齊 WPF L1876-1878 兩次 `Regex.Replace(..., 1)`；3+ `%s` template 只替前 2 個（parity lock 用 test 鎖住）
+- [x] D-step 7：`launch_normal(path, command_line) -> Result<(), GameError>` — `Command::new(path)` + `.current_dir(path.parent().unwrap_or("."))` + `.arg(command_line)` 只在 non-empty 時 push（避 empty argv 造成部分遊戲誤判）+ `.spawn()?`；對齊 WPF L1886-1891；`Child` drop 讓 game detach；io::Error 經 `#[from]` 自動轉 `GameError::Spawn`
+- [x] D-step 8：module docs — `services/game/mod.rs` call-graph + scope 聲明（process/registry 屬 P9 範疇）；`launcher.rs` WPF 行號對應表（L1727-1900 逐 helper 對應 column）+ deliberate departures section（XP dropped / Unicode scalar vs UTF-16 / LocalePluginUnsupported 砍）+ cross-platform stance；`error.rs` 7 variants 各有對應 WPF 行 + SHA-256 upgrade 註解
+- [x] D-step 9：**28 unit tests**（超過計畫的 15-20，增補 edge cases）— `validate_path` 6（空 / 不存在 / ASCII / 繁中 / 日文 / emoji）+ `GameStartMode::try_from` 5（0/1/2/clamp 3 + 999/reject -1）+ `locale_to_resolved_mode` 7（zh-TW / zh-HK / 5 tags batch / en-US / zh-CN / ja-JP）+ `resolve_mode` 3（Normal / LR pass-through / Auto smoke）+ `substitute_credentials` 6（2 slot / 1 slot / 0 slot / empty template / empty account / 3 slot only-first-2-replaced parity lock）+ `launch_normal` 2（Windows cmd.exe smoke + missing binary spawn error cross-platform gated）
+- [x] D-step 10：quality gates 全綠 — `cargo fmt` ✓ / `cargo clippy --all-targets -- -D warnings`（feature on/off 兩輪）✓ / `cargo test --lib` **370/370**（較 P7.3 的 342 多 28）✓ / `cargo test --test storage_legacy --features test-fixtures` 9/9 ✓ / `cargo test --test updater` 8/8 ✓ / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib` ✓（修 1 處 `query_system_locale` private-item link → plain backtick）
+- [x] D-step 11：commit `feat(next): add game launcher primitives + Normal mode (P8 chunk 8.1)` — `40e26fa`（review 後 amend：`launch_normal` 改用 `CommandExt::raw_arg` 對齊 WPF `Arguments` verbatim-append 語意，避免 Rust `Command::arg` 的自動引號包裹讓遊戲 CRT argv parser 誤把整串 `/hb /u:a /p:b` 當單一 token）
+
+#### Chunk 8.2 — `locale_remulator.rs` + SHA-256 embed + `launch_game` orchestrator
+
+- [ ] D-step 1：`Cargo.toml` 加 `[build-dependencies] sha2 = "0.10"`；確認 `windows` crate 已有 `Win32_UI_Shell`（7.x 已有）
+- [ ] D-step 2：`build.rs` 擴充 — read 5 檔 from `../Beanfun/LocaleRemulator/*`、compute SHA-256、write `$OUT_DIR/lr_sha256.rs` 含 `pub const LR_SHA256: [(&str, [u8; 32]); 5]`；`cargo:rerun-if-changed=` 每檔 + build.rs 自身；檔案不存在時 `panic!` 清楚訊息
+- [ ] D-step 3：`services/game/locale_remulator.rs` scaffold with `#[cfg(windows)]` 全檔；`include_bytes!` 5 檔 + `include!(concat!(env!("OUT_DIR"), "/lr_sha256.rs"))` 引 SHA-256 const；`pub const LR_ASSETS: [(&str, &[u8], &[u8; 32]); 5]` 組合 name / bytes / hash 三元組
+- [ ] D-step 4：`verify_file(path: &Path, expected_sha256: &[u8; 32]) -> io::Result<bool>` pure — 讀檔 → SHA-256 → compare；檔不存在回 `false`（非 error，呼叫方判斷）
+- [ ] D-step 5：`release_file(target_dir: &Path, name: &str, bytes: &[u8], expected_sha256: &[u8; 32]) -> Result<ReleaseOutcome, GameError>` — `ReleaseOutcome { Skipped, Rewritten, Created }`；檔存在 + hash 符 → Skipped；檔存在 + hash 不符 → `fs::remove_file` 後 write；檔不存在 → 建立 parent dir + write；對齊 WPF L138-163 但 hash-based 而非 length-based
+- [ ] D-step 6：`release_all(target_dir: &Path) -> Result<[ReleaseOutcome; 5], GameError>` — loop LR_ASSETS；任一失敗立即 short-circuit（對齊 WPF L1904-1914 short-circuit 語意）
+- [ ] D-step 7：`pub const LR_GUID: &str = "ef3e7b42-a87c-4c07-ae3e-eeebeef12762";` + `build_lr_arguments(game_path: &Path, command_line: &str) -> String` — 對齊 WPF L1917-1918 quoting policy（`game_path.starts_with('"')` 判斷要不要另加 quotes；command_line 尾綴空白）
+- [ ] D-step 8：`launch_via_lr(target_dir: &Path, game_path: &Path, command_line: &str) -> Result<(), GameError>` — `ShellExecuteW` with `runas` verb + `SW_SHOWNORMAL`；`lpFile = target_dir/LRProc.exe`；`lpParameters = "{GUID} {quoted_path} {cmd}"`；`lpDirectory = game_path.parent()`；UTF-16 wide string 轉換 via helper；error_code < 32 → `GameError::ShellExecute`
+- [ ] D-step 9：`launcher.rs` 加 top-level `launch_game(request: LaunchRequest) -> Result<(), GameError>` orchestrator — `LaunchRequest { game_path, command_line, mode }`；`validate_path` → `resolve_mode` → Normal call `launch_normal` / LR call `launch_via_lr`（LR case 先 `locale_remulator::release_all(target_dir)`）；`target_dir` = 從 Tauri config 或 `env::current_exe().parent()` 拿（放 8.1 或 8.2 合適時機討論）
+- [ ] D-step 10：module docs — `locale_remulator.rs` WPF 行號對應表（L1902-1947 + App.xaml.cs L131-167）+ SHA-256 upgrade rationale（對 WPF length-only 的 rejection）+ TOCTOU not-handled rationale；`launcher.rs` 加 `launch_game` 的 dispatch 流程圖
+- [ ] D-step 11：~10 unit tests — `verify_file` 4 case（檔不存在 / 存在 hash 符 / 存在 hash 不符 / 讀取失敗 io::Error）+ `release_file` 4 case（創新檔 / skip 符合 hash / rewrite 不符 hash / 父 dir 自動建立）+ `build_lr_arguments` 2 case（含空白 path / 已有引號 path）
+- [ ] D-step 12：1 integration test `tests/game_locale_remulator.rs`（`#[cfg(windows)]`）— release_all 到 tempdir 產出 5 檔驗 hash；再次 release_all 應 5 檔都 Skipped；篡改一 byte 再 release_all 應 1 Rewritten + 4 Skipped
+- [ ] D-step 13：quality gates 全綠
+- [ ] D-step 14：commit `feat(next): add LocaleRemulator embed + SHA-256 release + runas launch (P8 chunk 8.2)`
 
 ### P9 — Rust `services/process` + `services/registry`
 
