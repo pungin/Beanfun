@@ -24,9 +24,22 @@ tauri-build = { version = "2", features = [] }
 sha2 = "0.10"
 
 [dependencies]
-# Tauri core
-tauri = { version = "2", features = [] }
+# Tauri core — `specta` feature wires Tauri's State / Window types into
+# the specta type-graph so `tauri-specta` can derive them. Required by
+# `tauri-specta` 2.0.0-rc.x (P10 chunk 10.1).
+tauri = { version = "2", features = ["specta"] }
 tauri-plugin-opener = "2"
+
+# IPC type generation — pin to `tauri-specta` rc.21 (2025-01-13) instead
+# of the newest rc.24 (2026-03-30): rc.24 pulls `specta` rc.24 which uses
+# the `#![feature(debug_closure_helpers)]`-gated `fmt::from_fn`, breaking
+# stable-Rust builds (rust-lang/rust#117729 not stabilized yet). rc.21
+# pairs with `specta =2.0.0-rc.22` + `specta-typescript =0.0.9` (all pre-
+# `fmt::from_fn` churn) and compiles cleanly on `rustc 1.92.0 stable`.
+# Revisit when `debug_closure_helpers` stabilizes (PR rust-lang/rust#146099).
+tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
+specta = { version = "=2.0.0-rc.22", features = ["derive", "serde_json"] }
+specta-typescript = "=0.0.9"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
