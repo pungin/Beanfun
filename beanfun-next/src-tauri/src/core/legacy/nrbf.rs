@@ -742,10 +742,15 @@ mod tests {
 // value is emitted as `MemberPrimitiveUnTyped` (raw 4-byte LE),
 // *not* `MemberPrimitiveTyped`, per §2.3.2.4.
 //
-// Not a general-purpose NRBF writer. Lives inside `#[cfg(test)]` so
-// it never ships to a production binary.
-#[cfg(test)]
-mod fixture {
+// Not a general-purpose NRBF writer. Gated behind `cfg(test)` (for
+// this crate's unit tests) + the `test-fixtures` cargo feature (for
+// integration tests in `tests/`) so it never ships inside the
+// production binary. `pub` visibility is required so integration
+// tests in `tests/storage_legacy.rs` can reuse the byte builder
+// verbatim — the NRBF layout invariants belong here, not duplicated
+// at every call site.
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod fixture {
     // Record type codes — MS-NRBF §2.1.2.1.
     const RT_SERIALIZED_STREAM_HEADER: u8 = 0;
     const RT_CLASS_WITH_MEMBERS_AND_TYPES: u8 = 5;
@@ -787,7 +792,7 @@ mod fixture {
     /// decides both the declared `BinaryTypeEnum` (for the root's
     /// MemberTypeInfo) and the follow-on member-value record(s).
     #[derive(Debug, Clone)]
-    pub(super) enum MemberSpec<'a> {
+    pub enum MemberSpec<'a> {
         /// `List<string>` field = null reference.
         NullStringList,
         /// `List<int>` field = null reference.
@@ -822,10 +827,7 @@ mod fixture {
     /// `SystemClassWithMembersAndTypes` + the referenced
     /// `ArraySingleString` / `ArraySinglePrimitive`), and finally
     /// `MessageEnd`.
-    pub(super) fn build_root_class(
-        class_name: &str,
-        members: &[(&str, MemberSpec<'_>)],
-    ) -> Vec<u8> {
+    pub fn build_root_class(class_name: &str, members: &[(&str, MemberSpec<'_>)]) -> Vec<u8> {
         let mut out = Vec::new();
 
         write_serialized_stream_header(&mut out);

@@ -324,6 +324,52 @@ impl From<WireRecords> for Records {
 }
 
 // =====================================================================
+// P6 chunk 6.2 helper — bypass the JSON round-trip for NRBF migration
+// =====================================================================
+
+/// Construct a [`Records`] directly from a parallel-columns set,
+/// routing through [`WireRecords::normalize`] so the `accRecInit`
+/// padding semantics apply verbatim.
+///
+/// `account_name_list: Option<Vec<String>>` is the key affordance —
+/// `None` means "legacy [`Beanfun.AccountRecords`][wpf-ar] shape,
+/// field did not exist"; normalize then pads to `account_list.len()`
+/// empty strings, matching WPF
+/// `JsonConvert.DeserializeObject<Records>(accountRecords_json)`
+/// behaviour where an absent key leaves the `List<string>?` at
+/// `null`, which `accRecInit` turns into `""` × N.
+///
+/// **Internal to the crate** — exists so
+/// [`crate::services::storage::legacy::migrator::migrate_legacy_payload`]
+/// can sidestep a double JSON round-trip (parse NRBF → serialize
+/// JSON → deserialize JSON → normalize) while preserving every
+/// normalise rule. Production / API callers go through
+/// [`parse_records`] or construct [`Records`] directly.
+///
+/// [wpf-ar]: file://../../../../../../Beanfun/Helper/AccountManager.cs
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn records_from_wire_lists(
+    region_list: Vec<String>,
+    account_list: Vec<String>,
+    account_name_list: Option<Vec<String>>,
+    passwd_list: Vec<String>,
+    verify_list: Vec<String>,
+    method_list: Vec<i32>,
+    auto_login_list: Vec<bool>,
+) -> Records {
+    let wire = WireRecords {
+        region_list: Some(region_list),
+        account_list: Some(account_list),
+        account_name_list,
+        passwd_list: Some(passwd_list),
+        verify_list: Some(verify_list),
+        method_list: Some(method_list),
+        auto_login_list: Some(auto_login_list),
+    };
+    Records::from(wire)
+}
+
+// =====================================================================
 // D7 — Pure parsers / serializers (cross-platform)
 // =====================================================================
 

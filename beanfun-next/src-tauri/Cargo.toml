@@ -92,3 +92,18 @@ assert_matches = "1"
 tempfile = "3"
 pretty_assertions = "1"
 tokio-test = "0.4"
+
+[features]
+# Test-only NRBF byte-stream builder. Gated behind a feature flag so
+# the fixture helpers (~300 lines in `core::legacy::nrbf::fixture`)
+# stay out of production binaries. Enabled automatically during unit
+# tests via `cfg(test)`; integration tests (`tests/storage_legacy.rs`)
+# must opt in via `cargo test --features test-fixtures`.
+test-fixtures = []
+
+# Integration tests that rely on the NRBF fixture builder.
+# `cargo test` (no flags) will skip this target silently —
+# see module doc in `tests/storage_legacy.rs` for run instructions.
+[[test]]
+name = "storage_legacy"
+required-features = ["test-fixtures"]
