@@ -161,10 +161,19 @@ pub enum ReleaseOutcome {
 /// write when the file already matches the expected SHA-256.
 ///
 /// Strategy (vs. WPF `App.ReleaseResource` L131-167):
-/// - missing → `create_dir_all` parent + `fs::write` → [`ReleaseOutcome::Created`]
 /// - present with matching hash → short-circuit → [`ReleaseOutcome::Skipped`]
-/// - present with mismatching hash → `remove_file` + `fs::write` →
-///   [`ReleaseOutcome::Rewritten`]
+/// - `remove_file` succeeds → file pre-existed (hash mismatch) →
+///   [`ReleaseOutcome::Rewritten`] after `fs::write`
+/// - `remove_file` returns `NotFound` → fresh write → [`ReleaseOutcome::Created`]
+/// - `remove_file` returns any other error → [`GameError::LocaleRemulatorRelease`]
+///
+/// The `Created` vs `Rewritten` classification is taken from the
+/// authoritative `remove_file` result rather than from a separate
+/// `target.exists()` snapshot — that snapshot would race the actual
+/// write and occasionally mis-classify (e.g. if the file disappears
+/// between `verify_file` and `exists`, we'd still try to remove it).
+/// Trusting `remove_file` closes that TOCTOU window without adding
+/// a retry loop.
 ///
 /// Every I/O failure maps to [`GameError::LocaleRemulatorRelease`]
 /// tagged with the `'static` asset name so the UI layer (P10) can
@@ -185,21 +194,25 @@ pub fn release_file(
         }
     }
 
-    let exists = target.exists();
-
-    if exists {
-        fs::remove_file(&target)
-            .map_err(|e| GameError::LocaleRemulatorRelease { name, source: e })?;
-    } else if let Some(parent) = target.parent() {
-        if !parent.as_os_str().is_empty() && !parent.exists() {
+    // Ensure the parent directory exists. `create_dir_all` is a no-op
+    // when the directory is already there, so we don't need a separate
+    // `!parent.exists()` pre-check (that check would be racey anyway).
+    if let Some(parent) = target.parent() {
+        if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)
                 .map_err(|e| GameError::LocaleRemulatorRelease { name, source: e })?;
         }
     }
 
+    let removed = match fs::remove_file(&target) {
+        Ok(()) => true,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => false,
+        Err(e) => return Err(GameError::LocaleRemulatorRelease { name, source: e }),
+    };
+
     fs::write(&target, bytes).map_err(|e| GameError::LocaleRemulatorRelease { name, source: e })?;
 
-    Ok(if exists {
+    Ok(if removed {
         ReleaseOutcome::Rewritten
     } else {
         ReleaseOutcome::Created
@@ -289,8 +302,21 @@ pub fn build_lr_arguments(game_path: &Path, command_line: &str) -> String {
 /// pulling in a .NET-equivalent wrapper. Return values `<= 32` indicate
 /// failure per
 /// [MSDN](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew)
-/// and are mapped to [`GameError::ShellExecute`] carrying the last
-/// Win32 error.
+/// and are mapped to [`GameError::ShellExecute`] carrying both the
+/// raw pseudo-HINSTANCE code and the last Win32 error.
+///
+/// # Async runtime guidance
+///
+/// `ShellExecuteW` is synchronous and blocks the calling thread while
+/// the UAC consent dialog is on screen — seconds to minutes depending
+/// on user reaction. When invoked from the Tauri command layer (P10)
+/// on a Tokio runtime, wrap this call in [`tokio::task::spawn_blocking`]
+/// so runtime worker threads stay free for other commands. WPF does
+/// the equivalent by wrapping `proc.Start()` in `new Thread(...)` at
+/// `MainWindow.xaml.cs` L1923; the service layer itself stays sync
+/// so unit tests don't need an async harness.
+///
+/// [`tokio::task::spawn_blocking`]: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
 #[cfg(windows)]
 pub fn launch_via_lr(
     target_dir: &Path,
@@ -330,9 +356,14 @@ pub fn launch_via_lr(
     // ShellExecuteW returns a pseudo-HINSTANCE. Values `> 32` mean
     // success; `<= 32` is a documented error code. We use `.0 as isize`
     // to work across the Win32 / Win64 pointer-width split without
-    // manually casting the windows crate's `HINSTANCE` wrapper.
-    if (result.0 as isize) <= 32 {
+    // manually casting the windows crate's `HINSTANCE` wrapper, then
+    // narrow to `i32` for the error variant — the valid error range
+    // (`0..=32` per MSDN) fits comfortably and a wide HINSTANCE would
+    // have landed in the success arm above.
+    let raw = result.0 as isize;
+    if raw <= 32 {
         return Err(GameError::ShellExecute {
+            code: raw as i32,
             source: windows::core::Error::from_win32(),
         });
     }
@@ -501,6 +532,21 @@ mod tests {
         let outcome = release_file(&nested, name, bytes, sha).unwrap();
         assert_eq!(outcome, ReleaseOutcome::Created);
         assert!(nested.join(name).exists());
+    }
+
+    #[test]
+    fn release_file_handles_missing_file_as_created_not_error() {
+        // TOCTOU lock-in: `verify_file` returning `Ok(false)` covers
+        // both "missing" and "present but hash mismatch". The rewritten
+        // `release_file` must reach the `Created` arm for the missing
+        // case rather than blowing up on `remove_file`'s NotFound.
+        let dir = TempDir::new().unwrap();
+        let (name, bytes, sha) = known_asset();
+        let target = dir.path().join(name);
+        assert!(!target.exists(), "test setup invariant");
+
+        let outcome = release_file(dir.path(), name, bytes, sha).unwrap();
+        assert_eq!(outcome, ReleaseOutcome::Created);
     }
 
     // ---- release_all ----------------------------------------------------

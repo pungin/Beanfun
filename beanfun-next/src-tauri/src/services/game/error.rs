@@ -96,9 +96,20 @@ pub enum GameError {
     /// `ShellExecuteW` (Windows-only) failed to launch `LRProc.exe`
     /// via the `runas` verb — typically the user cancelled the UAC
     /// prompt, or UAC is disabled and the process creation failed.
+    ///
+    /// `code` is the raw pseudo-HINSTANCE return value from
+    /// `ShellExecuteW`; values `<= 32` are documented Win32 error
+    /// codes (e.g. `SE_ERR_FNF = 2`, `SE_ERR_ACCESSDENIED = 5`,
+    /// `SE_ERR_OOM = 8`, `ERROR_CANCELLED = 1223` for UAC refused).
+    /// Preserved verbatim so the UI layer (P10) can branch on
+    /// "UAC cancelled" vs "LRProc.exe missing" without re-interpreting
+    /// `GetLastError`, whose reliability for `ShellExecuteW` MSDN
+    /// does not guarantee. `source` carries whatever `GetLastError`
+    /// returned at the call site as a best-effort secondary signal.
     #[cfg(windows)]
-    #[error("ShellExecuteW failed to launch LRProc.exe")]
+    #[error("ShellExecuteW failed to launch LRProc.exe (code={code})")]
     ShellExecute {
+        code: i32,
         #[source]
         source: windows::core::Error,
     },

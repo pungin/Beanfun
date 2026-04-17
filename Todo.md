@@ -740,7 +740,19 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] D-step 11：**27 unit tests**（超出計畫的 15）— locale_remulator 18 + launcher.rs 新增 9（覆蓋 LR_ASSETS/LR_SHA256 平行、SHA-256 byte match、GUID lock-in、verify_file 4 案、release_file 5 案含 length-match-but-hash-differs security lock-in、release_all 3 案、build_lr_arguments 4 案、ShellExecute 錯誤映射、launch_game 4 案含 validate/non-ASCII/missing/normal smoke、default_target_dir smoke 等）
 - [x] D-step 12：1 integration test `tests/game_locale_remulator.rs`（cross-platform，**6 tests**）— release_all 綠燈 5 案、SHA-256 驗 5 檔、再次 Skipped、tamper → Rewritten only、delete → Created only、embedded length sanity
 - [x] D-step 13：quality gates 全綠 — `cargo fmt --check` ✓ / `cargo clippy --all-targets -- -D warnings`（default + test-fixtures 兩輪）✓ / `cargo test --lib` **397/397**（較 P8.1 的 370 多 27）✓ / `cargo test --test game_locale_remulator` 6/6 ✓ / `cargo test --test updater` 8/8 ✓ / `cargo test --test storage_legacy --features test-fixtures` 9/9 ✓ / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib` ✓（修 2 處 `LR_SHA256` / `expected_sha256` private-item link → plain backtick + 1 處 doc list indent warning）
-- [x] D-step 14：commit `feat(next): add LocaleRemulator embed + SHA-256 release + runas launch (P8 chunk 8.2)` — `6fbf8be`
+- [x] D-step 14：commit `feat(next): add LocaleRemulator embed + SHA-256 release + runas launch (P8 chunk 8.2)` — `6fbf8be`（實際 HEAD `fdada84` post-amend；1-step Todo 記錄漂移可接受）
+
+##### 8.2 review follow-up（2026-04-17，選項 C：全修）
+
+Review 發現 6 個問題，依風險高中低切 5 個 R-step 修改 + 1 個 gates + 1 個 commit：
+
+- [x] R8.2-1：**LaunchRequest Debug redaction**（R1 + R6 合併）— `LaunchRequest` 手寫 `impl Debug`（不再 derive）把 `command_line` 欄位 redact 成 `<redacted; len=N>`，其他 3 欄（game_path / mode / target_dir）維持原樣；`command_line` 欄位 doc 加 `# Security` 段警告「contains post-substitution credentials; never log/persist/display」；struct-level doc 加 `# Debug redaction` 段說明；新增 2 單元測試鎖定（`launch_request_debug_redacts_command_line` 驗 `{req:?}` 不含 account/password、`launch_request_debug_preserves_non_secret_fields` 驗其他欄位仍可讀）
+- [x] R8.2-2：**release_file 簡化 + TOCTOU 硬化**（R2）— 移除冗餘 `target.exists()` 第二次 syscall；移除 `!parent.exists() && create_dir_all(...)` 過度保守分支（`create_dir_all` 本身是 idempotent）；把 `Created` vs `Rewritten` 的判定從「verify 後的 snapshot」改成「`fs::remove_file` 的真實回傳」：`Ok(())` → Rewritten、`NotFound` → Created、其他 io::Error propagate。補 1 單元測試 `release_file_handles_missing_file_as_created_not_error` 鎖 TOCTOU 邊界（檔案在 verify 與 remove 之間消失時走 Created 而非錯誤）
+- [x] R8.2-3：**GameError::ShellExecute 承載 pseudo-HINSTANCE**（R4）— `ShellExecute` variant 加 `code: i32` 欄位，保留 `source: windows::core::Error` 不動；`launch_via_lr` 把 `ShellExecuteW` 回傳的 `raw as i32` 填入。UI 層（P10）可直接 branch 在 `code` 上分辨 `SE_ERR_FNF=2` / `SE_ERR_ACCESSDENIED=5` / `ERROR_CANCELLED=1223`（UAC 取消）等；`source` 保留做 best-effort 次訊號。無既有 call site pattern-match 此 variant → 加欄位是 additive、不 break
+- [x] R8.2-4：**launch_via_lr doc 補 spawn_blocking**（R5）— `launch_via_lr` doc 加 `# Async runtime guidance` 段說明 P10 Tauri command 在 Tokio runtime 上必須用 `tokio::task::spawn_blocking` 包裹（對齊 WPF L1923 `new Thread(...)` 避免 UI 卡死在 UAC prompt），service 層自身保持 sync
+- [x] R8.2-5：**integration test 匯入清理**（R3）— `tests/game_locale_remulator.rs` 刪掉 `use locale_remulator::{self};` 以及最後一行的 `let _ = locale_remulator::LR_GUID;` workaround（那兩個合在一起只是為了避 unused-import 警告硬塞的 no-op，`LR_GUID` 在該測試檔根本沒真的用到）
+- [x] R8.2-6：quality gates 全綠 — `cargo fmt --check` ✓ / `cargo clippy --all-targets -- -D warnings` ✓ / `cargo test --lib` **400/400**（較 P8.2 原本 397 多 3：2 Debug redaction + 1 TOCTOU lock-in）✓ / `cargo test --test game_locale_remulator` 6/6 ✓ / `cargo test --test updater` 8/8 ✓ / `cargo test --test storage_legacy --features test-fixtures` 9/9 ✓ / `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items` ✓
+- [ ] R8.2-7：commit `fix(next): apply P8.2 review follow-ups (redact Debug, tighten release_file, enrich ShellExecute error)` — 待填 hash
 
 ### P9 — Rust `services/process` + `services/registry`
 

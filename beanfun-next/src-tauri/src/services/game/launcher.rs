@@ -375,14 +375,31 @@ pub fn launch_normal(path: &Path, command_line: &str) -> Result<(), GameError> {
 /// Constructor-free by design: the Tauri command layer (P10) will
 /// build the struct via a direct field-init, and unit tests can do
 /// the same without factory boilerplate.
-#[derive(Debug, Clone)]
+///
+/// # `Debug` redaction
+///
+/// The [`Debug`][std::fmt::Debug] impl is hand-written rather than
+/// derived: `command_line` carries the post-[`substitute_credentials`]
+/// password in clear text and deriving `Debug` would leak it to any
+/// caller who `tracing::debug!("{req:?}")`'s the struct. The redacted
+/// shape is `command_line: <redacted; len=N>`, preserving the length
+/// (useful for diagnosing "empty template" bugs) without spilling
+/// contents.
+#[derive(Clone)]
 pub struct LaunchRequest {
     /// Absolute path to the game binary (e.g. `MapleStory.exe`). Must
     /// pass [`validate_path`].
     pub game_path: PathBuf,
     /// Post-substitution command-line string to forward to the game.
-    /// Callers should already have run [`substitute_credentials`] on
-    /// the template from settings.
+    ///
+    /// # Security
+    ///
+    /// After [`substitute_credentials`] runs on the settings template,
+    /// this string contains the game account password in clear text.
+    /// Never log, persist, or display it. The [`Debug`][std::fmt::Debug]
+    /// impl on [`LaunchRequest`] redacts this field specifically so a
+    /// stray `tracing::debug!("{req:?}")` downstream can't leak the
+    /// credentials.
     pub command_line: String,
     /// Requested launch mode — may be [`GameStartMode::Auto`] and
     /// will be resolved to a concrete [`ResolvedMode`] via
@@ -392,6 +409,20 @@ pub struct LaunchRequest {
     /// binaries + `LRProc.exe`. In production this is the beanfun-next
     /// installation directory; tests inject a `tempdir()` to isolate.
     pub target_dir: PathBuf,
+}
+
+impl std::fmt::Debug for LaunchRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LaunchRequest")
+            .field("game_path", &self.game_path)
+            .field(
+                "command_line",
+                &format_args!("<redacted; len={}>", self.command_line.len()),
+            )
+            .field("mode", &self.mode)
+            .field("target_dir", &self.target_dir)
+            .finish()
+    }
 }
 
 /// Resolve the default LocaleRemulator staging directory — the
@@ -806,5 +837,51 @@ mod tests {
         for (name, _) in super::locale_remulator::LR_ASSETS {
             assert!(dir.path().join(name).exists(), "{name} missing");
         }
+    }
+
+    // ---- LaunchRequest Debug redaction ----------------------------------
+
+    #[test]
+    fn launch_request_debug_redacts_command_line() {
+        // Lock-in: a stray `tracing::debug!("{req:?}")` must NOT leak
+        // post-substitution credentials. Both `account` and `password`
+        // end up concatenated into `command_line` via
+        // `substitute_credentials`; the `Debug` impl has to redact it.
+        let req = LaunchRequest {
+            game_path: PathBuf::from("game.exe"),
+            command_line: "/u:alice /p:swordfish".to_string(),
+            mode: GameStartMode::Normal,
+            target_dir: PathBuf::from("."),
+        };
+        let rendered = format!("{req:?}");
+        assert!(
+            !rendered.contains("swordfish"),
+            "Debug output must not contain the password; got: {rendered}"
+        );
+        assert!(
+            !rendered.contains("alice"),
+            "Debug output must not contain the account; got: {rendered}"
+        );
+        assert!(
+            rendered.contains("<redacted; len="),
+            "Debug output must include the redaction marker; got: {rendered}"
+        );
+    }
+
+    #[test]
+    fn launch_request_debug_preserves_non_secret_fields() {
+        // Sanity: redaction only masks `command_line`. The other
+        // three fields are still useful in diagnostics and must
+        // appear verbatim.
+        let req = LaunchRequest {
+            game_path: PathBuf::from("game.exe"),
+            command_line: "secret".to_string(),
+            mode: GameStartMode::LocaleRemulator,
+            target_dir: PathBuf::from("/tmp/lr"),
+        };
+        let rendered = format!("{req:?}");
+        assert!(rendered.contains("game.exe"));
+        assert!(rendered.contains("LocaleRemulator"));
+        assert!(rendered.contains("/tmp/lr") || rendered.contains("\\tmp\\lr"));
     }
 }

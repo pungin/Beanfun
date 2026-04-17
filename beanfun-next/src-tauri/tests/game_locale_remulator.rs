@@ -21,7 +21,6 @@ use std::fs;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
-use beanfun_next_lib::services::game::locale_remulator::{self};
 use beanfun_next_lib::services::game::{release_all, verify_file, ReleaseOutcome, LR_ASSETS};
 
 /// Compute SHA-256 of a byte slice — dup'd here instead of reaching
@@ -188,6 +187,4 @@ fn embedded_bytes_length_matches_wpf_tree_files() {
             "embedded bytes for {name} are not the expected size",
         );
     }
-    // Public module reference retained so the import is not dead.
-    let _ = locale_remulator::LR_GUID;
 }
