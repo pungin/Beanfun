@@ -9,11 +9,11 @@
 //!
 //! # Chunking (P9)
 //!
-//! | Chunk | Modules                        | Scope                                          |
-//! | ----- | ------------------------------ | ---------------------------------------------- |
-//! | 9.1   | [`error`], [`find`], [`kill`]  | WMI query + `OpenProcess` + `TerminateProcess` |
-//! | 9.2   | `patcher`, `play_page`         | single-shot helpers; timer driving → P10       |
-//! | 9.3   | `post_string`                  | Win32 thin wrappers for auto-paste             |
+//! | Chunk | Modules                                | Scope                                          |
+//! | ----- | -------------------------------------- | ---------------------------------------------- |
+//! | 9.1   | [`error`], [`find`], [`kill`]          | WMI query + `OpenProcess` + `TerminateProcess` |
+//! | 9.2   | [`patcher`], [`play_page`]             | single-shot helpers; timer driving → P10       |
+//! | 9.3   | `post_string`                          | Win32 thin wrappers for auto-paste             |
 //!
 //! # Timer ownership
 //!
@@ -36,7 +36,50 @@
 pub mod error;
 pub mod find;
 pub mod kill;
+pub mod patcher;
+pub mod play_page;
 
 pub use error::ProcessError;
 pub use find::{find_processes_by_name, ProcessInfo};
 pub use kill::kill_process;
+pub use patcher::{check_and_kill_patcher, PATCHER_EXE_NAME};
+pub use play_page::{close_play_window, PLAY_WINDOW_CLASS, PLAY_WINDOW_TITLE};
+
+/// UTF-16 encode `s` with a trailing NUL, the shape
+/// [`windows::core::PCWSTR`][PCWSTR] expects.
+///
+/// Private helper shared by the Win32 call sites in this module
+/// ([`play_page`], P9.3 `post_string`). Default-private visibility —
+/// descendant modules of `services/process` can still reach it via
+/// `super::to_wide_null`, but the rest of the crate cannot, which
+/// matches the stated "internal to process/" scope. A byte-identical
+/// copy already lives in `services/game/locale_remulator.rs`; if a
+/// third caller lands we promote both to `services/util/wide.rs` —
+/// not before (YAGNI, and avoids the drive-by edit to the P8 module
+/// that this chunk's scope does not justify).
+///
+/// [PCWSTR]: https://microsoft.github.io/windows-docs-rs/doc/windows/core/struct.PCWSTR.html
+fn to_wide_null(s: &str) -> Vec<u16> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    OsStr::new(s)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
+}
+
+#[cfg(test)]
+mod wide_tests {
+    use super::to_wide_null;
+
+    #[test]
+    fn to_wide_null_terminates_with_zero() {
+        let wide = to_wide_null("abc");
+        assert_eq!(wide, vec![b'a' as u16, b'b' as u16, b'c' as u16, 0]);
+    }
+
+    #[test]
+    fn to_wide_null_empty_string_is_just_nul() {
+        assert_eq!(to_wide_null(""), vec![0u16]);
+    }
+}

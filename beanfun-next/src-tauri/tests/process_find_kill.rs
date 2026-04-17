@@ -1,11 +1,20 @@
-//! Integration tests for [`services::process::find`] and
-//! [`services::process::kill`] — spawn a real child process, look it
-//! up via WMI, then terminate it and verify exit.
+//! Integration tests for [`services::process`][sp] — exercising the
+//! chunk 9.1 primitives ([`find`][f] / [`kill`][k]) against a real
+//! spawned child process, plus the chunk 9.2 helpers
+//! ([`check_and_kill_patcher`][cakp] / [`close_play_window`][cpw]) as
+//! smoke tests against the production code path (the DI-friendly
+//! per-behaviour unit tests live in each module's `mod tests`).
+//!
+//! [sp]: beanfun_next_lib::services::process
+//! [f]: beanfun_next_lib::services::process::find_processes_by_name
+//! [k]: beanfun_next_lib::services::process::kill_process
+//! [cakp]: beanfun_next_lib::services::process::check_and_kill_patcher
+//! [cpw]: beanfun_next_lib::services::process::close_play_window
 //!
 //! Gated `#[cfg(target_os = "windows")]` because both the `wmi` crate
-//! and the Win32 `OpenProcess`/`TerminateProcess` APIs are
-//! Windows-only. On other platforms the whole test binary compiles
-//! to an empty `main` and the harness reports 0/0 tests.
+//! and the Win32 `OpenProcess`/`TerminateProcess`/`FindWindowW` APIs
+//! are Windows-only. On other platforms the whole test binary
+//! compiles to an empty `main` and the harness reports 0/0 tests.
 //!
 //! # Harness hygiene
 //!
@@ -20,7 +29,9 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use beanfun_next_lib::services::process::{find_processes_by_name, kill_process, ProcessError};
+use beanfun_next_lib::services::process::{
+    check_and_kill_patcher, close_play_window, find_processes_by_name, kill_process, ProcessError,
+};
 
 /// RAII wrapper that guarantees a spawned child is killed on drop.
 ///
@@ -205,4 +216,50 @@ fn kill_nonexistent_pid_surfaces_open_process_error() {
         ProcessError::OpenProcess { pid, .. } => assert_eq!(pid, 0xFFFF_FFF0),
         other => panic!("expected OpenProcess error, got {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// 9.2 smoke tests — production wiring for check_and_kill_patcher +
+// close_play_window. The DI-friendly behavioural tests live in each
+// module's `mod tests`; these just verify the real-WMI /
+// real-FindWindowW path doesn't panic.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn check_and_kill_patcher_no_patcher_running_returns_empty() {
+    // Bogus game path in a directory where no Patcher.exe is running
+    // (nor has ever existed) — production code must go through
+    // find_processes_by_name -> WMI and come back with an empty kill
+    // list. Primary value: we catch a mis-wire where the DI defaults
+    // feed the wrong name into WMI, or WMI itself refuses to talk on
+    // this machine.
+    let fake_game =
+        std::path::Path::new(r"C:\this\path\definitely\does\not\exist\beanfun_next\MapleStory.exe");
+    let killed = check_and_kill_patcher(fake_game).expect("check_and_kill_patcher should not Err");
+    assert!(
+        killed.is_empty(),
+        "expected no patcher to match bogus game dir, got pids {killed:?}"
+    );
+}
+
+#[test]
+fn close_play_window_smoke_returns_ok() {
+    // WPF parity: when the launcher window isn't present, the call
+    // should complete with Ok(false) rather than raising. A common
+    // case in CI / dev: no MapleStory session running.
+    //
+    // We intentionally do NOT strict-assert `== Ok(false)` because a
+    // developer who happens to have the launcher open while running
+    // tests would get Ok(true) back and — more importantly — we would
+    // have posted WM_CLOSE to their live session. The weaker "returns
+    // Ok(_)" assertion is enough to catch:
+    //   - `FindWindowW` panicking or returning an unhandled variant
+    //   - `to_wide_null` producing a malformed buffer
+    //   - linkage regressions against user32.dll
+    // which are the plausible breakage modes.
+    let result = close_play_window();
+    assert!(
+        result.is_ok(),
+        "close_play_window returned Err unexpectedly: {result:?}"
+    );
 }

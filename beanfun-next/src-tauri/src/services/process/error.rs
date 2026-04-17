@@ -2,8 +2,8 @@
 //!
 //! Declared up-front for chunk 9.1 so the enum shape is stable across
 //! 9.1 / 9.2 / 9.3. Variants that the auto-paste Win32 wrappers (9.3)
-//! will add land here when that chunk opens; 9.1 only surfaces the
-//! first five.
+//! will add land here when that chunk opens; 9.1 landed the first five,
+//! 9.2 adds [`PostMessage`][ProcessError::PostMessage].
 //!
 //! # WPF mapping
 //!
@@ -14,12 +14,14 @@
 //! | [`WmiQuery`]           | `MainWindow.xaml.cs` L1775-1795 `ManagementObjectSearcher.Get()` throwing |
 //! | [`OpenProcess`]        | `MainWindow.xaml.cs` L1823 `Process.GetProcessById(pid)` throwing         |
 //! | [`TerminateProcess`]   | `MainWindow.xaml.cs` L1831 `Process.Kill()` throwing                      |
+//! | [`PostMessage`]        | `MainWindow.xaml.cs` L2450 `WindowsAPI.PostMessage(hWnd, WM_CLOSE, …)`    |
 //!
 //! [`WmiInit`]: ProcessError::WmiInit
 //! [`WmiConnect`]: ProcessError::WmiConnect
 //! [`WmiQuery`]: ProcessError::WmiQuery
 //! [`OpenProcess`]: ProcessError::OpenProcess
 //! [`TerminateProcess`]: ProcessError::TerminateProcess
+//! [`PostMessage`]: ProcessError::PostMessage
 
 /// Every failure that [`services/process`][`super`] can surface.
 #[derive(Debug, thiserror::Error)]
@@ -65,6 +67,22 @@ pub enum ProcessError {
     #[error("TerminateProcess failed for pid {pid}")]
     TerminateProcess {
         pid: u32,
+        #[source]
+        source: windows::core::Error,
+    },
+
+    /// `PostMessageW` returned failure after [`FindWindowW`][fw] found
+    /// a window. The most common cause is the window being destroyed
+    /// between the find and the post (race condition). `hwnd` is the
+    /// raw window handle reinterpreted as `usize` for logging —
+    /// `HWND` is pointer-sized and never semantically negative, so
+    /// `usize` is the narrower, more faithful integer shape than a
+    /// signed cast.
+    ///
+    /// [fw]: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-findwindoww
+    #[error("PostMessageW failed for HWND {hwnd:#x}")]
+    PostMessage {
+        hwnd: usize,
         #[source]
         source: windows::core::Error,
     },
