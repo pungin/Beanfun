@@ -15,7 +15,7 @@
 //!   `is_newer_version`) return `Result<_, UpdaterError>` for tests
 //!   and discriminating callers.
 //!
-//! # Layers (chunks 7.1 + 7.2 scope)
+//! # Layers (P7 complete)
 //!
 //! | Module               | Responsibility                                                        |
 //! | -------------------- | --------------------------------------------------------------------- |
@@ -23,16 +23,33 @@
 //! | [`parser`]           | `ParsedVersion` / `parse_tag` / `is_newer_version` (pure, cross-OS)   |
 //! | [`mod@proxy_probe`]  | `proxy_probe` / `proxy_probe_at` — proxy discovery (HEAD + strict 2xx)|
 //! | [`github`]           | `GitHubRelease` / `Channel` / `fetch_releases` / `select_release`     |
+//! | [`checker`]          | `check_update` / `check_update_at` / `UpdateInfo` — top-level pipeline|
 //!
-//! Chunk 7.3 (`checker.rs`) lands in a follow-up commit; this module
-//! will grow one more `pub use` for the top-level `check_update`
-//! entry point once it arrives.
+//! # Call graph (top-down)
+//!
+//! ```text
+//! check_update(channel, local_version)
+//!   └─ proxy_probe()                       (OnceLock-cached)
+//!   └─ run_check(prefix, api_url, ua, channel, local_version)
+//!        ├─ fetch_releases_at(fetch_url, ua)
+//!        ├─ select_release(&releases, channel)
+//!        ├─ parse_tag(release.tag_name)
+//!        ├─ is_newer_version(local_version, &parsed)
+//!        └─ UpdateInfo::from_release(release, parsed, prefix)
+//! ```
+//!
+//! Top-level `check_update` collapses all errors into `Option::None`
+//! (matching WPF `catch Exception → Debug.WriteLine` silent policy
+//! at L195-198); lower layers preserve typed [`UpdaterError`] for
+//! tests and diagnostics.
 
+pub mod checker;
 pub mod error;
 pub mod github;
 pub mod parser;
 pub mod proxy_probe;
 
+pub use checker::{check_update, check_update_at, UpdateInfo};
 pub use error::UpdaterError;
 pub use github::{
     fetch_releases, fetch_releases_at, select_release, Channel, GitHubAsset, GitHubRelease,
