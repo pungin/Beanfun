@@ -368,22 +368,51 @@ c:\Users\mo030\Desktop\Beanfun\
 
 ### P4 — Rust `services/beanfun` Account / OTP / Verify
 
-- [ ] `services/beanfun/account.rs`：
-  - [ ] `get_accounts(service_code, service_region)`
-  - [ ] `add_service_account(name, ...)`
-  - [ ] `change_service_account_display_name(...)`
-  - [ ] `get_service_contract(...)`
-  - [ ] `unconnected_game_init_add_account_payload(...)`
-  - [ ] `unconnected_game_add_account_check(...)` / `check_nickname(...)`
-  - [ ] `unconnected_game_add_account(...)`
-  - [ ] `unconnected_game_change_password(...)`
-- [ ] `services/beanfun/otp.rs`：`get_otp(account, service_code, service_region)` 完整 long-polling flow，呼叫 `core/wcdes::decrypt_hex`
-- [ ] `services/beanfun/verify.rs`：
-  - [ ] `get_verify_page_info()`
-  - [ ] `get_verify_captcha(sample: &str) -> base64 png`
-  - [ ] `submit_verify(viewstate, eventvalidation, sample, code, captcha)`
-- [ ] Integration tests：每個 endpoint 至少 2 cases（成功 + 錯誤）
-- **驗收**：15+ integration cases pass
+切 4 chunks，順序：account read+JSON 管理 → OTP → verify → account WebForms 管理。
+
+#### Chunk 4.1 — `services/beanfun/account.rs` 讀取 + JSON 管理 endpoints
+- [x] `get_accounts(client, session, service_code, service_region) -> Result<AccountListResult>`
+- [x] `get_create_time(client, session, service_code, service_region, sn) -> Option<String>`（私有 helper；對齊 WPF `try { ... } catch { return null; }` 用 `Option`）
+- [x] `get_service_contract(client, session, service_code, service_region) -> Result<String>`
+- [x] `add_service_account(client, session, name, service_code, service_region) -> Result<bool>`
+- [x] `change_service_account_display_name(client, session, new_name, game_code, account: &ServiceAccount) -> Result<bool>`
+- [x] Types：`ServiceAccount` / `AccountListResult` / `AmountLimitNotice` enum
+- [x] Integration tests：13 cases（5× `get_accounts`、2× `get_service_contract`、3× `add_service_account`、3× `change_service_account_display_name`）
+
+##### Chunk 4.1 實作 / 設計決議
+- **`core/time.rs`**：新建 `dt_compact` (`Y(M-1)DDhhmmssfff`) / `dt_iso` (`yyyyMMddHHmmss.fff`) + `_now` wrappers，移植 WPF `BeanfunClient.cs::GetCurrentTime(2)` / `(1)` 的字串格式。函式收 `chrono::DateTime<Local>` 參數讓單元測試 pin 時間。**不引用舊 WPF 程式**，只依規格重寫
+- **`core/parser/account.rs`**：新增 `extract_service_account_create_time` + `service_account_create_time_regex`（`<input ... id="dteCreate" ... value="..."`）對應 WPF 的 inline regex
+- **`add_service_account` / `change_service_account_display_name` 空字串短路**：未呼叫網路、直接 `Ok(false)`，對齊 WPF `if (sName == "") { return false; }` / `if (newName == "") { return false; }`
+- **`change_service_account_display_name` same-name 短路**：對齊 WPF `if (acc.sname == newName) { return false; }`，UI 層不需要重複防呆
+- **`gamezone.ashx` JSON `intResult` 解析**：對齊 WPF `JObject.Parse` + `jsonData["intResult"] == null || (int) jsonData["intResult"] != 1`，empty body / null 都算 `Ok(false)`，invalid JSON 才回 `LoginError::Json`
+- **`get_create_time` N+1 失敗靜默**：對齊 WPF `try { ... } catch { return null; }`，不污染 `get_accounts` 的回傳，而是各 row `screatetime: None`
+
+#### Chunk 4.2 — `services/beanfun/otp.rs`
+- [ ] `get_otp(client, session, account, service_code, service_region) -> Result<String>`：6 步 long-polling，呼叫 `core/wcdes::decrypt_hex`
+- [ ] WPF dev artifact 一律不移植（`Expect100Continue = false` 與 reqwest 預設等價、commented `Thread.Sleep` 是 dead code）
+
+#### Chunk 4.3 — `services/beanfun/verify.rs`
+- [ ] `get_verify_page_info(client, advance_check_url) -> VerifyPage`：解 `LoginError::AdvanceCheckRequired` 後 caller 走的恢復路徑
+- [ ] `get_verify_captcha(client, sample) -> Vec<u8>`（PNG bytes，UI 層 base64 / data URL）
+- [ ] `submit_verify(client, viewstate, eventvalidation, sample, code, captcha) -> ...`
+- [ ] WPF hardcoded TW domain（HK 沒有 AdvanceCheck）→ region check + typed error
+
+#### Chunk 4.4 — `services/beanfun/account.rs` WebForms 管理 endpoints
+- [ ] `unconnected_game_init_add_account_payload(...)`（含私有 `unconnected_game_init_account_payload` helper）
+- [ ] `unconnected_game_add_account_check(...)` + `check_nickname(...)`（DRY 候選：兩個只差 `__EVENTTARGET`）
+- [ ] `unconnected_game_add_account(...)`
+- [ ] `unconnected_game_change_password(...)`（4-step flow）
+
+##### 跨 chunk 設計決議
+- **State model**：P4 函式統一 `(client: &BeanfunClient, session: &Session, ...)`，沿用 P3 的 split（`BeanfunClient` 只管 HTTP plumbing、`Session` 由 caller 持有）
+- **`AmountLimitNotice` enum**：`None` / `AuthReLoginRequired`（偵測到「進階認證」）/ `Other(String 原文繁體)`。Service layer 不做 i18n / 簡繁轉換（WPF 的 `I18n.ToSimplified()` + `TryFindResource("AuthReLogin")` 都是 UI 層責任）
+- **`AccountList.ApplyAccountOrder`（user-defined sort 持久化）**：P4.1 只做 ssn 排序（deterministic, matches WPF first-pass）；user-defined 順序留到 P5 storage / P6 commands；doc 在 `account.rs` 註明
+- **OTP `Expect100Continue = false` 全域 mutation**：不移植。WPF 該行的最終結果是「不送 `Expect: 100-continue`」；reqwest 預設「最終結果」也是不送（且沒開關可以反過來開）→ 等價
+- **OTP commented `Thread.Sleep` / `Console.WriteLine`**：dead code 不移植
+- **OTP `ppppp=...` 64-char hex literal**：1:1 verbatim，doc 說明「protocol required, 來歷不明」
+- **Accept-Encoding**：沿用 P3.x 慣例由 reqwest gzip/deflate features 自動處理。WPF 對 `Download/UploadString` 設 `identity`、對 `UploadStringGZip` 設 `gzip, deflate, br`；我們 wire 上會送 `gzip, deflate`（reqwest 預設）。語意等價（response body 內容相同），doc 註明 wire-level divergence
+
+- **驗收**：15+ integration cases pass (P4.1-P4.4 合計)
 
 ### P5 — Rust `services/storage` DPAPI + `services/config` XML
 

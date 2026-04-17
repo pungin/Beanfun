@@ -11,6 +11,7 @@
 //! | [`error`]    | `LoginError` — typed error enum mapping WPF `errmsg`    |
 //! | [`session`]  | `Credentials`, `Session` (zeroize'd where sensitive)    |
 //! | [`login`]    | Login flows: session-key, TW/HK regular, TOTP, QRCode   |
+//! | [`account`]  | Account list + JSON management (gamezone.ashx)          |
 //!
 //! # Safety posture
 //!
@@ -26,11 +27,16 @@
 //!   sessions never share cookies, matching the WPF `WebClient` per-instance
 //!   jar behaviour.
 
+pub mod account;
 pub mod client;
 pub mod error;
 pub mod login;
 pub mod session;
 
+pub use account::{
+    add_service_account, change_service_account_display_name, get_accounts, get_service_contract,
+    AccountListResult, AmountLimitNotice, ServiceAccount,
+};
 pub use client::{BeanfunClient, ClientConfig, Endpoints, LoginRegion};
 pub use error::LoginError;
 pub use session::{Credentials, Session};

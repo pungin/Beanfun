@@ -8,5 +8,6 @@
 //! HTTP / IO / async orchestration belongs under `services::` (added in P3+).
 
 pub mod parser;
+pub mod time;
 pub mod version;
 pub mod wcdes;

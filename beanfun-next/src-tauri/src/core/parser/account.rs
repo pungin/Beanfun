@@ -101,6 +101,24 @@ pub fn extract_account_limit_notice(html: &str) -> Option<String> {
     capture_first(amount_limit_notice_regex(), html)
 }
 
+/// Extract the inline `ServiceAccountCreateTime: "…"` literal from a
+/// `game_zone/game_start_step2.aspx` body.
+///
+/// WPF reference (`BeanfunClient.Account.cs::GetCreateTime` L161-166):
+///
+/// ```csharp
+/// Regex regex = new Regex("ServiceAccountCreateTime: \"([^\"]+)\"");
+/// if (!regex.IsMatch(response)) return null;
+/// return regex.Match(response).Groups[1].Value;
+/// ```
+///
+/// Returns the extracted string verbatim (no trimming, no decoding) when
+/// present, mirroring WPF; `None` when the pattern does not match (which
+/// WPF surfaces as `null`).
+pub fn extract_service_account_create_time(html: &str) -> Option<String> {
+    capture_first(service_account_create_time_regex(), html)
+}
+
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
@@ -120,6 +138,14 @@ fn amount_limit_notice_regex() -> &'static Regex {
             r#"<div id="divServiceAccountAmountLimitNotice" class="InnerContent">(.*)</div>"#,
         )
         .expect("amount limit notice regex must compile")
+    })
+}
+
+fn service_account_create_time_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#"ServiceAccountCreateTime: "([^"]+)""#)
+            .expect("service account create time regex must compile")
     })
 }
 
@@ -232,5 +258,55 @@ mod tests {
     fn empty_document_yields_empty_list() {
         assert!(extract_service_accounts("").is_empty());
         assert_eq!(extract_account_limit_notice(""), None);
+    }
+
+    // -------------------------------------------------------------------------
+    // extract_service_account_create_time
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn create_time_when_present() {
+        let html = r#"<script>
+            var data = "stuff";
+            ServiceAccountCreateTime: "2024-01-15 10:30:00"
+            other = 42;
+        </script>"#;
+        assert_eq!(
+            extract_service_account_create_time(html).as_deref(),
+            Some("2024-01-15 10:30:00")
+        );
+    }
+
+    /// First match wins — matches the WPF `regex.Match(response).Groups[1]`
+    /// behaviour (single match, never iterated). A page should only ever
+    /// contain one such literal in practice, but locking the semantics in
+    /// guards future regressions.
+    #[test]
+    fn create_time_first_match_wins() {
+        let html = r#"
+            ServiceAccountCreateTime: "FIRST"
+            ServiceAccountCreateTime: "SECOND"
+        "#;
+        assert_eq!(
+            extract_service_account_create_time(html).as_deref(),
+            Some("FIRST")
+        );
+    }
+
+    #[test]
+    fn create_time_absent_returns_none() {
+        assert_eq!(extract_service_account_create_time(""), None);
+        assert_eq!(
+            extract_service_account_create_time("<html>nope</html>"),
+            None
+        );
+    }
+
+    /// The WPF regex uses `[^"]+` (greedy, at least one char), so an empty
+    /// quoted value does not match. We mirror that exactly.
+    #[test]
+    fn create_time_empty_quoted_value_does_not_match() {
+        let html = r#"ServiceAccountCreateTime: """#;
+        assert_eq!(extract_service_account_create_time(html), None);
     }
 }

@@ -67,7 +67,10 @@ pub type Result<T> = std::result::Result<T, ParserError>;
 // Re-export the most frequently used public items so services/commands can
 // `use crate::core::parser::{extract_viewstate, ViewStateForm, …}` without
 // reaching into submodules individually.
-pub use account::{extract_account_limit_notice, extract_service_accounts, ServiceAccountRow};
+pub use account::{
+    extract_account_limit_notice, extract_service_account_create_time, extract_service_accounts,
+    ServiceAccountRow,
+};
 pub use akey::extract_akey;
 pub use form::{extract_hidden_inputs, HiddenInput};
 pub use token::extract_verification_token;
