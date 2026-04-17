@@ -232,25 +232,6 @@ pub enum LoginError {
     // ---------------------------------------------------------------------
     // Advance-check verify (`BeanfunClient.Verify.cs`, P4.3)
     // ---------------------------------------------------------------------
-    /// Caller invoked the advance-check verify flow on a non-TW
-    /// [`super::LoginRegion`].
-    ///
-    /// WPF's verify endpoint (`BeanfunClient.Verify.cs` L23-25 + L90-92,
-    /// `MainWindow.xaml.cs::reLoadVerifyPage` L797-803) hardcodes
-    /// `tw.newlogin.beanfun.com` for both the page-info GET and the
-    /// submit POST, *and* `advanceCheckUrl` is only set by the TW
-    /// account_login branch (`BeanfunClient.Login.cs` L186). HK
-    /// regular / TOTP paths still produce `LoginAdvanceCheck` errmsgs
-    /// (L249, L361) but the resulting verify flow targets a TW host
-    /// against an HK session — a silent dead path.
-    ///
-    /// We surface this typed error to refuse the call early instead
-    /// of replicating the WPF dead-path behaviour. UI is expected to
-    /// fall back to "please re-login" rather than render a verify
-    /// form for HK sessions.
-    #[error("advance-check verify is not supported in the HK region")]
-    VerifyUnsupportedRegion,
-
     /// WPF `VerifyNoViewstate` (`MainWindow.xaml.cs::reLoadVerifyPage`
     /// L761) — the AdvanceCheck.aspx HTML did not contain a
     /// `__VIEWSTATE` hidden field. Either the server returned an

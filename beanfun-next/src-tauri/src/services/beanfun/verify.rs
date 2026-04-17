@@ -13,28 +13,39 @@
 //!   3. POST AdvanceCheck.aspx                 -> classified outcome (success / server msg / wrong captcha / wrong auth info)
 //! ```
 //!
-//! # Region asymmetry: TW only (deliberate)
+//! # Region routing: always TW newlogin host (matches WPF byte-for-byte)
 //!
 //! All three endpoints — `AdvanceCheck.aspx` GET, `BotDetectCaptcha.ashx`
-//! GET, `AdvanceCheck.aspx` POST — are hardcoded to
-//! `https://tw.newlogin.beanfun.com/...` in WPF
-//! (`BeanfunClient.Verify.cs` L23-25 / L43-45 / L90-92, plus
-//! `MainWindow.xaml.cs::reLoadVerifyPage` L797-803 which strips and
-//! re-prepends the TW host onto the form action). Furthermore
-//! `BeanfunClient.advanceCheckUrl` (L186 in `BeanfunClient.Login.cs`)
-//! is only ever set on the **TW** account_login branch
-//! (`resultCode == "2"`), never on HK Regular (L249) or HK TOTP
-//! (L361).
+//! GET, `AdvanceCheck.aspx` POST — target `tw.newlogin.beanfun.com`
+//! regardless of the calling client's [`super::LoginRegion`]. This
+//! mirrors WPF (`BeanfunClient.Verify.cs` L23-25 / L43-45 / L90-92,
+//! plus `MainWindow.xaml.cs::reLoadVerifyPage` L797-803 which strips
+//! and re-prepends the TW host onto the form action) verbatim, and
+//! relies on the existing [`super::Endpoints::hk()`] invariant that
+//! `newlogin_base = https://tw.newlogin.beanfun.com/`. The internal
+//! `newlogin_url(...)` URL helper on [`BeanfunClient`] therefore
+//! lands on the same TW host an HK WPF client would hit.
 //!
-//! HK regular / TOTP flows still produce `LoginAdvanceCheck` errmsg
-//! strings on captcha-required responses, but invoking verify on an HK
-//! session is a **silent dead path** in WPF (the GET would hit a TW
-//! host that has no idea about this HK session). To avoid replicating
-//! that broken-by-design behaviour, every public function in this
-//! module rejects non-TW clients with
-//! [`LoginError::VerifyUnsupportedRegion`] up front. UI is expected
-//! to surface "please re-login" instead of opening the verify
-//! dialog when the underlying session is HK.
+//! HK is **not** rejected up front. Both HK Regular (L249 in
+//! `BeanfunClient.Login.cs`) and HK TOTP (L361) raise
+//! `LoginAdvanceCheck` when the server response contains
+//! `RELOAD_CAPTCHA_CODE` + `alert` — that signal originates server-side,
+//! so the server expects clients to reach for the verify flow, exactly
+//! as the TW account_login `resultCode = 2` branch (L187) does. WPF
+//! has run this code path against HK sessions in production for years;
+//! we preserve 1:1 functional parity here rather than second-guessing
+//! the server's contract. Whether the HK session cookie is actually
+//! accepted on the TW newlogin host is decided by the server: if the
+//! HTML it returns lacks the expected hidden fields, we surface a
+//! typed `VerifyMissing*` error (same observable outcome as a WPF
+//! "VerifyNoViewstate" / "VerifyNoEventvalidation").
+//!
+//! Asymmetry that *is* preserved between regions:
+//! [`LoginError::AdvanceCheckRequired::url`] is `Some(_)` only on TW
+//! `account_login resultCode == 2` (WPF L186). HK paths leave it as
+//! `None`, which routes [`get_verify_page_info`] through the static
+//! TW fallback URL — exactly what `BeanfunClient.Verify.cs` L23-25
+//! does when `advanceCheckUrl` is empty.
 //!
 //! # State model
 //!
@@ -81,7 +92,7 @@ use regex::Regex;
 use reqwest::Response;
 
 use crate::core::parser::{capture_first, extract_viewstate};
-use crate::services::beanfun::client::{BeanfunClient, LoginRegion};
+use crate::services::beanfun::client::BeanfunClient;
 use crate::services::beanfun::error::LoginError;
 use crate::services::beanfun::login::ensure_success;
 
@@ -152,25 +163,26 @@ pub enum VerifyOutcome {
 /// [`LoginError::AdvanceCheckRequired::url`] carried out of the
 /// upstream login call; pass `None` to use the static TW fallback
 /// (`https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx`).
-/// Mirrors `BeanfunClient.Verify.cs::getVerifyPageInfo` L23-26.
+/// Both regions land on the same TW newlogin host (see module-level
+/// "Region routing" docs). Mirrors
+/// `BeanfunClient.Verify.cs::getVerifyPageInfo` L23-26.
 ///
 /// # Errors
 ///
-/// - [`LoginError::VerifyUnsupportedRegion`] when `client.config().region`
-///   is not [`LoginRegion::TW`] — see module docs for why HK is rejected
-///   instead of replicating the WPF dead path.
 /// - [`LoginError::ServerMessage`] when the page contains an
 ///   `alert('...')` script (per `reLoadVerifyPage` L805-810 which
 ///   surfaces the alert text as the errmsg).
 /// - [`LoginError::VerifyMissingViewState`] /
 ///   [`LoginError::VerifyMissingEventValidation`] /
 ///   [`LoginError::VerifyMissingSampleCaptcha`] /
-///   [`LoginError::VerifyMissingLblAuthType`] for missing required fields.
+///   [`LoginError::VerifyMissingLblAuthType`] for missing required fields
+///   — also the path the HK + cross-domain-cookie failure mode would
+///   land on, if the server returns a generic placeholder page instead
+///   of the expected verify form.
 pub async fn get_verify_page_info(
     client: &BeanfunClient,
     advance_check_url: Option<&str>,
 ) -> Result<VerifyPageInfo, LoginError> {
-    ensure_tw(client)?;
     let url = match advance_check_url {
         Some(u) if !u.is_empty() => u.to_owned(),
         _ => build_default_advance_check_url(client)?,
@@ -188,11 +200,12 @@ pub async fn get_verify_page_info(
 /// expected to base64-encode them for an `<img src="data:...">`.
 ///
 /// Mirrors `BeanfunClient.Verify.cs::getVerifyCaptcha` L35-67 with the
-/// same `< 500 bytes` rejection threshold (L48).
+/// same `< 500 bytes` rejection threshold (L48). Region-agnostic by
+/// design: both TW and HK clients route the GET through the TW
+/// newlogin host (see module-level "Region routing" docs).
 ///
 /// # Errors
 ///
-/// - [`LoginError::VerifyUnsupportedRegion`] for non-TW clients.
 /// - [`LoginError::VerifyCaptchaImageTooSmall`] when the response body
 ///   is < 500 bytes — matches WPF's `buffer.Length < 500` check that
 ///   returns `null` (treated as "captcha load failed").
@@ -200,7 +213,6 @@ pub async fn get_verify_captcha(
     client: &BeanfunClient,
     samplecaptcha: &str,
 ) -> Result<Vec<u8>, LoginError> {
-    ensure_tw(client)?;
     let url = build_captcha_url(client, samplecaptcha)?;
     let resp = client.http().get(url).send().await?;
     ensure_success(&resp, "BotDetectCaptcha.ashx")?;
@@ -218,19 +230,20 @@ pub async fn get_verify_captcha(
 ///
 /// Mirrors `BeanfunClient.Verify.cs::verify` L69-100 (POST with the
 /// 8-field form) plus `MainWindow.xaml.cs::verifyWorker_DoWork`
-/// L2616-2679 (response classification).
+/// L2616-2679 (response classification). Region-agnostic by design:
+/// `page_info.form_action` is already a fully-qualified TW newlogin
+/// URL (set during step 1's HTML parse) regardless of the client's
+/// region.
 ///
 /// # Errors
 ///
-/// - [`LoginError::VerifyUnsupportedRegion`] for non-TW clients.
-/// - Transport / parse failures bubble through the usual variants.
+/// Transport / parse failures bubble through the usual variants.
 pub async fn submit_verify(
     client: &BeanfunClient,
     page_info: &VerifyPageInfo,
     verify_code: &str,
     captcha_code: &str,
 ) -> Result<VerifyOutcome, LoginError> {
-    ensure_tw(client)?;
     let form = build_verify_form(page_info, verify_code, captcha_code);
     let resp = client
         .http()
@@ -241,21 +254,6 @@ pub async fn submit_verify(
     ensure_success(&resp, "AdvanceCheck.aspx (POST)")?;
     let body = client.bounded_text(resp).await?;
     Ok(classify_verify_response(&body))
-}
-
-// -----------------------------------------------------------------------------
-// Private helpers — region guard
-// -----------------------------------------------------------------------------
-
-/// Reject non-TW clients early with [`LoginError::VerifyUnsupportedRegion`].
-///
-/// Centralised so all three public entry points share one
-/// implementation; called as the very first statement of each.
-fn ensure_tw(client: &BeanfunClient) -> Result<(), LoginError> {
-    if client.config().region != LoginRegion::TW {
-        return Err(LoginError::VerifyUnsupportedRegion);
-    }
-    Ok(())
 }
 
 // -----------------------------------------------------------------------------
@@ -512,7 +510,7 @@ fn classify_verify_response(body: &str) -> VerifyOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::beanfun::client::ClientConfig;
+    use crate::services::beanfun::client::{ClientConfig, LoginRegion};
 
     fn tw_client() -> BeanfunClient {
         BeanfunClient::new(ClientConfig::for_region(LoginRegion::TW)).unwrap()
@@ -520,23 +518,6 @@ mod tests {
 
     fn hk_client() -> BeanfunClient {
         BeanfunClient::new(ClientConfig::for_region(LoginRegion::HK)).unwrap()
-    }
-
-    // -------------------------------------------------------------------------
-    // ensure_tw
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn ensure_tw_accepts_tw_client() {
-        assert!(ensure_tw(&tw_client()).is_ok());
-    }
-
-    #[test]
-    fn ensure_tw_rejects_hk_client_with_typed_error() {
-        assert!(matches!(
-            ensure_tw(&hk_client()).unwrap_err(),
-            LoginError::VerifyUnsupportedRegion
-        ));
     }
 
     // -------------------------------------------------------------------------
@@ -569,6 +550,40 @@ mod tests {
         assert_eq!(
             url,
             "https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx"
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Region invariance: HK clients ALSO route to the TW newlogin host
+    // -------------------------------------------------------------------------
+
+    /// Both URL helpers resolve to `tw.newlogin.beanfun.com` even when
+    /// the calling client is configured for HK. This locks in the
+    /// guarantee that powers our 1:1 alignment with WPF's
+    /// region-agnostic verify endpoints (`Verify.cs` L23-25 / L43-45 /
+    /// L90-92), and depends on the existing
+    /// [`super::Endpoints::hk()`] invariant that
+    /// `newlogin_base = TW`.
+    ///
+    /// If a future change moves HK's `newlogin_base` to a per-region
+    /// host, this test will fire first — exactly the place to reason
+    /// about whether verify needs an explicit override.
+    #[test]
+    fn url_helpers_target_tw_newlogin_host_even_for_hk_client() {
+        let hk = hk_client();
+
+        let default_url = build_default_advance_check_url(&hk).unwrap();
+        assert_eq!(
+            default_url, "https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx",
+            "HK client must still route AdvanceCheck.aspx GET to TW newlogin host"
+        );
+
+        let captcha_url = build_captcha_url(&hk, "VCID_HK_test").unwrap();
+        assert!(
+            captcha_url
+                .as_str()
+                .starts_with("https://tw.newlogin.beanfun.com/LoginCheck/BotDetectCaptcha.ashx?"),
+            "HK client must still route BotDetectCaptcha.ashx GET to TW newlogin host, got: {captcha_url}"
         );
     }
 

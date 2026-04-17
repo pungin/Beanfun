@@ -17,7 +17,7 @@
 //! | Scenario                                                      | Outcome                                                                  |
 //! |---------------------------------------------------------------|--------------------------------------------------------------------------|
 //! | TW happy path (3 calls in order)                              | success [`VerifyOutcome::Success`]                                       |
-//! | HK region rejection × 3 fns                                   | [`LoginError::VerifyUnsupportedRegion`] before any HTTP traffic          |
+//! | HK happy path (3 calls in order, same TW newlogin host)       | success [`VerifyOutcome::Success`] — 1:1 with WPF region-agnostic flow   |
 //! | get_verify_page_info uses passed advance_check_url            | wiremock receives GET on the explicit URL                                |
 //! | get_verify_page_info falls back to default URL when None      | wiremock receives GET on `LoginCheck/AdvanceCheck.aspx`                  |
 //! | get_verify_page_info HTML alert short-circuits                | [`LoginError::ServerMessage`]                                            |
@@ -41,27 +41,27 @@ use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 // Fixture builders
 // -----------------------------------------------------------------------------
 
-/// Build a [`BeanfunClient`] whose `newlogin_base` (and the other
-/// two bases, harmlessly) point at `server`. Region defaults to TW
-/// because verify is TW-only by design; HK tests construct their
-/// client separately to exercise the `VerifyUnsupportedRegion`
-/// guard.
-fn tw_client_for(server: &MockServer) -> BeanfunClient {
+/// Build a [`BeanfunClient`] in `region` whose `newlogin_base`
+/// (and the other two bases, harmlessly) point at `server`. Both
+/// regions are valid callers of the verify flow — verify is
+/// region-agnostic by design (matches WPF `Verify.cs` L23-25 /
+/// L43-45 / L90-92 which hardcodes the TW newlogin host
+/// regardless of region).
+fn client_for(server: &MockServer, region: LoginRegion) -> BeanfunClient {
     let base = Url::parse(&format!("{}/", server.uri())).expect("mock URL parses");
     let endpoints = Endpoints {
         login_base: base.clone(),
         portal_base: base.clone(),
         newlogin_base: base,
     };
-    let mut cfg = ClientConfig::for_region(LoginRegion::TW);
+    let mut cfg = ClientConfig::for_region(region);
     cfg.endpoints = endpoints;
     BeanfunClient::new(cfg).expect("client builds")
 }
 
-/// HK client backed by no real server — verifies that the
-/// region guard short-circuits **before** any HTTP traffic.
-fn hk_client_no_server() -> BeanfunClient {
-    BeanfunClient::new(ClientConfig::for_region(LoginRegion::HK)).expect("client builds")
+/// Convenience for the TW-only tests that don't need to swap region.
+fn tw_client_for(server: &MockServer) -> BeanfunClient {
+    client_for(server, LoginRegion::TW)
 }
 
 /// AdvanceCheck.aspx HTML with every required field present plus a
@@ -150,36 +150,49 @@ async fn tw_happy_path_get_page_then_captcha_then_submit_success() {
 }
 
 // -----------------------------------------------------------------------------
-// Group B — HK region guard (no HTTP traffic at all)
+// Group B — HK region parity (verify is region-agnostic, matches WPF)
 // -----------------------------------------------------------------------------
 
+/// HK clients run the **same** 3-call flow as TW clients.
+///
+/// WPF `BeanfunClient.Verify.cs` L23-25 / L43-45 / L90-92 all
+/// hardcode `tw.newlogin.beanfun.com` regardless of region. HK
+/// regular / TOTP login paths legitimately raise `LoginAdvanceCheck`
+/// when the server returns `RELOAD_CAPTCHA_CODE` + `alert`
+/// (`BeanfunClient.Login.cs` L249 / L361), so HK reaching this flow
+/// is a server-supported recovery path — not a dead branch.
+///
+/// This test wires an HK client at the same wiremock server (which
+/// stands in for `tw.newlogin.beanfun.com`) and confirms the flow
+/// completes identically to the TW happy path. The transport-level
+/// "is HK session cookie accepted by TW host" question is decided by
+/// the production server; if the answer is "no", the HTML returned
+/// will lack the expected hidden fields and we will instead surface
+/// a `LoginError::VerifyMissing*` typed error — which is the same
+/// outcome WPF would observe for the same failure mode.
 #[tokio::test]
-async fn hk_get_verify_page_info_returns_unsupported_region() {
-    let client = hk_client_no_server();
-    let err = get_verify_page_info(&client, None).await.unwrap_err();
-    assert!(matches!(err, LoginError::VerifyUnsupportedRegion));
-}
+async fn hk_happy_path_runs_full_flow_via_tw_newlogin_routing() {
+    let server = MockServer::start().await;
+    let client = client_for(&server, LoginRegion::HK);
 
-#[tokio::test]
-async fn hk_get_verify_captcha_returns_unsupported_region() {
-    let client = hk_client_no_server();
-    let err = get_verify_captcha(&client, "VCID_x").await.unwrap_err();
-    assert!(matches!(err, LoginError::VerifyUnsupportedRegion));
-}
+    mount_advance_check_get(&server, &full_verify_page_html()).await;
+    mount_captcha(&server, fake_captcha_bytes()).await;
+    mount_advance_check_post(&server, "<script>alert('資料已驗證成功');</script>").await;
 
-#[tokio::test]
-async fn hk_submit_verify_returns_unsupported_region() {
-    let client = hk_client_no_server();
-    let info = VerifyPageInfo {
-        viewstate: "x".into(),
-        viewstate_generator: None,
-        event_validation: "x".into(),
-        samplecaptcha: "x".into(),
-        lbl_auth_type: "x".into(),
-        form_action: "https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx".into(),
-    };
-    let err = submit_verify(&client, &info, "v", "c").await.unwrap_err();
-    assert!(matches!(err, LoginError::VerifyUnsupportedRegion));
+    let info = get_verify_page_info(&client, None)
+        .await
+        .expect("HK page info fetched via TW newlogin host");
+    assert_eq!(info.viewstate, "VS_ITG");
+
+    let bytes = get_verify_captcha(&client, &info.samplecaptcha)
+        .await
+        .expect("HK captcha fetched via TW newlogin host");
+    assert!(bytes.len() >= 500);
+
+    let outcome = submit_verify(&client, &info, "AUTH_CODE_HK", "CAPTCHA_HK")
+        .await
+        .expect("HK submit succeeds via TW newlogin host");
+    assert_eq!(outcome, VerifyOutcome::Success);
 }
 
 // -----------------------------------------------------------------------------
