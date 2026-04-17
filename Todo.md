@@ -559,6 +559,7 @@ c:\Users\mo030\Desktop\Beanfun\
 - **Chunk 5.2**：save → load round-trip 欄位 byte-byte 相同；normalize 補齊短 list 與 WPF `accRecInit` 等價；base64 legacy 觸發 typed error；DPAPI 失敗觸發刪檔行為
 - **Chunk 5.3**：16 個已知 key + default 的 get/set 行為全 OK；`set_value(key, None)` 真的移除該節點；損毀檔案觸發刪除 + 重試一次成功；remaining WPF-written XML fixture 可以 parse
 - **P5 總驗收**：約 33 個 unit tests + 25 個 integration tests 全綠，quality gates 全綠
+- [x] P5 全章節 post-implementation review — 對齊 WPF `AccountManager.cs` / `ModifyRegistry.cs` / `ConfigAppSettings.cs`，整體功能 1:1，找到 3 項 polish 已 commit `bbd5f85`（F2 save 對 registry write failure 比 WPF 嚴格的 deviation doc / F5 `load_records_blocking` 把 NotFound 當 file missing 省 syscall + 防 TOCTOU / F6 `StorageError::AppDataMissing` variant 與 `ConfigError::AppDataMissing` 對齊 API shape）
 
 ### P6 — Rust `core/legacy` BinaryFormatter parser
 

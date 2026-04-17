@@ -29,6 +29,13 @@
 //!   (`Beanfun/Helper/AccountManager.cs` L226-229). The remaining
 //!   variants surface only the errors that callers can meaningfully
 //!   react to.
+//! - [`StorageError::AppDataMissing`] mirrors the sibling
+//!   [`ConfigError::AppDataMissing`][cfg-appdata] — both
+//!   `%APPDATA%`-resolving path helpers share a typed variant for
+//!   the env-var-unset case so UI code can treat the failure
+//!   uniformly regardless of which on-disk artifact it was after.
+//!
+//! [cfg-appdata]: crate::services::config::ConfigError::AppDataMissing
 
 use thiserror::Error;
 
@@ -71,6 +78,19 @@ pub enum StorageError {
     /// so caller logs can pinpoint the failure surface.
     #[error("storage I/O error: {0}")]
     Io(#[source] std::io::Error),
+
+    /// `%APPDATA%` environment variable is unset or empty, so the
+    /// default `Users.dat` path cannot be resolved. Should never
+    /// happen on a normal Windows session; typically only triggers
+    /// inside unusual sandbox contexts.
+    ///
+    /// Mirrors [`ConfigError::AppDataMissing`][cfg-appdata] so both
+    /// `default_*_path` helpers in this crate have the same typed
+    /// surface for the env-var-unset case.
+    ///
+    /// [cfg-appdata]: crate::services::config::ConfigError::AppDataMissing
+    #[error("APPDATA environment variable is missing or empty")]
+    AppDataMissing,
 
     /// JSON serialization (save) or deserialization (parse / import)
     /// failed. `parse_records` and `import_records` propagate this for

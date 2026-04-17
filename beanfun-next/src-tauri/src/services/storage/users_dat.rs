@@ -29,6 +29,22 @@
 //!
 //! Steps 3-5 run inside `tokio::task::spawn_blocking`.
 //!
+//! ## Deviation from WPF — strict registry-write handling
+//!
+//! WPF `writeRawData` ignores the `bool` return value of
+//! `ModifyRegistry.Write("Entropy", entropy)`: if the registry write
+//! fails, it still goes on to write the DPAPI ciphertext with an
+//! entropy that was never persisted, so the next load cannot
+//! decrypt and the file gets deleted on first read — silent data
+//! loss.
+//!
+//! We `?`-propagate registry failure as [`StorageError::Registry`]
+//! before touching the ciphertext file, so a registry-write error
+//! surfaces loudly and the existing `Users.dat` (and its still-
+//! valid previous entropy) are left intact. This is a corrected
+//! port rather than a behaviour change — WPF callers that hit this
+//! code path would have lost data regardless.
+//!
 //! # Load flow ([`load_records`])
 //!
 //! WPF `readRawData` (lines 215-229) wraps DPAPI / registry / UTF-8
@@ -345,17 +361,17 @@ pub fn export_records(records: &Records) -> Result<String, StorageError> {
 /// `AccountManager` uses (`SpecialFolder.ApplicationData` →
 /// `Roaming`).
 ///
-/// Returns [`StorageError::Io`] when the `APPDATA` environment
-/// variable is unset (the OS should always set it on a normal
-/// Windows session; this only fails in unusual sandbox contexts).
+/// Returns [`StorageError::AppDataMissing`] when the `APPDATA`
+/// environment variable is unset or empty (the OS should always set
+/// it on a normal Windows session; this only fails in unusual
+/// sandbox contexts). The typed variant is shared with the sibling
+/// [`crate::services::config::default_config_xml_path`] so both
+/// default-path helpers surface env-var failure uniformly.
 #[cfg(target_os = "windows")]
 pub fn default_users_dat_path() -> Result<PathBuf, StorageError> {
-    let appdata = std::env::var_os("APPDATA").ok_or_else(|| {
-        StorageError::Io(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "APPDATA environment variable not set",
-        ))
-    })?;
+    let appdata = std::env::var_os("APPDATA")
+        .filter(|s| !s.is_empty())
+        .ok_or(StorageError::AppDataMissing)?;
     Ok(PathBuf::from(appdata).join("Beanfun").join("Users.dat"))
 }
 
@@ -454,12 +470,19 @@ fn load_records_blocking(
     entropy_subkey: &str,
     entropy_value_name: &str,
 ) -> Result<Records, StorageError> {
-    if !path.exists() {
-        return Ok(Records::default());
-    }
-
+    // Single syscall instead of `path.exists()` + `std::fs::read`:
+    // the separate exists-check is a TOCTOU hazard (file could be
+    // unlinked between the two calls) and `read` already encodes
+    // "file missing" as `ErrorKind::NotFound`. Matches the terminal
+    // state of WPF `readRawData` when `File.Exists` races against
+    // another process deleting `Users.dat` — both settle on "empty
+    // records, no throw" without bothering to delete a file that is
+    // already gone.
     let cipher = match std::fs::read(path) {
         Ok(bytes) => bytes,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Records::default());
+        }
         Err(err) => return Err(StorageError::Io(err)),
     };
 
