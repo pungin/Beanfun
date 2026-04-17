@@ -496,6 +496,8 @@
     >Enter the two-factor authentication code from your app</system:String
   >
   <system:String x:Key="CopyDeeplink">Copy Deeplink</system:String>
+  <system:String x:Key="CopyQRCode">Copy QR Code Image</system:String>
+  <system:String x:Key="EnlargeQRCode">Enlarge QR Code</system:String>
   <system:String x:Key="CopyDeeplinkSuccess">Deeplink copied to clipboard.</system:String>
   <system:String x:Key="CopyDeeplinkNotReady"
     >Deeplink is not ready yet. Please wait for the QR Code to load.</system:String

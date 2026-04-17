@@ -107,6 +107,88 @@
             </Button>
           </DockPanel>
         </TextBlock>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0 5 0 0">
+          <Button
+            x:Name="btn_CopyQR"
+            Width="20"
+            Height="20"
+            Margin="5 0"
+            Cursor="Hand"
+            ToolTip="{DynamicResource CopyQRCode}"
+            Click="CopyQRCode_Click"
+          >
+            <Button.Resources>
+              <Style TargetType="{x:Type Button}">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{x:Null}" />
+                <Setter Property="Template">
+                  <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                      <TextBlock>
+                        <Path
+                          x:Name="Path"
+                          Fill="#848484"
+                          Stretch="Uniform"
+                          Data="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+                        />
+                      </TextBlock>
+                      <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                          <Setter TargetName="Path" Property="Fill" Value="#484848" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                          <Setter TargetName="Path" Property="Fill" Value="#3AC3F7" />
+                        </Trigger>
+                      </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                  </Setter.Value>
+                </Setter>
+              </Style>
+            </Button.Resources>
+          </Button>
+          <Button
+            x:Name="btn_EnlargeQR"
+            Width="20"
+            Height="20"
+            Margin="5 0"
+            Cursor="Hand"
+            ToolTip="{DynamicResource EnlargeQRCode}"
+            Click="EnlargeQRCode_Click"
+          >
+            <Button.Resources>
+              <Style TargetType="{x:Type Button}">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{x:Null}" />
+                <Setter Property="Template">
+                  <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                      <TextBlock>
+                        <Path
+                          x:Name="Path"
+                          Fill="#848484"
+                          Stretch="Uniform"
+                          Data="M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3h-6zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3v6zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42L5.3 17.3 3 15v6h6zm12-6l-2.3 2.3-2.87-2.89-1.42 1.42 2.89 2.87L15 21h6v-6z"
+                        />
+                      </TextBlock>
+                      <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                          <Setter TargetName="Path" Property="Fill" Value="#484848" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                          <Setter TargetName="Path" Property="Fill" Value="#3AC3F7" />
+                        </Trigger>
+                      </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                  </Setter.Value>
+                </Setter>
+              </Style>
+            </Button.Resources>
+          </Button>
+        </StackPanel>
         <Button
           x:Name="btn_CopyDeeplink"
           Content="{DynamicResource CopyDeeplink}"

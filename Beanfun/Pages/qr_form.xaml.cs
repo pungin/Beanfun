@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 
 namespace Beanfun
 {
@@ -84,6 +85,40 @@ namespace Beanfun
         private void btn_StartGame_Click(object sender, RoutedEventArgs e)
         {
             App.MainWnd.runGame();
+        }
+
+        private void CopyQRCode_Click(object sender, RoutedEventArgs e)
+        {
+            if (qr_image.Source is BitmapSource bmp)
+            {
+                try
+                {
+                    Clipboard.SetImage(bmp);
+                }
+                catch { }
+            }
+        }
+
+        private void EnlargeQRCode_Click(object sender, RoutedEventArgs e)
+        {
+            if (qr_image.Source == null)
+                return;
+
+            var wnd = new Window
+            {
+                Title = "QR Code",
+                SizeToContent = SizeToContent.WidthAndHeight,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                ResizeMode = ResizeMode.NoResize,
+                Content = new Image
+                {
+                    Source = qr_image.Source,
+                    Width = 300,
+                    Height = 300,
+                },
+            };
+            wnd.ShowDialog();
         }
     }
 }

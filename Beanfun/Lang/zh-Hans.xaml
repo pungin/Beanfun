@@ -407,6 +407,8 @@
   <system:String x:Key="LoginMode">登入方式</system:String>
   <system:String x:Key="InputTotp">请输入二次验证程序动态密码</system:String>
   <system:String x:Key="CopyDeeplink">复制 Deeplink</system:String>
+  <system:String x:Key="CopyQRCode">复制 QR Code 图片</system:String>
+  <system:String x:Key="EnlargeQRCode">放大 QR Code</system:String>
   <system:String x:Key="CopyDeeplinkSuccess">Deeplink 已复制到剪贴板。</system:String>
   <system:String x:Key="CopyDeeplinkNotReady"
     >Deeplink 尚未取得，请等待二维码加载完成。</system:String
