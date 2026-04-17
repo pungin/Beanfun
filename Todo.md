@@ -409,10 +409,20 @@ c:\Users\mo030\Desktop\Beanfun\
 - **regex 用 `std::sync::OnceLock<Regex>`**：對齊 codebase 既有 convention（`core/parser/*` / `services/beanfun/login/*`），不引入 `once_cell` dep
 
 #### Chunk 4.3 — `services/beanfun/verify.rs`
-- [ ] `get_verify_page_info(client, advance_check_url) -> VerifyPage`：解 `LoginError::AdvanceCheckRequired` 後 caller 走的恢復路徑
-- [ ] `get_verify_captcha(client, sample) -> Vec<u8>`（PNG bytes，UI 層 base64 / data URL）
-- [ ] `submit_verify(client, viewstate, eventvalidation, sample, code, captcha) -> ...`
-- [ ] WPF hardcoded TW domain（HK 沒有 AdvanceCheck）→ region check + typed error
+- [x] `get_verify_page_info(client, advance_check_url) -> VerifyPageInfo`：解 `LoginError::AdvanceCheckRequired` 後 caller 走的恢復路徑（接受 `Option<&str>`，None → 用 newlogin_base 預設 URL）
+- [x] `get_verify_captcha(client, samplecaptcha) -> Vec<u8>`（PNG bytes，UI 層 base64 / data URL；< 500 bytes → `VerifyCaptchaImageTooSmall { actual }`）
+- [x] `submit_verify(client, page_info, verify_code, captcha_code) -> VerifyOutcome`（4 variants：Success / ServerMessage(String) / WrongCaptcha / WrongAuthInfo）
+- [x] WPF hardcoded TW domain（HK 雖會觸發 `LoginAdvanceCheck` errmsg 但 `BeanfunClient.advanceCheckUrl` 只在 TW 設置 + 三個 endpoint 全 hardcode TW host → silent dead path）→ `ensure_tw` 嚴格 region guard，HK 一律 `VerifyUnsupportedRegion`
+- [x] 6 個 typed `LoginError` variants：`VerifyUnsupportedRegion` / `VerifyMissingViewState` / `VerifyMissingEventValidation` / `VerifyMissingSampleCaptcha` / `VerifyMissingLblAuthType` / `VerifyCaptchaImageTooSmall { actual }`
+- [x] Pure helpers + parse / classify 全用 `OnceLock<Regex>` memoized，每個 helper 單獨 SRP，整體覆蓋 18 unit + 15 integration tests
+
+##### Chunk 4.3 設計決議
+- **HK 嚴格拒絕（不對齊 WPF dead path）**：WPF `BeanfunClient.Verify.cs` L23-25 / L43-45 / L90-92 + `MainWindow.xaml.cs::reLoadVerifyPage` L797-803 三處全 hardcode `tw.newlogin.beanfun.com`，但 HK regular / TOTP 路徑（`BeanfunClient.Login.cs` L249 / L361）仍會產生 `LoginAdvanceCheck` errmsg。WPF 的「HK + LoginAdvanceCheck」分支走的是會打 TW host 但 cookie 對不上的 silent dead path（無功能、無 UI 提示）。Rust port 改為早期 typed error `VerifyUnsupportedRegion`，UI 收到此錯誤直接導回登入頁，比 WPF 嚴格但功能等價且避免 silent fail
+- **`advanceCheckUrl` 透過 `LoginError::AdvanceCheckRequired { url: Option<String> }` 傳遞**：WPF 把 `advanceCheckUrl` 放在 `BeanfunClient` instance field，違背我們 stateless `BeanfunClient` 的設計原則。複用既有 `LoginError::AdvanceCheckRequired` 的 `url` 欄位，由 caller（UI）保管並回傳給 `get_verify_page_info(client, Some(&url))`，符合 SRP（service 純函式 + caller 持狀態）
+- **`bounded_bytes` 私有 helper 而非升上 `BeanfunClient`**：captcha 是整個 service surface 唯一回 bytes 的呼叫，升上 client 會誘導誤用。複用 `bounded_text` 的同款 chunk-cap 邏輯但去掉 UTF-8 驗證，私藏在 verify.rs 內部
+- **重用 `extract_viewstate`（DRY）**：parse 直接用 `core::parser::viewstate::extract_viewstate`，再把 `event_validation: Option<None>` → typed `VerifyMissingEventValidation`。WPF 對 viewstate / event_validation 是 strict required、viewstate_generator optional，與既有 helper 的 `Option` 語意一致
+- **`form_action` 解碼順序**：對應 WPF L800-802 的 `Replace("&amp;", "&")` + 顯式 prepend `https://tw.newlogin.beanfun.com/LoginCheck/`，缺 form action 時 fallback 到預設 URL（與 WPF L797 的 `if (regex.IsMatch(...))` 條件等價）
+- **outcome classification 對齊 `verifyWorker_DoWork` L2634-2661**：先 `alert\\('(.*)'\\);` 抓出訊息 → 含 `資料已驗證成功` → `Success`；否則 → `ServerMessage(msg)`。無 alert 再看 `圖形驗證碼輸入錯誤` → `WrongCaptcha` / 否則 → `WrongAuthInfo`
 
 #### Chunk 4.4 — `services/beanfun/account.rs` WebForms 管理 endpoints
 - [ ] `unconnected_game_init_add_account_payload(...)`（含私有 `unconnected_game_init_account_payload` helper）

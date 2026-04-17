@@ -13,6 +13,7 @@
 //! | [`login`]    | Login flows: session-key, TW/HK regular, TOTP, QRCode   |
 //! | [`account`]  | Account list + JSON management (gamezone.ashx)          |
 //! | [`otp`]      | OTP retrieval (5 HTTP + WCDES decrypt)                  |
+//! | [`verify`]   | Advance-check captcha re-auth (3 HTTP, TW only)         |
 //!
 //! # Safety posture
 //!
@@ -34,6 +35,7 @@ pub mod error;
 pub mod login;
 pub mod otp;
 pub mod session;
+pub mod verify;
 
 pub use account::{
     add_service_account, change_service_account_display_name, get_accounts, get_service_contract,
@@ -43,3 +45,6 @@ pub use client::{BeanfunClient, ClientConfig, Endpoints, LoginRegion};
 pub use error::LoginError;
 pub use otp::get_otp;
 pub use session::{Credentials, Session};
+pub use verify::{
+    get_verify_captcha, get_verify_page_info, submit_verify, VerifyOutcome, VerifyPageInfo,
+};

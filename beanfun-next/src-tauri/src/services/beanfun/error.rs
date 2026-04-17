@@ -230,6 +230,68 @@ pub enum LoginError {
     OtpDecryptionFailed { cause: String },
 
     // ---------------------------------------------------------------------
+    // Advance-check verify (`BeanfunClient.Verify.cs`, P4.3)
+    // ---------------------------------------------------------------------
+    /// Caller invoked the advance-check verify flow on a non-TW
+    /// [`super::LoginRegion`].
+    ///
+    /// WPF's verify endpoint (`BeanfunClient.Verify.cs` L23-25 + L90-92,
+    /// `MainWindow.xaml.cs::reLoadVerifyPage` L797-803) hardcodes
+    /// `tw.newlogin.beanfun.com` for both the page-info GET and the
+    /// submit POST, *and* `advanceCheckUrl` is only set by the TW
+    /// account_login branch (`BeanfunClient.Login.cs` L186). HK
+    /// regular / TOTP paths still produce `LoginAdvanceCheck` errmsgs
+    /// (L249, L361) but the resulting verify flow targets a TW host
+    /// against an HK session — a silent dead path.
+    ///
+    /// We surface this typed error to refuse the call early instead
+    /// of replicating the WPF dead-path behaviour. UI is expected to
+    /// fall back to "please re-login" rather than render a verify
+    /// form for HK sessions.
+    #[error("advance-check verify is not supported in the HK region")]
+    VerifyUnsupportedRegion,
+
+    /// WPF `VerifyNoViewstate` (`MainWindow.xaml.cs::reLoadVerifyPage`
+    /// L761) — the AdvanceCheck.aspx HTML did not contain a
+    /// `__VIEWSTATE` hidden field. Either the server returned an
+    /// unexpected page, or our regex no longer matches the current
+    /// markup.
+    #[error("verify page missing __VIEWSTATE")]
+    VerifyMissingViewState,
+
+    /// WPF `VerifyNoEventvalidation` (`reLoadVerifyPage` L776) — the
+    /// AdvanceCheck.aspx HTML did not contain an `__EVENTVALIDATION`
+    /// hidden field. Note `__VIEWSTATEGENERATOR` is **not** required
+    /// (WPF stores it only when present, L766-770) so it doesn't get
+    /// its own variant.
+    #[error("verify page missing __EVENTVALIDATION")]
+    VerifyMissingEventValidation,
+
+    /// WPF `VerifyNoSamplecaptcha` (`reLoadVerifyPage` L784) — the
+    /// AdvanceCheck.aspx HTML did not contain a `LBD_VCID_*` captcha
+    /// id field. The captcha image URL embeds this id as the `t=`
+    /// query parameter.
+    #[error("verify page missing LBD_VCID_* captcha id")]
+    VerifyMissingSampleCaptcha,
+
+    /// WPF `VerifyNoLblAuthType` (`reLoadVerifyPage` L792) — the
+    /// AdvanceCheck.aspx HTML did not contain the `lblAuthType`
+    /// label. WPF surfaces this label inside the verify dialog so
+    /// the user knows whether they're being asked for an email or
+    /// SMS code.
+    #[error("verify page missing lblAuthType label")]
+    VerifyMissingLblAuthType,
+
+    /// WPF `getVerifyCaptcha` L48-52 (`buffer == null || buffer.Length
+    /// < 500`) — the captcha image endpoint returned a body too small
+    /// to be a real PNG. WPF returns `null` and the verify dialog
+    /// renders no image; we surface a typed error so callers can
+    /// distinguish "rate-limited / blocked" from "decode failure".
+    /// `actual` carries the byte count for diagnostics.
+    #[error("verify captcha image too small to be valid (got {actual} bytes, < 500)")]
+    VerifyCaptchaImageTooSmall { actual: usize },
+
+    // ---------------------------------------------------------------------
     // Transport-level errors
     // ---------------------------------------------------------------------
     /// Wrapped `reqwest::Error` — network, TLS, connect, or body-read
