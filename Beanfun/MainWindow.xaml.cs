@@ -683,46 +683,67 @@ namespace Beanfun
         {
             if (!GameList.ContainsKey(App.LoginRegion.ToLower()))
             {
-                List<GameService> gameList = new List<GameService>();
-                WebClient wc = new WebClient();
-
-                string res = Encoding.UTF8.GetString(
-                    wc.DownloadData(
-                        "https://"
-                            + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
-                            + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"
-                    )
-                );
-
-                IniDataParser parser = new IniDataParser();
-                INIData = parser.Parse(res);
-
-                res = Encoding.UTF8.GetString(
-                    wc.DownloadData(
-                        "https://"
-                            + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
-                            + ".beanfun.com/game_zone/"
-                    )
-                );
-                Regex reg = new Regex("Services\\.ServiceList = (.*);");
-                if (reg.IsMatch(res))
+                new Thread(() =>
                 {
-                    string json = reg.Match(res).Groups[1].Value;
-                    bool newJson = new Regex("^\\[(.*)\\]$").IsMatch(json);
-                    if (newJson)
+                    try
                     {
-                        JArray jsons = JArray.Parse(json);
-                        foreach (JObject game in jsons)
-                            AddGameServiceFromJson(gameList, game);
+                        List<GameService> gameList = new List<GameService>();
+                        WebClient wc = new WebClient();
+
+                        string res = Encoding.UTF8.GetString(
+                            wc.DownloadData(
+                                "https://"
+                                    + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
+                                    + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"
+                            )
+                        );
+
+                        IniDataParser parser = new IniDataParser();
+                        var iniData = parser.Parse(res);
+
+                        res = Encoding.UTF8.GetString(
+                            wc.DownloadData(
+                                "https://"
+                                    + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
+                                    + ".beanfun.com/game_zone/"
+                            )
+                        );
+                        Regex reg = new Regex("Services\\.ServiceList = (.*);");
+                        if (reg.IsMatch(res))
+                        {
+                            string json = reg.Match(res).Groups[1].Value;
+                            bool newJson = new Regex("^\\[(.*)\\]$").IsMatch(json);
+                            if (newJson)
+                            {
+                                JArray jsons = JArray.Parse(json);
+                                foreach (JObject game in jsons)
+                                    AddGameServiceFromJson(gameList, game);
+                            }
+                            else
+                            {
+                                JObject o = JObject.Parse(json);
+                                foreach (JObject game in o["Rows"])
+                                    AddGameServiceFromJson(gameList, game);
+                            }
+                        }
+
+                        Dispatcher.Invoke(() =>
+                        {
+                            INIData = iniData;
+                            if (!GameList.ContainsKey(App.LoginRegion.ToLower()))
+                                GameList.Add(App.LoginRegion.ToLower(), gameList);
+                            selectedGameChanged();
+                        });
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        JObject o = JObject.Parse(json);
-                        foreach (JObject game in o["Rows"])
-                            AddGameServiceFromJson(gameList, game);
+                        Console.WriteLine("reLoadGameInfo failed: " + ex.Message);
                     }
-                }
-                GameList.Add(App.LoginRegion.ToLower(), gameList);
+                })
+                {
+                    IsBackground = true,
+                }.Start();
+                return;
             }
 
             selectedGameChanged();
@@ -1366,6 +1387,7 @@ namespace Beanfun
         {
             try
             {
+                loginPage.qr.CloseEnlargeWindow();
                 frame.Content = accountList;
                 btn_Region.Visibility = Visibility.Collapsed;
 
@@ -2169,7 +2191,7 @@ namespace Beanfun
                             try
                             {
                                 Clipboard.SetText(accountList.t_Password.Text);
-                                MessageBox.Show(TryFindResource("GetOtpSuccessAndCopy") as string);
+                                ShowOtpCopiedHint();
                             }
                             catch { }
                         }
@@ -2259,9 +2281,23 @@ namespace Beanfun
                             1
                         )
                     );
+        }
 
-            //if (!this.pingWorker.IsBusy)  this.pingWorker.RunWorkerAsync();
-            //this.pingWorker.RunWorkerAsync();
+        private void ShowOtpCopiedHint()
+        {
+            accountList.toastText.Text =
+                TryFindResource("GetOtpSuccessAndCopy") as string ?? "Copied!";
+            accountList.toastBorder.Visibility = Visibility.Visible;
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2),
+            };
+            timer.Tick += (s, _) =>
+            {
+                timer.Stop();
+                accountList.toastBorder.Visibility = Visibility.Collapsed;
+            };
+            timer.Start();
         }
 
         // Ping to Beanfun website.

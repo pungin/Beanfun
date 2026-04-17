@@ -1,7 +1,9 @@
+using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 
 namespace Beanfun
 {
@@ -84,6 +86,87 @@ namespace Beanfun
         private void btn_StartGame_Click(object sender, RoutedEventArgs e)
         {
             App.MainWnd.runGame();
+        }
+
+        private void CopyQRCode_Click(object sender, RoutedEventArgs e)
+        {
+            if (qr_image.Source is BitmapSource bmp)
+            {
+                try
+                {
+                    var encoder = new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(bmp));
+                    using (var stream = new System.IO.MemoryStream())
+                    {
+                        encoder.Save(stream);
+                        stream.Position = 0;
+                        var bitmap = new System.Drawing.Bitmap(stream);
+                        System.Windows.Forms.Clipboard.SetImage(bitmap);
+                    }
+                    ShowToast(
+                        Application.Current.TryFindResource("CopyQRCodeSuccess") as string
+                            ?? "QR Code copied!"
+                    );
+                }
+                catch
+                {
+                    ShowToast(
+                        Application.Current.TryFindResource("CopyFailed") as string ?? "Copy failed"
+                    );
+                }
+            }
+        }
+
+        private Window _enlargeWnd;
+
+        public void CloseEnlargeWindow()
+        {
+            if (_enlargeWnd != null)
+            {
+                _enlargeWnd.Close();
+                _enlargeWnd = null;
+            }
+        }
+
+        private void EnlargeQRCode_Click(object sender, RoutedEventArgs e)
+        {
+            if (qr_image.Source == null)
+                return;
+
+            CloseEnlargeWindow();
+
+            _enlargeWnd = new Window
+            {
+                Title = "QR Code",
+                Width = 350,
+                Height = 350,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                ResizeMode = ResizeMode.CanResize,
+                Content = new Image
+                {
+                    Source = qr_image.Source,
+                    Stretch = System.Windows.Media.Stretch.Uniform,
+                },
+            };
+            _enlargeWnd.Closed += (s, _) => _enlargeWnd = null;
+            _enlargeWnd.Show();
+        }
+
+        private void ShowToast(string message)
+        {
+            toastText.Text = message;
+            toastBorder.Visibility = Visibility.Visible;
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2),
+            };
+            timer.Tick += (s, _) =>
+            {
+                timer.Stop();
+                toastBorder.Visibility = Visibility.Collapsed;
+            };
+            timer.Start();
         }
     }
 }
