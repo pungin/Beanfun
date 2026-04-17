@@ -1,7 +1,12 @@
 //! Typed error enum for the storage layer.
 //!
-//! Currently scopes to chunks 5.1 (DPAPI + entropy) and 5.2 (Users.dat);
-//! chunk 5.3 (Config.xml) will append further variants below.
+//! Scopes to chunks 5.1 (DPAPI + entropy) and 5.2 (Users.dat). The
+//! Config.xml store landed as a separate module
+//! ([`crate::services::config`]) with its own
+//! [`ConfigError`][cfg-err] enum, keeping the storage / config
+//! concern boundaries clean.
+//!
+//! [cfg-err]: crate::services::config::ConfigError
 //!
 //! # Design
 //!
@@ -61,10 +66,9 @@ pub enum StorageError {
     #[error("entropy value has invalid shape")]
     EntropyShape,
 
-    /// Generic file I/O failure on the `Users.dat` (or, in chunk 5.3,
-    /// `Config.xml`) path — read / write / metadata / `mkdir_p`.
-    /// Distinct from [`Self::Registry`] so caller logs can pinpoint
-    /// the failure surface.
+    /// Generic file I/O failure on the `Users.dat` path — read /
+    /// write / metadata / `mkdir_p`. Distinct from [`Self::Registry`]
+    /// so caller logs can pinpoint the failure surface.
     #[error("storage I/O error: {0}")]
     Io(#[source] std::io::Error),
 

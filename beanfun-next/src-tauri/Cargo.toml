@@ -60,6 +60,7 @@ percent-encoding = "2"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 html-escape = "0.2"
+indexmap = "2"
 
 # Secret handling — zero password / token buffers on drop
 zeroize = { version = "1", features = ["derive"] }

@@ -502,18 +502,37 @@ c:\Users\mo030\Desktop\Beanfun\
 - [x] D-step 13：commit `feat(next): add Users.dat JSON + DPAPI storage (P5 chunk 5.2)`
 
 #### Chunk 5.3 — `services/config/xml.rs`（AppSettings XML 讀寫 + 損毀重建）
-- [ ] D-step 1：新增 `services/config/mod.rs` + `ConfigError` error enum（至少 `Io` / `XmlParse` / `XmlWrite` 3 個 variants）
-- [ ] D-step 2：XML reader — `parse_app_settings(xml: &str) -> Result<HashMap<String, String>, ConfigError>`（quick-xml reader，只處理固定 `<configuration><appSettings><add key value />` schema）
-- [ ] D-step 3：XML writer — `write_app_settings(map: &BTreeMap<String, String>) -> String`（固定 schema，`<?xml version="1.0" encoding="utf-8"?>`、`BTreeMap` 確保 key 排序穩定）
-- [ ] D-step 4：`get_value(path, key)` async / `get_value_or(path, key, default)` async（對齊 WPF `GetValue(key)` / `GetValue(key, def)` 兩個 signature）
-- [ ] D-step 5：`set_value(path, key, value: Option<&str>)` async（`None` = remove key，對齊 WPF `value == null ⇒ Remove`）
-- [ ] D-step 6：損毀重建 — parse / write 失敗 → 刪檔 + 重試**一次**（限一次避免無限遞迴，差異於 WPF 的無限遞迴設計寫進 module doc）
-- [ ] D-step 7：`default_config_xml_path() -> PathBuf` helper
-- [ ] D-step 8：lib re-exports + doc
-- [ ] D-step 9：~10 unit tests（parser / writer / round-trip / schema 未知 element 忽略 / XML escape / missing key default）
-- [ ] D-step 10：~8 integration tests in `tests/config_xml.rs`（missing file 自動建立 / set then get / remove key / 損毀檔案重建 / 16 個已知 key 的 default）
-- [ ] D-step 11：quality gates（fmt / clippy / test / doc 全綠）
-- [ ] D-step 12：commit `feat(next): add AppSettings XML config store (P5 chunk 5.3)`
+
+##### 校準後的設計決議（vs WPF `ConfigAppSettings.cs`）
+
+- **A — Map type 用 `IndexMap`**：保 insertion order 與 .NET `ConfigurationManager` 完全對齊，WPF 寫的 `Config.xml` 讀進來改 value 不打亂順序、新 key append 到尾巴。新增 1 個 dep `indexmap = "2"` 換 byte-byte 相容
+- **B — `get_value` 對齊 WPF catch-all**：`async fn get_value(path, key) -> String`（內部呼 `get_value_or(path, key, "")`）/ `async fn get_value_or(path, key, default) -> String`；任何失敗（Io / XmlParse / UTF-8）→ log warn + 回 default。對齊 WPF L88-91 try/catch 行為
+- **C — `set_value` 用 typed Result（deviation from WPF）**：`async fn set_value(path, key, value: Option<&str>) -> Result<(), ConfigError>`；read 失敗會內聚刪檔重試一次（行為對 user 看起來與 WPF 等價）；write 失敗（disk full / perm denied）surface 為 `Err(ConfigError::Io)` 不像 WPF L60 空 `catch{}` swallow。Module doc 明確標註此 deviation 並記錄理由（WPF 靜默失敗是 anti-pattern，typed error 讓 P10 上層 service 可決定 UX）
+- **D — 損毀重建內聚到 1 次 flow**：WPF L36-61 是 outer try/catch + 遞迴 retry；Rust 內聚到 `set_value` flow 內：file 不存在 → 空 IndexMap；read 或 parse 失敗 → log warn + `std::fs::remove_file`（best-effort）+ 空 IndexMap → 繼續 modify + write。不需要 outer retry counter
+- **E — XML schema 完全對齊 .NET ConfigurationManager**：`<?xml version="1.0" encoding="utf-8"?>` + `<configuration>` → `<appSettings>` → `<add key="..." value="..."/>` (self-closing)；escape `<` `>` `&` `"` `'` 由 quick-xml 處理；read 時忽略 unknown element / attribute；write 時 drop unknown（對齊 .NET 行為）；縮排與行尾用 quick-xml 預設（2-space LF）WPF 仍可讀
+- **F — API 不需要 `_at` 變體**：沒摸 registry，caller 直接傳 `path` 已經夠 test 隔離
+- **G — `ConfigError` 4 個 variant**：`Io(std::io::Error)` / `XmlParse(quick_xml::Error)` / `XmlWrite(quick_xml::Error)` / `AppDataMissing`（Windows-only `default_config_xml_path` 用）
+- **H — Path source**：`std::env::var_os("APPDATA")` + `\Beanfun\Config.xml` 對齊 P5.2 風格不加新 dep；`default_config_xml_path()` Windows-only
+
+##### Crate 依賴
+
+- `indexmap = "2"`（新增）
+- `quick-xml = "0.37"` with `serialize` feature（已有）
+
+##### D-steps
+
+- [x] D-step 1：`services/config/mod.rs` + `ConfigError` 4 variants（`Io` / `XmlParse` / `XmlWrite` / `AppDataMissing`）
+- [x] D-step 2：`Cargo.toml` 加入 `indexmap = "2"`
+- [x] D-step 3：`services/config/xml.rs` `parse_app_settings(xml: &str) -> Result<IndexMap<String, String>, ConfigError>`（quick-xml reader，跳過 unknown element / 容錯 declaration / 嚴格只挑 `<configuration><appSettings><add>` 路徑）
+- [x] D-step 4：`serialize_app_settings(map: &IndexMap<String, String>) -> Result<String, ConfigError>`（quick-xml writer，固定 schema + XML declaration + escape；空 map 走 self-closing `<appSettings/>` 對齊 .NET output）
+- [x] D-step 5：`get_value_or(path, key, default) -> String` async / `get_value(path, key) -> String` async（內部呼 `get_value_or` + ""）— catch-all + log warn 對齊 WPF
+- [x] D-step 6：`set_value(path, key, value: Option<&str>) -> Result<(), ConfigError>` async — `tokio::task::spawn_blocking`：file 不存在 → 空 IndexMap；read 或 parse 失敗 → log warn + `remove_file` + 空 IndexMap；modify map（`IndexMap::insert` 統一處理 Add/Update 保持 slot；`shift_remove` 處理 Remove；no-op 跳過寫檔對齊 WPF L21-25）→ `serialize_app_settings` → mkdir_p parent → `std::fs::write`；write 失敗 surface
+- [x] D-step 7：`default_config_xml_path() -> Result<PathBuf, ConfigError>` Windows-only helper（`%APPDATA%\Beanfun\Config.xml`）
+- [x] D-step 8：`services/config/mod.rs` re-exports（`parse_app_settings` / `serialize_app_settings` / `get_value` / `get_value_or` / `set_value` cross-platform；`default_config_xml_path` Windows-only）+ module doc（含 set_value typed-error deviation 記錄）+ `services/mod.rs` 掛 `pub mod config;`
+- [x] D-step 9：11 unit tests（cross-platform）— `parse_app_settings` 6（WPF fixture / 空 appSettings / unknown element 跳過 / escape `<>&"'` decode / malformed XML / insertion order preserved）+ `serialize_app_settings` 4（empty self-closing wire format / round-trip / escape encode / insertion order）+ `ConfigError` Display 1
+- [x] D-step 10：11 integration tests in `tests/config_xml.rs`（cross-platform）— missing file `get_value` 回 default 且不建檔 / missing file `set_value` 自動建檔 + mkdir_p parent / set then get round-trip / `set_value(key, None)` remove key / `set_value(non_existent_key, None)` no-op 不建檔 / 損毀檔案 `set_value` 內聚刪檔重建成功 / 損毀檔案 `get_value` 回 default 不刪檔 / update existing key 保 insertion order / WPF fixture 透過 `set_value` round-trip / `serialize → parse` arbitrary map 含 escape / `default_config_xml_path` Windows-only 解析
+- [x] D-step 11：quality gates（fmt / clippy `-D warnings` / test `278 lib + 11 config_xml + 13 storage_users_dat + 7 storage_dpapi + 其他 共 447 passed 0 failed` / doc 0 warning 全綠）
+- [x] D-step 12：commit `feat(next): add AppSettings XML config store (P5 chunk 5.3)`
 
 #### Chunk 5.x 設計決議（事前記錄，實作後若有調整再 update）
 

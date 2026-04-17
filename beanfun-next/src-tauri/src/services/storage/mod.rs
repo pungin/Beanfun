@@ -1,6 +1,7 @@
-//! Local secure storage layer — DPAPI, registry entropy, the
-//! `Users.dat` JSON store, and (in chunk 5.3) the `Config.xml`
-//! wrapper.
+//! Local secure storage layer — DPAPI, registry entropy, and the
+//! `Users.dat` JSON store. The `Config.xml` AppSettings store is a
+//! sibling module under [`crate::services::config`] (chunk 5.3) — it
+//! shares no Win32 surface with this layer so the two are kept apart.
 //!
 //! Ports the legacy C# storage surface under `Beanfun/Helper/`:
 //!
@@ -31,8 +32,6 @@
 //! | [`dpapi`]     | `dpapi_protect` / `dpapi_unprotect` — `CurrentUser`-scope API            |
 //! | [`entropy`]   | `Entropy(String)` — 8-char `[A-Z0-9]` DPAPI salt + registry              |
 //! | [`users_dat`] | `Records` / `save_records` / `load_records` / `import` / `export`        |
-//!
-//! Chunk 5.3 (Config.xml) extends this listing.
 
 pub mod entropy;
 pub mod error;

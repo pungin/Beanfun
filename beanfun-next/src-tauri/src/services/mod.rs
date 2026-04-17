@@ -12,4 +12,5 @@
 //! Each service (beanfun, maplestory launcher, …) lives in its own submodule.
 
 pub mod beanfun;
+pub mod config;
 pub mod storage;
