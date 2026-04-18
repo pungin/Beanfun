@@ -19,6 +19,14 @@
  * 4. **Router last.** No reverse dependency on the others; placing it
  *    last keeps a stable mental model ("everything plugins app
  *    services first, then add navigation").
+ * 5. **`installRouterGuards` after `app.use(router)`.** D10 wires
+ *    the `requiresAuth` guard plus the session-expired bridge here
+ *    — needs the auth store (Pinia ready) and the router (just
+ *    installed). Reads the store via `useAuthStore()`; safe to call
+ *    here because Pinia was installed in step 1. Passes the store
+ *    methods as bound functions so the guard layer never imports
+ *    Pinia internals (see `router/index.ts::RouterGuardDeps`
+ *    rationale).
  *
  * # Why no `pinia-plugin-persistedstate` install
  *
@@ -37,7 +45,8 @@ import 'element-plus/dist/index.css'
 
 import App from './App.vue'
 import { createAppI18n, wireI18n } from './i18n'
-import { createAppRouter } from './router'
+import { createAppRouter, installRouterGuards } from './router'
+import { useAuthStore } from './stores/auth'
 
 const app = createApp(App)
 
@@ -52,5 +61,11 @@ app.use(ElementPlus)
 
 const router = createAppRouter()
 app.use(router)
+
+const auth = useAuthStore()
+installRouterGuards(router, {
+  isAuthenticated: () => auth.isLoggedIn,
+  clearSession: () => auth.clearSession(),
+})
 
 app.mount('#app')

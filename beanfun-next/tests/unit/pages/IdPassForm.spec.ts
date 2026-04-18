@@ -388,9 +388,9 @@ describe('IdPassForm', () => {
 
     mockLoginRegular.mockReturnValueOnce(
       err({
-        code: 'auth.verify_required',
+        code: 'auth.advance_check_required',
         message: 'verify required',
-        details: null,
+        details: { url: 'https://tw.beanfun.com/AdvanceCheck.aspx?xyz' },
       }),
     )
 

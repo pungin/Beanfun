@@ -34,6 +34,33 @@
  *   on errors without surfacing any text. We render the same meaning
  *   as localizable strings because an SPA can't ship a bitmap tip
  *   trivially across locales.
+ * - `loginTotp.*` — TOTP challenge form copy (`pages/LoginTotp.vue`):
+ *   page-scoped title and subtitle. WPF `LoginTotp.xaml` renders only
+ *   the single `InputTotp` label (reused as the subtitle source of
+ *   truth in the WPF locale JSON) plus the `Login` / `Cancel` buttons
+ *   that every login child already reuses. We add a dedicated
+ *   `title` because the WPF shell (`MainWindow`) does not show a page
+ *   heading — the surrounding `LoginPage` shell in the SPA has a
+ *   generic "請登入" subline that needs an inline TOTP-specific
+ *   heading to signal the sub-flow. The `back` affordance reuses the
+ *   WPF `Back` key (shared across every login child's top-left link),
+ *   and `errors.auth.invalid_totp` already lives under `errors.auth.*`
+ *   so no form-scoped key is needed for the error toast.
+ * - `loginVerify.*` — AdvanceCheck verify page copy (`pages/VerifyPage.vue`):
+ *   page-scoped title, subtitle, and the post-success toast that
+ *   informs the user the AdvanceCheck cleared and they should
+ *   re-enter credentials (the no-secrets-over-IPC backend policy
+ *   means the SPA can't auto-resume login — see `VerifyPage.vue`
+ *   docblock for the rationale). All field labels / placeholders /
+ *   error toasts (`AuthInfoNeed` / `CaptchaCodeNeed` /
+ *   `YourAuthInfoTip` / `MsgAuthInfoEmpty` / `MsgCaptchaCodeEmpty` /
+ *   `WrongCaptcha` / `WrongAuthInfo` / `LoadCaptchaFailed` /
+ *   `RefreshCaptcha` / `AuthConfirm` / `Remember` / `Back`) reuse
+ *   WPF locale keys verbatim, so no form-scoped duplicates live
+ *   here — only the namespace-level chrome the SPA layout
+ *   introduces (heading + post-success affirmation toast that
+ *   doesn't exist in WPF because `do_Login` re-runs synchronously
+ *   without surfacing a "verify cleared" message).
  * - `loginGamepass.*` — GamePass login form copy (`pages/GamepassForm.vue`):
  *   page-scoped title/subtitle, 4-step progress labels, HK-unsupported
  *   redirect toast, connection-lost fallback, refresh button label,
@@ -64,6 +91,23 @@
  * P12 will extend this as new error codes / pages appear; the
  * `KeysMatch` type guard plus the vitest "all-locales-match" spec
  * ensure no key drifts silently.
+ *
+ * # Static key-usage audit (D9)
+ *
+ * `tests/unit/i18n/key-usage.spec.ts` mechanically enforces two
+ * additional invariants over this module + the WPF locale JSON:
+ *
+ * 1. Every literal `t('some.key')` call site under
+ *    `src/{pages,composables,components,stores}/` resolves to a
+ *    key declared in the canonical zh-TW message tree (catches
+ *    typos at `npm run test` time instead of at live boot).
+ * 2. Every leaf key declared here is consumed somewhere — either
+ *    via a literal `t('...')` call, or via a `DYNAMIC_KEY_CONSUMERS`
+ *    entry in that spec (errors.* via the translator pipeline,
+ *    themePreset.* via the future Settings swatch list, region tile
+ *    hint keys via TILES[i].hintKey). When you delete a banner /
+ *    page that owned a leaf, either remove the key here too, or
+ *    register the new dynamic consumer in the spec.
  */
 
 /**
@@ -93,6 +137,15 @@ const zhTW = {
     unsupportedHK: 'QR 登入僅支援台灣區，已返回登入入口。',
     connectionLost: '無法取得登入狀態，請點選重新整理重試。',
   },
+  loginTotp: {
+    title: '雙重驗證',
+    subtitle: '請輸入驗證器應用程式顯示的 6 位數驗證碼。',
+  },
+  loginVerify: {
+    title: '二次驗證',
+    subtitle: '為了確保帳號安全，請完成以下驗證後重新登入。',
+    success: '二次驗證已完成，請重新輸入帳號密碼登入。',
+  },
   loginGamepass: {
     title: '使用 GamePass 登入',
     subtitle: '請於開啟的視窗中完成 GamePass 登入程序。',
@@ -112,7 +165,7 @@ const zhTW = {
     auth: {
       session_required: '您的登入狀態已失效，請重新登入。',
       totp_required: '請輸入驗證碼以完成登入。',
-      verify_required: '伺服器要求進行二次驗證。',
+      advance_check_required: '伺服器要求進行二次驗證。',
       invalid_totp: '驗證碼錯誤，請重新輸入。',
       not_logged_in: '尚未登入。',
       gamepass_window_already_open: 'GamePass 登入視窗已開啟，請先關閉再重新嘗試。',
@@ -173,6 +226,15 @@ const zhCN = {
     unsupportedHK: 'QR 登录仅支持台湾区，已返回登录入口。',
     connectionLost: '无法获取登录状态，请点选重新加载重试。',
   },
+  loginTotp: {
+    title: '双重验证',
+    subtitle: '请输入验证器应用程序显示的 6 位数验证码。',
+  },
+  loginVerify: {
+    title: '二次验证',
+    subtitle: '为了确保账号安全，请完成以下验证后重新登录。',
+    success: '二次验证已完成，请重新输入账号密码登录。',
+  },
   loginGamepass: {
     title: '使用 GamePass 登录',
     subtitle: '请于开启的窗口中完成 GamePass 登录程序。',
@@ -192,7 +254,7 @@ const zhCN = {
     auth: {
       session_required: '您的登录状态已失效，请重新登录。',
       totp_required: '请输入验证码以完成登录。',
-      verify_required: '服务器要求进行二次验证。',
+      advance_check_required: '服务器要求进行二次验证。',
       invalid_totp: '验证码错误，请重新输入。',
       not_logged_in: '尚未登录。',
       gamepass_window_already_open: 'GamePass 登录窗口已开启，请先关闭再重新尝试。',
@@ -253,6 +315,16 @@ const enUS = {
     unsupportedHK: 'QR login is only available in Taiwan; redirected back to the login entry.',
     connectionLost: 'Unable to reach the login service. Please tap Reload and try again.',
   },
+  loginTotp: {
+    title: 'Two-factor authentication',
+    subtitle: 'Enter the 6-digit code shown in your authenticator app.',
+  },
+  loginVerify: {
+    title: 'Additional verification',
+    subtitle:
+      'To keep your account safe, please complete the verification below and sign in again.',
+    success: 'Verification complete. Please enter your credentials to sign in again.',
+  },
   loginGamepass: {
     title: 'Sign in with GamePass',
     subtitle: 'Please complete the GamePass sign-in flow in the window that opens.',
@@ -273,7 +345,7 @@ const enUS = {
     auth: {
       session_required: 'Your session expired. Please log in again.',
       totp_required: 'Please enter your TOTP code to continue.',
-      verify_required: 'Server requires additional verification.',
+      advance_check_required: 'Server requires additional verification.',
       invalid_totp: 'Invalid TOTP code. Please try again.',
       not_logged_in: 'Not logged in.',
       gamepass_window_already_open:

@@ -127,7 +127,7 @@ export function registerSessionExpiredHandler(handler: SessionExpiredHandler | n
  * `auth.session_required` hook) without throwing. Exported so callers
  * that intentionally use {@link safeInvoke} for branch-on-code
  * dispatch (e.g. the auth store's `loginRegular` flow that swallows
- * `auth.totp_required` / `auth.verify_required` and re-routes the UI)
+ * `auth.totp_required` / `auth.advance_check_required` and re-routes the UI)
  * can still surface *unhandled* errors via the same pipeline as
  * {@link wrapCommand} — without duplicating the ElMessage import or
  * the translator lookup.

@@ -30,13 +30,31 @@
  *
  * `loginRegular` and `loginTotp` are special: certain backend
  * `CommandError::code` values (`auth.totp_required`,
- * `auth.verify_required`) are *not* user-facing failures — they're
- * "the server says we need a second factor". The store catches
+ * `auth.advance_check_required`) are *not* user-facing failures —
+ * they're "the server says we need a second factor". The store catches
  * those codes via {@link safeInvoke}, sets the corresponding
  * pending flag, and **returns `null`** instead of throwing /
  * toasting. Every other error is funneled through
  * {@link surfaceCommandError} so the user sees the same toast they
  * would for any other command failure.
+ *
+ * # Wire-string contract: `auth.advance_check_required`
+ *
+ * The flow-continuation code for the AdvanceCheck (captcha + extra
+ * auth info) branch is the **backend's** `LoginError::AdvanceCheckRequired`
+ * mapping (`commands/error.rs` L393-396 → `"auth.advance_check_required"`).
+ * P10.2 originally exposed it via the `VerifyRequired` constant under
+ * the wrong wire string (`auth.verify_required`), which made the
+ * `pendingVerify` branch silently unreachable in production despite
+ * mock-driven unit tests passing. P12.1 D8 pre-flight retired the bad
+ * spelling and renamed the constant to {@link AdvanceCheckRequired}
+ * to match the backend SSOT byte-for-byte. The error's `details.url`
+ * field carries the TW `AccountLogin resultCode=2` AdvanceCheck URL
+ * (HK paths leave it `null` → backend falls back to the static TW
+ * URL inside `get_verify_page_info`); we capture it on
+ * {@link useAuthStore.advanceCheckUrl} so {@link useAuthStore.getVerifyPageInfo}
+ * can pass it through without `VerifyPage.vue` having to dig into
+ * the raw `CommandError.details` shape.
  */
 
 import { computed, ref } from 'vue'
@@ -63,8 +81,29 @@ import type {
 /** Codes the auth flow swallows instead of toasting. */
 const FLOW_CONTINUATION_CODES = {
   TotpRequired: 'auth.totp_required',
-  VerifyRequired: 'auth.verify_required',
+  AdvanceCheckRequired: 'auth.advance_check_required',
 } as const
+
+/**
+ * Pull the AdvanceCheck URL out of an `auth.advance_check_required`
+ * error's `details` payload.
+ *
+ * Backend shape: `details: { url: string | null }` (see
+ * `commands/error.rs::From<LoginError> for CommandError`,
+ * `LoginError::AdvanceCheckRequired { url } => with_details(json!({ "url": url }))`).
+ * TW `AccountLogin resultCode=2` populates the URL; HK paths leave it
+ * `null` and the backend's `get_verify_page_info` falls back to the
+ * static TW URL.
+ *
+ * Returned `null` on any shape mismatch (defence-in-depth — backend
+ * contract is explicit, but we don't want to hard-fail the flow if
+ * a future backend change drops the field).
+ */
+function readAdvanceCheckUrl(details: unknown): string | null {
+  if (details === null || typeof details !== 'object') return null
+  const url = (details as { url?: unknown }).url
+  return typeof url === 'string' ? url : null
+}
 
 /**
  * Symbolic action ids used by {@link useAuthStore.pendingAction}.
@@ -91,6 +130,26 @@ export const useAuthStore = defineStore('auth', () => {
   const pendingVerify = ref(false)
   const qrChallenge = ref<QrStart | null>(null)
   const pendingAction = ref<AuthAction | null>(null)
+
+  /**
+   * AdvanceCheck URL extracted from the most recent
+   * `auth.advance_check_required` error's `details.url`.
+   *
+   * - TW `AccountLogin resultCode=2` populates this with a session-
+   *   scoped URL.
+   * - HK paths leave it `null`; the backend `get_verify_page_info`
+   *   command falls back to the static TW URL when given `null`,
+   *   matching WPF `BeanfunClient.Verify.cs` L23-25.
+   *
+   * `VerifyPage.vue` passes this straight through to
+   * {@link getVerifyPageInfo}. Cleared on:
+   * - successful login (regular / TOTP / QR / GamePass — anything
+   *   that mints a session implies the AdvanceCheck slot is no
+   *   longer relevant), and
+   * - {@link submitVerify} returning `success`, and
+   * - {@link logout}.
+   */
+  const advanceCheckUrl = ref<string | null>(null)
 
   const isLoggedIn = computed(() => session.value !== null)
 
@@ -140,14 +199,16 @@ export const useAuthStore = defineStore('auth', () => {
         pendingTotp.value = false
         pendingVerify.value = false
         qrChallenge.value = null
+        advanceCheckUrl.value = null
         return result.data
       }
       if (result.error.code === FLOW_CONTINUATION_CODES.TotpRequired) {
         pendingTotp.value = true
         return null
       }
-      if (result.error.code === FLOW_CONTINUATION_CODES.VerifyRequired) {
+      if (result.error.code === FLOW_CONTINUATION_CODES.AdvanceCheckRequired) {
         pendingVerify.value = true
+        advanceCheckUrl.value = readAdvanceCheckUrl(result.error.details)
         return null
       }
       surfaceCommandError(result.error)
@@ -169,11 +230,13 @@ export const useAuthStore = defineStore('auth', () => {
         session.value = result.data
         pendingTotp.value = false
         pendingVerify.value = false
+        advanceCheckUrl.value = null
         return result.data
       }
-      if (result.error.code === FLOW_CONTINUATION_CODES.VerifyRequired) {
+      if (result.error.code === FLOW_CONTINUATION_CODES.AdvanceCheckRequired) {
         pendingTotp.value = false
         pendingVerify.value = true
+        advanceCheckUrl.value = readAdvanceCheckUrl(result.error.details)
         return null
       }
       surfaceCommandError(result.error)
@@ -219,6 +282,7 @@ export const useAuthStore = defineStore('auth', () => {
           qrChallenge.value = null
           pendingTotp.value = false
           pendingVerify.value = false
+          advanceCheckUrl.value = null
         } else if (result.data.status === 'expired') {
           qrChallenge.value = null
         }
@@ -282,6 +346,7 @@ export const useAuthStore = defineStore('auth', () => {
     pendingTotp.value = false
     pendingVerify.value = false
     qrChallenge.value = null
+    advanceCheckUrl.value = null
   }
 
   async function getVerifyPageInfo(advanceCheckUrl: string | null): Promise<VerifyPage> {
@@ -308,18 +373,51 @@ export const useAuthStore = defineStore('auth', () => {
   async function submitVerify(verifyCode: string, captchaCode: string): Promise<VerifySubmit> {
     return withGuard(AUTH_ACTIONS.SubmitVerify, async () => {
       const r = await wrapCommand(commands.submitVerify(verifyCode, captchaCode))
-      if (r.result === 'success') pendingVerify.value = false
+      if (r.result === 'success') {
+        pendingVerify.value = false
+        advanceCheckUrl.value = null
+      }
       return r
     })
+  }
+
+  /**
+   * Wipe every piece of session-derived state without invoking any
+   * backend command.
+   *
+   * Two callers in scope:
+   *
+   * 1. {@link logout} — uses this **after** a successful
+   *    `commands.logout()` round-trip so the local-state-clear
+   *    logic lives in exactly one place (DRY).
+   * 2. The D10 router-level session-expired bridge
+   *    (`router/index.ts::installRouterGuards`) — calls this
+   *    **directly**, skipping the backend round-trip, because
+   *    `auth.session_required` means the server already considers
+   *    the session gone; calling `commands.logout()` would just
+   *    fail with the same code and surface an extra toast.
+   *
+   * Skips the {@link withGuard} slot deliberately: the guard
+   * exists to prevent **concurrent** in-flight actions, but
+   * `clearSession` is a synchronous local mutation that cannot
+   * race with itself or with anything else (Vue reactivity is
+   * single-threaded). Holding the guard slot here would also
+   * deadlock against the session-expired path firing while a
+   * regular action is mid-flight (e.g. `loginRegular` returning
+   * `auth.session_required` from a stale cookie).
+   */
+  function clearSession(): void {
+    session.value = null
+    pendingTotp.value = false
+    pendingVerify.value = false
+    qrChallenge.value = null
+    advanceCheckUrl.value = null
   }
 
   async function logout(): Promise<void> {
     return withGuard(AUTH_ACTIONS.Logout, async () => {
       await wrapCommand(commands.logout())
-      session.value = null
-      pendingTotp.value = false
-      pendingVerify.value = false
-      qrChallenge.value = null
+      clearSession()
     })
   }
 
@@ -329,6 +427,7 @@ export const useAuthStore = defineStore('auth', () => {
     pendingTotp,
     pendingVerify,
     qrChallenge,
+    advanceCheckUrl,
     pendingAction,
 
     loginRegular,
@@ -340,6 +439,7 @@ export const useAuthStore = defineStore('auth', () => {
     getVerifyPageInfo,
     getVerifyCaptcha,
     submitVerify,
+    clearSession,
     logout,
   }
 })
