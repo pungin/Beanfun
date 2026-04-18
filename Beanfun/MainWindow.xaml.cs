@@ -917,8 +917,22 @@ namespace Beanfun
                 frame.Focus();
         }
 
+        private void CloseGamePassBrowser()
+        {
+            foreach (Window wnd in Application.Current.Windows)
+            {
+                if (wnd is GamePassBrowser)
+                {
+                    wnd.Close();
+                    break;
+                }
+            }
+        }
+
         private void btn_Region_Click(object sender, RoutedEventArgs e)
         {
+            loginPage.qr.CloseEnlargeWindow();
+            CloseGamePassBrowser();
             App.LoginRegion = App.LoginRegion == "TW" ? "HK" : "TW";
             ConfigAppSettings.SetValue("loginRegion", App.LoginRegion);
             loginMethodInit();
@@ -1039,6 +1053,8 @@ namespace Beanfun
         {
             if (qrWorker.IsBusy)
                 qrWorker.CancelAsync();
+            loginPage.qr.CloseEnlargeWindow();
+            CloseGamePassBrowser();
             qrCheckLogin.IsEnabled = false;
             btn_Region.IsEnabled = true;
             settingPage.LoginModePanel.Visibility =
@@ -1244,7 +1260,7 @@ namespace Beanfun
                 case "authkeyParseFailed":
                 case "LoginUnknown":
                     msg = TryFindResource(msg) as string;
-                    method = 0;
+                    method = 1;
                     break;
                 case "LoginNoAkey":
                     msg = $"{TryFindResource("LoginNoAkey") as string}({msg})";
@@ -2370,8 +2386,17 @@ namespace Beanfun
         private void qrWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
             btn_Region.IsEnabled = true;
+            if (e.Cancelled)
+                return;
             if (updateQRCodeImage())
+            {
                 qrCheckLogin.IsEnabled = true;
+            }
+            else
+            {
+                App.LoginMethod = (int)LoginMethod.Regular;
+                loginMethodChanged();
+            }
         }
 
         private void qrCheckLogin_Tick(object sender, EventArgs e)
