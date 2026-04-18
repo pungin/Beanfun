@@ -57,6 +57,10 @@ pub use totp::login_totp;
 pub use totp_challenge::TotpChallenge;
 pub use tw_regular::login_tw_regular;
 
+use std::fmt;
+
+use serde::de::{self, Deserializer, Visitor};
+
 use crate::services::beanfun::LoginError;
 
 // -----------------------------------------------------------------------------
@@ -99,4 +103,301 @@ pub(crate) fn apply_json_headers(
         .header(reqwest::header::REFERER, referer)
         .header("X-Requested-With", "XMLHttpRequest")
         .header("RequestVerificationToken", verification_token)
+}
+
+// -----------------------------------------------------------------------------
+// Shared response-parsing helpers
+// -----------------------------------------------------------------------------
+
+/// Upper bound on the body snippet we include in the `tracing::warn!`
+/// emitted by [`parse_step_json`]. Picked at 500 **chars** (not bytes)
+/// so multi-byte CJK responses don't get truncated mid-codepoint.
+const BODY_LOG_PREVIEW_CHARS: usize = 500;
+
+/// Parse a JSON body returned by a login step, emitting a
+/// `tracing::warn!` on failure that includes a bounded body preview.
+///
+/// Centralises the "try to parse, log body on error" pattern used by
+/// every JSON-bodied login step so operators have enough context to
+/// diagnose a server response-shape regression without having to
+/// redeploy a debug build. The full body is **not** logged — we cap
+/// at `BODY_LOG_PREVIEW_CHARS` chars so a mis-routed page-sized
+/// response (e.g. HTML error page) doesn't blow up the log volume.
+///
+/// The input is always already bounded by [`crate::services::beanfun::
+/// BeanfunClient::bounded_text`], so the preview cap is defence in
+/// depth against a future caller that forgets that guard — not a
+/// substitute for it.
+pub(crate) fn parse_step_json<T>(text: &str, step: &str) -> Result<T, LoginError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_json::from_str(text).map_err(|e| {
+        tracing::warn!(
+            step,
+            error = %e,
+            body_preview = %truncate_chars(text, BODY_LOG_PREVIEW_CHARS),
+            "login step JSON parse failed"
+        );
+        LoginError::from(e)
+    })
+}
+
+/// Return a borrowed prefix of `s` up to `max_chars` Unicode scalar
+/// values. Cheap O(max_chars) scan; caller is expected to treat the
+/// return as "at most N characters" — the rest of the string is
+/// silently dropped.
+fn truncate_chars(s: &str, max_chars: usize) -> &str {
+    match s.char_indices().nth(max_chars) {
+        Some((byte_idx, _)) => &s[..byte_idx],
+        None => s,
+    }
+}
+
+/// Serde `deserialize_with` helper mimicking Newtonsoft
+/// `JToken.ToString()` semantics.
+///
+/// # Why this exists (P3 parity fix)
+///
+/// WPF reads the login-response fields `ResultCode` / `Result` /
+/// `ResultMessage` / `ResultData.Captcha` via `JToken.ToString()`,
+/// which silently coerces **any** JSON scalar (string / integer /
+/// float / boolean / null) into its string form:
+///
+/// ```csharp
+/// // BeanfunClient.Login.cs L97-99
+/// string resultCode = loginJson["ResultCode"]?.ToString();
+/// string result     = loginJson["Result"]?.ToString();
+/// string resultMsg  = loginJson["ResultMessage"]?.ToString() ?? "";
+/// ```
+///
+/// Beanfun's production server genuinely returns these fields as
+/// integers in some branches (e.g. `ResultCode: 1` instead of
+/// `ResultCode: "1"`). A strict `#[serde(rename = "ResultCode")]
+/// result_code: Option<String>` on the Rust side therefore blows up
+/// with `invalid type: integer 1, expected a string` — a regression
+/// against WPF that only surfaces against the live server.
+///
+/// Applying `#[serde(deserialize_with = "deserialize_jtoken_to_string")]`
+/// to the same set of fields restores the WPF lenient behaviour for
+/// those specific call sites without weakening strict typing
+/// elsewhere (other Beanfun endpoints use `(int)` / `(string)` casts
+/// in WPF, which mirror strict serde behaviour and therefore do not
+/// need this helper).
+///
+/// # Semantics
+///
+/// | JSON token    | Returned `Option<String>` |
+/// |---------------|---------------------------|
+/// | `"foo"`       | `Some("foo")`             |
+/// | `1` (int)     | `Some("1")`               |
+/// | `-1`          | `Some("-1")`              |
+/// | `1.5` (float) | `Some("1.5")`             |
+/// | `true`        | `Some("True")`  (matches .NET `bool.ToString()`) |
+/// | `false`       | `Some("False")` (matches .NET `bool.ToString()`) |
+/// | `null`        | `None`                    |
+/// | missing key   | `None` (requires `#[serde(default)]` on field) |
+///
+/// Objects and arrays are rejected with a standard serde type-mismatch
+/// error — Newtonsoft's `JToken.ToString()` would return a JSON
+/// substring for those, but no observed Beanfun field returns a
+/// nested value where a scalar is expected, so accepting them here
+/// would only mask a future response-shape regression.
+///
+/// # Placement (SRP)
+///
+/// The helper lives here rather than in `services/beanfun/mod.rs`
+/// because, at the time of writing, only the login flow exercises
+/// the WPF `.ToString()` pattern. Hoisting to a broader module on
+/// first speculative need would violate YAGNI; the second call site
+/// outside `login/` is the promotion trigger.
+pub(super) fn deserialize_jtoken_to_string<'de, D>(de: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct JTokenVisitor;
+
+    impl<'de> Visitor<'de> for JTokenVisitor {
+        type Value = Option<String>;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("a JSON scalar (string, integer, float, boolean, or null)")
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v.to_owned()))
+        }
+
+        fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v))
+        }
+
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v.to_string()))
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v.to_string()))
+        }
+
+        fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v.to_string()))
+        }
+
+        fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            // .NET `bool.ToString()` returns "True" / "False" with the
+            // first letter capitalised — match it verbatim so any
+            // downstream code that compares against those exact
+            // strings continues to work.
+            Ok(Some(if v {
+                "True".to_owned()
+            } else {
+                "False".to_owned()
+            }))
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, d: D) -> Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            d.deserialize_any(JTokenVisitor)
+        }
+    }
+
+    de.deserialize_any(JTokenVisitor)
+}
+
+#[cfg(test)]
+mod helper_tests {
+    use super::*;
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    struct Wrapper {
+        #[serde(default, deserialize_with = "deserialize_jtoken_to_string")]
+        v: Option<String>,
+    }
+
+    fn parse(json: &str) -> Option<String> {
+        serde_json::from_str::<Wrapper>(json).expect("valid JSON").v
+    }
+
+    #[test]
+    fn string_value_passes_through_unchanged() {
+        assert_eq!(parse(r#"{"v":"hello"}"#), Some("hello".to_owned()));
+    }
+
+    #[test]
+    fn positive_integer_coerces_to_string() {
+        // The specific WPF-parity case: Beanfun server returns
+        // `ResultCode: 1` and WPF's `.ToString()` yields "1".
+        assert_eq!(parse(r#"{"v":1}"#), Some("1".to_owned()));
+    }
+
+    #[test]
+    fn negative_integer_coerces_to_string() {
+        assert_eq!(parse(r#"{"v":-1}"#), Some("-1".to_owned()));
+    }
+
+    #[test]
+    fn float_coerces_to_string() {
+        // No observed Beanfun field uses floats, but the coercion
+        // should still succeed rather than reject the payload — this
+        // pins the contract against a future server change.
+        assert_eq!(parse(r#"{"v":1.5}"#), Some("1.5".to_owned()));
+    }
+
+    #[test]
+    fn bool_true_matches_dot_net_capitalisation() {
+        // .NET `true.ToString()` → "True" (capital T).
+        assert_eq!(parse(r#"{"v":true}"#), Some("True".to_owned()));
+    }
+
+    #[test]
+    fn bool_false_matches_dot_net_capitalisation() {
+        assert_eq!(parse(r#"{"v":false}"#), Some("False".to_owned()));
+    }
+
+    #[test]
+    fn null_becomes_none() {
+        assert_eq!(parse(r#"{"v":null}"#), None);
+    }
+
+    #[test]
+    fn missing_key_becomes_none() {
+        assert_eq!(parse(r#"{}"#), None);
+    }
+
+    #[test]
+    fn object_value_is_rejected() {
+        assert!(serde_json::from_str::<Wrapper>(r#"{"v":{"a":1}}"#).is_err());
+    }
+
+    #[test]
+    fn array_value_is_rejected() {
+        assert!(serde_json::from_str::<Wrapper>(r#"{"v":[1,2]}"#).is_err());
+    }
+
+    #[test]
+    fn truncate_chars_returns_full_str_when_shorter_than_max() {
+        assert_eq!(truncate_chars("hi", 10), "hi");
+    }
+
+    #[test]
+    fn truncate_chars_caps_multibyte_input_without_splitting_codepoint() {
+        // "中文字符" = 4 chars, each 3 bytes → 12 bytes total.
+        // `truncate_chars(_, 2)` must return exactly "中文" (6 bytes,
+        // 2 chars) — not 2 bytes, which would land mid-codepoint.
+        let out = truncate_chars("中文字符", 2);
+        assert_eq!(out, "中文");
+    }
+
+    #[test]
+    fn parse_step_json_surfaces_login_error_on_malformed_body() {
+        // Smoke test that the wrapper returns `LoginError::Json` (via
+        // the `#[from] serde_json::Error` conversion) rather than the
+        // raw serde error. The `tracing::warn!` side-effect is not
+        // asserted — `tracing-test` isn't pulled in as a dev-dep for
+        // this crate; the structured fields are covered by manual
+        // inspection plus the `truncate_chars` tests above.
+        #[derive(Debug, serde::Deserialize)]
+        struct T {
+            #[allow(dead_code)]
+            x: String,
+        }
+        let err = parse_step_json::<T>("not json", "TestStep").unwrap_err();
+        assert!(matches!(err, LoginError::Json(_)));
+    }
 }

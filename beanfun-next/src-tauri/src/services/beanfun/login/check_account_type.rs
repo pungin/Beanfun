@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{apply_json_headers, ensure_success};
+use super::{apply_json_headers, deserialize_jtoken_to_string, ensure_success, parse_step_json};
 use crate::services::beanfun::{BeanfunClient, LoginError};
 
 /// JSON body of the `CheckAccountType` POST.
@@ -40,7 +40,16 @@ struct CheckAccountTypeResponse {
 
 #[derive(Deserialize)]
 struct CheckAccountTypeData {
-    #[serde(rename = "Captcha")]
+    /// WPF reads this via `JToken.ToString() ?? ""` (L77) — the
+    /// server has been observed to send this as either a string or
+    /// a (zero-valued) integer, so we use the shared JToken-style
+    /// coercion helper. See [`deserialize_jtoken_to_string`] for the
+    /// full rationale.
+    #[serde(
+        rename = "Captcha",
+        default,
+        deserialize_with = "deserialize_jtoken_to_string"
+    )]
     captcha: Option<String>,
 }
 
@@ -78,9 +87,51 @@ pub async fn check_account_type(
         return Ok(String::new());
     }
 
-    let parsed: CheckAccountTypeResponse = serde_json::from_str(&text)?;
+    let parsed: CheckAccountTypeResponse = parse_step_json(&text, "CheckAccountType")?;
     Ok(parsed
         .result_data
         .and_then(|d| d.captcha)
         .unwrap_or_default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Reach into the private DTO to assert the JToken coercion
+    /// actually fires for this call site — belt-and-braces on top of
+    /// the helper-level unit tests in `login/mod.rs`.
+    #[test]
+    fn captcha_integer_response_parses_via_jtoken_coercion() {
+        let body = r#"{"ResultData":{"Captcha":0}}"#;
+        let parsed: CheckAccountTypeResponse = serde_json::from_str(body).expect("valid JSON");
+        assert_eq!(
+            parsed.result_data.and_then(|d| d.captcha).as_deref(),
+            Some("0")
+        );
+    }
+
+    #[test]
+    fn captcha_string_response_still_parses() {
+        let body = r#"{"ResultData":{"Captcha":"TOKEN"}}"#;
+        let parsed: CheckAccountTypeResponse = serde_json::from_str(body).expect("valid JSON");
+        assert_eq!(
+            parsed.result_data.and_then(|d| d.captcha).as_deref(),
+            Some("TOKEN")
+        );
+    }
+
+    #[test]
+    fn captcha_null_response_yields_none() {
+        let body = r#"{"ResultData":{"Captcha":null}}"#;
+        let parsed: CheckAccountTypeResponse = serde_json::from_str(body).expect("valid JSON");
+        assert!(parsed.result_data.and_then(|d| d.captcha).is_none());
+    }
+
+    #[test]
+    fn missing_result_data_yields_none() {
+        let body = r#"{"ResultCode":"1"}"#;
+        let parsed: CheckAccountTypeResponse = serde_json::from_str(body).expect("valid JSON");
+        assert!(parsed.result_data.is_none());
+    }
 }

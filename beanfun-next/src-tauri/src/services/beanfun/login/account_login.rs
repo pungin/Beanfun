@@ -32,7 +32,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{apply_json_headers, ensure_success};
+use super::{apply_json_headers, deserialize_jtoken_to_string, ensure_success, parse_step_json};
 use crate::services::beanfun::{BeanfunClient, Credentials, LoginError};
 
 #[derive(Serialize)]
@@ -51,13 +51,31 @@ struct AccountLoginRequest<'a> {
     verification_token: &'a str,
 }
 
+/// Deserialised view of the three response fields WPF reads via
+/// `JToken.ToString()` (L97-99). All three are coerced from whatever
+/// JSON scalar the server sends (string / integer / float / bool)
+/// into `Option<String>` by [`deserialize_jtoken_to_string`] — see
+/// its docblock for the parity rationale and the full scalar → string
+/// coercion table.
 #[derive(Deserialize)]
 struct AccountLoginResponse {
-    #[serde(rename = "ResultCode")]
+    #[serde(
+        rename = "ResultCode",
+        default,
+        deserialize_with = "deserialize_jtoken_to_string"
+    )]
     result_code: Option<String>,
-    #[serde(rename = "Result")]
+    #[serde(
+        rename = "Result",
+        default,
+        deserialize_with = "deserialize_jtoken_to_string"
+    )]
     result: Option<String>,
-    #[serde(rename = "ResultMessage")]
+    #[serde(
+        rename = "ResultMessage",
+        default,
+        deserialize_with = "deserialize_jtoken_to_string"
+    )]
     result_message: Option<String>,
 }
 
@@ -91,7 +109,7 @@ pub async fn account_login(
 
     ensure_success(&resp, "AccountLogin")?;
     let text = client.bounded_text(resp).await?;
-    let parsed: AccountLoginResponse = serde_json::from_str(&text)?;
+    let parsed: AccountLoginResponse = parse_step_json(&text, "AccountLogin")?;
 
     classify_outcome(
         parsed.result_code.as_deref().unwrap_or_default(),
@@ -189,5 +207,58 @@ mod tests {
             classify_outcome("-1", "", "帳號或密碼錯誤".into()),
             Err(LoginError::ServerMessage(m)) if m == "帳號或密碼錯誤"
         );
+    }
+
+    /// WPF-parity regression pin: Beanfun has been observed to return
+    /// `ResultCode` / `Result` as **integers** rather than strings
+    /// (e.g. `"ResultCode": 1` not `"ResultCode": "1"`). Before the
+    /// P3 JToken-parity fix this produced
+    /// `JSON parse error: invalid type: integer '1', expected a
+    /// string`; the coercion helper must let this body through and
+    /// preserve the downstream `classify_outcome` branch.
+    #[test]
+    fn all_integer_response_parses_and_maps_to_success() {
+        let body = r#"{"ResultCode":1,"Result":0,"ResultMessage":"ok"}"#;
+        let parsed: AccountLoginResponse = serde_json::from_str(body).expect("valid JSON");
+        assert_eq!(parsed.result_code.as_deref(), Some("1"));
+        assert_eq!(parsed.result.as_deref(), Some("0"));
+        assert_eq!(parsed.result_message.as_deref(), Some("ok"));
+        // End-to-end sanity: plug into `classify_outcome` the way
+        // `account_login` does at runtime and confirm the
+        // `("1", non-"1")` success branch still matches.
+        assert!(classify_outcome(
+            parsed.result_code.as_deref().unwrap_or_default(),
+            parsed.result.as_deref().unwrap_or_default(),
+            parsed.result_message.unwrap_or_default(),
+        )
+        .is_ok());
+    }
+
+    /// Mixed integer / string shape — verifies each field is coerced
+    /// independently (no "all strings or all integers" assumption in
+    /// the helper).
+    #[test]
+    fn mixed_integer_and_string_fields_all_parse() {
+        let body = r#"{"ResultCode":"2","Result":0,"ResultMessage":"https://verify.example/c"}"#;
+        let parsed: AccountLoginResponse = serde_json::from_str(body).expect("valid JSON");
+        assert_matches!(
+            classify_outcome(
+                parsed.result_code.as_deref().unwrap_or_default(),
+                parsed.result.as_deref().unwrap_or_default(),
+                parsed.result_message.unwrap_or_default(),
+            ),
+            Err(LoginError::AdvanceCheckRequired { url: Some(u) }) if u == "https://verify.example/c"
+        );
+    }
+
+    /// Backwards compatibility: the all-string shape that existed
+    /// before the parity fix must continue to parse unchanged.
+    #[test]
+    fn legacy_all_string_response_still_parses() {
+        let body = r#"{"ResultCode":"1","Result":"0","ResultMessage":""}"#;
+        let parsed: AccountLoginResponse = serde_json::from_str(body).expect("valid JSON");
+        assert_eq!(parsed.result_code.as_deref(), Some("1"));
+        assert_eq!(parsed.result.as_deref(), Some("0"));
+        assert_eq!(parsed.result_message.as_deref(), Some(""));
     }
 }
