@@ -1081,7 +1081,8 @@ Review 發現 6 個問題，依風險高中低切 5 個 R-step 修改 + 1 個 ga
     - `commands/storage.rs` 兩處對 `cfg(not(target_os = "windows"))` gated `platform_unsupported_error` / `cfg(test)` gated `tests::platform_unsupported_code_is_stable` 的 intra-doc link 改 plain code（在 Windows host 跑 cargo doc 兩 item 都不可見，原 link 一定 unresolved）
     - `commands/system.rs` 4 處 `[`crate::services::system::open_url`]` ambiguous（`pub mod open_url; pub use open_url::open_url;` mod 跟 fn 同名）加 `()` disambiguator → `[`crate::services::system::open_url()`]`，並拿掉一個 redundant `[svc]` reference link
   - `bindings.ts` regen：D6-5 已透過 `cargo run --example export_bindings` 真實生成（不再延後到 P11）；後續 P10.3 再無 command 簽名 / DTO 變動，無需再 regen
-- [ ] D-step 9：commit `feat(next): add launcher+storage+config+update+system commands (P10 chunk 10.3)` — 待填 hash；不帶 co-author；**吸取 D15 教訓：禁止擅自 amend**，若要回填 hash 另開 chore commit
+- [x] D-step 9：commit `feat(next): add launcher+storage+config+update+system commands (P10 chunk 10.3)` — `2f28041`；無 co-author；32 files changed, 7474 insertions(+), 151 deletions(-)（13 新檔：`.cargo/config.toml` / `examples/export_bindings.rs` / `commands/{config, launcher, storage, update}.rs` / `services/process/{auto_paste, game}.rs` / `services/system/{mod, error, open_url}.rs` / `windows-app-manifest.xml` / `src/types/bindings.ts`）
+  - ops note：按 P10.2 D15 教訓採「先 commit 不含 Todo hash → 讀 HEAD hash → 另開 chore commit 回填」流程，禁止擅自 amend
 
 ##### 預估
 
