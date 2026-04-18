@@ -125,9 +125,9 @@ describe('locale assets', () => {
 
   it('merges WPF flat keys with frontend-only nested keys', () => {
     expect(i18nMessages['zh-TW']).toHaveProperty('AppName', '繽放')
-    expect(i18nMessages['zh-TW'].placeholder).toHaveProperty('heading')
+    expect(i18nMessages['zh-TW'].loginShell).toHaveProperty('heading')
     expect(i18nMessages['en-US']).toHaveProperty('AppName')
-    expect(i18nMessages['en-US'].placeholder).toHaveProperty('heading')
+    expect(i18nMessages['en-US'].loginShell).toHaveProperty('heading')
   })
 })
 
@@ -135,26 +135,33 @@ describe('createAppI18n', () => {
   it('boots with zh-TW as the default locale and zh-TW messages applied', () => {
     const i18n = createAppI18n()
     expect(i18n.global.locale.value).toBe('zh-TW')
-    expect(i18n.global.t('placeholder.heading')).toBe(i18nMessages['zh-TW'].placeholder.heading)
+    expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['zh-TW'].loginShell.heading)
   })
 
   it('renders zh-CN messages when locale switches', () => {
     const i18n = createAppI18n()
     setLocale(i18n, 'zh-CN')
-    expect(i18n.global.t('placeholder.heading')).toBe(i18nMessages['zh-CN'].placeholder.heading)
+    expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['zh-CN'].loginShell.heading)
   })
 
   it('substitutes positional placeholders ({0}) in WPF-style messages', () => {
+    /*
+     * `GashRemain` is a generated WPF key with a single `{0}` placeholder
+     * (point amount). Picked here because the frontend-only namespace no
+     * longer ships any positional-arg strings post-Placeholder removal,
+     * and this spec must keep proving vue-i18n's WPF-style interpolation
+     * still works on the auto-generated dictionary.
+     */
     const i18n = createAppI18n()
-    const rendered = i18n.global.t('placeholder.versionError', ['boom'])
-    expect(rendered).toContain('boom')
+    const rendered = i18n.global.t('GashRemain', ['1234'])
+    expect(rendered).toContain('1234')
   })
 
   it('setLocale switches the rendered language end-to-end', () => {
     const i18n = createAppI18n()
-    expect(i18n.global.t('placeholder.heading')).toBe(i18nMessages['zh-TW'].placeholder.heading)
+    expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['zh-TW'].loginShell.heading)
     setLocale(i18n, 'en-US')
-    expect(i18n.global.t('placeholder.heading')).toBe(i18nMessages['en-US'].placeholder.heading)
+    expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['en-US'].loginShell.heading)
   })
 })
 

@@ -318,6 +318,91 @@ impl PendingVerify {
     }
 }
 
+/// GamePass-login continuation waiting for the WebView window to
+/// drive its OAuth-style flow to completion.
+///
+/// Stored as `Some(_)` on [`AppState::pending_gamepass`] after a
+/// `login_gamepass_start` call succeeds. The backend holds onto
+/// both the `BeanfunClient` (cookie jar continuity — the GamePass
+/// flow re-uses the same portal session cookies the WebView will
+/// see) and the `skey` (passed to the WebView URL as `pSKey={skey}`
+/// to bind the GamePass login attempt to the correct portal
+/// session) because:
+///
+/// - `skey` is the portal session key; treating it as backend-only
+///   prevents the frontend from having to thread it through every
+///   subsequent open-window / complete IPC, and matches the
+///   `pending_qr` / `pending_totp` "no secrets over IPC" stance
+///   (P10.2 Q4=C).
+/// - `BeanfunClient` carries the cookie jar that the WebView's
+///   pre-injection step will mirror (the WPF reference at
+///   `Beanfun\Windows\GamePassBrowser.xaml.cs` L99-104 copies every
+///   cookie from `bfClient.cookieContainer` into the WebView2
+///   profile before navigating; we mirror that with
+///   `Webview::set_cookie` in P12.1 D5b CP3).
+///
+/// # Lifecycle
+///
+/// ```text
+/// login_gamepass_start(region)
+///   ├─ Reject HK with auth.gamepass_unsupported_region (TW-only;
+///   │   WPF MainWindow.xaml.cs::loginMethodInit hides the GamePass
+///   │   button under HK at L1099-1114).
+///   ├─ clear pending_totp / pending_qr / pending_gamepass
+///   ├─ mint fresh BeanfunClient (TW endpoints)
+///   ├─ get_session_key(client) → skey
+///   ├─ pending_gamepass = Some((client, skey))
+///   └─ Ok(())   (skey stays backend-internal)
+///
+/// open_gamepass_window         (P12.1 D5b CP3)
+///   ├─ read pending_gamepass (clone client + skey)
+///   ├─ build WebviewWindow at login.beanfun.com URL with pSKey
+///   ├─ inject every cookie from client.cookie_store() into the
+///   │   webview cookie store via Webview::set_cookie
+///   ├─ on_navigation hook: every URL change → read
+///   │   webview cookies for the 3 portal domains; if bfWebToken
+///   │   appears, run complete_gamepass_login(..) inline:
+///   │     ├─ Ok(session)  → pending_gamepass = None;
+///   │     │                 set auth = Some((client, session));
+///   │     │                 emit gamepass-login-success { session };
+///   │     │                 close window
+///   │     └─ Err(e)       → pending_gamepass = None;
+///   │                       emit gamepass-login-failed { error };
+///   │                       close window
+///   └─ window-close (no token yet) = user cancel = clear
+///       pending_gamepass; no event emitted
+/// ```
+///
+/// Cancelling a pending GamePass (user closes the WebView before
+/// scanning / approving) is handled by the D7 `logout` command and
+/// the on-close hook above — same single-cleanup-lever stance as
+/// [`PendingTotp`] / [`PendingQr`].
+#[derive(Debug, Clone)]
+pub struct PendingGamepass {
+    /// Same [`BeanfunClient`] that ran the GamePass init — its
+    /// cookie jar is the source of truth for the WebView cookie
+    /// pre-injection step in `open_gamepass_window`. Cloning is
+    /// cheap (Arc-based internals).
+    pub client: BeanfunClient,
+    /// Portal session key returned by
+    /// [`crate::services::beanfun::login::get_session_key`]. The
+    /// WebView URL uses this as the `pSKey` query param so the
+    /// GamePass login attempt binds back to the same portal session
+    /// the cookie jar represents. Clone-friendly (`String`).
+    pub skey: String,
+}
+
+impl PendingGamepass {
+    /// Bundle a client + skey pair ready to be parked on
+    /// [`AppState::pending_gamepass`].
+    pub fn new(client: BeanfunClient, skey: impl Into<String>) -> Self {
+        Self {
+            client,
+            skey: skey.into(),
+        }
+    }
+}
+
 /// Shared application state injected into every Tauri command.
 ///
 /// See the [module-level documentation][self] for the lifecycle and
@@ -381,6 +466,19 @@ pub struct AppState {
     /// coexist with a stale `pending_totp` or `pending_qr`;
     /// `logout` (D7) clears all three in one swoop.
     pub pending_verify: RwLock<Option<PendingVerify>>,
+
+    /// Backend-held GamePass-login continuation — see
+    /// [`PendingGamepass`] for the full lifecycle. `None` whenever
+    /// no GamePass WebView session is active (fresh process /
+    /// post-`logout` / post-complete / user-cancel).
+    ///
+    /// Sibling slot to `pending_totp` / `pending_qr`: the three
+    /// represent the same "half-finished login" concept across
+    /// different flows, and `login_gamepass_start` /
+    /// `login_qr_start` / `login_regular` clear **the others** at
+    /// their top to guarantee at most one continuation is
+    /// outstanding at a time.
+    pub pending_gamepass: RwLock<Option<PendingGamepass>>,
 }
 
 impl AppState {
@@ -398,6 +496,7 @@ impl AppState {
             pending_totp: RwLock::new(None),
             pending_qr: RwLock::new(None),
             pending_verify: RwLock::new(None),
+            pending_gamepass: RwLock::new(None),
         }
     }
 }
@@ -484,9 +583,10 @@ mod tests {
 
     /// `AppState::new` must zero-init every pending slot. Covered
     /// specifically because P10.2 added multiple pending slots
-    /// (D4 added `pending_totp`; D5 added `pending_qr`); keeping a
-    /// separate assertion per slot makes a future slot's absent
-    /// initialization a localized failure.
+    /// (D4 added `pending_totp`; D5 added `pending_qr`; P12.1 D5
+    /// added `pending_gamepass`); keeping a separate assertion per
+    /// slot makes a future slot's absent initialization a
+    /// localized failure.
     #[tokio::test]
     async fn pending_slots_start_as_none() {
         let state = AppState::new(PathBuf::from(r"C:\tmp"));
@@ -502,5 +602,31 @@ mod tests {
             state.pending_verify.read().await.is_none(),
             "pending_verify must be None before any AdvanceCheck flow",
         );
+        assert!(
+            state.pending_gamepass.read().await.is_none(),
+            "pending_gamepass must be None before any GamePass login attempt",
+        );
+    }
+
+    #[tokio::test]
+    async fn pending_gamepass_can_be_populated_then_taken() {
+        let state = AppState::new(PathBuf::from(r"C:\tmp"));
+        let client = BeanfunClient::new(ClientConfig::default()).expect("client builds");
+        let pending = PendingGamepass::new(client, "SKEY_GP_TEST");
+
+        {
+            let mut guard = state.pending_gamepass.write().await;
+            *guard = Some(pending);
+        }
+
+        let taken = {
+            let mut guard = state.pending_gamepass.write().await;
+            guard.take()
+        };
+
+        let pending = taken.expect("populated value returned by take()");
+        assert_eq!(pending.skey, "SKEY_GP_TEST");
+        assert_eq!(pending.client.config().region, LoginRegion::TW);
+        assert!(state.pending_gamepass.read().await.is_none());
     }
 }

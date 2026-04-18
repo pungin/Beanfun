@@ -64,6 +64,7 @@
 //! | `QrInitResultError`                         | `auth.qr_init_result_error`                        | —                                             |
 //! | `QrJsonParseFailed`                         | `auth.qr_json_parse_failed`                        | —                                             |
 //! | `QrUnsupportedRegion`                       | `auth.qr_unsupported_region`                       | —                                             |
+//! | `GamepassUnsupportedRegion`                 | `auth.gamepass_unsupported_region`                 | —                                             |
 //! | `DeviceRegistrationRequired { .. }`         | `auth.device_registration_required`                | `login_token` / `poll_url` / `param`          |
 //! | `DeviceLoginTimeout`                        | `auth.device_login_timeout`                        | —                                             |
 //! | `DeviceLoginRejected`                       | `auth.device_login_rejected`                       | —                                             |
@@ -91,6 +92,32 @@
 //! | `InvalidUrl(..)`                            | `auth.invalid_url`                                 | `url`                                         |
 //! | `InvalidUtf8`                               | `auth.invalid_utf8`                                | —                                             |
 //! | `Unknown(..)`                               | `auth.unknown`                                     | `detail`                                      |
+//!
+//! ## Inline-raised codes — `auth.*`
+//!
+//! Codes raised directly inside [`crate::commands::auth`] command
+//! handlers (not via a [`LoginError`] `From` impl) for precondition
+//! violations the service layer can't express. Listed here so the
+//! frontend i18n catalogue and operator log scrapers have a single
+//! source of truth.
+//!
+//! | Where                                                         | Code                                  | `details` fields | Note                                                                     |
+//! | ------------------------------------------------------------- | ------------------------------------- | ---------------- | ------------------------------------------------------------------------ |
+//! | `open_gamepass_window` — prior WebView still alive            | `auth.gamepass_window_already_open`   | —                | Distinct from `auth.gamepass_not_started` so log attribution stays clean — see [`crate::commands::auth::GAMEPASS_WINDOW_ALREADY_OPEN_CODE`]. |
+//! | `login_gamepass_start` — prior WebView still alive            | `auth.gamepass_window_already_open`   | —                | Same code surfaced from the race-guard on the *other* entry point so the i18n / toast text stays uniform (remediation is identical: close the window). |
+//!
+//! ## Inline-raised codes — `ui.*`
+//!
+//! Codes raised by UI-layer plumbing in [`crate::commands::auth`]
+//! when a Tauri [`tauri::WebviewWindow`] operation fails after the
+//! service layer has already done its work. Distinct namespace
+//! (`ui.*` vs `auth.*`) so the frontend can special-case the two:
+//! `auth.*` is a flow / server error, `ui.*` is a local renderer
+//! fault that usually clears on retry.
+//!
+//! | Where                                                         | Code                                  | `details` fields | Note                                                                     |
+//! | ------------------------------------------------------------- | ------------------------------------- | ---------------- | ------------------------------------------------------------------------ |
+//! | `open_gamepass_window` — `window.navigate(login_url)` failed   | `ui.gamepass_navigate_failed`         | —                | Raised *after* the `about:blank` shell + cookie seed succeed, so the pending slot is cleared and the dangling window is closed before this is returned. |
 //!
 //! ## `StorageError` — `storage.*`
 //!
@@ -390,6 +417,9 @@ impl From<LoginError> for CommandError {
             }
             LoginError::QrUnsupportedRegion => {
                 CommandError::new("auth.qr_unsupported_region", message)
+            }
+            LoginError::GamepassUnsupportedRegion => {
+                CommandError::new("auth.gamepass_unsupported_region", message)
             }
             LoginError::DeviceRegistrationRequired {
                 login_token,
@@ -858,6 +888,18 @@ mod from_impls_tests {
     fn login_missing_session_key_has_no_details() {
         let err: CommandError = LoginError::MissingSessionKey.into();
         assert_eq!(err.code, "auth.missing_session_key");
+        assert!(err.details.is_none());
+    }
+
+    /// P12.1 D5a CP1 wire-string contract: the GamePass region
+    /// guard surfaces a dedicated typed code so the Vue layer can
+    /// localize it differently from the QR sibling. Pin both the
+    /// code and the absence of a `details` blob (no leaked region
+    /// echo / context — same shape as `qr_unsupported_region`).
+    #[test]
+    fn login_gamepass_unsupported_region_has_no_details() {
+        let err: CommandError = LoginError::GamepassUnsupportedRegion.into();
+        assert_eq!(err.code, "auth.gamepass_unsupported_region");
         assert!(err.details.is_none());
     }
 

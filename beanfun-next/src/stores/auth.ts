@@ -45,6 +45,7 @@ import { defineStore } from 'pinia'
 import {
   CommandInvocationError,
   safeInvoke,
+  type SafeResult,
   surfaceCommandError,
   wrapCommand,
 } from '../services/invoke'
@@ -75,6 +76,7 @@ export const AUTH_ACTIONS = {
   LoginTotp: 'login.totp',
   LoginQrStart: 'login.qr_start',
   LoginQrCheck: 'login.qr_check',
+  LoginGamepassStart: 'login.gamepass_start',
   GetVerifyPageInfo: 'verify.page_info',
   GetVerifyCaptcha: 'verify.captcha',
   SubmitVerify: 'verify.submit',
@@ -194,28 +196,92 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * Poll the QR challenge. The store updates `session` to the
-   * approved session payload when `status === 'approved'`, but
-   * always returns the raw {@link QrStatus} so the caller's poll
-   * loop can dispatch on `pending` / `retry` / `expired` /
-   * `approved` directly.
+   * Poll the QR challenge. Returns a {@link SafeResult} so the caller's
+   * poll loop can branch on both success (status dispatch) and failure
+   * (stop polling, show inline error) without try/catch or duplicate
+   * `ElMessage.error` toasts on every tick.
    *
-   * @returns `null` only when the call is rejected by `withGuard`
-   *   (another action in flight) — otherwise the live status.
+   * On `ok: true` with `status === 'approved'` the store also updates
+   * `session` and clears `qrChallenge` / pending flags; on `expired`
+   * it clears `qrChallenge`. Errors are returned untouched — no
+   * console / toast side effects — mirroring WPF
+   * `MainWindow.qrCheckLogin_Tick` (L2358-2359) which silently disables
+   * the timer on any non-zero result instead of surfacing a MessageBox.
+   * The caller is expected to render an inline fallback and let the
+   * user hit "Refresh" (WPF equivalent: the user clicks `btn_Refresh_QRCode`).
    */
-  async function loginQrCheck(): Promise<QrStatus> {
+  async function loginQrCheck(): Promise<SafeResult<QrStatus>> {
     return withGuard(AUTH_ACTIONS.LoginQrCheck, async () => {
-      const status = await wrapCommand(commands.loginQrCheck())
-      if (status.status === 'approved') {
-        session.value = status.session
-        qrChallenge.value = null
-        pendingTotp.value = false
-        pendingVerify.value = false
-      } else if (status.status === 'expired') {
-        qrChallenge.value = null
+      const result = await safeInvoke(commands.loginQrCheck())
+      if (result.ok) {
+        if (result.data.status === 'approved') {
+          session.value = result.data.session
+          qrChallenge.value = null
+          pendingTotp.value = false
+          pendingVerify.value = false
+        } else if (result.data.status === 'expired') {
+          qrChallenge.value = null
+        }
       }
-      return status
+      return result
     })
+  }
+
+  /**
+   * Start a GamePass login. The command stashes a fresh
+   * `BeanfunClient` + portal session key on the backend's
+   * `pending_gamepass` slot; nothing useful comes back across the
+   * IPC boundary (P10.2 Q4=C "no secrets over IPC"), so the action
+   * resolves to `void`.
+   *
+   * The actual WebView window opening + cookie-driven completion
+   * lives in P12.1 D5b CP3 (`open_gamepass_window` cmd + Tauri
+   * `gamepass-login-success` / `gamepass-login-failed` events).
+   * The caller (`GamepassForm`) is expected to advance its UI
+   * progress tracker on resolve / inline-error on reject; errors
+   * follow the same `wrapCommand` → toast path as `loginQrStart`.
+   *
+   * A backend refusal (`auth.gamepass_unsupported_region` — TW only)
+   * is a defence-in-depth line; `GamepassForm` pre-flights on region
+   * before invoking, so this branch is reachable only if a hostile
+   * caller bypasses the UI.
+   */
+  async function loginGamepassStart(region: LoginRegion): Promise<void> {
+    return withGuard(AUTH_ACTIONS.LoginGamepassStart, async () => {
+      await wrapCommand(commands.loginGamepassStart(region))
+    })
+  }
+
+  /**
+   * Install a freshly-minted GamePass session on the store.
+   *
+   * # Why a store action rather than a direct `session.value = info`
+   *
+   * P12.1 D5b CP4 delivers the terminal session via the Tauri
+   * `gamepass-login-success` event (not a command Promise), so the
+   * normal `wrapCommand` → inline-mutation path used by
+   * {@link loginRegular} / {@link loginQrCheck} doesn't apply. This
+   * action replicates the exact 4-field post-success mutation
+   * (`session` + clear `pendingTotp` / `pendingVerify` /
+   * `qrChallenge`) so the GamePass path leaves the store in the
+   * same shape the other login flows do — SRP keeps every session
+   * write inside the store module, DRY avoids duplicating the
+   * clear-pending-flags block in the view layer.
+   *
+   * # Guard semantics
+   *
+   * Intentionally **not** wrapped in {@link withGuard}: the
+   * `LoginGamepassStart` guard released long before this fires
+   * (between `loginGamepassStart` Promise resolve and the
+   * user-driven OAuth round-trip in the WebView), and the event
+   * can arrive at arbitrary later time. Re-entering `withGuard`
+   * would fight the guard slot rather than help.
+   */
+  function applyGamepassSession(info: SessionInfo): void {
+    session.value = info
+    pendingTotp.value = false
+    pendingVerify.value = false
+    qrChallenge.value = null
   }
 
   async function getVerifyPageInfo(advanceCheckUrl: string | null): Promise<VerifyPage> {
@@ -269,6 +335,8 @@ export const useAuthStore = defineStore('auth', () => {
     loginTotp,
     loginQrStart,
     loginQrCheck,
+    loginGamepassStart,
+    applyGamepassSession,
     getVerifyPageInfo,
     getVerifyCaptcha,
     submitVerify,

@@ -127,6 +127,17 @@ pub enum LoginError {
     #[error("QR login is not supported in the HK region")]
     QrUnsupportedRegion,
 
+    /// GamePass login is only supported in the TW region. WPF
+    /// `MainWindow.loginMethodInit` (L1099-1114) hides the
+    /// `btn_GamePass` button when `App.LoginRegion == "HK"` (same
+    /// guard that disables `btn_QRCode`), and the GamePass WebView
+    /// hardcodes the TW `login.beanfun.com/GP/GPLoginInfo.aspx` host.
+    /// We surface a dedicated typed error so `login_gamepass_start`
+    /// can refuse the call early before opening any window or
+    /// minting an HTTP client, mirroring the QR sibling above.
+    #[error("GamePass login is not supported in the HK region")]
+    GamepassUnsupportedRegion,
+
     // ---------------------------------------------------------------------
     // Device-registration polling (CheckIsRegisteDevice / bfAPPAutoLogin)
     // ---------------------------------------------------------------------

@@ -22,6 +22,7 @@
 pub mod account_login;
 pub mod check_account_type;
 pub mod completed;
+pub mod gamepass;
 pub mod hk_error;
 pub mod hk_regular;
 pub mod index;
@@ -41,6 +42,9 @@ pub mod tw_regular;
 pub use account_login::account_login;
 pub use check_account_type::check_account_type;
 pub use completed::login_completed;
+pub use gamepass::{
+    inject_webview_cookies, seed_webview_cookies_from_client, try_complete_gamepass_login,
+};
 pub use hk_error::{extract_hk_error_signal, HkErrorSignal};
 pub use hk_regular::login_hk_regular;
 pub use index::{get_login_index, LoginIndex};

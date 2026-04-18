@@ -214,6 +214,178 @@ async loginQrCheck() : Promise<Result<QrStatus, CommandError>> {
 }
 },
 /**
+ * Open a fresh BeanfunClient + portal session key for a GamePass
+ * login attempt and stash both on [`AppState::pending_gamepass`]
+ * so a follow-up `open_gamepass_window` (CP3) can drive the
+ * WebView leg.
+ * 
+ * # Behaviour
+ * 
+ * - **TW only.** Mirrors [`login_qr_start`]: the WPF
+ * `MainWindow.xaml.cs::loginMethodInit` (L1099-1114) hides the
+ * `btn_GamePass` button under HK, and the GamePass WebView path
+ * hardcodes the TW `login.beanfun.com/GP/GPLoginInfo.aspx` host.
+ * Non-TW callers receive `auth.gamepass_unsupported_region`
+ * (mapped from [`LoginError::GamepassUnsupportedRegion`]) before
+ * any HTTP traffic / window allocation.
+ * - **Mints a fresh `BeanfunClient`** (TW endpoints) so the cookie
+ * jar starts empty — exactly mirrors WPF
+ * `gamepass_form.btn_OpenGamePass_Click` L52-53
+ * (`var client = new BeanfunClient(); ... client.GetSessionkey()`),
+ * which throws away any prior `App.MainWnd.bfClient` and starts
+ * over. Cookie continuity from a prior login is intentionally
+ * **not** desirable here: the GamePass leg must look like a
+ * first-time portal visit so the WebView's pre-injected cookies
+ * match the `bfClient`'s view of the world.
+ * - **Returns `()`** because everything the frontend needs is
+ * conveyed by the next event in the flow:
+ * - `open_gamepass_window` (CP3) opens the WebView using the
+ * stashed `skey`,
+ * - `gamepass-login-success` / `gamepass-login-failed` Tauri
+ * events surface the terminal outcome.
+ * Keeping `skey` backend-internal matches the P10.2 Q4=C
+ * "no secrets over IPC" stance shared with `pending_qr` /
+ * `pending_totp`.
+ * 
+ * # Side effects
+ * 
+ * - Clears any prior `pending_totp` / `pending_qr` /
+ * `pending_gamepass` (switching login method invalidates every
+ * half-finished continuation, same stance as [`login_qr_start`]).
+ * - Populates `pending_gamepass = Some((client, skey))` on success
+ * so [`PendingGamepass`] can drive the CP3 WebView leg.
+ * 
+ * # Preconditions
+ * 
+ * - **No live GamePass WebView window.** If a prior
+ * [`open_gamepass_window`] call's window is still alive we
+ * refuse the call with [`GAMEPASS_WINDOW_ALREADY_OPEN_CODE`] —
+ * the same typed error [`open_gamepass_window`] itself uses —
+ * without touching any pending slot or minting a new client.
+ * 
+ * This guards against a subtle race surfaced in live test
+ * 2026-04-18: if a user triggered a second
+ * `login_gamepass_start` while an old GamePass window was still
+ * up, this command would happily wipe `pending_gamepass` and
+ * replace it with a fresh `(client, skey)`. The follow-up
+ * `open_gamepass_window` would then reject with
+ * `auth.gamepass_window_already_open` (correct), **but** the
+ * still-live old window's [`handle_gamepass_window_destroyed`]
+ * hook would misread the fresh pending slot as "user cancelled
+ * this attempt" the moment the user closed the old window,
+ * clearing the new slot and emitting a spurious
+ * `gamepass-login-cancelled` event.
+ * 
+ * Pushing the window check up here forces the user through a
+ * clean "close old → start new" transition — the same invariant
+ * WPF enforces by allocating exactly one `GamePassBrowser` per
+ * click (`gamepass_form.xaml.cs::btn_OpenGamePass_Click`
+ * L37-59).
+ * 
+ * # Region restriction
+ * 
+ * GamePass is **TW-only** — same WPF guard as QR
+ * (`MainWindow.xaml.cs::loginMethodInit` L1099-1114). The region
+ * parameter is kept for symmetry with [`login_regular`] /
+ * [`login_qr_start`], but a non-TW value bubbles up
+ * [`LoginError::GamepassUnsupportedRegion`] (surfaces as
+ * `auth.gamepass_unsupported_region`).
+ * 
+ * # Why the region check happens here, not in a service module
+ * 
+ * `login_gamepass_start` does not call any gamepass-specific
+ * service function (the body is just `BeanfunClient::new` +
+ * [`get_session_key`] + slot stash); the region guard is the only
+ * logic that would justify a thin service wrapper. Inlining it
+ * keeps the `services::beanfun::login::*` modules focused on
+ * per-step HTTP calls (SRP) and avoids a `gamepass_start` shim
+ * whose body would be a single `if`. CP3's
+ * `complete_gamepass_login` will live in
+ * `services/beanfun/login/gamepass.rs` because *that* one really
+ * does drive multiple HTTP round-trips.
+ */
+async loginGamepassStart(region: LoginRegion) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("login_gamepass_start", { region }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Open the GamePass WebView window and wire its page-load / destroy
+ * hooks to the completion workers.
+ * 
+ * # Preconditions
+ * 
+ * Two distinct error codes guard the entry — keep the
+ * distinction so operator logs and the Vue toast pipeline can
+ * attribute the real cause:
+ * 
+ * - [`GAMEPASS_NOT_STARTED_CODE`] (`auth.gamepass_not_started`) —
+ * no [`login_gamepass_start`] preceded this call, so
+ * [`AppState::pending_gamepass`] is empty. Remediation: call
+ * `login_gamepass_start` first.
+ * - [`GAMEPASS_WINDOW_ALREADY_OPEN_CODE`]
+ * (`auth.gamepass_window_already_open`) — a prior
+ * [`tauri::WebviewWindow`] labelled [`GAMEPASS_WINDOW_LABEL`]
+ * is still alive; WPF allocates exactly one `GamePassBrowser`
+ * per login attempt (`gamepass_form.xaml.cs::btn_OpenGamePass_Click`
+ * L37-59) and duplicating would race on the shared
+ * `pending_gamepass` slot. Remediation: close the existing
+ * window before retrying.
+ * 
+ * # Side effects
+ * 
+ * - Creates a single [`tauri::WebviewWindow`] labelled
+ * [`GAMEPASS_WINDOW_LABEL`], navigating to
+ * `https://login.beanfun.com/Login/Index?pSKey={skey}`.
+ * - Injects [`GAMEPASS_AUTOCLICK_JS`] into every page the WebView
+ * loads — harmless on non-GamePass pages (the `querySelector`
+ * returns `null`).
+ * - Attaches an `on_page_load` hook that spawns
+ * [`handle_gamepass_page_load`] onto `tauri::async_runtime::spawn`
+ * for each `PageLoadEvent::Finished` tick.
+ * - Attaches an `on_window_event` hook that spawns
+ * [`handle_gamepass_window_destroyed`] when the window is
+ * destroyed (user cancel or programmatic close after success).
+ * 
+ * # Terminal outcomes
+ * 
+ * Never returned synchronously — the command resolves `Ok(())` as
+ * soon as the WebView window is created. The real terminal outcome
+ * arrives later via the Tauri event bus:
+ * 
+ * - [`GAMEPASS_SUCCESS_EVENT`] with [`SessionInfo`] payload — login
+ * succeeded and [`AppState::auth`] is now populated.
+ * - [`GAMEPASS_CANCELLED_EVENT`] — user closed the window before
+ * completion; `pending_gamepass` cleared.
+ * - [`GAMEPASS_FAILED_EVENT`] with [`CommandError`] payload — all
+ * three harvest URLs failed on a page-load tick (defensive
+ * surface for Tauri runtime regressions).
+ * 
+ * Keeping the `Ok(())` return separate from the success event
+ * mirrors the P10.2 Q5=B split between "command success = flow
+ * started" and "event delivery = flow terminal outcome" already
+ * established by `login_qr_start` / `login_qr_check`.
+ * 
+ * # Why async?
+ * 
+ * Tauri's [`WebviewWindowBuilder::build`] deadlocks on Windows when
+ * called from a synchronous command or event handler (WebView2
+ * issue tracked upstream at wry#583). `async fn` hands the call
+ * off to the tokio executor, which is a different thread from the
+ * WebView2 message pump.
+ */
+async openGamepassWindow() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_gamepass_window") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Fetch the AdvanceCheck.aspx page and park the verify
  * continuation on [`AppState::pending_verify`].
  * 
@@ -307,11 +479,11 @@ async submitVerify(verifyCode: string, captchaCode: string) : Promise<Result<Ver
  * service-level module docs). Errors are logged via `tracing`
  * but **never surfaced to the frontend** — logout is UX-critical
  * and must not appear to fail.
- * - Clears `auth`, `pending_totp`, `pending_qr`, and
- * `pending_verify` unconditionally. After this command returns,
- * every subsequent command that calls `require_auth` / reads a
- * pending slot will surface its typed "not started" /
- * "session_required" error.
+ * - Clears `auth`, `pending_totp`, `pending_qr`,
+ * `pending_verify`, and `pending_gamepass` unconditionally.
+ * After this command returns, every subsequent command that
+ * calls `require_auth` / reads a pending slot will surface its
+ * typed "not started" / "session_required" error.
  * 
  * # Idempotence
  * 

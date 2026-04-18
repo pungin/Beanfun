@@ -18,6 +18,7 @@ vi.mock('../../../src/types/bindings', () => ({
     loginTotp: vi.fn(),
     loginQrStart: vi.fn(),
     loginQrCheck: vi.fn(),
+    loginGamepassStart: vi.fn(),
     getVerifyPageInfo: vi.fn(),
     getVerifyCaptcha: vi.fn(),
     submitVerify: vi.fn(),
@@ -36,6 +37,7 @@ const mockLoginRegular = vi.mocked(commands.loginRegular)
 const mockLoginTotp = vi.mocked(commands.loginTotp)
 const mockLoginQrStart = vi.mocked(commands.loginQrStart)
 const mockLoginQrCheck = vi.mocked(commands.loginQrCheck)
+const mockLoginGamepassStart = vi.mocked(commands.loginGamepassStart)
 const mockSubmitVerify = vi.mocked(commands.submitVerify)
 const mockLogout = vi.mocked(commands.logout)
 
@@ -158,7 +160,7 @@ describe('useAuthStore', () => {
       const approved: QrStatus = { status: 'approved', session: SESSION }
       mockLoginQrCheck.mockReturnValueOnce(ok(approved))
       const status = await auth.loginQrCheck()
-      expect(status).toEqual(approved)
+      expect(status).toEqual({ ok: true, data: approved })
       expect(auth.session).toEqual(SESSION)
       expect(auth.qrChallenge).toBeNull()
     })
@@ -169,7 +171,7 @@ describe('useAuthStore', () => {
       const expired: QrStatus = { status: 'expired' }
       mockLoginQrCheck.mockReturnValueOnce(ok(expired))
       const status = await auth.loginQrCheck()
-      expect(status).toEqual(expired)
+      expect(status).toEqual({ ok: true, data: expired })
       expect(auth.qrChallenge).toBeNull()
       expect(auth.session).toBeNull()
     })
@@ -181,6 +183,64 @@ describe('useAuthStore', () => {
       mockLoginQrCheck.mockReturnValueOnce(ok({ status: 'pending' }))
       await auth.loginQrCheck()
       expect(auth.qrChallenge).toEqual(ch)
+    })
+
+    it('returns the error result without toasting on backend failure', async () => {
+      const auth = useAuthStore()
+      const ch: QrStart = { bitmap_base64: 'x', deeplink: null }
+      auth.qrChallenge = ch
+      const failure = {
+        code: 'beanfun.qr_json_parse_failed',
+        message: 'JSON parse failed',
+        details: null,
+      }
+      const { ElMessage } = await import('element-plus')
+      vi.mocked(ElMessage.error).mockClear()
+      mockLoginQrCheck.mockReturnValueOnce(err(failure))
+      const status = await auth.loginQrCheck()
+      expect(status).toEqual({ ok: false, error: failure })
+      expect(auth.qrChallenge).toEqual(ch)
+      expect(ElMessage.error).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('loginGamepassStart', () => {
+    it('resolves to void on backend ok (no session yet — skey stashed server-side)', async () => {
+      mockLoginGamepassStart.mockReturnValueOnce(ok(null))
+      const auth = useAuthStore()
+      const result = await auth.loginGamepassStart('TW')
+      expect(result).toBeUndefined()
+      expect(auth.session).toBeNull()
+      expect(auth.isLoggedIn).toBe(false)
+      expect(auth.pendingAction).toBeNull()
+    })
+
+    it('throws CommandInvocationError on backend refusal (e.g. HK region guard)', async () => {
+      mockLoginGamepassStart.mockReturnValueOnce(
+        err({
+          code: 'auth.gamepass_unsupported_region',
+          message: 'HK not supported',
+          details: null,
+        }),
+      )
+      const auth = useAuthStore()
+      await expect(auth.loginGamepassStart('HK')).rejects.toBeInstanceOf(CommandInvocationError)
+      expect(auth.pendingAction).toBeNull()
+    })
+
+    it('flags pendingAction during the in-flight call', async () => {
+      let resolve!: (r: Result<null, CommandError>) => void
+      mockLoginGamepassStart.mockReturnValueOnce(
+        new Promise<Result<null, CommandError>>((res) => {
+          resolve = res
+        }),
+      )
+      const auth = useAuthStore()
+      const inFlight = auth.loginGamepassStart('TW')
+      expect(auth.pendingAction).toBe(AUTH_ACTIONS.LoginGamepassStart)
+      resolve({ status: 'ok', data: null })
+      await inFlight
+      expect(auth.pendingAction).toBeNull()
     })
   })
 

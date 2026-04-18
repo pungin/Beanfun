@@ -200,6 +200,30 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         // auth (P10.2 — QR family)
         auth::login_qr_start,
         auth::login_qr_check,
+        // auth (P12.1 D5 — GamePass family)
+        //
+        // Both `login_gamepass_start` and `open_gamepass_window` are
+        // generic over `R: tauri::Runtime` because they take an
+        // `AppHandle<R>` (the former to run a window-alive pre-flight
+        // guard, the latter to build a `WebviewWindow<R>`).
+        // `collect_commands!` forwards generic commands to both
+        // `tauri::generate_handler!` (which strips the turbofish and
+        // re-injects `R` from the surrounding closure) and
+        // `specta::function::collect_functions!` (which expands into
+        // a non-generic inner `fn export(...)`). The specta side
+        // therefore needs a *concrete* runtime in the turbofish —
+        // using the outer `R` trips rustc E0401 (`use of generic
+        // parameter from outer item`).
+        //
+        // TS binding generation is runtime-agnostic — specta only
+        // inspects serialisable argument/return types — so pinning
+        // the specta side to `tauri::Wry` does not leak into the
+        // emitted `bindings.ts` contract; the tauri side retains
+        // the generic `R` so the command still monomorphises
+        // correctly for whichever runtime `build_specta_builder`
+        // is instantiated with (production uses `Wry`).
+        auth::login_gamepass_start::<tauri::Wry>,
+        auth::open_gamepass_window::<tauri::Wry>,
         // auth (P10.2 — verify family)
         auth::get_verify_page_info,
         auth::get_verify_captcha,
@@ -361,6 +385,9 @@ mod bindings_file_tests {
         // --- P10.2 — auth QR family ----------------------------------
         "loginQrStart",
         "loginQrCheck",
+        // --- P12.1 D5 — auth GamePass family -------------------------
+        "loginGamepassStart",
+        "openGamepassWindow",
         // --- P10.2 — auth verify family ------------------------------
         "getVerifyPageInfo",
         "getVerifyCaptcha",
