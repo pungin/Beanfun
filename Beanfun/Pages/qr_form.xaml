@@ -114,6 +114,7 @@
             Height="20"
             Margin="5 0"
             Cursor="Hand"
+            IsEnabled="False"
             ToolTip="{DynamicResource CopyQRCode}"
             Click="CopyQRCode_Click"
           >
@@ -154,6 +155,7 @@
             Height="20"
             Margin="5 0"
             Cursor="Hand"
+            IsEnabled="False"
             ToolTip="{DynamicResource EnlargeQRCode}"
             Click="EnlargeQRCode_Click"
           >

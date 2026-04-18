@@ -78,6 +78,7 @@ namespace Beanfun
         public string game_commandLine = "tw.login.maplestory.beanfun.com 8484 BeanFun %s %s";
         private string otp;
         private BitmapImage qr_default;
+        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(typeof(MainWindow));
         private static readonly System.Windows.Forms.NotifyIcon _trayNotifyIcon =
             new System.Windows.Forms.NotifyIcon
             {
@@ -683,6 +684,8 @@ namespace Beanfun
         {
             if (!GameList.ContainsKey(App.LoginRegion.ToLower()))
             {
+                var capturedRegion = App.LoginRegion.ToLower();
+                string host = capturedRegion == "hk" ? "bfweb.hk" : "tw";
                 new Thread(() =>
                 {
                     try
@@ -692,9 +695,7 @@ namespace Beanfun
 
                         string res = Encoding.UTF8.GetString(
                             wc.DownloadData(
-                                "https://"
-                                    + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
-                                    + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"
+                                $"https://{host}.beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"
                             )
                         );
 
@@ -702,11 +703,7 @@ namespace Beanfun
                         var iniData = parser.Parse(res);
 
                         res = Encoding.UTF8.GetString(
-                            wc.DownloadData(
-                                "https://"
-                                    + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
-                                    + ".beanfun.com/game_zone/"
-                            )
+                            wc.DownloadData($"https://{host}.beanfun.com/game_zone/")
                         );
                         Regex reg = new Regex("Services\\.ServiceList = (.*);");
                         if (reg.IsMatch(res))
@@ -729,19 +726,23 @@ namespace Beanfun
 
                         Dispatcher.Invoke(() =>
                         {
+                            if (App.LoginRegion.ToLower() != capturedRegion)
+                                return;
+
                             INIData = iniData;
-                            if (!GameList.ContainsKey(App.LoginRegion.ToLower()))
-                                GameList.Add(App.LoginRegion.ToLower(), gameList);
+                            if (!GameList.ContainsKey(capturedRegion))
+                                GameList.Add(capturedRegion, gameList);
                             selectedGameChanged();
                         });
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine("reLoadGameInfo failed: " + ex.Message);
+                        log.Error("reLoadGameInfo failed", ex);
                     }
                 })
                 {
                     IsBackground = true,
+                    Name = "reLoadGameInfo",
                 }.Start();
                 return;
             }
@@ -2422,11 +2423,15 @@ namespace Beanfun
             {
                 result = false;
                 loginPage.qr.qr_image.Source = qr_default;
+                loginPage.qr.btn_CopyQR.IsEnabled = false;
+                loginPage.qr.btn_EnlargeQR.IsEnabled = false;
             }
             else
             {
                 result = true;
                 loginPage.qr.qr_image.Source = qrCodeImage;
+                loginPage.qr.btn_CopyQR.IsEnabled = true;
+                loginPage.qr.btn_EnlargeQR.IsEnabled = true;
             }
             loginPage.qr.btn_Refresh_QRCode.IsEnabled = true;
 
