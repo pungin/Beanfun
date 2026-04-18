@@ -5,6 +5,9 @@ using System.Windows.Input;
 
 namespace Beanfun
 {
+    /// <summary>
+    /// LoginTotp.xaml 的交互逻辑
+    /// </summary>
     public partial class LoginTotp : Page
     {
         private TextBox[] _otpBoxes;
