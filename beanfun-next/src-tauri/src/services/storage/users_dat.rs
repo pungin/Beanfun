@@ -116,7 +116,20 @@ use super::{
 /// `region` defaults to `"TW"` and `method` to `0` to match the WPF
 /// `accRecInit` defaults; everything else defaults to its type's
 /// natural zero value.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// # IPC exposure (P10.3 Q7 = A — plaintext passthrough)
+///
+/// Derives [`serde::Serialize`] + [`serde::Deserialize`] +
+/// [`specta::Type`] so the P10.3 storage commands can hand row-
+/// shaped account objects across the IPC boundary verbatim.
+/// `password` crosses the boundary **in plaintext** — matches WPF
+/// which returns the decrypted password to the UI for auto-fill /
+/// launch flows, and the webview shares the app's trust boundary
+/// (same Windows user session, same process tree). Import / export
+/// JSON files likewise contain plaintext (see
+/// [`crate::services::storage::export_records`] / [`import_records`]
+/// module docs for the on-disk JSON caveats).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct Account {
     /// e.g. `"TW"` / `"HK"`. Defaults to `"TW"` per WPF `accRecInit`.
     pub region: String,
@@ -152,7 +165,16 @@ impl Default for Account {
 /// In-memory record store. The on-disk wire format is parallel
 /// columns (see [`WireRecords`]); this struct is the row-shaped
 /// representation that the rest of the app uses.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+///
+/// Derives [`serde::Serialize`] + [`serde::Deserialize`] +
+/// [`specta::Type`] for the P10.3 storage commands — the newtype
+/// around `Vec<Account>` serialises as a plain JSON array, which
+/// is what the frontend + bindings.ts expect. The parallel-
+/// columns disk format (`WireRecords`) remains the **only** shape
+/// ever persisted to `Users.dat` / exported JSON files;
+/// `Records`'s row-shape serialisation only lives inside the IPC
+/// channel (never disk).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct Records(pub Vec<Account>);
 
 // =====================================================================

@@ -7,7 +7,8 @@
 //! to match the production helper's platform scope.
 
 use beanfun_next_lib::services::config::{
-    get_value, get_value_or, parse_app_settings, serialize_app_settings, set_value,
+    get_all_values, get_value, get_value_or, parse_app_settings, serialize_app_settings, set_value,
+    ConfigError,
 };
 use indexmap::IndexMap;
 use pretty_assertions::assert_eq;
@@ -181,6 +182,80 @@ async fn export_then_import_preserves_arbitrary_map() {
     let xml = serialize_app_settings(&map).expect("serialize");
     let parsed = parse_app_settings(&xml).expect("parse");
     assert_eq!(parsed, map);
+}
+
+// ---------------------------------------------------------------------
+// get_all_values — P10.3 D2 addition. Same IO-bearing async surface
+// as `get_value` but returns the full map so the settings page can
+// render the whole `Config.xml` in one round-trip.
+// ---------------------------------------------------------------------
+
+#[tokio::test]
+async fn get_all_values_missing_file_returns_empty_map() {
+    let (_dir, path) = temp_config_path();
+    let map = get_all_values(&path).await.expect("missing file is Ok");
+    assert!(
+        map.is_empty(),
+        "missing file must collapse to empty map, not fail"
+    );
+    assert!(
+        !path.exists(),
+        "get_all_values must not create the file (parity with get_value)"
+    );
+}
+
+#[tokio::test]
+async fn get_all_values_preserves_insertion_order() {
+    let (_dir, path) = temp_config_path();
+    std::fs::write(&path, WPF_FIXTURE).expect("seed WPF fixture");
+    let map = get_all_values(&path)
+        .await
+        .expect("WPF fixture reads as ordered map");
+    let entries: Vec<(&str, &str)> = map.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    // Order must match the on-disk `<add>` sequence — the frontend
+    // settings page relies on this to keep the UI stable across
+    // save / reload cycles.
+    assert_eq!(
+        entries,
+        vec![
+            ("Region", "TW"),
+            ("LastAccount", "user@example.com"),
+            ("AutoLogin", "false"),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn get_all_values_corrupted_xml_surfaces_xml_parse_error() {
+    // Unlike `get_value` (WPF-parity catch-all → ""), `get_all_values`
+    // surfaces typed errors so the command layer can decide whether
+    // to swallow + log (D2 `get_all_config`) or bubble up (future
+    // diagnostics). Corrupted XML is the parse-error signal.
+    let (_dir, path) = temp_config_path();
+    std::fs::write(&path, "<configuration><appSettings><add key=\"a\"")
+        .expect("seed corrupted xml");
+    let err = get_all_values(&path)
+        .await
+        .expect_err("corrupted xml must surface typed error");
+    assert!(matches!(err, ConfigError::XmlParse(_)));
+}
+
+#[tokio::test]
+async fn get_all_values_non_utf8_surfaces_io_error() {
+    let (_dir, path) = temp_config_path();
+    // Write raw bytes that are not valid UTF-8 (`0xFF` is never a
+    // valid UTF-8 start byte). `read_map_blocking` maps this to
+    // `ConfigError::Io(InvalidData)`.
+    std::fs::write(&path, [0xFFu8, 0xFE, 0xFD]).expect("seed non-utf8");
+    let err = get_all_values(&path)
+        .await
+        .expect_err("non-utf8 must surface typed error");
+    match err {
+        ConfigError::Io(io_err) => {
+            assert_eq!(io_err.kind(), std::io::ErrorKind::InvalidData);
+        }
+        other => panic!("expected Io(InvalidData), got {other:?}"),
+    }
 }
 
 #[cfg(target_os = "windows")]

@@ -72,15 +72,41 @@
 //! - **Auto-generated TS types** — `tauri-specta` + `specta-typescript`
 //!   export all command signatures and the [`CommandError`][error::CommandError]
 //!   DTO to `beanfun-next/src/types/bindings.ts` on every debug build
-//!   (P10-Q4 = A, P10.1-Q6/Q8).
+//!   (P10-Q4 = A, P10.1-Q6/Q8). The same builder is also reachable
+//!   through `cargo run --example export_bindings` for out-of-band
+//!   regeneration (added in chunk 10.3 D6 alongside the
+//!   [`crate::default_bindings_path`] helper that funnels every
+//!   regeneration path to the same on-disk target).
+//! - **Platform gating with stable IPC surface** (chunk 10.3) —
+//!   Windows-only commands (every command in [`storage`] plus
+//!   [`launcher::detect_game_path`], [`launcher::list_game_processes`]
+//!   / [`launcher::kill_game_processes`], [`launcher::auto_paste`])
+//!   keep their `#[tauri::command]` signatures **unconditional** so
+//!   `bindings.ts` exposes the same symbol set on every host.
+//!   Non-Windows builds short-circuit the body and surface
+//!   `<domain>.platform_unsupported` ([`storage`], [`launcher`]) —
+//!   this lets `cargo check` on macOS / Linux dev boxes stay green
+//!   without breaking the frontend type contract.
+//! - **Hybrid credential pass-through** (chunk 10.3 Q7 = A) —
+//!   [`storage::load_accounts`] / [`storage::save_account`] /
+//!   [`storage::import_records`] / [`storage::export_records`]
+//!   surface decrypted passwords verbatim across IPC, and
+//!   [`launcher::launch_game`] / [`launcher::auto_paste`] take
+//!   plaintext `account` + `password` parameters. This mirrors the
+//!   WPF flow (single-trust-boundary Windows process) and keeps
+//!   import/export interoperable with legacy `Users.dat` JSON
+//!   exports. The [`storage`] / [`launcher`] module docs
+//!   spell out the rationale; future chunks that introduce a
+//!   secondary unprivileged renderer would re-apply redaction at
+//!   that boundary instead of churning these commands.
 //!
 //! # Chunk layout
 //!
-//! | Chunk | Status   | Focus                                                                                            |
-//! |-------|----------|--------------------------------------------------------------------------------------------------|
-//! | 10.1  | done     | IPC infrastructure + `version` / `ping` smoke                                                    |
-//! | 10.2  | **done** | `auth` (regular / QR / verify / logout) + `account` (base / management / info) + `otp` (this PR) |
-//! | 10.3  | pending  | `launcher` / `storage` / `config` / `update` / `system` (extends 10.1)                            |
+//! | Chunk | Status   | Focus                                                                                                                         |
+//! |-------|----------|-------------------------------------------------------------------------------------------------------------------------------|
+//! | 10.1  | done     | IPC infrastructure + `version` / `ping` smoke                                                                                 |
+//! | 10.2  | done     | `auth` (regular / QR / verify / logout) + `account` (base / management / info) + `otp`                                        |
+//! | 10.3  | **done** | `system::open_url` (D1) + `config` 3-cmd (D2) + `storage` 5-cmd (D3) + `update::check_update` (D4) + `launcher` 6-cmd (D5a~d) |
 //!
 //! [ac]: state::AuthContext
 //! [pt]: state::PendingTotp
@@ -106,12 +132,16 @@
 
 pub mod account;
 pub mod auth;
+pub mod config;
 pub mod dto;
 pub mod error;
+pub mod launcher;
 pub mod otp;
 pub mod session;
 pub mod state;
+pub mod storage;
 pub mod system;
+pub mod update;
 
 use tauri_specta::{collect_commands, Builder};
 
@@ -188,6 +218,30 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         account::get_remain_point,
         // otp (P10.2)
         otp::get_otp,
+        // system (P10.3 — D1 open_url)
+        system::open_url,
+        // config (P10.3 — D2)
+        config::get_config_value,
+        config::get_all_config,
+        config::set_config,
+        // storage (P10.3 — D3)
+        storage::load_accounts,
+        storage::save_account,
+        storage::remove_account,
+        storage::import_records,
+        storage::export_records,
+        // update (P10.3 — D4)
+        update::check_update,
+        // launcher (P10.3 — D5a launch)
+        launcher::launch_game,
+        // launcher (P10.3 — D5b path)
+        launcher::set_game_path,
+        launcher::detect_game_path,
+        // launcher (P10.3 — D5c process)
+        launcher::list_game_processes,
+        launcher::kill_game_processes,
+        // launcher (P10.3 — D5d auto-paste)
+        launcher::auto_paste,
     ])
 }
 
@@ -230,12 +284,17 @@ mod bindings_file_tests {
     //! # Fresh-clone behaviour
     //!
     //! On a brand-new checkout `bindings.ts` legitimately does not
-    //! exist (D8 only regenerates on debug-build *boot*, not on
-    //! `cargo check`). The test treats a missing file as "not yet
-    //! bootstrapped" and passes with a stderr hint instead of
-    //! failing — CI pipelines that care about the contract should
-    //! either commit `bindings.ts` to the repo or run a `cargo tauri
-    //! dev`-style bootstrap step before `cargo test`.
+    //! exist (the production exporter only runs on debug-build
+    //! *boot*, not on `cargo check`). The test treats a missing
+    //! file as "not yet bootstrapped" and passes with a stderr
+    //! hint instead of failing — CI pipelines that care about the
+    //! contract should either commit `bindings.ts` to the repo or
+    //! run a `cargo run --example export_bindings`-style bootstrap
+    //! step before `cargo test`. The example binary
+    //! ([`beanfun_next_lib::default_bindings_path`]) shares the
+    //! target path with the debug-boot exporter and the test, so
+    //! every regeneration path lands in the same canonical
+    //! location by construction.
     //!
     //! [`CommandError`]: super::error::CommandError
     //! [`VersionInfo`]: super::system::VersionInfo
@@ -244,73 +303,169 @@ mod bindings_file_tests {
 
     /// Path to the committed `bindings.ts` the frontend imports from.
     ///
-    /// Resolved at compile time via [`env!`] on `CARGO_MANIFEST_DIR`
-    /// so the test never hard-codes a relative assumption about the
-    /// working directory `cargo test` happens to run from. Mirrors
-    /// the production target computed in
-    /// [`crate::export_specta_bindings`].
+    /// Thin wrapper over [`crate::default_bindings_path`] — the
+    /// single source of truth shared with the debug-boot exporter
+    /// in [`crate::run`] and the
+    /// `beanfun-next/src-tauri/examples/export_bindings.rs`
+    /// standalone regenerate-bindings entry point. Kept as a
+    /// wrapper (rather than inlining
+    /// `crate::default_bindings_path()` at every call site) so this
+    /// test file reads end-to-end without a single external jump
+    /// and so a future change — e.g. falling back to a
+    /// `TEST_BINDINGS_PATH` env var in CI — lands in one place.
     fn bindings_path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("src-tauri always has a parent (the Tauri project root)")
-            .join("src")
-            .join("types")
-            .join("bindings.ts")
+        crate::default_bindings_path()
     }
 
-    /// Symbols the frontend imports from `bindings.ts`. The assertion
-    /// only matches against lines whose first non-whitespace token is
-    /// `export` — full regex would be more targeted but is fragile
-    /// against specta's evolving output formatting (semicolons,
-    /// `export type` vs `export interface`, trailing commas), while a
-    /// bare `contents.contains` matches comments and doc strings that
-    /// legitimately mention a type name without exporting it.
-    const REQUIRED_SYMBOLS: &[&str] = &[
-        // --- commands (P10.1 — system smoke) ------------------------
+    /// Tauri commands the frontend invokes via `commands.<name>(...)`.
+    ///
+    /// # Naming convention
+    ///
+    /// Listed in **camelCase** because that's how `tauri-specta`
+    /// emits the wrapper methods on the
+    /// `export const commands = {...}` const. Rust source uses
+    /// `snake_case` (`#[tauri::command] pub async fn login_regular`)
+    /// and specta auto-converts to camelCase (`async loginRegular`)
+    /// when emitting TS — to match what the frontend actually
+    /// imports, the assertion has to look for the camelCase form.
+    ///
+    /// # Search pattern
+    ///
+    /// Each entry is searched for via `async <name>(` against the
+    /// full file contents — see [`bindings_file_contains_all_symbols`]
+    /// for the rationale (the per-command method definitions live
+    /// inside an `export const commands = {...}` block, so they're
+    /// not on `export`-prefixed lines and need a non-export-only
+    /// search surface; the `async ` prefix narrows the surface
+    /// enough to avoid stray doc-comment matches).
+    ///
+    /// # P10.1 D8 design follow-up
+    ///
+    /// The original `REQUIRED_SYMBOLS` list lumped commands and
+    /// DTOs together and searched for both within `export`-prefixed
+    /// lines only. That worked for the first two commands
+    /// (`version` / `ping` — single-word identities that survive
+    /// the snake↔camel transform unchanged) but broke as soon as
+    /// P10.3 introduced multi-word commands like `login_regular` /
+    /// `open_url`. Splitting the list into commands + DTOs and
+    /// using a dedicated pattern per group is the structural fix:
+    /// each side gets the strictest possible match without false
+    /// positives.
+    const REQUIRED_COMMANDS: &[&str] = &[
+        // --- P10.1 — system smoke ------------------------------------
         "version",
         "ping",
-        // --- commands (P10.2 — auth regular family) -----------------
-        "login_regular",
-        "login_totp",
-        // --- commands (P10.2 — auth QR family) ----------------------
-        "login_qr_start",
-        "login_qr_check",
-        // --- commands (P10.2 — auth verify family) ------------------
-        "get_verify_page_info",
-        "get_verify_captcha",
-        "submit_verify",
-        // --- commands (P10.2 — logout) -------------------------------
+        // --- P10.2 — auth regular family -----------------------------
+        "loginRegular",
+        "loginTotp",
+        // --- P10.2 — auth QR family ----------------------------------
+        "loginQrStart",
+        "loginQrCheck",
+        // --- P10.2 — auth verify family ------------------------------
+        "getVerifyPageInfo",
+        "getVerifyCaptcha",
+        "submitVerify",
+        // --- P10.2 — logout ------------------------------------------
         "logout",
-        // --- commands (P10.2 — account base + management + info) ----
-        "get_accounts",
+        // --- P10.2 — account base + management + info ----------------
+        "getAccounts",
         "refresh",
-        "add_service_account",
-        "change_display_name",
-        "get_contract",
-        "get_email",
-        "get_remain_point",
-        // --- commands (P10.2 — otp) ---------------------------------
-        "get_otp",
-        // --- DTOs (P10.1) -------------------------------------------
+        "addServiceAccount",
+        "changeDisplayName",
+        "getContract",
+        "getEmail",
+        "getRemainPoint",
+        // --- P10.2 — otp ---------------------------------------------
+        "getOtp",
+        // --- P10.3 — D1 system ---------------------------------------
+        "openUrl",
+        // --- P10.3 — D2 config ---------------------------------------
+        "getConfigValue",
+        "getAllConfig",
+        "setConfig",
+        // --- P10.3 — D3 storage --------------------------------------
+        "loadAccounts",
+        "saveAccount",
+        "removeAccount",
+        "importRecords",
+        "exportRecords",
+        // --- P10.3 — D4 update ---------------------------------------
+        "checkUpdate",
+        // --- P10.3 — D5 launcher -------------------------------------
+        "launchGame",
+        "setGamePath",
+        "detectGamePath",
+        "listGameProcesses",
+        "killGameProcesses",
+        "autoPaste",
+    ];
+
+    /// DTO type names the frontend imports from `bindings.ts`.
+    ///
+    /// # Naming convention
+    ///
+    /// Listed in **PascalCase** because that's how Rust struct /
+    /// enum names round-trip through `specta::Type` into TS
+    /// (`export type CommandError = {...}` /
+    /// `export type LoginRegion = "Tw" | "Hk"` etc.).
+    ///
+    /// # Search pattern
+    ///
+    /// Each entry is searched for via `export type <Name>` against
+    /// the file contents — the prefix anchors the match to an
+    /// actual top-level type alias declaration, so a renamed type
+    /// with a leftover `// CommandError ...` doc comment can't
+    /// slip past.
+    ///
+    /// # Notable omissions
+    ///
+    /// - `Records` is a `Vec<Account>` newtype on the Rust side;
+    ///   tauri-specta inlines it as `Account[]` in the emitted TS
+    ///   (no `export type Records = ...` alias is produced) so it
+    ///   intentionally does **not** appear in this list. The
+    ///   `Account` row type carries the meaningful schema for the
+    ///   frontend.
+    /// - `TotpChallengeInfo` derives `specta::Type` but is only
+    ///   ever serialised into [`CommandError`]'s
+    ///   [`details`][crate::commands::error::CommandError::details]
+    ///   field via `serde_json::to_value(...)` — it never appears
+    ///   in a `#[tauri::command]` signature, and `tauri-specta`
+    ///   only emits types reachable from registered command
+    ///   signatures. The frontend treats `auth.totp_required`'s
+    ///   `details` payload as free-form JSON (matching the
+    ///   `JsonValue` recursive type already in `bindings.ts`); a
+    ///   future chunk may expose `TotpChallengeInfo` as a
+    ///   first-class type by surfacing it through a dedicated
+    ///   `tauri-specta::Builder::types()` registration.
+    const REQUIRED_DTOS: &[&str] = &[
+        // --- P10.1 ---------------------------------------------------
         "CommandError",
         "VersionInfo",
-        // --- DTOs (P10.2 — auth / session DTOs) ---------------------
+        // --- P10.2 — auth / session ---------------------------------
         "SessionInfo",
         "LoginRegion",
-        "TotpChallengeInfo",
         "QrStart",
         "QrStatus",
         "VerifyPage",
         "VerifyCaptcha",
         "VerifySubmit",
-        // --- DTOs (P10.2 — account DTOs) ----------------------------
+        // --- P10.2 — account ----------------------------------------
         "ServiceAccount",
         "AccountListResult",
         "AmountLimitNotice",
+        // --- P10.3 — storage row-shape DTO --------------------------
+        "Account",
+        // --- P10.3 — game / launcher --------------------------------
+        "GameStartMode",
+        "GameProcessInfo",
+        "AutoPasteRequest",
+        // --- P10.3 — updater ----------------------------------------
+        "Channel",
+        "UpdateInfo",
     ];
 
     #[test]
-    fn bindings_file_contains_all_p101_symbols() {
+    fn bindings_file_contains_all_symbols() {
         let path = bindings_path();
         let Ok(contents) = std::fs::read_to_string(&path) else {
             // Fresh clone / someone deleted the generated file —
@@ -318,7 +473,8 @@ mod bindings_file_tests {
             // See the module-level note on fresh-clone behaviour.
             eprintln!(
                 "[skip] bindings.ts not found at {}; run `cargo tauri dev` \
-                 once to regenerate (see `crate::export_specta_bindings`)",
+                 once (or `cargo run --example export_bindings`) to regenerate \
+                 (see `crate::export_specta_bindings` / `crate::default_bindings_path`)",
                 path.display()
             );
             return;
@@ -326,34 +482,31 @@ mod bindings_file_tests {
 
         assert!(
             !contents.is_empty(),
-            "bindings.ts at {} is empty — did the last `cargo tauri dev` boot crash \
-             before `tauri_specta::Builder::export` finished?",
+            "bindings.ts at {} is empty — did the last `cargo tauri dev` / \
+             `cargo run --example export_bindings` invocation crash before \
+             `tauri_specta::Builder::export` finished?",
             path.display()
         );
 
-        // Narrow the search surface to `export`-prefixed lines so
-        // stray comments / docblocks that mention a symbol by name
-        // don't fool the check (a renamed command with a leftover
-        // `// CommandError ...` comment would otherwise slip past).
-        let export_lines: String = contents
-            .lines()
-            .filter(|line| line.trim_start().starts_with("export"))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        assert!(
-            !export_lines.is_empty(),
-            "bindings.ts at {} contains no `export` declaration — file is malformed \
-             or truncated; rerun `cargo tauri dev` to regenerate",
-            path.display()
-        );
-
-        for symbol in REQUIRED_SYMBOLS {
+        for cmd in REQUIRED_COMMANDS {
+            let needle = format!("async {cmd}(");
             assert!(
-                export_lines.contains(symbol),
-                "bindings.ts is missing exported `{symbol}` — rerun `cargo tauri dev` \
-                 to regenerate, then commit the updated file. Expected symbols: {:?}",
-                REQUIRED_SYMBOLS
+                contents.contains(&needle),
+                "bindings.ts is missing wrapper method `async {cmd}(` — rerun \
+                 `cargo run --example export_bindings` to regenerate, then commit \
+                 the updated file. Expected commands: {:?}",
+                REQUIRED_COMMANDS
+            );
+        }
+
+        for dto in REQUIRED_DTOS {
+            let needle = format!("export type {dto}");
+            assert!(
+                contents.contains(&needle),
+                "bindings.ts is missing exported type `{dto}` — rerun \
+                 `cargo run --example export_bindings` to regenerate, then commit \
+                 the updated file. Expected DTOs: {:?}",
+                REQUIRED_DTOS
             );
         }
     }

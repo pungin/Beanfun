@@ -112,7 +112,18 @@ pub struct GitHubAsset {
 /// three-state because `"Preview"` (WPF) aliases `"Beta"` via L204 —
 /// the distinction never reached the selection logic, so preserving
 /// it here would be noise.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// # IPC exposure (P10.3 D4)
+///
+/// Derives [`serde::Serialize`] + [`serde::Deserialize`] +
+/// [`specta::Type`] so the `check_update` Tauri command can accept
+/// the channel choice from the frontend without a DTO wrapper.
+/// Unit variants serialize as plain JSON strings (`"Stable"` /
+/// `"Beta"`), matching the WPF `updateChannel` config value shape
+/// so settings pages can bind to a single string without a decoder.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, specta::Type,
+)]
 pub enum Channel {
     /// Stable-only: skip releases with `prerelease == true`.
     Stable,

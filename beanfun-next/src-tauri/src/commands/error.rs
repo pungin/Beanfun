@@ -116,16 +116,17 @@
 //!
 //! ## `ProcessError` — `process.*`
 //!
-//! | Variant                     | Code                                | `details` fields              |
-//! | --------------------------- | ----------------------------------- | ----------------------------- |
-//! | `WmiInit(..)`               | `process.wmi_init_failed`           | —                             |
-//! | `WmiConnect(..)`            | `process.wmi_connect_failed`        | —                             |
-//! | `WmiQuery { query, .. }`    | `process.wmi_query_failed`          | `query`                       |
-//! | `OpenProcess { pid, .. }`   | `process.open_process_failed`       | `pid`                         |
-//! | `TerminateProcess { pid }`  | `process.terminate_process_failed`  | `pid`                         |
-//! | `PostMessage { hwnd, .. }`  | `process.post_message_failed`       | `hwnd`                        |
-//! | `NonAscii { offset, ch }`   | `process.non_ascii`                 | `offset` / `char`             |
-//! | `Win32Call { name, .. }`    | `process.win32_call_failed`         | `win32_function`              |
+//! | Variant                          | Code                                | `details` fields                  |
+//! | -------------------------------- | ----------------------------------- | --------------------------------- |
+//! | `WmiInit(..)`                    | `process.wmi_init_failed`           | —                                 |
+//! | `WmiConnect(..)`                 | `process.wmi_connect_failed`        | —                                 |
+//! | `WmiQuery { query, .. }`         | `process.wmi_query_failed`          | `query`                           |
+//! | `OpenProcess { pid, .. }`        | `process.open_process_failed`       | `pid`                             |
+//! | `TerminateProcess { pid }`       | `process.terminate_process_failed`  | `pid`                             |
+//! | `PostMessage { hwnd, .. }`       | `process.post_message_failed`       | `hwnd`                            |
+//! | `NonAscii { offset, ch }`        | `process.non_ascii`                 | `offset` / `char`                 |
+//! | `Win32Call { name, .. }`         | `process.win32_call_failed`         | `win32_function`                  |
+//! | `WindowNotFound { primary, .. }` | `process.window_not_found`          | `primary_class` / `fallback_class` |
 //!
 //! ## `RegistryError` — `registry.*`
 //!
@@ -155,18 +156,47 @@
 //! | `JsonDecode(..)`            | `update.json_decode_failed`  | `line` / `column`                         |
 //! | `UnsupportedTag(tag)`       | `update.unsupported_tag`     | `tag`                                     |
 //!
-//! ## Command-layer `system.*` codes
+//! ## `SystemError` — `system.*`
 //!
-//! Unlike the seven tables above, these codes do **not** map back to
-//! a domain enum — they're minted inside the command / boot layer
-//! for failures that have no `services/*` counterpart (boot-time
-//! resource resolution, generic `tokio` task plumbing, etc.). They
-//! are listed here so the `code` column stays globally searchable.
+//! | Variant                     | Code                           | `details` fields                     |
+//! | --------------------------- | ------------------------------ | ------------------------------------ |
+//! | `InvalidUrl { .. }`         | `system.invalid_url`           | `url` / `reason`                     |
+//! | `OpenFailed { .. }`         | `system.open_url_failed`       | `url` / `io_kind`                    |
+//! | `SpawnBlockingFailed(..)`   | `system.spawn_blocking_failed` | `is_panic` / `is_cancelled`          |
+//!
+//! ## Command-layer `system.*` codes (no domain counterpart)
+//!
+//! Unlike the eight tables above, these codes are minted inside the
+//! command / boot layer for failures that have no `services/*`
+//! counterpart (boot-time resource resolution, ad-hoc `tokio` task
+//! plumbing in [`super::system::ping`]). They share the `system.*`
+//! namespace with [`SystemError`] so the `code` column stays
+//! globally searchable; [`super::system::ping`] in particular
+//! re-uses the `system.spawn_blocking_failed` code without going
+//! through [`SystemError`] (the smoke command pre-dates the service
+//! layer).
 //!
 //! | Code                            | Origin                                                                        | `details` fields |
 //! | ------------------------------- | ----------------------------------------------------------------------------- | ---------------- |
 //! | `system.app_data_missing`       | [`crate::run`] — `%APPDATA%` env var is unset or empty (Windows boot).        | —                |
-//! | `system.spawn_blocking_failed`  | [`super::system::ping`] and future Win32 wrappers — [`tokio::task::JoinError`] from a panicked / cancelled blocking worker. | —                |
+//! | `system.spawn_blocking_failed`  | [`super::system::ping`] ad-hoc path — same code as [`SystemError::SpawnBlockingFailed`] but minted without constructing the service error. | — |
+//!
+//! ## Command-layer `launcher.*` codes (no domain counterpart)
+//!
+//! Minted inside [`super::launcher`] for orchestration failures
+//! that happen **outside** the [`GameError`] surface — i.e. setup
+//! steps the service layer doesn't reach. Every launch-time
+//! business failure (path validation, locale remulator release,
+//! ShellExecuteW, Command::spawn) still flows through the
+//! [`GameError`] / [`game.*`](#gameerror--commanderror-servicesgame)
+//! table; these command-only codes cover the edges.
+//!
+//! | Code                                 | Origin                                                                                 | `details` fields                |
+//! | ------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------- |
+//! | `launcher.target_dir_resolve_failed` | [`super::launcher::launch_game`] — [`default_target_dir`][dtd] returned `io::Error`.   | `io_kind`                       |
+//! | `launcher.spawn_blocking_failed`     | [`super::launcher::launch_game`] — [`tokio::task::JoinError`] from `spawn_blocking`.    | `is_panic` / `is_cancelled`     |
+//!
+//! [dtd]: crate::services::game::default_target_dir
 //!
 //! # Usage at the command boundary
 //!
@@ -196,6 +226,7 @@ use crate::services::game::error::GameError;
 use crate::services::process::error::ProcessError;
 use crate::services::registry::error::RegistryError;
 use crate::services::storage::error::StorageError;
+use crate::services::system::error::SystemError;
 use crate::services::updater::error::UpdaterError;
 
 /// IPC-facing error DTO. Preserves a stable `{ code, message, details }`
@@ -564,6 +595,13 @@ impl From<ProcessError> for CommandError {
                 CommandError::new("process.win32_call_failed", message)
                     .with_details(json!({ "win32_function": name }))
             }
+            ProcessError::WindowNotFound {
+                primary_class,
+                fallback_class,
+            } => CommandError::new("process.window_not_found", message).with_details(json!({
+                "primary_class": primary_class,
+                "fallback_class": fallback_class,
+            })),
         }
     }
 }
@@ -671,6 +709,35 @@ impl From<UpdaterError> for CommandError {
             UpdaterError::UnsupportedTag(tag) => {
                 CommandError::new("update.unsupported_tag", message)
                     .with_details(json!({ "tag": tag }))
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// SystemError → CommandError (services/system — open_url, future
+// open_folder / reveal_in_finder)
+// ---------------------------------------------------------------------
+
+impl From<SystemError> for CommandError {
+    fn from(e: SystemError) -> Self {
+        let message = e.to_string();
+        match e {
+            SystemError::InvalidUrl { url, reason } => {
+                CommandError::new("system.invalid_url", message)
+                    .with_details(json!({ "url": url, "reason": reason }))
+            }
+            SystemError::OpenFailed { url, source } => {
+                CommandError::new("system.open_url_failed", message).with_details(json!({
+                    "url": url,
+                    "io_kind": io_kind_str(&source),
+                }))
+            }
+            SystemError::SpawnBlockingFailed(join_err) => {
+                CommandError::new("system.spawn_blocking_failed", message).with_details(json!({
+                    "is_panic": join_err.is_panic(),
+                    "is_cancelled": join_err.is_cancelled(),
+                }))
             }
         }
     }
@@ -945,6 +1012,38 @@ mod from_impls_tests {
         let details = err.details.expect("details present");
         assert_eq!(details.get("offset"), Some(&json!(7)));
         assert_eq!(details.get("char"), Some(&json!("中")));
+    }
+
+    #[test]
+    fn process_window_not_found_carries_primary_and_fallback_classes() {
+        let err: CommandError = ProcessError::WindowNotFound {
+            primary_class: "MapleStoryClass".into(),
+            fallback_class: Some("MapleStoryClassTW".into()),
+        }
+        .into();
+        assert_eq!(err.code, "process.window_not_found");
+        let details = err.details.expect("details present");
+        assert_eq!(
+            details.get("primary_class"),
+            Some(&json!("MapleStoryClass"))
+        );
+        assert_eq!(
+            details.get("fallback_class"),
+            Some(&json!("MapleStoryClassTW"))
+        );
+    }
+
+    #[test]
+    fn process_window_not_found_serializes_null_fallback_when_absent() {
+        let err: CommandError = ProcessError::WindowNotFound {
+            primary_class: "NexonGameClass".into(),
+            fallback_class: None,
+        }
+        .into();
+        assert_eq!(err.code, "process.window_not_found");
+        let details = err.details.expect("details present");
+        assert_eq!(details.get("primary_class"), Some(&json!("NexonGameClass")));
+        assert_eq!(details.get("fallback_class"), Some(&json!(null)));
     }
 
     // ----- RegistryError ---------------------------------------------

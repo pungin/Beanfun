@@ -1,9 +1,12 @@
 //! Typed errors for [`services/process`][`super`].
 //!
 //! Declared up-front for chunk 9.1 so the enum shape is stable across
-//! 9.1 / 9.2 / 9.3. 9.1 landed the first five variants, 9.2 added
-//! [`PostMessage`][ProcessError::PostMessage], and 9.3 adds
-//! [`NonAscii`][ProcessError::NonAscii] for the auto-paste Win32 wrappers.
+//! 9.1 / 9.2 / 9.3 / 10.3. 9.1 landed the first five variants, 9.2 added
+//! [`PostMessage`][ProcessError::PostMessage], 9.3 added
+//! [`NonAscii`][ProcessError::NonAscii] for the auto-paste Win32 wrappers,
+//! and 10.3 D5d adds [`WindowNotFound`][ProcessError::WindowNotFound] so
+//! orchestration call sites can distinguish "no matching top-level window"
+//! from the backend-failure variants.
 //!
 //! # WPF mapping
 //!
@@ -17,6 +20,7 @@
 //! | [`PostMessage`]        | `MainWindow.xaml.cs` L2450 `WindowsAPI.PostMessage(hWnd, WM_CLOSE, …)`                                  |
 //! | [`NonAscii`]           | **beanfun-next exclusive** — `WindowsAPI.cs:25` silently maps non-ASCII to `'?'` via `ASCIIEncoding`    |
 //! | [`Win32Call`]          | **beanfun-next exclusive** — generic shape for "must-succeed" Win32 calls (D5+ `GetClientRect`, etc.)   |
+//! | [`WindowNotFound`]     | `MainWindow.xaml.cs` L2158-2162 `FindWindow` returning `IntPtr.Zero` (P10.3 D5d auto-paste preflight)   |
 //!
 //! [`WmiInit`]: ProcessError::WmiInit
 //! [`WmiConnect`]: ProcessError::WmiConnect
@@ -26,6 +30,7 @@
 //! [`PostMessage`]: ProcessError::PostMessage
 //! [`NonAscii`]: ProcessError::NonAscii
 //! [`Win32Call`]: ProcessError::Win32Call
+//! [`WindowNotFound`]: ProcessError::WindowNotFound
 
 /// Every failure that [`services/process`][`super`] can surface.
 #[derive(Debug, thiserror::Error)]
@@ -132,5 +137,30 @@ pub enum ProcessError {
         name: &'static str,
         #[source]
         source: windows::core::Error,
+    },
+
+    /// The target window for an orchestration (chunk 10.3 D5d auto-
+    /// paste) could not be located. `primary_class` is the class
+    /// name the orchestrator looked up first; `fallback_class` is
+    /// the secondary class name it also tried (if any). Both come
+    /// back in the error payload so the command layer can surface
+    /// "tried `MapleStoryClass`, then `MapleStoryClassTW`, still no
+    /// match" to the frontend for a clipboard-copy fallback.
+    ///
+    /// Distinct from [`WmiQuery`] / [`OpenProcess`] (which describe
+    /// backend failures) and from `find_window` returning `None`
+    /// (which, standalone, is a routine non-error outcome) — this
+    /// variant marks a call site where "no matching window" means
+    /// the orchestration cannot proceed and callers must surface
+    /// the failure.
+    ///
+    /// [`WmiQuery`]: ProcessError::WmiQuery
+    /// [`OpenProcess`]: ProcessError::OpenProcess
+    #[error(
+        "target window not found (primary class: {primary_class:?}, fallback class: {fallback_class:?})"
+    )]
+    WindowNotFound {
+        primary_class: String,
+        fallback_class: Option<String>,
     },
 }

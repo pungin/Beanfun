@@ -246,10 +246,7 @@ mod tests {
         let bytes: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
         let encoded = encode_png_base64(&bytes);
 
-        assert!(
-            encoded.is_ascii(),
-            "base64 output must be ASCII: {encoded}"
-        );
+        assert!(encoded.is_ascii(), "base64 output must be ASCII: {encoded}");
         let decoded = STANDARD
             .decode(&encoded)
             .expect("standard-alphabet encoding decodes back");

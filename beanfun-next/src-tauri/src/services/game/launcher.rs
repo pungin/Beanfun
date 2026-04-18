@@ -66,8 +66,22 @@ use super::locale_remulator;
 /// The integer repr matches WPF so a config file saved by the
 /// legacy launcher deserialises cleanly into the new enum via
 /// [`GameStartMode::try_from`].
+///
+/// # IPC exposure (P10.3 D5a)
+///
+/// Derives [`serde::Serialize`] + [`serde::Deserialize`] +
+/// [`specta::Type`] so the `launch_game` Tauri command can accept
+/// the mode choice from the frontend without a DTO wrapper. Unit
+/// variants serialize as plain JSON strings (`"Auto"` / `"Normal"`
+/// / `"LocaleRemulator"`) — the frontend reads the legacy
+/// `startGameMode` integer (`"0"` / `"1"` / `"2"`) from Config and
+/// maps it to the enum on its side, mirroring the clamp rules in
+/// [`GameStartMode::try_from`] (negative = `Auto` fallback, `>= 2`
+/// = `LocaleRemulator`). Matches the
+/// [`crate::services::updater::Channel`] pattern used by
+/// `check_update` (P10.3 D4) for a uniform unit-enum IPC contract.
 #[repr(i32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 pub enum GameStartMode {
     /// Decide `Normal` vs `LocaleRemulator` based on the current
     /// system default locale — the default config value.

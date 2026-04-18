@@ -331,6 +331,7 @@ dependencies = [
  "html-escape",
  "indexmap 2.14.0",
  "nrbf",
+ "open",
  "percent-encoding",
  "pretty_assertions",
  "quick-xml 0.37.5",

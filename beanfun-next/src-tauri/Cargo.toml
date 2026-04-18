@@ -30,6 +30,15 @@ sha2 = "0.10"
 tauri = { version = "2", features = ["specta"] }
 tauri-plugin-opener = "2"
 
+# Cross-platform URL / file opener (ShellExecuteW on Windows,
+# LSOpenCFURLRef on macOS, xdg-open on Linux). Already pulled in as
+# a transitive dep via tauri-plugin-opener; declared here directly
+# so `services::system::open_url` can call `open::that` without
+# depending on `AppHandle` (the plugin's Rust API requires one,
+# which would tie the service layer to the Tauri runtime and break
+# the "services are framework-agnostic" invariant set in P10.1).
+open = "5"
+
 # IPC type generation — pin to `tauri-specta` rc.21 (2025-01-13) instead
 # of the newest rc.24 (2026-03-30): rc.24 pulls `specta` rc.24 which uses
 # the `#![feature(debug_closure_helpers)]`-gated `fmt::from_fn`, breaking

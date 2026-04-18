@@ -46,16 +46,18 @@
 //!
 //! # Layers
 //!
-//! | Module    | Responsibility                                                                     |
-//! |-----------|------------------------------------------------------------------------------------|
-//! | [`error`] | `ConfigError` — typed failures (`Io` / `XmlParse` / `XmlWrite` / `AppDataMissing`) |
-//! | `xml`     | `parse` / `serialize` / `get_value` / `get_value_or` / `set_value` / path helper   |
+//! | Module    | Responsibility                                                                                    |
+//! |-----------|---------------------------------------------------------------------------------------------------|
+//! | [`error`] | `ConfigError` — typed failures (`Io` / `XmlParse` / `XmlWrite` / `AppDataMissing`)                |
+//! | `xml`     | `parse` / `serialize` / `get_value` / `get_value_or` / `get_all_values` / `set_value` / path helper |
 
 pub mod error;
 pub mod xml;
 
 pub use error::ConfigError;
-pub use xml::{get_value, get_value_or, parse_app_settings, serialize_app_settings, set_value};
+pub use xml::{
+    get_all_values, get_value, get_value_or, parse_app_settings, serialize_app_settings, set_value,
+};
 
 #[cfg(target_os = "windows")]
 pub use xml::default_config_xml_path;

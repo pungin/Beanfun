@@ -15,6 +15,7 @@ pub mod beanfun;
 pub mod config;
 pub mod game;
 pub mod storage;
+pub mod system;
 pub mod updater;
 
 #[cfg(target_os = "windows")]

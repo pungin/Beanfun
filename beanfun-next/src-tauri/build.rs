@@ -15,8 +15,89 @@ const LR_ASSETS: &[&str] = &[
 ];
 
 fn main() {
-    tauri_build::build();
+    let mut attributes = tauri_build::Attributes::new();
+    #[cfg(windows)]
+    {
+        attributes = attributes
+            .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
+        embed_app_manifest_for_all_binaries();
+    }
+    tauri_build::try_build(attributes).expect("tauri_build::try_build failed");
+
     emit_lr_sha256();
+}
+
+/// Embed the Windows application manifest into **every** binary
+/// produced by this crate (the main app, examples, and test
+/// executables) instead of just the main `beanfun-next.exe`.
+///
+/// # Why this exists (P10.3 D6)
+///
+/// `tauri-build`'s default Windows manifest path goes through
+/// [`tauri_winres::WindowsResource::set_manifest`] →
+/// `embed_resource::compile()`, which emits a `cargo:rustc-link-arg-bins`
+/// directive. The `-bins` suffix scopes the linker arg to *bin*
+/// targets only — example binaries (`cargo run --example
+/// export_bindings`) and test binaries (`cargo test --lib`) are
+/// excluded. Those binaries still get the **import** for
+/// Common Controls v6 APIs (because the `tauri` rlib on the link
+/// line carries a static dependency on `comctl32.dll` v6 entries),
+/// but without a manifest declaring the Common Controls v6
+/// `<dependentAssembly>`, Windows resolves `comctl32.dll` to the
+/// stub v5 redirector that lacks those v6-only exports — so the
+/// loader bails with `STATUS_ENTRYPOINT_NOT_FOUND` (0xc0000139)
+/// at process-start time.
+///
+/// Tauri tracks this as a known issue across several reports
+/// (tauri-apps/tauri#11028 / #13419 / #13948 / #14580); the
+/// official workaround — recommended by Tauri maintainer
+/// `lucasfernog` — is exactly what this function does:
+///
+/// 1. Tell `tauri-build` to skip the default manifest embed via
+///    [`tauri_build::WindowsAttributes::new_without_app_manifest`]
+///    (otherwise the main binary would end up with two competing
+///    manifests, and the linker emits `LNK4078` warnings).
+/// 2. Re-embed the same manifest ourselves through
+///    `cargo:rustc-link-arg=/MANIFEST:EMBED` +
+///    `/MANIFESTINPUT:<path>` — `rustc-link-arg` (no `-bins`
+///    suffix) propagates to **every** linker invocation in this
+///    crate, so example and test binaries inherit the manifest
+///    too.
+///
+/// The manifest content under
+/// `src-tauri/windows-app-manifest.xml` is byte-identical to the
+/// `tauri-build`-bundled `windows-app-manifest.xml` — we copied
+/// it verbatim so production binaries see the exact same
+/// Common Controls v6 dependency declaration they did before this
+/// change. Other Windows resources `tauri-build` injects
+/// (version info, icon, product name) are unaffected and continue
+/// to land on the main binary only via `tauri-build`'s separate
+/// `WindowsResource` call.
+///
+/// # Linker requirements
+///
+/// `/MANIFEST:EMBED` requires `mt.exe` (Windows SDK Manifest
+/// Tool) on `PATH` for the linker to call. The MSVC toolchain
+/// ships `mt.exe` alongside `link.exe`, so any developer with
+/// MSVC build tools installed (a hard requirement for compiling
+/// Tauri on Windows anyway) already has it.
+#[cfg(windows)]
+fn embed_app_manifest_for_all_binaries() {
+    static WINDOWS_MANIFEST_FILE: &str = "windows-app-manifest.xml";
+
+    let manifest = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is always set by cargo"),
+    )
+    .join(WINDOWS_MANIFEST_FILE);
+
+    println!("cargo:rerun-if-changed={}", manifest.display());
+    println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+    println!(
+        "cargo:rustc-link-arg=/MANIFESTINPUT:{}",
+        manifest
+            .to_str()
+            .expect("manifest path is always valid UTF-8 on Windows host")
+    );
 }
 
 /// Compute the SHA-256 of every LocaleRemulator asset referenced by

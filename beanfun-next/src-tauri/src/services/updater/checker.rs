@@ -84,7 +84,17 @@ use super::{UpdaterError, GH_API_RELEASES_URL};
 /// the "Detect New Version {0}" message header, `body` renders as
 /// release notes Markdown, `download_url` is what the "Download" button
 /// opens, and `tag_name` is retained for diagnostics / telemetry.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// # IPC exposure (P10.3 D4)
+///
+/// Derives [`serde::Serialize`] + [`specta::Type`] so the
+/// `check_update` Tauri command returns the struct directly
+/// (wrapped in `Option<_>` to distinguish "no newer release" from
+/// "newer release found"). `Deserialize` is intentionally **not**
+/// derived — the frontend never constructs `UpdateInfo`; it only
+/// consumes the backend-minted value, so the reverse direction
+/// would be dead surface.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 pub struct UpdateInfo {
     /// Human-readable version string produced by
     /// `format!("{major}.{minor}.{patch}({timestamp})")` — matches

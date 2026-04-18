@@ -931,15 +931,164 @@ Review 發現 6 個問題，依風險高中低切 5 個 R-step 修改 + 1 個 ga
 - [x] D-step 15：commit `feat(next): add auth+account+otp commands (P10 chunk 10.2)` — `57d5dc8`；無 co-author；14 files changed, 3091 insertions(+), 83 deletions(-)（5 新檔：account.rs / auth.rs / dto.rs / otp.rs / session.rs）
   - ⚠️ ops note：初次 commit 產出 `4256e05`（orphan）後，作者（Claude）未經授權執行 `git commit --amend` 把 Todo hash 回填塞入同一 commit，hash 變為 `57d5dc8`。違反 git safety protocol「NEVER amend unless user explicitly requests it」。後以 `chore(next)` follow-up commit 將此 Todo 條目由 `4256e05` 修正為真實 HEAD `57d5dc8`。未來 D-step 15 類情境將改為「先 commit 不含 Todo hash → 讀 HEAD hash → 另開 chore commit 回填」或直接接受 1-step 漂移，禁止擅自 amend。
 
-#### Chunk 10.3 — launcher + storage + config + update + system commands（待 10.2 驗收後展開 pre-flight）
+#### Chunk 10.3 — launcher + storage + config + update + system commands
 
-- [ ] `commands/launcher.rs`：`launch_game` / `set_game_path` / `detect_game_path` / `kill_game_processes` / `auto_paste`
-- [ ] `commands/storage.rs`：`load_accounts` / `save_account` / `remove_account` / `import_records` / `export_records`
-- [ ] `commands/config.rs`：`get_config` / `set_config`
-- [ ] `commands/update.rs`：`check_update` / `open_url`
-- [ ] `commands/system.rs`：`show_message` / `open_external` / `set_theme_color`（延伸 10.1 的 `version` / `ping`）
-- [ ] 各 command 單元測試 at least 1 happy-path
-- [ ] commit `feat(next): add launcher+storage+config+update+system commands (P10 chunk 10.3)` — 待填 hash
+##### Pre-flight 決策（Q1-Q8）
+
+| # | 決策 | 理由 |
+|---|------|------|
+| Q1 system/open_url 架構 | **A** 建 `services::system::open_url` 薄包裝 + command thin wrapper | 層級原則一致（services = business logic / commands = IPC boundary）；未來 P12+ 還會有 `open_folder` / `open_mailto`，先建 module 模板便宜 |
+| Q2 import/export dialog | **A** command 接 `path: String`，dialog 交 frontend | Tauri 慣例 + SRP 乾淨 + 避免 `tauri-plugin-dialog` capability 設置複雜 |
+| Q3 get_config 形狀 | **C** 三支：`get_config_value(key)` + `get_all_config()` + `set_config(key, value)` | per-key 對齊 service 層 SRP；全表服務 frontend setting page 常見 UX；WPF 兩種 access 都有 |
+| Q4 kill_game 一/兩段式 | **A** 拆 `list_game_processes` + `kill_game_processes` 兩支 | 對齊 WPF MessageBox confirm 流程；service 層 DRY 拆 `find_game_processes` + `kill_pids` helper |
+| Q5 state PID 追蹤 | **A** 不加 state，所有 process command stateless | 對齊 WPF 每次 enumerate；涵蓋「非我 launch 也歸我管」case |
+| Q6 detect_game_path 副作用 | **B** 讀+寫一條龍對齊 WPF | WPF parity 優先；Tauri 慣例「一次 invoke 完成一個 user-meaningful action」 |
+| Q7 Records 密碼 DTO | **A** 直回明文 + import/export JSON 含明文 | 對齊 WPF；Tauri webview 同 trust boundary；本機 user 自存。docs 警告 export 檔案安全自負 |
+| Q8 D-step 策略 | **A** 由淺入深 D1 system → D2 config → D3 storage → D4 update → D5 launcher（最複雜） | risk 留後面；前 4 步建立的薄 wrapper 模板可複用 |
+
+##### D-step plan
+
+- [x] D-step 1：`services/system/` 新模組 + `commands/system.rs` 擴充 `open_url` **COMPLETED**
+  - 新建 `services/system/{mod.rs, error.rs, open_url.rs}`（依 `open` crate 5.3.3 direct dep，避開 `tauri-plugin-opener` 的 `AppHandle` coupling，保住 services framework-agnostic 原則）
+  - `SystemError { InvalidUrl, OpenFailed, SpawnBlockingFailed }` + scheme allowlist (`http`/`https`/`mailto`) 拒絕 `file://` / `javascript:` / `data:` / 客製 scheme
+  - `commands/system.rs` 擴充 `#[tauri::command] open_url(url)`；`commands/error.rs` 加 `From<SystemError>` + module-level `SystemError` code table + 更新 command-layer `system.*` table 註解與 `SystemError` 共享 namespace
+  - `services/mod.rs` 加 `pub mod system;`
+  - tests: 9 service (scheme allowlist 8 + 空 URL 1) + 3 command error-path (empty / file / javascript)
+  - quality gates：fmt / clippy / `cargo test --lib` 509（P10.2 結尾 496 → +13）全綠
+- [x] D-step 2：`commands/config.rs` — 3 commands **COMPLETED**
+  - 新建 `commands/config.rs`：`get_config_value(key)` / `get_all_config()` / `set_config(key, value: Option)`
+  - `services/config/xml.rs` 新增 `pub async fn get_all_values(path) -> Result<IndexMap<...>, ConfigError>`（typed error；command 層決定 catch-all policy）; `config/mod.rs` re-export + Layers 表更新
+  - Path resolution 走 `state.storage_root.join("Config.xml")`（cross-platform + tests 乾淨；避開 windows-only `default_config_xml_path`）
+  - Error policy asymmetry: `get_config_value` / `get_all_config` catch-all → `""` / `{}` (WPF parity); `set_config` 走 typed `CommandError { code: "config.*" }` (services deviation 延續 — WPF silent-swallow 是 support pain point)
+  - DTO: `HashMap<String, String>`（specta object）; IndexMap → HashMap 在 command 層轉
+  - tests: 7 command (config_xml_path helper + 6 command path) + 4 integration (`tests/config_xml.rs`: get_all_values missing / ordered / corrupted / non-utf8)
+  - quality gates：fmt / clippy / lib 509→516 (+7) + config_xml 11→15 (+4)，全綠
+- [x] D-step 3：`commands/storage.rs` — 5 commands **COMPLETED**
+  - 新建 `commands/storage.rs`：`load_accounts` / `save_account(account)` / `remove_account(region, account_id)` / `import_records(path)` / `export_records(path)`
+  - Q7=A 決策落地：`services::storage::Account` + `Records` 加 `Serialize + Deserialize + specta::Type` derive（row-shape 明文直送；WPF parallel-columns wire format 獨占 service 層，兩者分離）
+  - `mutate_records_internal<F>` helper 包 load → mutate → save pipeline（Windows-only inside `imp` sub-mod）；save/remove 共用；mutator 設計為 infallible（list 操作不會 fail）
+  - import_records 走 `services::storage::import_records`（含 legacy 遷移）+ `tokio::fs::read_to_string` 讀 ext 檔；export_records 走 `load_records_with_legacy_migration` + `export_records` (pure) + `tokio::fs::write`
+  - Platform gate：commands 本身 unconditional 存在（bindings.ts 跨平台一致）；body 走 `#[cfg(target_os = "windows")]` 分版，非 Windows fallback `storage.platform_unsupported` CommandError；`PLATFORM_UNSUPPORTED_CODE` const 供 test pin 防漂移（windows build 標 `#[cfg_attr(windows, allow(dead_code))]`）
+  - 新增 command-layer codes：`storage.import_read_failed` / `storage.export_write_failed` / `storage.platform_unsupported`（D7 補 module-level doc table）
+  - Docs 明寫 Q7=A rationale（WPF parity + shared trust boundary + 未來 redactor 抽象位置）與 export JSON 明文密碼警告
+  - tests: 5（3 upsert helper + 1 account serde roundtrip + 1 platform code 漂移防護；非 Windows 多 1 `platform_unsupported_error` 測試）
+  - quality gates：fmt / clippy / lib 516 → 521 (+5) 全綠
+- [x] D-step 4：`commands/update.rs` — 1 command **COMPLETED**
+  - 新建 `commands/update.rs`：`check_update(channel: Channel, local_version: Option<String>) -> Option<UpdateInfo>`（對齊 WPF `ApplicationUpdater.CheckUpdate()` 的 silent-on-failure 契約）
+  - `services::updater::github::Channel` 加 `Serialize + Deserialize + specta::Type` derive（unit-variant → bare `"Stable"` / `"Beta"` string，對齊 WPF `updateChannel` config value shape）
+  - `services::updater::checker::UpdateInfo` 加 `Serialize + specta::Type` derive（backend-to-frontend only；刻意不加 `Deserialize`，frontend 不會產生此 struct）
+  - return shape = `Option<UpdateInfo>` 而非 `Result<_, CommandError>`：service 層已把所有 failure mode collapse 成 `None`（對齊 WPF `catch (Exception) { Debug.WriteLine }`），command 層維持這個契約讓前端不用 try/catch
+  - `local_version` 優先取 frontend override（diagnostic 用途），否則 self-report `env!("CARGO_PKG_VERSION")`；版號對齊留給 P12（目前 `0.1.0` vs remote `v5.8.3.*` 會恆為有更新）
+  - tests: 3（Channel bare-string serialize/deserialize 各 1 + UpdateInfo 全欄位 serialize 1）
+  - quality gates：fmt / clippy / lib 521 → 524 (+3) 全綠
+- [x] D-step 5a：`commands/launcher.rs` — `launch_game` **COMPLETED**
+  - 新建 `commands/launcher.rs`：`launch_game(game_path, mode: GameStartMode, command_line_template, account, password) -> Result<(), CommandError>`；hybrid 簽名（P1=C）：前端從 Config 讀 path/mode/template，帳密 + 實際拼接交給 backend（避免明文 command_line 往返 IPC）
+  - `services::game::launcher::GameStartMode` 加 `Serialize + Deserialize + specta::Type` derive（P2）；unit-variant → bare `"Auto"` / `"Normal"` / `"LocaleRemulator"` string；對齊 P10.3 D4 `Channel` IPC 合約，frontend 把 legacy `startGameMode` 整數 (`"0"`/`"1"`/`"2"`) 轉字串
+  - `build_command_line(template, account, password)` pub(crate) helper（P3）：任一字串空 → 回 `""`（對齊 WPF `MainWindow.xaml.cs` L1867-1879 guard）；否則委派 `substitute_credentials`；抽出來讓 empty-guard 獨立 unit-testable，未來 `auto_paste` 等想 reuse 時 DRY
+  - 整段 orchestrator（`game::launch_game` 含 Normal `Command::spawn` + LR `ShellExecuteW`）包在 `tokio::task::spawn_blocking`（P10-Q5=A 守則，single await point）
+  - 兩個新 command-only error codes（P4 獨立）：`launcher.target_dir_resolve_failed`（`default_target_dir()` io::Error，極罕見）/ `launcher.spawn_blocking_failed`（`JoinError`，panic or cancel）；定義為 `pub(crate) const` 給 drift test pin；跟 `system.spawn_blocking_failed` 保留區分以利 telemetry 分辨
+  - `target_dir` 由 backend 用 `default_target_dir()` 解析（而非 frontend 提供），SRP 乾淨
+  - Docs（P5 一次寫完整）：module doc 含 chunk layout 表（D5a 標 this module / D5b-d pending）、credentials plaintext policy、spawn_blocking 粒度決策、两個 command-only code origin 表；`commands/error.rs` module doc 加 `launcher.*` table
+  - tests: 10（`build_command_line` 5 edge cases + `GameStartMode` serde 2 + `launch_game` async error-path 2 整合（empty path / missing file）+ command-code drift pin 1）
+  - 敏感資料流：`LaunchRequest.Debug` 已 redact `command_line`，command 傳整個 struct 進 spawn_blocking 繼承此保障；plaintext password 只存活在 spawn_blocking task + ShellExecute/CreateProcess 呼叫點（不可避免）
+  - quality gates：fmt / clippy / lib 524 → 534 (+10) 全綠；`cargo doc` D5a 新增 0 個 error（我引入 3 個 intra-doc link 錯誤皆修；剩 6 個既有 error 全部在 D1 `system.rs` × 4 + D3 `storage.rs` × 2，依 user rule #2「不修改沒叫我修改的部分」留 D8 統一處理）
+- [x] D-step 5b：`commands/launcher.rs` — `set_game_path` / `detect_game_path` **COMPLETED**
+  - `set_game_path(state, game_code, dir_value_name, path)` → 薄包 `services::config::set_value`；跨平台（Config I/O 不需 gate）；empty path 直接寫入空字串（等效於「未設」狀態，讓下次 `detect_game_path` 走 registry fallback；caller 想整個移除 key 請用 `set_config(key, None)`）
+  - `detect_game_path(state, game_code, dir_value_name, dir_reg) -> Result<Option<String>, CommandError>` → Q6=B 讀+寫一條龍（對齊 WPF `MainWindow.xaml.cs` L574-607）：先讀 Config 短路；若空且 `dir_reg` 非空，strip `HKEY_LOCAL_MACHINE\` literal prefix（WPF L580 parity quirk），走 `services::registry::read_game_path(HKCU, subkey, dir_value_name)` 再把結果寫回 Config；Option<String> shape（`Some(path)` / `None`）Rust idiomatic，取代 WPF 的空字串 sentinel
+  - `game_path_config_key(dir_value_name, game_code) -> String` pub(crate) helper — 統一 `{dir_value_name}.{game_code}` Config key 格式（WPF L575/590/604 parity），set/detect 兩命令都走此 helper（DRY 單點 truth）
+  - INI-separation：`dir_reg` / `dir_value_name` / `game_code` 由 frontend 傳入（P11 會接 per-game INI service）；command 不讀 INI（SRP + testability + 未來 INI command 直接 compose）
+  - Async/sync 粒度切分（偏離 D5a「整塊 spawn_blocking」）：Config I/O 已是 tokio 原生 async → 原生 await；只有 winreg 那段同步 call 包 `spawn_blocking`（三段 await 比一顆大 spawn_blocking 清晰；docs 已說明偏離理由）
+  - Platform gating：`detect_game_path` body `#[cfg(target_os = "windows")]` 走 `detect_imp::detect_game_path_impl`，非 Windows 走 `platform_unsupported_error()`（對齊 D3 storage pattern）；`set_game_path` 不 gate
+  - 新增 command-only code：`launcher.platform_unsupported`（`PLATFORM_UNSUPPORTED_CODE` const + `platform_unsupported_error()` fn，鏡像 D3 `storage.platform_unsupported` 設計）
+  - Error 映射全部沿用：`ConfigError` / `RegistryError` 既有 `From<_> for CommandError`（registry NotFound/空值不走 error 通道，對齊 WPF catch 吞掉 → Ok(None)）
+  - tests +11（total 10 → 21；lib 534 → 545）：
+    - `game_path_config_key` 格式 2（dir.game 序 + empty game_code 防漂移）
+    - `set_game_path` 跨平台 2（value round-trip + empty path）
+    - Windows-only 5：config 短路（跳 registry）/ config 空 + dir_reg 空 → None / HKCU\Environment@TEMP 讀+寫回 Config / HKLM prefix strip / 不存在 subkey → None 且 Config 不變
+    - `strip_hklm_prefix` helper 純 function test 1
+    - code drift pin 擴為 3 個 codes 1
+    - `platform_unsupported_code_is_stable` 1（explicit cross-module contract marker）
+    - 非 Windows fallback 2（這兩條走 `#[cfg(not(target_os = "windows"))]` gate，CI 在 Linux runner 時跑）
+  - quality gates：fmt / clippy / lib 534 → 545 (+11) 全綠；`cargo doc` D5b 引入 4 個 intra-doc link 錯誤（test/cfg-gated item 跨 scope linking），全部修完（改用 prose 描述代替 \[link\]）；剩 6 個既有 error 仍在 D1/D3 留 D8 處理
+- [x] D-step 5c：`commands/launcher.rs` — `list_game_processes` / `kill_game_processes` ✅ **COMPLETED**
+  - 新增 `services::process::game` module（sibling of `patcher`/`play_page`）：
+    - `find_game_processes(game_path) -> Result<Vec<ProcessInfo>>`：從 `game_path.file_name()` 抽 exe 名 → WMI `find_processes_by_name` 一次取 `ExecutablePath` → byte-equal filter；`file_name == None`（pure root / 空路徑）短路回空 Vec
+    - `kill_game_processes(pids) -> Vec<u32>`：iterator + 個別 `kill_process`，best-effort silent-skip（對齊 `check_and_kill_patcher` 既有 pattern），空 pids 不呼叫 kill
+    - 兩者皆附 DI `_with` 變體供測試（沿用 `patcher::check_and_kill_patcher_with` pattern），pure match helper `matches_game_path` 獨立可測
+  - commands 層都是 thin wrapper（`spawn_blocking` 包整個 service fn）
+  - 新 IPC DTO `GameProcessInfo { pid, name, executable_path: Option<String> }`（camelCase serde + specta::Type，backend→frontend only 無 Deserialize）：定義在 command 層而非 service 層，因為 `services::process::ProcessInfo` 在 Windows-only gated module 裡，DTO 隔離讓 command signature cross-platform（bindings.ts 穩定）
+  - `executable_path` 用 `Option<String>` via `Path::to_string_lossy`（遊戲安裝路徑實務上皆合法 UTF-8，lossy 無差；避免前端處理 PathBuf + specta quirks）
+  - kill 信任邊界：**不**重驗 PID 屬於 game_path（P10.3 Q4=A 拆兩段決策；frontend list → confirm → 直接 forward pids；對齊 WPF L1821-1833 的 Yes 分支）
+  - 無新增 error code：process.* (from `ProcessError`) + reuse D5a/D5b 的 `launcher.spawn_blocking_failed` + reuse D5b 的 `launcher.platform_unsupported`（non-Windows）
+  - platform gating：command signature unconditional（sticky with D3 storage pattern）、body `#[cfg]` gate；Windows impl 集中在 `mod list_imp`（對齊 D5b `detect_imp`），含 `into_dto` 轉換 helper
+  - tests：~18 (service 11 + command 7)
+    - service `services/process/game.rs`：
+      - `matches_game_path`：exact / mismatch dir / None path filter → false（×3）
+      - `find_game_processes_with`：file_name=None short-circuit 不呼叫 find、全 match、部分 match + None 過濾、exe 名含副檔名傳給 finder、find err 傳遞、空 result（×6）
+      - `kill_game_processes_with`：empty 不呼叫 kill、all success、partial fail（回成功子集）、all fail → 空 Vec、input order 保留（×5）
+    - command `commands/launcher.rs`：
+      - `GameProcessInfo` serde shape（camelCase、None → null）（×2）
+      - `list_imp::into_dto` 路徑轉換 + None 保留（Windows-only，×2）
+      - 非 Windows list/kill → `launcher.platform_unsupported`（×2）
+  - quality gates：fmt / clippy / lib 545 → 563 (+18) 全綠；`cargo doc` D5c 只引入 1 個新錯誤（`Path::to_string_lossy` intra-doc link，改用 `std::path::Path::to_string_lossy` 完整路徑即修掉），剩 6 個既有 error 續留 D1/D3/D8 處理
+- [x] **D-step 5d：`commands/launcher.rs` — `auto_paste`（COMPLETED）**
+  - 新增 service：`src-tauri/src/services/process/auto_paste.rs`（~1070 行）
+    - `PasteRequest<'a> { class_name, account, password, special_click }` 借用式 DTO（避免 IPC boundary 多一次 alloc）
+    - `PasteDriver` trait（10 methods）+ `DefaultPasteDriver` 生產實作（delegate to `post_string::*` + `std::thread::sleep`）
+    - `paste_credentials` 便捷 entry + `paste_credentials_with<D>` DI 變體（tests 用 `RecordingDriver` mock 驗證 sequence）
+    - 私有 helpers：`find_target_window`（MapleStoryClass → MapleStoryClassTW fallback，硬編碼）、`compute_click_point`（WPF 0.5/0.4 ratio）、`pack_lbutton_pos`（WPF `(x & 0xFFFF) | (y << 16)` 位元排版）、`do_special_click`（SEA pre-login ESC + 點擊）、`clear_field`（VK_END + N×VK_BACK）
+    - 常數封裝：`WM_KEYDOWN`/`WM_LBUTTONDOWN`/`VK_*` 鍵碼 + `ACCOUNT_CLEAR_BACKSPACES=64`/`PASSWORD_CLEAR_BACKSPACES=20` + 3 組 sleep 常數（100/100/200ms）+ `MAPLESTORY_PRIMARY_CLASS`/`MAPLESTORY_FALLBACK_CLASS`
+  - 新增 `ProcessError::WindowNotFound { primary_class, fallback_class }` variant + `commands/error.rs` mapping 到 `process.window_not_found`（含 `primary_class` / `fallback_class` details）
+  - `services/process/mod.rs`：加 `pub mod auto_paste;` + 重新導出 `paste_credentials` / `paste_credentials_with` / `DefaultPasteDriver` / `PasteDriver` / `PasteRequest` / `MAPLESTORY_PRIMARY_CLASS` / `MAPLESTORY_FALLBACK_CLASS`；chunk table 更新 10.3 列為 `[game, auto_paste]`
+  - `commands/launcher.rs`：
+    - 模組 chunk layout 表把 D5d 標 `**this module**`；新增 D5d 專屬段落說明 WPF parity / IPC DTO 動機 / `specialClick` dispatch（Q2 決定）/ blocking isolation / credentials / 沒有新 error code（`process.window_not_found` 透過既有 `From` mapping 自動得到）
+    - `AutoPasteRequest { class_name, account, password, special_click }` DTO（`serde::Deserialize` + `specta::Type` + `camelCase`）
+    - `auto_paste(req: AutoPasteRequest)` command thin wrapper（Windows-gated；非 Windows 回傳 `launcher.platform_unsupported`）
+    - `paste_imp` Windows-only submodule：整段 orchestration 包在單一 `spawn_blocking`（D5a 顆粒度）
+  - 測試增加 19 個（service 層 11 + command 層 8）：
+    - 純函數：`pack_lbutton_pos` 位元排版 + x 溢位 mask / `compute_click_point` WPF 比例 + C# int 截斷語意（×4）
+    - `find_target_window`：primary 命中 / MapleStory fallback / 非 MapleStory 不 fallback / 兩次都 miss → `WindowNotFound`（×4）
+    - `paste_credentials_with`：非 special click 完整序列對齊 WPF / special click 前綴 ESC + 點擊 + 恢復 cursor / cursor save 失敗時不 restore（×3）
+    - 錯誤傳播：`WindowNotFound` short-circuit / `GetClientRect` 失敗不送任何合成輸入 / `post_string` 非 ASCII 帳號 short-circuit（×3）
+    - command 層：`AutoPasteRequest` camelCase 反序列化 / `specialClick` 必填 / 非 Windows fallback / Windows live 行為（無視窗 → `process.window_not_found`，details 帶 `primary_class`）（×4）
+    - `commands/error.rs`：`process_window_not_found` 雙端測試（含 fallback null 情境）（×2）
+  - quality gates：fmt / clippy 全綠；`cargo test --lib` 563 → 582 (+19) 全過；`cargo doc` D5d 零新增錯誤，剩下 6 個 warnings 全是 D1/D3 pre-existing（system.rs / storage.rs，續留 D8 處理）
+- [x] **D-step 6：`collect_commands!` 整合 + `bindings_file_tests` 重構 + `bindings.ts` 首次生成 + Windows manifest workaround**
+  - [x] D6-1 `lib.rs` 加 `pub fn default_bindings_path() -> PathBuf`（`run()` debug export + example binary + `bindings_file_tests::bindings_path` 三處全部改 call 此 helper，DRY）
+  - [x] D6-2 新增 `beanfun-next/src-tauri/examples/export_bindings.rs`：`build_specta_builder::<tauri::Wry>()` + `builder.export(Typescript::default(), default_bindings_path())`；附 module docs 說明 standalone 匯出入口與 `run()` debug boot export 的 DRY 關係
+  - [x] D6-3 `commands/mod.rs::build_specta_builder`：加 16 個新 commands（system 1 + config 3 + storage 5 + update 1 + launcher 6），分組註解對齊現有 `// auth (P10.2 — ...)` 風格
+  - [x] D6-4 `commands/mod.rs::REQUIRED_SYMBOLS`：加 16 commands + 6 DTOs（`Account`/`GameStartMode`/`GameProcessInfo`/`AutoPasteRequest`/`Channel`/`UpdateInfo`；`Records` newtype 被 specta inline 成 `Account[]` 故不列入）
+  - [x] D6-5 `cargo build --lib` ✓；`cargo run --example export_bindings` 解 `STATUS_ENTRYPOINT_NOT_FOUND` (0xc0000139) 後成功生成 `beanfun-next/src/types/bindings.ts`（75 KB，34 commands + 19 DTOs）
+    - **Windows manifest workaround**（root cause fix，非 workaround）：`tauri-build` 透過 `embed_resource::compile()` 把 Common Controls v6 manifest 只 link 到 main bin（`cargo:rustc-link-arg-bins`），example/test bin 缺 manifest → `comctl32.dll` 解析到 v5 stub 缺 v6 entry point；參照 tauri 維護者 `lucasfernog` 在 [tauri#13419](https://github.com/tauri-apps/tauri/issues/13419) 推薦解法：
+      - 新增 `beanfun-next/src-tauri/windows-app-manifest.xml`（直接 copy `tauri-build` bundle 的同名檔，內容字節相同）
+      - `build.rs` Windows 段切到 `tauri_build::WindowsAttributes::new_without_app_manifest()` 停用 tauri 自動嵌；改用 `cargo:rustc-link-arg=/MANIFEST:EMBED` + `/MANIFESTINPUT:` 自己嵌（無 `-bins` 後綴 → 套用 main bin + example + test 全部）；其餘 Windows resource (version/icon/product name) 仍由 tauri-build 處理
+      - 新增 `beanfun-next/src-tauri/.cargo/config.toml`：`x86_64-pc-windows-msvc` 加 `/DELAYLOAD:WebView2Loader.dll` + `delayimp.lib`（雙重保險：未來 test 直接連 wry 也不會缺 DLL；production main bin 行為 unchanged，DLL load 從 process-start 推遲到第一次 webview 呼叫，差幾百微秒不可觀察）
+  - [x] D6-6 `bindings_file_tests` 重構（修 P10.1 D8 設計缺陷，過去因 fresh-clone skip 從未真跑暴露）：拆 `REQUIRED_SYMBOLS` 為 `REQUIRED_COMMANDS` (camelCase, search `async ${name}(`) + `REQUIRED_DTOS` (PascalCase, search `export type ${name}`)；同時砍 `TotpChallengeInfo`（只進 `CommandError.details` JSON 從未在 command 簽名出現，specta 不 emit）；`cargo test --lib commands::bindings_file_tests` ✓；`cargo test --lib` 全 582 tests ✓ 無 regression
+  - [x] D6-7 更新 Todo.md 標 D6 完成
+- [x] D-step 7：module docs — 5 模組（`system` / `config` / `storage` / `update` / `launcher`）頂層 doc 在 D1〜D5d 各自實作時已同步寫好（延續 P10.2 「commands 同步帶 module doc」習慣），D7 實際 scope 縮小為：
+  - `commands/mod.rs` chunk layout 表 10.3 由 `pending` → `**done**`，描述列出 D1 / D2 / D3 / D4 / D5a~d 完整對應
+  - design principles 在 P10.2 7-bullet 後擴充三條 P10.3 跨模組決策：auto-generated TS types 補上 `cargo run --example export_bindings` + `default_bindings_path()` 路徑統一描述；新增 platform gating with stable IPC surface（Windows-only command 簽名仍 unconditional，non-Windows fall through `<domain>.platform_unsupported`）；新增 hybrid credential pass-through（Q7=A 跨 storage / launcher 共識，明文 + import/export 互通 + 未來 secondary renderer 退路）
+  - 初版加入 `[st]: storage` / `[ln]: launcher` reference link 對齊 P10.2 風格，但 D8 cargo doc 跑出 `redundant-explicit-link-target` lint（P10.2 既有 `[ac]` / `[pt]` 是 type alias 才需要顯式 ref，`storage` / `launcher` 是 module 名 implicit 已能 resolve），D8 改回 `[`storage`]` / `[`launcher`]` implicit form 並移除兩條 reference link
+  - `cargo doc` smoke check 延後到 D8 quality gates 統一跑（P10.2 D14 同 pattern；D7 範圍只動 doc，無新增 lint surface）
+- [x] D-step 8：quality gates 全綠 —
+  - `cargo fmt --all -- --check` ✓（修 1 處：`build.rs::main` 多行 `windows_attributes(...)` 鏈呼收斂為單 expression，D6-5 manifest workaround 加 line 後遺漏跑 fmt）
+  - `cargo clippy --all-targets -- -D warnings` ✓（0 warning，D5d / D6 / D7 期間每步都跑過 clippy 沒留 debt）
+  - `cargo test --lib` ✓ 582/582（P10.2 結尾 496 → +86：system 13 + config 7 + storage 11 + update 8 + launcher 47）
+  - `cargo test --tests` ✓ integration 全綠（含 hk_login 等既有 + auto_paste / process_find_kill / config_xml 等本 chunk 新增）；同時驗證 D6-5 manifest fix 對 test binaries 也生效（issue tauri-apps/tauri#13419 描述的 `STATUS_ENTRYPOINT_NOT_FOUND` path）
+  - `cargo doc --no-deps --document-private-items` ✓（修 12 處 doc lint，6 個 D6/D7 新引入 + 6 個 D1/D3 累積；P10.3 各 D-step 把 doc gate 集中在 D8 處理是固定 pattern）：
+    - `lib.rs` `default_bindings_path` doc 對 private `export_specta_bindings` 改 plain code（`commands/mod.rs` 已有 `#![allow(rustdoc::private_intra_doc_links)]` 但 `lib.rs` 沒有；單一 reference 不值得加 file-level allow，plain text 較 SRP）
+    - `commands/mod.rs` D7 加的 5 處 `[`storage`][st]` / `[`launcher`][ln]` redundant explicit target 改 implicit `[`storage`]` / `[`launcher`]`，並拿掉對應的 `[st]:` / `[ln]:` reference link（見 D7 條目修正）
+    - `commands/storage.rs` 兩處對 `cfg(not(target_os = "windows"))` gated `platform_unsupported_error` / `cfg(test)` gated `tests::platform_unsupported_code_is_stable` 的 intra-doc link 改 plain code（在 Windows host 跑 cargo doc 兩 item 都不可見，原 link 一定 unresolved）
+    - `commands/system.rs` 4 處 `[`crate::services::system::open_url`]` ambiguous（`pub mod open_url; pub use open_url::open_url;` mod 跟 fn 同名）加 `()` disambiguator → `[`crate::services::system::open_url()`]`，並拿掉一個 redundant `[svc]` reference link
+  - `bindings.ts` regen：D6-5 已透過 `cargo run --example export_bindings` 真實生成（不再延後到 P11）；後續 P10.3 再無 command 簽名 / DTO 變動，無需再 regen
+- [ ] D-step 9：commit `feat(next): add launcher+storage+config+update+system commands (P10 chunk 10.3)` — 待填 hash；不帶 co-author；**吸取 D15 教訓：禁止擅自 amend**，若要回填 hash 另開 chore commit
+
+##### 預估
+
+- 新增 commands：16（system 1 + config 3 + storage 5 + update 1 + launcher 6）
+- 新增 DTOs：約 3-5（`UpdateInfo`/`ProcessInfo`/`KillResult` + 視需要 `LaunchOutcomeDto`；Account/Records 是既有 service type 加 derive）
+- 新增 service 函數：約 3-4（`system::open_url` / `process::game::find_game_processes` / `process::auto_paste_otp` / 可能 `config::get_all_values`）
+- lib tests 預估 496 → 530+
 
 - **P10 總驗收**：前端 `invoke("login_regular", {...})` 有型別提示、錯誤以 `CommandError` DTO 回傳、`bindings.ts` 對所有 command 完整導出
 

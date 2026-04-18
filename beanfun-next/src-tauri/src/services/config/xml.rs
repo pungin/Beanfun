@@ -234,6 +234,28 @@ fn read_value_blocking(path: &Path, key: &str) -> Result<Option<String>, ConfigE
     Ok(map.get(key).cloned())
 }
 
+/// Read every `<add key value />` entry from `path` as an ordered
+/// [`IndexMap`].
+///
+/// Unlike [`get_value`] / [`get_value_or`] (which are WPF-parity
+/// catch-all: return `""` / `default` on any failure) this function
+/// surfaces [`ConfigError`] so the caller can decide whether to
+/// swallow the failure (P10.3 `get_all_config` command → log + empty
+/// map) or bubble it up (future diagnostics / import-export
+/// tooling). The missing-file case collapses to
+/// `Ok(IndexMap::new())` because .NET `ConfigurationManager` treats
+/// a non-existent file as an empty settings collection — that
+/// specific outcome is not a failure.
+///
+/// Sits between `get_value` (single-key, stringly-typed fallback)
+/// and `set_value` (write path, typed error) in the API surface —
+/// fills the "read the whole map for the settings page" gap P10.3
+/// Q3=C introduces.
+pub async fn get_all_values(path: &Path) -> Result<IndexMap<String, String>, ConfigError> {
+    let path_owned = path.to_owned();
+    spawn_blocking_config(move || read_map_blocking(&path_owned)).await
+}
+
 fn read_map_blocking(path: &Path) -> Result<IndexMap<String, String>, ConfigError> {
     let bytes = match std::fs::read(path) {
         Ok(b) => b,

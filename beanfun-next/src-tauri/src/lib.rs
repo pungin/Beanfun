@@ -28,10 +28,48 @@ pub mod commands;
 pub mod core;
 pub mod services;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use commands::error::CommandError;
 use commands::state::AppState;
+
+/// Canonical location of the auto-generated `bindings.ts` the
+/// frontend imports from.
+///
+/// Resolves to `<CARGO_MANIFEST_DIR>/../src/types/bindings.ts` — i.e.
+/// the Tauri project root's `src/types/bindings.ts`. Cargo guarantees
+/// `CARGO_MANIFEST_DIR` points at the crate root (`src-tauri/`), so
+/// the parent is always the project root regardless of where the
+/// caller happens to run `cargo` from.
+///
+/// # Why a public helper (P10.3 D6)
+///
+/// Three independent code paths need the same target path:
+///
+/// 1. `export_specta_bindings` — private debug-build boot export
+///    inside [`run`] (kept private; navigate via the `lib.rs` source
+///    if the implementation matters).
+/// 2. `beanfun-next/src-tauri/examples/export_bindings.rs` — the
+///    standalone regenerate-bindings entry point a developer runs
+///    via `cargo run --example export_bindings` when they don't want
+///    to spin up `cargo tauri dev` just to refresh types.
+/// 3. `commands::bindings_file_tests::bindings_path` — the drift
+///    guard that greps the committed file for required symbols.
+///
+/// Keeping the path computation in one place means renaming the
+/// target (future restructure: `src/types/` → `src/api/`) is a
+/// one-line edit. Previous Tauri prototypes in this repo already
+/// drifted once when the path was duplicated across the boot helper
+/// and the test; this helper is the structural fix so we don't
+/// repeat that mistake.
+pub fn default_bindings_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("src-tauri always has a parent (the Tauri project root)")
+        .join("src")
+        .join("types")
+        .join("bindings.ts")
+}
 
 /// Resolve the production storage root directory.
 ///
@@ -109,24 +147,18 @@ fn resolve_storage_root() -> Result<PathBuf, CommandError> {
 ///
 /// # Target path
 ///
-/// `<CARGO_MANIFEST_DIR>/../src/types/bindings.ts`, resolved at
-/// compile time via [`env!("CARGO_MANIFEST_DIR")`][std::env!]. Cargo
-/// guarantees this constant points at the crate root (i.e.
-/// `src-tauri/`), whose parent is the Tauri project root.
+/// [`default_bindings_path`] — see that helper for the resolution
+/// rule and the DRY rationale shared with the
+/// `export_bindings` example binary and the
+/// `bindings_file_tests` drift guard.
 /// [`tauri_specta::Builder::export`] auto-creates the parent
 /// directory via `fs::create_dir_all`, so the `types/` folder does
 /// not need to pre-exist.
 #[cfg(debug_assertions)]
 fn export_specta_bindings<R: tauri::Runtime>(builder: &tauri_specta::Builder<R>) {
     use specta_typescript::Typescript;
-    use std::path::Path;
 
-    let target = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("src-tauri always has a parent (the Tauri project root)")
-        .join("src")
-        .join("types")
-        .join("bindings.ts");
+    let target = default_bindings_path();
 
     if let Err(err) = builder.export(Typescript::default(), &target) {
         eprintln!(

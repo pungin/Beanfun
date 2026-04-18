@@ -14,6 +14,7 @@
 //! | 9.1   | [`error`], [`find`], [`kill`]          | WMI query + `OpenProcess` + `TerminateProcess` |
 //! | 9.2   | [`patcher`], [`play_page`]             | single-shot helpers; timer driving → P10       |
 //! | 9.3   | `post_string`                          | Win32 thin wrappers for auto-paste             |
+//! | 10.3  | [`game`], [`auto_paste`]               | game preflight + OTP credential hand-off       |
 //!
 //! # Timer ownership
 //!
@@ -33,15 +34,22 @@
 //! compile on Windows. Cross-platform unit tests for P5 / P6 / P7 / P8
 //! are unaffected.
 
+pub mod auto_paste;
 pub mod error;
 pub mod find;
+pub mod game;
 pub mod kill;
 pub mod patcher;
 pub mod play_page;
 pub mod post_string;
 
+pub use auto_paste::{
+    paste_credentials, paste_credentials_with, DefaultPasteDriver, PasteDriver, PasteRequest,
+    MAPLESTORY_FALLBACK_CLASS, MAPLESTORY_PRIMARY_CLASS,
+};
 pub use error::ProcessError;
 pub use find::{find_processes_by_name, ProcessInfo};
+pub use game::{find_game_processes, kill_game_processes};
 pub use kill::kill_process;
 pub use patcher::{check_and_kill_patcher, PATCHER_EXE_NAME};
 pub use play_page::{close_play_window, PLAY_WINDOW_CLASS, PLAY_WINDOW_TITLE};
