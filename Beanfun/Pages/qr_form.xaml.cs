@@ -109,7 +109,8 @@ namespace Beanfun
                 catch { }
                 ShowToast(
                     Application.Current.TryFindResource(ok ? "CopyQRCodeSuccess" : "CopyFailed")
-                        as string ?? (ok ? "QR Code copied!" : "Copy failed"),
+                        as string
+                        ?? (ok ? "QR Code copied!" : "Copy failed"),
                     ok
                 );
             }
