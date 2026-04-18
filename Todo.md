@@ -1095,19 +1095,56 @@ Review 發現 6 個問題，依風險高中低切 5 個 R-step 修改 + 1 個 ga
 
 ### P11 — Vue 前端：i18n / Pinia / 主題
 
-- [ ] `scripts/convert-lang.mjs`：讀 `Beanfun/Lang/*.xaml` → 產生 `src/locales/*.json`（key 對齊 WPF 資源 key）
-- [ ] 加入 `src/locales/zh-TW.json` / `zh-CN.json` / `en-US.json`
-- [ ] vue-i18n 設定、設定頁切語系即時更新
-- [ ] Element Plus 主題色：runtime 設定 `--el-color-primary`（配合 Settings 頁可換色）
-- [ ] Pinia stores：
-  - [ ] `auth`：login state / webtoken / region / method
-  - [ ] `account`：service accounts / selected game / remain point / email
-  - [ ] `config`：所有 Config.xml 對應設定
-  - [ ] `ui`：theme color / minimize_to_tray / sw-render
-- [ ] `services/invoke.ts`：型別安全的 `invoke` 薄包裝，統一錯誤處理
-- [ ] `router/index.ts`：Pages 間導航
-- [ ] 單元測試：每個 store 3+ cases
-- **驗收**：主題 / 語系 / 設定存檔 / 重啟保留
+#### P11 pre-flight decisions（2026-04-16）— Q1-Q10 全 all_you_decide
+
+- **Q1（Sub-chunking）= A（單 chunk + 一次 commit）**：user 指示「如果都確定了就一次做完一次驗證」；14 D-step 內聚（彼此依賴 invoke wrapper / i18n / stores），中途 commit 反而切出非 user-visible-feature-complete 狀態
+- **Q2（`services/invoke.ts` 形狀）= B（thin wrapper）**：`wrapCommand` 解 `Result<T, CommandError>` + ElMessage error toast + console log + `auth.session_required` redirect hook；另 export `safeInvoke` 不 throw 給少數 caller 自處理。對齊 WPF「try-catch + MessageBox.Show」改為 ElMessage；DRY（每 store action 一行 invoke 不用 try/catch）
+- **Q3（i18n key + convert-lang）= A（WPF key 1:1）**：`<system:String x:Key="K">V</system:String>` → flat KV JSON；佔位符 `{0}` 保留（vue-i18n list-mode 支援）；映射 `zh.xaml→zh-TW.json` / `zh-Hans.xaml→zh-CN.json` / `en.xaml→en-US.json`；vitest 加三語系 key 一致性 guard 防漂移
+- **Q4（Pinia store 粒度）= A（4 store）**：`auth` / `account` / `config` / `ui`；對齊 backend AppState 4 面向；auth 內部用 sub-state field 區分 regular/qr/totp/verify 流程不拆 store
+- **Q5（Persisted state）= B（不 persist）**：single source of truth = `Config.xml`；frontend store 只是 in-memory cache，啟動 boot hook 呼 `get_all_config` 載入；DRY 最強（避免 Config.xml + localStorage 雙存同步 bug）；對齊 WPF（無獨立 frontend persistence）；`pinia-plugin-persistedstate` 留 package.json 不 wire
+- **Q6（ELP theme color runtime）= A（CSS variable + JS shade gen）**：`useThemeColor` composable + 自寫 30 行 HSL mix helper 算 5 lighter / 3 darker shade + `setProperty`；mockup `_design-system.html` 8 色作 preset + 自訂 hex picker；對齊 WPF「Settings 即時換色」
+- **Q7（`tauri.conf.json` capabilities）= A（暫不補）**：保持現況 `core:default + opener:default`；YAGNI — P11 純 infra，P12 切 page 時依需求補（dialog 給 import/export，shell 給 game launch 等）
+- **Q8（Router mode + structure）= A（hash + flat + minimal）**：`createWebHashHistory`；P11 只建 root `/` route 載 placeholder，P12 切 page 時逐個加 route；Tauri SPA 標準
+- **Q9（Smoke test 範圍）= B（cargo tauri dev + version command）**：App.vue boot 呼 `commands.version()` 顯示 build info；驗 frontend↔backend IPC round-trip + bindings.ts 真用得起來
+- **Q10（Test scope per module）= 3+ vitest tests**（contract / 邊界 / error path）對齊 P10 backend lib tests pattern；不深測 vue-i18n / pinia 內部 behavior；quality gates 跟 P10 對齊 `vitest run` + `vue-tsc --noEmit` + `eslint .` + `prettier --check .`
+
+#### D-step plan（單 chunk，14 D-step + 1 chore）
+
+- [x] D-step 1：`services/invoke.ts` thin wrapper ✓ — `wrapCommand<T>` 解 `Result<T, CommandError>` + `ElMessage.error` + `console.error` + `auth.session_required` redirect hook；`safeInvoke<T>` 回 `SafeResult<T>` 不 throw；`CommandInvocationError` 保留 structured cause；refactor 出 `surfaceCommandError` 讓 auth store 的 `safeInvoke` branch（`totp_required` / `verify_required` 當 flow continuation 不 toast）也能共用 error pipeline；`registerErrorTranslator` / `registerSessionExpiredHandler` 為 main.ts boot wire；12 vitest ✓
+- [x] D-step 2：`scripts/convert-lang.mjs` ✓ — Node ESM + `fast-xml-parser`（devDep 新增）解 `<system:String x:Key="K">V</system:String>` → flat KV；保留插入順序 + `{0}` 佔位符 + XML entity 解碼；`LOCALE_FILE_MAP` 映射 3 XAML → 3 JSON；8 vitest（inline XAML fixture，涵蓋 non-string resource / invalid XML / order preservation）✓
+- [x] D-step 3：跑 D2 script 產 `src/locales/{zh-TW,zh-CN,en-US}.json` ✓ — generated-and-checked-in artefact；**上游 WPF `zh-Hans.xaml` 真實缺約 30 個 key**（vs `zh.xaml` / `en.xaml` 完全對齊），對齊舊 WPF 的 `ResourceDictionary` fallback 行為；D10 drift guard 因此調整（見 D10）
+- [x] D-step 4：`composables/useThemeColor.ts` ✓ — `setPrimaryColor(hex)` + 線性 RGB mix helper 算 `light-3/5/7/9` + `dark-2` shade（Element Plus 實際 CSS variable 名稱）；export `THEME_PRESETS` 8 色 + `DEFAULT_PRIMARY_COLOR`；18 vitest（含 3-digit hex / 大小寫正規化 / edge case weight / all shades applied）✓
+- [x] D-step 5：`router/index.ts` ✓ — `createWebHashHistory` + `routes[]` flat + 1 root `/` 掛 `PlaceholderPage.vue` + catch-all redirect；`createAppRouter()` factory；`ROUTE_NAMES` 常數；5 vitest ✓
+- [x] D-step 6：`stores/config.ts` ✓ — Pinia `defineStore('config', ...)` setup syntax；`entries` / `loaded` / `size` computed；`loadAll()` 經 `wrapCommand(commands.getAllConfig())` 篩 string-only；`get` / `getOr` / `set(key, null)` delete semantics；不走 `pinia-plugin-persistedstate`（P11 Q5=B）；8 vitest ✓
+- [x] D-step 7：`stores/ui.ts` ✓ — 上層 `useConfigStore`；5 persistent computed getter（`themeColor` / `language` / `minimizeToTray` / `disableHwAccel` / `updateChannel`）+ 對應 setter 走 `config.set` 寫 `Config.xml` + side-effect（`setPrimaryColor` / `localeApplier`）；純 UI `globalLoading` / `currentDialog` 不走 Config；`applyAll()` boot hook（theme fallback default / locale try-catch keep previous）；`registerLocaleApplier` 留給 D10 wire；12 vitest（含 invalid config 值 fallback）✓
+- [x] D-step 8：`stores/auth.ts` ✓ — `session` / `pendingTotp` / `pendingVerify` / `qrChallenge` + `pendingAction` 雙擊 guard（`withGuard` helper）；8 IPC actions；**`loginRegular` / `loginTotp` 用 `safeInvoke` 攔 `auth.totp_required` / `auth.verify_required` 當 flow continuation 不 toast**（backend 回 `CommandError` 是正常登入階段訊號，`surfaceCommandError` 只留給真 error）；15 vitest ✓
+- [x] D-step 9：`stores/account.ts` ✓ — 雙 scope 整合在單一 store（per P11 Q4=A 4-store decision）：Users.dat（`accounts[]` / save / remove / import / export）+ live service account（`serviceAccounts[]` / refresh / add / rename / otp）；`getEmail` / `getRemainPoint` / `getContract` 各自 `Map<number, T>` cache 因 session-scoped 且跨 service-account lookup；`clearSessionData()` 供 auth `logout` 呼叫清 runtime cache；16 vitest ✓
+- [x] D-step 10：vue-i18n setup ✓
+  - `src/i18n/messages.ts` — frontend-only 非 WPF key（`placeholder.*` / `errors.*` / `themePreset.*`）三語系 nested tree；`KeysMatch<T, U>` compile-time guard 強制 zh-CN / en-US tree 與 zh-TW canonical 完全一致（任何 key 缺失即 `vue-tsc --noEmit` 失敗）
+  - `src/i18n/index.ts` — `i18nMessages` 把 generated WPF flat key（`AppName` 等）+ frontend-only nested key（`placeholder.*` 等）shallow merge（namespace 不碰撞）；`createAppI18n()` factory（`legacy: false` Composition API mode / `fallbackLocale: 'en-US'` / 依 `import.meta.env.DEV` 開 warn）；`setLocale(i18n, code)` helper；`wireI18n(i18n)` 同時註冊 ui store 的 `localeApplier` 跟 invoke 的 `errorTranslator`（errors.{code} → localized toast；te() miss 則 fallback backend message）
+  - 9 vitest（含 2 drift guard + 4 createAppI18n behavior + 3 wireI18n surface 測）✓
+  - **P11 原 Q3 plan 假設「三語系 key set 完全一致（防漂移 guard）」，但 D3 發現 WPF 上游 `zh-Hans.xaml` 真實比 `zh.xaml` / `en.xaml` 少約 30 key**。對齊舊 WPF 1:1 的原則，drift guard 放寬為：(a) 三 JSON load non-empty、(b) zh-CN ⊆ zh-TW（抓 zh-CN renegade key）、(c) zh-TW ≡ en-US（平行翻譯雙方皆上游維護）；frontend-only messages.ts 仍 strict equality；runtime 由 `fallbackLocale: 'en-US'` 補 zh-CN 缺 key（match WPF ResourceDictionary fallback semantics）
+- [x] D-step 11：`main.ts` wire ✓ — `createApp(App).use(pinia).use(i18n).use(ElementPlus).use(router).mount('#app')`；`wireI18n(i18n)` 在 `app.use(i18n)` 之前執行確保 UI store 首次 render 前已註冊好 locale applier；`element-plus/dist/index.css` import 一併做在 main.ts；`pinia-plugin-persistedstate` 留 `package.json` 但故意不 register（P11 Q5=B）
+- [x] D-step 12：`App.vue` overhaul ✓ — 整個換掉 Tauri scaffold；`<el-config-provider :locale="elpLocale">` wrap `<RouterView />`；`ELP_LOCALE_MAP: Record<AppLocale, Language>` 映射 3 locale 到 Element Plus `zh-tw.mjs` / `zh-cn.mjs` / `en.mjs`；`elpLocale` computed 跟 `useUiStore().language` 連動即時切；`onMounted` 跑 `config.loadAll()`（失敗走 `ElMessage.warning` 不卡 boot）→ `ui.applyAll()`；root font-family / 色系走 mockup design
+- [x] D-step 13：quality gates ✓
+  - `npm run test`：**vitest 111 passed / 10 files**（D1: 12, D2: 8, D4: 18, D5: 5, D6: 8, D7: 12, D8: 15, D9: 16, D10: 9, smoke: 3；比預估 ~35 多 ~3 倍，因各 D-step 實作時就補足 contract/邊界/error path 測到飽）
+  - `npm run typecheck`：`vue-tsc --noEmit` 0 error（D12 過程補 `src/element-plus-locale.d.ts` ambient shim，因 element-plus 的 `package.json` exports 沒掛 `dist/locale/*.mjs` subpath → `TS7016`，此 workaround 是 element-plus issue tracker 官方建議做法；`createAppI18n()` 拿掉顯式 return type 讓 TS infer，原寫 `I18n<typeof i18nMessages, ...>` 跟 vue-i18n 內部 `LocaleMessage<VueMessageType>` 不相容）
+  - `npm run lint`：`eslint .` 0 error 0 warning（`src/types/bindings.ts` 已於 D1 加入 `ignores`，D10 移除 `messages.ts` 無效的 `/* eslint-disable @typescript-eslint/no-unused-vars */` 塊）
+  - `npm run format:check`：`prettier --check .` all clean（一次性跑 `npm run format` 應用樣式；加 `src/types/bindings.ts` 進 `.prettierignore` 因為 tauri-specta 生成檔的 `/* prettier-ignore */` 只能 ignore 下一個 statement 不是全檔）
+  - `cargo check --manifest-path src-tauri/Cargo.toml` ✓ Rust 側仍 compile 乾淨
+  - `npm run build`（`vue-tsc --noEmit && vite build`）✓ 1647 modules transformed，prod bundle 產出（JS 1.15 MB / CSS 353 kB，>500 kB warning 是 ELP + Pinia + vue-i18n 組合的典型 baseline，P12 可視需再 code-split）
+  - `cargo tauri dev` 視覺 smoke 交 user 手動驗（placeholder 顯示 heading + `app` / `tauri` 版本 + 預設橘 `#FF8201` 主題 + zh-TW 文案）
+  - **D13 期間發現 D5 留下的 debt 一併修掉**（typecheck / lint 卡住）：(a) `Placeholder.vue` 使用 `version.productVersion` / `buildSha` / `buildTimestampUtc` 這 3 個實際不存在的欄位（`VersionInfo` 只有 `app` / `tauri`，D5 沒跑 typecheck 沒抓到），改成顯示 `app` + `tauri` + 新增 `placeholder.appVersion` / `placeholder.tauriVersion` i18n key（三語系同步）；(b) `Placeholder` 違反 `vue/multi-word-component-names`，加 `defineOptions({ name: 'PlaceholderPage' })` 不動檔名與 router `ROUTE_NAMES.Placeholder` 常數
+- [x] D-step 14：commit `feat(next): add P11 frontend infra (i18n + Pinia + router + theme)` — `8aeebaf`；無 co-author；33 files changed, 10312 insertions(+), 5758 deletions(-)（deletions 主要是 `src/types/bindings.ts` 上一版 + `App.vue` Tauri scaffold 整個換掉）
+  - ops note：按 P10.2 D15 / P10.3 D9 教訓採「先 commit 不含 Todo hash → 讀 HEAD hash → 另開 chore commit 回填」流程，禁止擅自 amend
+
+##### 預估
+
+- 新增 frontend 模組：~12 (`services/invoke.ts` / `router/index.ts` / `composables/useThemeColor.ts` / `i18n/index.ts` / 4 stores / `pages/Placeholder.vue` / `App.vue` overhaul / `main.ts` overhaul / `scripts/convert-lang.mjs`)
+- 新增生成 artefact：4 (`src/locales/{zh-TW,zh-CN,en-US}.json` + 1 fixture for D2 script test)
+- 預估 vitest tests：~35（D1: 3, D2: 2, D4: 3, D5: 2, D6: 4, D7: 4, D8: 6, D9: 5, D10: 2 + 1 guard）
+
+- **驗收**：主題 / 語系 / 設定存檔 / 重啟保留（透過 Config.xml backend 寫入；frontend store 重啟空，boot hook 重新讀回）；`cargo tauri dev` smoke 證 IPC 通路 + bindings.ts 型別正確
 
 ### P12 — Vue 前端：所有 Pages + Windows 1:1
 
