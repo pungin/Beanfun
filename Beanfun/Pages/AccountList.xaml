@@ -305,5 +305,16 @@
         </StackPanel>
       </StackPanel>
     </Grid>
+    <Border
+      x:Name="toastBorder"
+      Background="#CC333333"
+      CornerRadius="6"
+      HorizontalAlignment="Center"
+      VerticalAlignment="Bottom"
+      Margin="0 0 0 50"
+      Visibility="Collapsed"
+    >
+      <TextBlock x:Name="toastText" Foreground="White" FontSize="13" Margin="14 8" />
+    </Border>
   </Grid>
 </Page>

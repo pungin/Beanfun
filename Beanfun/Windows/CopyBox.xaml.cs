@@ -24,7 +24,7 @@ namespace Beanfun
         {
             try
             {
-                Clipboard.SetText(t_Value.Text);
+                WindowsAPI.CopyText(t_Value.Text);
                 MessageBox.Show(TryFindResource("CopyFinished") as string);
             }
             catch

@@ -1,7 +1,9 @@
+using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 
 namespace Beanfun
 {
@@ -57,7 +59,7 @@ namespace Beanfun
             {
                 try
                 {
-                    Clipboard.SetText(qrcodeClass.deeplink);
+                    WindowsAPI.CopyText(qrcodeClass.deeplink);
                     MessageBox.Show(
                         Application.Current.TryFindResource("CopyDeeplinkSuccess") as string
                     );
@@ -84,6 +86,92 @@ namespace Beanfun
         private void btn_StartGame_Click(object sender, RoutedEventArgs e)
         {
             App.MainWnd.runGame();
+        }
+
+        private void CopyQRCode_Click(object sender, RoutedEventArgs e)
+        {
+            if (qr_image.Source is BitmapSource bmp)
+            {
+                bool ok = false;
+                try
+                {
+                    var encoder = new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(bmp));
+                    using (var stream = new System.IO.MemoryStream())
+                    {
+                        encoder.Save(stream);
+                        stream.Position = 0;
+                        var bitmap = new System.Drawing.Bitmap(stream);
+                        System.Windows.Forms.Clipboard.SetImage(bitmap);
+                        ok = true;
+                    }
+                }
+                catch { }
+                ShowToast(
+                    Application.Current.TryFindResource(ok ? "CopyQRCodeSuccess" : "CopyFailed")
+                        as string
+                        ?? (ok ? "QR Code copied!" : "Copy failed"),
+                    ok
+                );
+            }
+        }
+
+        private Window _enlargeWnd;
+
+        public void CloseEnlargeWindow()
+        {
+            if (_enlargeWnd != null)
+            {
+                _enlargeWnd.Close();
+                _enlargeWnd = null;
+            }
+        }
+
+        private void EnlargeQRCode_Click(object sender, RoutedEventArgs e)
+        {
+            if (qr_image.Source == null)
+                return;
+
+            CloseEnlargeWindow();
+
+            _enlargeWnd = new Window
+            {
+                Title = "QR Code",
+                Width = 350,
+                Height = 350,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                ResizeMode = ResizeMode.CanResize,
+                Content = new Image
+                {
+                    Source = qr_image.Source,
+                    Stretch = System.Windows.Media.Stretch.Uniform,
+                },
+            };
+            _enlargeWnd.Closed += (s, _) => _enlargeWnd = null;
+            _enlargeWnd.Show();
+        }
+
+        private void ShowToast(string message, bool success = true)
+        {
+            toastText.Text = (success ? "✓ " : "") + message;
+            toastBorder.Background = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)
+                    System.Windows.Media.ColorConverter.ConvertFromString(
+                        success ? "#CC2E7D32" : "#CC333333"
+                    )
+            );
+            toastBorder.Visibility = Visibility.Visible;
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2),
+            };
+            timer.Tick += (s, _) =>
+            {
+                timer.Stop();
+                toastBorder.Visibility = Visibility.Collapsed;
+            };
+            timer.Start();
         }
     }
 }

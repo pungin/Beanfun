@@ -94,7 +94,8 @@
           <TextBox
             x:Name="otp1"
             GotFocus="otp_GotFocus"
-            PreviewKeyUp="otp1_PreviewKeyUp"
+            PreviewKeyDown="otp_PreviewKeyDown"
+            TextChanged="otp_TextChanged"
             Grid.Column="0"
             TextAlignment="Center"
             VerticalContentAlignment="Center"
@@ -104,7 +105,8 @@
           <TextBox
             x:Name="otp2"
             GotFocus="otp_GotFocus"
-            PreviewKeyUp="otp2_PreviewKeyUp"
+            PreviewKeyDown="otp_PreviewKeyDown"
+            TextChanged="otp_TextChanged"
             Grid.Column="2"
             TextAlignment="Center"
             VerticalContentAlignment="Center"
@@ -114,7 +116,8 @@
           <TextBox
             x:Name="otp3"
             GotFocus="otp_GotFocus"
-            PreviewKeyUp="otp3_PreviewKeyUp"
+            PreviewKeyDown="otp_PreviewKeyDown"
+            TextChanged="otp_TextChanged"
             Grid.Column="4"
             TextAlignment="Center"
             VerticalContentAlignment="Center"
@@ -124,7 +127,8 @@
           <TextBox
             x:Name="otp4"
             GotFocus="otp_GotFocus"
-            PreviewKeyUp="otp4_PreviewKeyUp"
+            PreviewKeyDown="otp_PreviewKeyDown"
+            TextChanged="otp_TextChanged"
             Grid.Column="6"
             TextAlignment="Center"
             VerticalContentAlignment="Center"
@@ -134,7 +138,8 @@
           <TextBox
             x:Name="otp5"
             GotFocus="otp_GotFocus"
-            PreviewKeyUp="otp5_PreviewKeyUp"
+            PreviewKeyDown="otp_PreviewKeyDown"
+            TextChanged="otp_TextChanged"
             Grid.Column="8"
             TextAlignment="Center"
             VerticalContentAlignment="Center"
@@ -144,7 +149,8 @@
           <TextBox
             x:Name="otp6"
             GotFocus="otp_GotFocus"
-            PreviewKeyUp="otp6_PreviewKeyUp"
+            PreviewKeyDown="otp_PreviewKeyDown"
+            TextChanged="otp_TextChanged"
             Grid.Column="10"
             TextAlignment="Center"
             VerticalContentAlignment="Center"

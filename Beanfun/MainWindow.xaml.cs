@@ -78,6 +78,7 @@ namespace Beanfun
         public string game_commandLine = "tw.login.maplestory.beanfun.com 8484 BeanFun %s %s";
         private string otp;
         private BitmapImage qr_default;
+        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(typeof(MainWindow));
         private static readonly System.Windows.Forms.NotifyIcon _trayNotifyIcon =
             new System.Windows.Forms.NotifyIcon
             {
@@ -683,46 +684,67 @@ namespace Beanfun
         {
             if (!GameList.ContainsKey(App.LoginRegion.ToLower()))
             {
-                List<GameService> gameList = new List<GameService>();
-                WebClient wc = new WebClient();
-
-                string res = Encoding.UTF8.GetString(
-                    wc.DownloadData(
-                        "https://"
-                            + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
-                            + ".beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"
-                    )
-                );
-
-                IniDataParser parser = new IniDataParser();
-                INIData = parser.Parse(res);
-
-                res = Encoding.UTF8.GetString(
-                    wc.DownloadData(
-                        "https://"
-                            + (App.LoginRegion == "HK" ? "bfweb.hk" : "tw")
-                            + ".beanfun.com/game_zone/"
-                    )
-                );
-                Regex reg = new Regex("Services\\.ServiceList = (.*);");
-                if (reg.IsMatch(res))
+                var capturedRegion = App.LoginRegion.ToLower();
+                string host = capturedRegion == "hk" ? "bfweb.hk" : "tw";
+                new Thread(() =>
                 {
-                    string json = reg.Match(res).Groups[1].Value;
-                    bool newJson = new Regex("^\\[(.*)\\]$").IsMatch(json);
-                    if (newJson)
+                    try
                     {
-                        JArray jsons = JArray.Parse(json);
-                        foreach (JObject game in jsons)
-                            AddGameServiceFromJson(gameList, game);
+                        List<GameService> gameList = new List<GameService>();
+                        WebClient wc = new WebClient();
+
+                        string res = Encoding.UTF8.GetString(
+                            wc.DownloadData(
+                                $"https://{host}.beanfun.com/beanfun_block/generic_handlers/get_service_ini.ashx"
+                            )
+                        );
+
+                        IniDataParser parser = new IniDataParser();
+                        var iniData = parser.Parse(res);
+
+                        res = Encoding.UTF8.GetString(
+                            wc.DownloadData($"https://{host}.beanfun.com/game_zone/")
+                        );
+                        Regex reg = new Regex("Services\\.ServiceList = (.*);");
+                        if (reg.IsMatch(res))
+                        {
+                            string json = reg.Match(res).Groups[1].Value;
+                            bool newJson = new Regex("^\\[(.*)\\]$").IsMatch(json);
+                            if (newJson)
+                            {
+                                JArray jsons = JArray.Parse(json);
+                                foreach (JObject game in jsons)
+                                    AddGameServiceFromJson(gameList, game);
+                            }
+                            else
+                            {
+                                JObject o = JObject.Parse(json);
+                                foreach (JObject game in o["Rows"])
+                                    AddGameServiceFromJson(gameList, game);
+                            }
+                        }
+
+                        Dispatcher.Invoke(() =>
+                        {
+                            if (App.LoginRegion.ToLower() != capturedRegion)
+                                return;
+
+                            INIData = iniData;
+                            if (!GameList.ContainsKey(capturedRegion))
+                                GameList.Add(capturedRegion, gameList);
+                            selectedGameChanged();
+                        });
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        JObject o = JObject.Parse(json);
-                        foreach (JObject game in o["Rows"])
-                            AddGameServiceFromJson(gameList, game);
+                        log.Error("reLoadGameInfo failed", ex);
                     }
-                }
-                GameList.Add(App.LoginRegion.ToLower(), gameList);
+                })
+                {
+                    IsBackground = true,
+                    Name = "reLoadGameInfo",
+                }.Start();
+                return;
             }
 
             selectedGameChanged();
@@ -895,8 +917,22 @@ namespace Beanfun
                 frame.Focus();
         }
 
+        private void CloseGamePassBrowser()
+        {
+            foreach (Window wnd in Application.Current.Windows)
+            {
+                if (wnd is GamePassBrowser)
+                {
+                    wnd.Close();
+                    break;
+                }
+            }
+        }
+
         private void btn_Region_Click(object sender, RoutedEventArgs e)
         {
+            loginPage.qr.CloseEnlargeWindow();
+            CloseGamePassBrowser();
             App.LoginRegion = App.LoginRegion == "TW" ? "HK" : "TW";
             ConfigAppSettings.SetValue("loginRegion", App.LoginRegion);
             loginMethodInit();
@@ -1017,6 +1053,8 @@ namespace Beanfun
         {
             if (qrWorker.IsBusy)
                 qrWorker.CancelAsync();
+            loginPage.qr.CloseEnlargeWindow();
+            CloseGamePassBrowser();
             qrCheckLogin.IsEnabled = false;
             btn_Region.IsEnabled = true;
             settingPage.LoginModePanel.Visibility =
@@ -1222,7 +1260,7 @@ namespace Beanfun
                 case "authkeyParseFailed":
                 case "LoginUnknown":
                     msg = TryFindResource(msg) as string;
-                    method = 0;
+                    method = 1;
                     break;
                 case "LoginNoAkey":
                     msg = $"{TryFindResource("LoginNoAkey") as string}({msg})";
@@ -1366,6 +1404,7 @@ namespace Beanfun
         {
             try
             {
+                loginPage.qr.CloseEnlargeWindow();
                 frame.Content = accountList;
                 btn_Region.Visibility = Visibility.Collapsed;
 
@@ -2168,10 +2207,10 @@ namespace Beanfun
                         {
                             try
                             {
-                                Clipboard.SetText(accountList.t_Password.Text);
-                                MessageBox.Show(TryFindResource("GetOtpSuccessAndCopy") as string);
+                                WindowsAPI.CopyText(accountList.t_Password.Text);
                             }
                             catch { }
+                            ShowOtpCopiedHint();
                         }
                         else
                         {
@@ -2259,9 +2298,29 @@ namespace Beanfun
                             1
                         )
                     );
+        }
 
-            //if (!this.pingWorker.IsBusy)  this.pingWorker.RunWorkerAsync();
-            //this.pingWorker.RunWorkerAsync();
+        public void ShowOtpCopiedHint(string message = null)
+        {
+            accountList.toastText.Text =
+                "✓ " + (message ?? TryFindResource("GetOtpSuccessAndCopy") as string ?? "Copied!");
+            accountList.toastBorder.Background = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#CC2E7D32")
+            );
+            accountList.toastBorder.Visibility = Visibility.Visible;
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2),
+            };
+            timer.Tick += (s, _) =>
+            {
+                timer.Stop();
+                accountList.toastBorder.Visibility = Visibility.Collapsed;
+                accountList.toastBorder.Background = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("#CC333333")
+                );
+            };
+            timer.Start();
         }
 
         // Ping to Beanfun website.
@@ -2333,8 +2392,17 @@ namespace Beanfun
         private void qrWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
             btn_Region.IsEnabled = true;
+            if (e.Cancelled)
+                return;
             if (updateQRCodeImage())
+            {
                 qrCheckLogin.IsEnabled = true;
+            }
+            else
+            {
+                App.LoginMethod = (int)LoginMethod.Regular;
+                Dispatcher.BeginInvoke(new System.Action(() => loginMethodChanged()));
+            }
         }
 
         private void qrCheckLogin_Tick(object sender, EventArgs e)
@@ -2386,11 +2454,15 @@ namespace Beanfun
             {
                 result = false;
                 loginPage.qr.qr_image.Source = qr_default;
+                loginPage.qr.btn_CopyQR.IsEnabled = false;
+                loginPage.qr.btn_EnlargeQR.IsEnabled = false;
             }
             else
             {
                 result = true;
                 loginPage.qr.qr_image.Source = qrCodeImage;
+                loginPage.qr.btn_CopyQR.IsEnabled = true;
+                loginPage.qr.btn_EnlargeQR.IsEnabled = true;
             }
             loginPage.qr.btn_Refresh_QRCode.IsEnabled = true;
 
