@@ -32,6 +32,7 @@ use std::path::{Path, PathBuf};
 
 use commands::error::CommandError;
 use commands::state::AppState;
+use tracing_subscriber::{fmt, EnvFilter};
 
 /// Canonical location of the auto-generated `bindings.ts` the
 /// frontend imports from.
@@ -199,14 +200,101 @@ pub fn default_typescript_exporter() -> specta_typescript::Typescript {
     )
 }
 
+/// Initialize the global `tracing` subscriber so every
+/// `tracing::info!` / `warn!` / `error!` / `debug!` emitted by the
+/// services and command layers actually reaches stderr.
+///
+/// # Why this exists (P12.1 D4 live-test postmortem)
+///
+/// `tracing` is built on a global `Dispatch`; if no subscriber is
+/// installed the macros compile but resolve to a no-op writer. From
+/// project bootstrap up through P12.1 D4 we shipped progressively
+/// richer diagnostic logging (regex-miss `body_preview`s in
+/// `session_key.rs` / `send_login.rs`, the `step = "LoginCompleted"`
+/// marker in `completed.rs`, every `verify.rs` retry / cooldown
+/// trace) but never wired a subscriber, so the diagnostics were all
+/// silently dropped. The QR finalize live-test loop surfaced this:
+/// after the `auth.missing_web_token` Option B fix landed and the
+/// flow started succeeding end-to-end, the user reported "log 完全
+/// 沒東西" — confirming the entire observability investment had been
+/// invisible the whole time.
+///
+/// # Filter directive
+///
+/// Reads `RUST_LOG` first via [`EnvFilter::try_from_default_env`] so
+/// developers can override per-session
+/// (`RUST_LOG=trace cargo tauri dev`, `RUST_LOG=beanfun_next_lib=trace`,
+/// `RUST_LOG=hyper=warn,beanfun_next_lib=debug`, …).
+///
+/// Falls back to `"info,beanfun_next_lib=debug"`:
+///
+/// - **Third-party crates (`hyper`, `reqwest`, `tauri`, `tao`, …) at
+///   `INFO`** — quiet by default. These libraries emit dense
+///   per-request `DEBUG` traces that drown the signal we care about
+///   (our service-layer narrative).
+/// - **Our own `beanfun_next_lib` crate at `DEBUG`** — surfaces every
+///   diagnostic we have already invested in (login step markers,
+///   cookie jar dumps, regex preview bodies) without forcing a
+///   `RUST_LOG` env var on every contributor's shell.
+///
+/// # Output destination
+///
+/// Default [`tracing_subscriber::fmt`] writes to **stderr**. In
+/// `cargo tauri dev` that's the same terminal that runs the dev
+/// server, so logs appear interleaved with Vite's HMR output and
+/// Cargo's compile messages. For the production Windows build the
+/// `windows_subsystem = "windows"` attribute in `main.rs` suppresses
+/// the console window, so stderr lands in the void; future P-stage
+/// work can route to a file via [`tauri-plugin-log`] or a custom
+/// rolling-file appender if production observability becomes a
+/// requirement (none today — WPF parity scope only covers dev-time
+/// debugging).
+///
+/// # Test isolation
+///
+/// `cargo test` does not invoke `run()`, so this initializer is
+/// never reached during any unit / integration / specta test.
+/// Tests that need tracing visibility install their own subscriber
+/// via `tracing_subscriber::fmt::try_init()` in the test body.
+/// Calling `init()` twice in a process panics; this single call site
+/// in the production boot path is the canonical owner of the global
+/// subscriber.
+///
+/// # WPF parity (none)
+///
+/// This is observability infrastructure, not business logic. The
+/// legacy WPF client wrote ad-hoc `Console.WriteLine` calls plus a
+/// hand-rolled file logger; we deliberately swap that for the
+/// industry-standard `tracing` ecosystem. The structured fields
+/// (`step = "LoginCompleted"`, `url = %url`, …) that the WPF code
+/// could only flatten into prose are now first-class and, with this
+/// subscriber installed, queryable via downstream JSON exporters
+/// when we eventually need them.
+fn init_tracing() {
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,beanfun_next_lib=debug"));
+
+    fmt().with_env_filter(filter).with_target(true).init();
+}
+
 /// Tauri application entry point.
 ///
 /// On storage-root resolution failure the process exits with code 1
 /// after writing a single-line diagnostic to stderr (chosen over
 /// `expect`/`panic` so the user-facing fatal message is concise;
 /// there's no reasonable recovery when `%APPDATA%` is unresolvable).
+///
+/// # Boot ordering
+///
+/// [`init_tracing`] is the very first call so even the storage-root
+/// resolver gets a live subscriber if it ever grows a `tracing::warn!`
+/// (today it short-circuits via [`eprintln!`] for the fatal path so
+/// the tracing layer is unused there, but the ordering is the
+/// safe default for future additions).
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_tracing();
+
     let storage_root = resolve_storage_root().unwrap_or_else(|err| {
         eprintln!("fatal: cannot resolve storage root — {err}");
         std::process::exit(1);

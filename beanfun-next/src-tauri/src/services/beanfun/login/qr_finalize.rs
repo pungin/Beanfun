@@ -54,7 +54,7 @@
 //!
 //! ## Step 3 — `POST return.aspx` with the SendLogin form (no-redirect)
 //!
-//! WPF L588-598. `redirect = false` → no-redirect client; `Referer:
+//! WPF L588-600. `redirect = false` → no-redirect client; `Referer:
 //! https://login.beanfun.com/`; payload is the `<input>`s scraped
 //! from step 2's HTML form.
 //!
@@ -64,10 +64,25 @@
 //! POST, which means whatever value the jar holds *after step 4*
 //! is the canonical one used by every subsequent API call (WPF
 //! L868). We mirror that lifetime: we call [`super::post_return_aspx()`]
-//! to perform the request (so the cookie jar is primed and the
-//! transport-level `MissingWebToken` failure mode still surfaces if
-//! the response is malformed), then **deliberately discard** the
-//! returned token — the canonical webtoken comes from step 4.
+//! to perform the request (so the cookie jar is primed and any HTTP
+//! / transport failure still surfaces as a typed error), then
+//! **deliberately discard** the returned token — the canonical
+//! webtoken comes from step 4.
+//!
+//! ### Leniency on missing `bfWebToken` (WPF parity)
+//!
+//! WPF L591-598 wraps the cookie read inside
+//! `if (!string.IsNullOrEmpty(setCookieHeader))`, silently falling
+//! through to `return "OK"` (L600) when the server omits the cookie.
+//! The canonical lookup happens in step 4 anyway (L868), so step 3's
+//! job is only to advance server state — not to produce a token.
+//! We mirror that by swallowing [`LoginError::MissingWebToken`] at
+//! this callsite specifically; every other error variant
+//! (transport, HTTP non-2xx/3xx, invalid URL) still propagates
+//! unchanged. Live testing on 2026-04-16 showed beanfun's TW server
+//! does omit `Set-Cookie: bfWebToken` on this hop for some session
+//! states, and a strict reading surfaced as `auth.missing_web_token`
+//! to the user — aligning with WPF eliminates the regression.
 //!
 //! ## Step 4 — shared `LoginCompleted` tail (`AuthKey="OK"`)
 //!
@@ -181,7 +196,7 @@ pub async fn finalize_qr_login(
 
     let form = send_login(client, &index_url, QR_SEND_LOGIN_ACCEPT).await?;
 
-    // Step 3 — `POST return.aspx` with the SendLogin form (WPF L588-598).
+    // Step 3 — `POST return.aspx` with the SendLogin form (WPF L588-600).
     // We deliberately discard the captured `bfWebToken` here: this POST
     // exists to advance server-side session state and prime the cookie
     // jar, but the *canonical* token is the one captured in step 4
@@ -190,7 +205,17 @@ pub async fn finalize_qr_login(
     // value at that point — not the value scraped here — is what every
     // subsequent API call uses. See module-level "Step 4" docs for the
     // alignment rationale.
-    let _step3_token = post_return_aspx(client, &form).await?;
+    //
+    // WPF parity for missing cookie: L591-598 wraps the scrape in
+    // `if (!string.IsNullOrEmpty(setCookieHeader))` and silently falls
+    // through to `return "OK"` when the cookie is absent. Mirror that
+    // by swallowing `MissingWebToken` specifically; every other error
+    // (transport, HTTP 4xx/5xx, URL) still short-circuits. See
+    // module-level "Leniency on missing bfWebToken" section.
+    match post_return_aspx(client, &form).await {
+        Ok(_) | Err(LoginError::MissingWebToken) => {}
+        Err(other) => return Err(other),
+    }
 
     // Step 4 — shared `LoginCompleted` tail (WPF L838-882). Mirrors
     // what HK Regular and TOTP also do; the QR-specific bits are the

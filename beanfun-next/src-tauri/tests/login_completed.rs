@@ -8,11 +8,19 @@
 //!
 //! - the request is sent to `portal_base/beanfun_block/bflogin/return.aspx`
 //!   (not `login_base`) with the exact WPF field values,
-//! - the `bfWebToken` cookie scraped from the 302 lands on `Session`,
+//! - the `bfWebToken` cookie that reqwest records in the shared
+//!   cookie jar during the auto-followed redirect chain lands on
+//!   `Session.web_token` (WPF parity with L863-868's
+//!   `UploadString` → auto-follow → `GetCookie("bfWebToken")`),
 //! - the region / account metadata arguments end up on `Session`
 //!   verbatim (no silent rewriting),
-//! - `MissingWebToken` propagates from `post_return_aspx` unchanged
-//!   when the server omits the cookie.
+//! - `MissingWebToken` surfaces when the cookie jar has no
+//!   `bfWebToken` after the redirect chain settles.
+//!
+//! Because `login_completed` follows redirects (WPF parity), every
+//! `return.aspx` mock here also mounts a `GET /after` landing page
+//! so reqwest's auto-follow has somewhere to land without surfacing
+//! a 404 as `LoginError::Unknown`. See [`mount_after_landing`].
 
 use beanfun_next_lib::services::beanfun::{
     login::login_completed, BeanfunClient, ClientConfig, Endpoints, LoginError, LoginRegion,
@@ -43,6 +51,7 @@ async fn mount_return_aspx_with_token(server: &MockServer, token: &str) {
         )
         .mount(server)
         .await;
+    mount_after_landing(server).await;
 }
 
 /// Mount a `return.aspx` mock that intentionally omits the `bfWebToken`
@@ -54,6 +63,22 @@ async fn mount_return_aspx_without_token(server: &MockServer) {
             ResponseTemplate::new(302)
                 .append_header("Location", format!("{}/after", server.uri()).as_str()),
         )
+        .mount(server)
+        .await;
+    mount_after_landing(server).await;
+}
+
+/// `GET /after` → `200 OK` landing page. Required because
+/// `login_completed` follows 302s via [`BeanfunClient::http`] (WPF
+/// parity with L863's `UploadString` auto-follow), so the mocked 302
+/// above points to `/after` which must exist or reqwest surfaces the
+/// 404 as `LoginError::Unknown`. The body is intentionally empty —
+/// `login_completed` discards the response body, it only cares about
+/// the cookie jar state after the chain settles.
+async fn mount_after_landing(server: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/after"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(""))
         .mount(server)
         .await;
 }
@@ -160,6 +185,7 @@ async fn post_body_contains_session_key_and_akey_url_encoded() {
         )
         .mount(&server)
         .await;
+    mount_after_landing(&server).await;
 
     let client = client_for(&server, LoginRegion::TW);
     login_completed(
@@ -195,6 +221,7 @@ async fn post_body_has_empty_service_code_and_region_fields() {
         )
         .mount(&server)
         .await;
+    mount_after_landing(&server).await;
 
     let client = client_for(&server, LoginRegion::TW);
     login_completed(
@@ -236,5 +263,72 @@ async fn missing_web_token_surfaces_login_error_variant() {
     assert!(
         matches!(err, LoginError::MissingWebToken),
         "expected MissingWebToken, got {err:?}"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Redirect-chain cookie read (WPF L863-868 parity)
+// -----------------------------------------------------------------------------
+
+#[tokio::test]
+async fn bfwebtoken_set_on_late_redirect_hop_still_lands_on_session() {
+    // WPF's `LoginCompleted` auto-follows redirects (L863 `UploadString`
+    // + `WebClient`'s default `AllowAutoRedirect = true`) and then reads
+    // `bfWebToken` from the *cookie jar* afterwards (L868
+    // `GetCookie("bfWebToken")`). An earlier draft of this module
+    // piggy-backed on `post_return_aspx` (no-redirect + immediate
+    // `Set-Cookie` scrape), which caused a live regression on
+    // 2026-04-16: beanfun's TW server set `bfWebToken` on a LATER
+    // hop in the chain, invisible to the first-302 scrape.
+    //
+    // This test locks the fix: the initial 302 carries no
+    // `bfWebToken`; the redirect target (`/after`) is where the cookie
+    // is finally set. With auto-redirect + jar read we capture it.
+    // With the old "scrape the first 302" strategy we would NOT, and
+    // this test would fail with `MissingWebToken`.
+    let server = MockServer::start().await;
+
+    // First hop: 302 → /after, but NO `bfWebToken` Set-Cookie.
+    Mock::given(method("POST"))
+        .and(path("/beanfun_block/bflogin/return.aspx"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .append_header("Location", format!("{}/after", server.uri()).as_str()),
+        )
+        .mount(&server)
+        .await;
+
+    // Second hop (`/after`): 200 with the canonical `bfWebToken`.
+    // Mirrors beanfun's observed traffic where the final landing
+    // page is where the portal-scoped `bfWebToken` arrives.
+    Mock::given(method("GET"))
+        .and(path("/after"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .append_header(
+                    "Set-Cookie",
+                    format!("bfWebToken={WEB_TOKEN}; Path=/; HttpOnly").as_str(),
+                )
+                .set_body_string(""),
+        )
+        .mount(&server)
+        .await;
+
+    let client = client_for(&server, LoginRegion::TW);
+    let session = login_completed(
+        &client,
+        SESSION_KEY,
+        AKEY,
+        ACCOUNT_ID,
+        SERVICE_CODE,
+        SERVICE_REGION,
+    )
+    .await
+    .expect("late-hop cookie must still land on Session");
+
+    assert_eq!(
+        session.web_token, WEB_TOKEN,
+        "cookie set on the final hop must be captured via the jar, \
+         not just the first-302 Set-Cookie scrape"
     );
 }

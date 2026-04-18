@@ -89,8 +89,8 @@
 use reqwest::header;
 use serde::Deserialize;
 
-use super::ensure_success;
 use super::qr_init::QrLoginInit;
+use super::{ensure_success, truncate_chars, BODY_LOG_PREVIEW_CHARS};
 use crate::services::beanfun::{BeanfunClient, LoginError, LoginRegion};
 
 /// One round-trip's worth of state from `QRLogin/CheckLoginStatus`.
@@ -169,10 +169,21 @@ pub async fn poll_qr_login_status(
     // it here would diverge from the production wire shape.
     //
     // Body is empty (`NameValueCollection payload = new ...` with no
-    // entries). `WebClient.UploadString` still sets
-    // `Content-Type: application/x-www-form-urlencoded` for that
-    // empty payload, which reqwest does NOT do automatically for
-    // `.body("")`, so we set it explicitly to keep wire parity.
+    // entries). WPF's `WebClient.UploadString` emits two headers
+    // automatically for that empty payload which we have to
+    // reconstruct manually around `.body("")`:
+    //
+    // - `Content-Type: application/x-www-form-urlencoded` — reqwest
+    //   only auto-sets it for `.form(&T)` / `.json(&T)`, not for
+    //   raw `.body(...)`.
+    // - `Content-Length: 0` — reqwest/hyper treats `.body("")` as
+    //   a no-length streaming body and emits
+    //   `Transfer-Encoding: chunked` (or neither framing header)
+    //   instead of `Content-Length: 0`. Beanfun's
+    //   `QRLogin/CheckLoginStatus` endpoint is strict HTTP/1.1 and
+    //   rejects both alternatives with `HTTP 411 Length Required`
+    //   (observed live 2026-04-18). An explicit zero-length header
+    //   restores byte-equal wire parity with WPF's `UploadString`.
     let resp = client
         .http()
         .post(url)
@@ -181,6 +192,7 @@ pub async fn poll_qr_login_status(
         .header("Origin", origin)
         .header("RequestVerificationToken", &init.verification_token)
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::CONTENT_LENGTH, "0")
         .body("")
         .send()
         .await?;
@@ -192,8 +204,23 @@ pub async fn poll_qr_login_status(
     // collapse the underlying `serde_json::Error` into our
     // dedicated `QrJsonParseFailed` variant to keep the WPF
     // `errmsg = "LoginJsonParseFailed"` mapping intact.
-    let parsed: PollResponse =
-        serde_json::from_str(&body).map_err(|_| LoginError::QrJsonParseFailed)?;
+    //
+    // Diagnostic (same pattern as `session_key.rs` regex-miss and
+    // `send_login.rs` empty-scrape paths from the D3 observability
+    // commit): log a bounded `body_preview` so a server-side wire
+    // shape regression (e.g. `ResultMessage` field returned as an
+    // integer à la P3 parity fix) is identifiable from one tracing
+    // line instead of a silent frontend banner. The error code
+    // itself (`auth.qr_json_parse_failed`) doesn't change.
+    let parsed: PollResponse = serde_json::from_str(&body).map_err(|e| {
+        tracing::warn!(
+            step = "qr_poll",
+            error = %e,
+            body_preview = %truncate_chars(&body, BODY_LOG_PREVIEW_CHARS),
+            "QR poll response JSON parse failed",
+        );
+        LoginError::QrJsonParseFailed
+    })?;
 
     // WPF L640-652 dispatch table. Missing `ResultMessage` field
     // casts to null in C# (`(string)jsonData["ResultMessage"]`) and
@@ -205,7 +232,22 @@ pub async fn poll_qr_login_status(
         Some("Wait Login") => Ok(QrPollOutcome::WaitLogin),
         Some("Token Expired") => Ok(QrPollOutcome::TokenExpired),
         Some("Success") => Ok(QrPollOutcome::Approved),
-        _ => Err(LoginError::ServerMessage(body)),
+        other => {
+            // Unknown / absent `ResultMessage` → mirror WPF's
+            // `errmsg = response; return -1` fall-through. Log the
+            // preview **before** moving `body` into the error so a
+            // future beanfun release that adds a new status (e.g.
+            // `"RateLimited"`) surfaces in the logs as a clear
+            // regression signal rather than just a user-visible
+            // error banner.
+            tracing::warn!(
+                step = "qr_poll",
+                result_message = ?other,
+                body_preview = %truncate_chars(&body, BODY_LOG_PREVIEW_CHARS),
+                "QR poll returned unknown ResultMessage",
+            );
+            Err(LoginError::ServerMessage(body))
+        }
     }
 }
 

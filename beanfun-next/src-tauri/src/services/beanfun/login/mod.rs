@@ -61,7 +61,7 @@ use std::fmt;
 
 use serde::de::{self, Deserializer, Visitor};
 
-use crate::services::beanfun::LoginError;
+use crate::services::beanfun::{BeanfunClient, LoginError};
 
 // -----------------------------------------------------------------------------
 // Shared request helpers
@@ -103,6 +103,57 @@ pub(crate) fn apply_json_headers(
         .header(reqwest::header::REFERER, referer)
         .header("X-Requested-With", "XMLHttpRequest")
         .header("RequestVerificationToken", verification_token)
+}
+
+/// Read `bfWebToken` from `client`'s shared cookie jar, scoped to the
+/// portal host (TW: `tw.beanfun.com`; HK: `bfweb.hk.beanfun.com`).
+///
+/// # Shared ownership
+///
+/// Two callers need exactly this lookup shape — HK Regular / TOTP / QR
+/// via [`completed::login_completed`], and GamePass via
+/// [`gamepass::try_complete_gamepass_login`]. Both follow the WPF
+/// `BeanfunClient.cs::GetCookie("bfWebToken")` (L153-163) pattern of
+/// querying `CookieContainer.GetCookies(new Uri("https://{portal_host}/"))`
+/// (L144-150) — i.e. the cookie set whose `Domain` attribute
+/// domain-matches the portal host, per RFC 6265 §5.1.3.
+///
+/// Hoisting the helper here keeps the "portal-origin scoping + mutex
+/// lock + case-insensitive name match" policy in one place. A future
+/// flow that also needs `bfWebToken` lookup (e.g. multi-session
+/// diagnostics) picks it up for free; a future policy change
+/// (different cookie name / broader scope) lands in exactly one
+/// location.
+///
+/// # Why scope matters
+///
+/// During the login redirect chain, beanfun sets `bfWebToken` on one
+/// of the later hops — often with `Domain=.beanfun.com` or a
+/// `portal_host`-specific Domain. An earlier hop may emit an
+/// unrelated cookie (e.g. an auth session-id on `login.beanfun.com`)
+/// that would NOT be visible to the portal host. `CookieStore::matches`
+/// performs the same RFC 6265 visibility check WPF's `GetCookies(Uri)`
+/// does, so feeding it the portal URL gives us exactly the cookie set
+/// WPF would have seen.
+///
+/// Returns `None` when no `bfWebToken` cookie is visible from the
+/// portal origin. The caller decides how to surface the miss — HK
+/// Regular / QR / TOTP raise [`LoginError::MissingWebToken`] (WPF
+/// L868-872 `if (this.webtoken == "") { errmsg = "LoginNoWebtoken"; }`);
+/// GamePass treats it as "navigation isn't finished yet" and waits
+/// for the next page load (WPF `GamePassBrowser.TryCompleteLogin`
+/// L143-144 early-returns silently).
+pub(super) fn read_bfwebtoken_from_jar(client: &BeanfunClient) -> Option<String> {
+    let portal_base = &client.config().endpoints.portal_base;
+    let store = client.cookie_store();
+    let guard = store
+        .lock()
+        .expect("cookie store mutex must not be poisoned");
+    guard
+        .matches(portal_base)
+        .into_iter()
+        .find(|c| c.name().eq_ignore_ascii_case("bfWebToken"))
+        .map(|c| c.value().to_owned())
 }
 
 // -----------------------------------------------------------------------------

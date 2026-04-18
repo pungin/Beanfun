@@ -5,6 +5,7 @@ import {
   THEME_PRESETS,
   mixHexColor,
   parseHexColor,
+  resolvePrimaryColor,
   setPrimaryColor,
   useThemeColor,
 } from '../../../src/composables/useThemeColor'
@@ -57,6 +58,45 @@ describe('parseHexColor', () => {
     expect(() => parseHexColor('not-a-color')).toThrow(RangeError)
     expect(() => parseHexColor('#xyz123')).toThrow(RangeError)
     expect(() => parseHexColor('#1234')).toThrow(RangeError)
+  })
+})
+
+describe('resolvePrimaryColor', () => {
+  it('maps WPF named colors to their P11 preset hex (documented aliases)', () => {
+    // Pairs come straight from WPF_NAMED_COLOR_ALIASES; one per entry
+    // so adding / removing an alias in the source forces a visible
+    // test diff.
+    expect(resolvePrimaryColor('White')).toBe('#555555')
+    expect(resolvePrimaryColor('Black')).toBe('#1A1A1A')
+    expect(resolvePrimaryColor('LightBlue')).toBe('#0B6E99')
+    expect(resolvePrimaryColor('Pink')).toBe('#D85A88')
+    expect(resolvePrimaryColor('Gold')).toBe('#C9A227')
+    expect(resolvePrimaryColor('Silver')).toBe('#7A7A7A')
+  })
+
+  it('matches aliases case-insensitively', () => {
+    expect(resolvePrimaryColor('lightblue')).toBe('#0B6E99')
+    expect(resolvePrimaryColor('LIGHTBLUE')).toBe('#0B6E99')
+    expect(resolvePrimaryColor('LiGhTbLuE')).toBe('#0B6E99')
+  })
+
+  it('trims leading / trailing whitespace on alias input', () => {
+    expect(resolvePrimaryColor('  LightBlue  ')).toBe('#0B6E99')
+    expect(resolvePrimaryColor('\tGold\n')).toBe('#C9A227')
+  })
+
+  it('passes hex input through untouched (pre or post resolver)', () => {
+    // resolvePrimaryColor doesn't validate hex — it only translates
+    // legacy named colors. Callers combine it with parseHexColor.
+    expect(resolvePrimaryColor('#FF8201')).toBe('#FF8201')
+    expect(resolvePrimaryColor('#B6DE8E')).toBe('#B6DE8E')
+    expect(resolvePrimaryColor('#abc')).toBe('#abc')
+  })
+
+  it('passes unknown strings through so parseHexColor can reject them', () => {
+    // Round-trip property: any non-alias string comes back verbatim.
+    expect(resolvePrimaryColor('not-a-color')).toBe('not-a-color')
+    expect(resolvePrimaryColor('SlateGray')).toBe('SlateGray') // valid WPF color, not in WPF Settings ComboBox
   })
 })
 
@@ -123,6 +163,16 @@ describe('setPrimaryColor', () => {
   it('throws RangeError for invalid hex input without mutating the target', () => {
     expect(() => setPrimaryColor('not-a-color', target)).toThrow(RangeError)
     expect(target.style.getPropertyValue('--el-color-primary')).toBe('')
+  })
+
+  it('accepts legacy WPF named-color aliases and applies the P11 preset hex', () => {
+    // Regression: `Config.xml` written by the old WPF client stores
+    // raw WPF color names like "LightBlue"; setPrimaryColor used to
+    // throw because only the hex path was wired. Now the alias
+    // resolver translates it to the P11 `lightblue` preset
+    // (`#0B6E99`) before parseHexColor runs.
+    setPrimaryColor('LightBlue', target)
+    expect(target.style.getPropertyValue('--el-color-primary')).toBe('#0b6e99')
   })
 
   it('falls back to document.documentElement when no target is provided', () => {

@@ -71,6 +71,18 @@ async fn mount_return_aspx_with_token(server: &MockServer, token: &str) {
         )
         .mount(server)
         .await;
+    mount_after_landing(server).await;
+}
+
+/// `GET /after` → `200 OK` landing page. HK Regular's
+/// `login_completed` follows redirects (WPF L863 parity), so the
+/// 302 mounted above needs a reachable target.
+async fn mount_after_landing(server: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/after"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(""))
+        .mount(server)
+        .await;
 }
 
 // -- TW login fixtures --------------------------------------------------------

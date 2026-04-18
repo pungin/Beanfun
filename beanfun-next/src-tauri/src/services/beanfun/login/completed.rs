@@ -33,21 +33,40 @@
 //! shape, so they call [`login_completed`] instead of rebuilding the
 //! form by hand.
 //!
-//! Transport-wise we reuse [`post_return_aspx`] verbatim: same host
-//! (`portal_base/beanfun_block/bflogin/return.aspx`), same no-redirect
-//! quirk, same `Set-Cookie` scrape for `bfWebToken`.
+//! # Wire shape — auto-redirect + cookie-jar read (WPF L863-868 parity)
+//!
+//! Unlike TW Regular's inline `return.aspx` (which uses
+//! [`super::post_return_aspx`] on a no-redirect client and scrapes
+//! `Set-Cookie` from the **immediate** 302), `LoginCompleted` talks
+//! to a different server surface: WPF L863 posts the five-field form
+//! via `UploadString` (auto-follow enabled because no
+//! `redirect = false` override is in scope — see WPF L921 in
+//! `SetBaseHeaders`), then L868 reads `bfWebToken` from the cookie
+//! **jar** via `GetCookie("bfWebToken")` (L153-163), scoped to
+//! `https://{portal_host}/` (L144-150). WPF-observed beanfun traffic
+//! carries `bfWebToken` on one of the **later** redirect hops, not
+//! on the first 302 — scraping `Set-Cookie` header-by-header from
+//! the first hop is not sufficient.
+//!
+//! We mirror that exactly:
+//!
+//! 1. POST via the redirect-following [`BeanfunClient::http`] client.
+//! 2. `ensure_success` on the final response (after the chain settles).
+//! 3. Discard the body — WPF L874-879 further calls `GetAccounts` /
+//!    `getRemainPoint`, but we defer those to higher-level callers
+//!    (see "No `GetAccounts` / `getRemainPoint` tail" below).
+//! 4. Read `bfWebToken` from the shared [`CookieStoreMutex`] the two
+//!    reqwest clients share (see `BeanfunClient::cookie_store`),
+//!    scoped to the portal domain.
+//!
+//! This differs from an earlier draft that piggy-backed on
+//! [`super::post_return_aspx`]: that helper is TW Regular-shaped
+//! (no-redirect + header scrape) and produced `MissingWebToken`
+//! errors against live beanfun traffic because `bfWebToken` arrived
+//! only on a later hop. See 2026-04-16 Todo.md hotfix entry.
 //!
 //! # Intentional divergences from WPF
 //!
-//! - **Skip the redundant `Location` GET (WPF L865).** WPF calls
-//!   `this.DownloadString($"https://{host}/{ResponseHeaders["Location"]}")`
-//!   after the `UploadString`. Because WPF's `WebClient` auto-follows
-//!   the 302 by default, `ResponseHeaders` already reflects the final
-//!   200 response at that point — where `Location` is usually absent,
-//!   making the second GET either a no-op or a request to the bare host.
-//!   Our no-redirect client captures `bfWebToken` directly from the
-//!   302's `Set-Cookie` header (same strategy used by TW's
-//!   `post_return_aspx`), so the extra GET adds nothing we need.
 //! - **No `GetAccounts` / `getRemainPoint` tail.** WPF L874-879 calls
 //!   both inside `LoginCompleted` and stores the results on the client.
 //!   We keep `login_completed` narrowly scoped to "finalise auth →
@@ -57,10 +76,12 @@
 //!   and avoids blocking the login path on downstream API calls that
 //!   can fail independently.
 
+use reqwest::header;
+
 use crate::core::parser::HiddenInput;
 use crate::services::beanfun::{BeanfunClient, LoginError, Session};
 
-use super::post_return_aspx;
+use super::{ensure_success, read_bfwebtoken_from_jar};
 
 /// Run the shared login-tail: post the five-field form to `return.aspx`,
 /// extract `bfWebToken` from the response, and wrap everything into a
@@ -82,12 +103,15 @@ use super::post_return_aspx;
 ///
 /// # Error surface
 ///
-/// - [`LoginError::MissingWebToken`] — `return.aspx` returned no
-///   `bfWebToken` cookie. Almost always indicates an upstream issue that
-///   slipped through (bad akey, expired session) rather than a local
-///   bug.
-/// - Any [`LoginError`] that `post_return_aspx` can surface (HTTP,
-///   invalid URL, etc.) bubbles up unchanged.
+/// - [`LoginError::MissingWebToken`] — the cookie jar contained no
+///   `bfWebToken` entry after the redirect chain settled. Almost
+///   always indicates an upstream issue (bad akey, expired session,
+///   server-side policy change) rather than a local bug.
+/// - [`LoginError::Unknown`] — `return.aspx` (or any redirect-chain
+///   hop) returned a non-2xx final status. Mirrors WPF catching a
+///   `WebException` at the outer try block (L604-607).
+/// - [`LoginError::InvalidUrl`] / transport errors — propagated from
+///   URL construction and the reqwest POST verbatim.
 pub async fn login_completed(
     client: &BeanfunClient,
     session_key: &str,
@@ -106,7 +130,34 @@ pub async fn login_completed(
     );
 
     let form = build_completed_form(session_key, akey);
-    let web_token = post_return_aspx(client, &form).await?;
+    let url = client.portal_url("beanfun_block/bflogin/return.aspx")?;
+    // WPF L921-922 `SetBaseHeaders(..., "https://login.beanfun.com/")`.
+    // `Url::as_str()` preserves the trailing slash that url::Url
+    // canonicalises for origin URLs, matching the WPF byte shape.
+    let login_base = client.config().endpoints.login_base.as_str().to_owned();
+
+    // WPF parity: use the redirect-following client (WPF's WebClient
+    // auto-follows because `SetBaseHeaders` did not toggle
+    // `AllowAutoRedirect = false` on L921-922). reqwest 0.12's
+    // default `RedirectPolicy::default()` follows up to 10 hops —
+    // more than enough for beanfun's observed 1-2 hop chain.
+    let resp = client
+        .http()
+        .post(url)
+        .header(header::REFERER, login_base)
+        .form(&form)
+        .send()
+        .await?;
+
+    ensure_success(&resp, "return.aspx (LoginCompleted tail)")?;
+    // Drop explicitly to drain the body + return the connection to
+    // the pool before we reach into the shared cookie jar. Not
+    // strictly required for correctness (the Response's Drop impl
+    // does the same), but makes the "jar is ready to read" intent
+    // explicit.
+    drop(resp);
+
+    let web_token = read_bfwebtoken_from_jar(client).ok_or(LoginError::MissingWebToken)?;
 
     // Operator observability: single success line at the shared login
     // tail — covers HK Regular, HK TOTP, and QR Code flows in one log
@@ -114,17 +165,34 @@ pub async fn login_completed(
     // `account_id` is non-secret; skey / web_token / akey are session
     // bearers and deliberately not logged — `Session::Debug` already
     // redacts them for safe capture elsewhere.
+    //
+    // Empty-account_id rendering: QR login has no user-typed id and
+    // intentionally passes `""` here (see `qr_finalize.rs` "Session
+    // .account_id" module docs — actual account resolves on the
+    // subsequent `GetAccounts` call). Rendering that as a bare
+    // `account_id=` in the log trips postmortem readers into hunting
+    // a bug that isn't there, so substitute a sentinel that makes the
+    // deferred-resolution intent visible. HK Regular / TOTP callers
+    // *must* pass a non-empty id (they have the user's textbox value
+    // in hand); if one somehow arrives here empty the same sentinel
+    // will surface the gap instead of silently swallowing it — an
+    // empty-value log line that would otherwise read identically.
+    let account_id_display = if account_id.is_empty() {
+        "<deferred>"
+    } else {
+        account_id
+    };
     tracing::info!(
         step = "LoginCompleted",
         region = ?client.config().region,
-        account_id = %account_id,
+        account_id = account_id_display,
         "login flow completed successfully"
     );
 
     Ok(Session::new(
         client.config().region,
         session_key,
-        web_token,
+        &web_token,
         account_id,
         service_code,
         service_region,

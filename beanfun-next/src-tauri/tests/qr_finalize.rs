@@ -13,7 +13,7 @@
 //! | HK region guard, no HTTP traffic                                | `hk_region_returns_qr_unsupported_without_http_traffic`          |
 //! | step 1 (`QRLogin/QRLogin`) HTTP 5xx                             | `qrlogin_handshake_failure_propagates_as_unknown`                |
 //! | step 2 (`Login/SendLogin`) empty form                           | `send_login_empty_form_yields_send_login_no_form_data`           |
-//! | step 3 (`return.aspx` SendLogin form) missing bfWebToken cookie | `step3_missing_set_cookie_yields_missing_web_token`              |
+//! | step 3 missing bfWebToken → tolerated, step 4 still runs        | `step3_missing_set_cookie_is_tolerated_and_continues_to_step4`   |
 //! | step 4 (`return.aspx` AuthKey=OK form) missing bfWebToken cookie| `step4_login_completed_missing_token_yields_missing_web_token`   |
 //! | step 1 wire shape — Accept=JSON, Referer=Index URL              | `step1_qrlogin_handshake_sends_expected_headers`                 |
 //! | step 2 wire shape — Accept=QR-specific HTML, Referer            | `step2_send_login_sends_qr_specific_html_accept`                 |
@@ -161,7 +161,9 @@ async fn mount_return_aspx_step3_with_token(server: &MockServer, token: &str) {
 }
 
 /// Step 3 mock that responds **without** a `bfWebToken` cookie.
-/// Drives the per-step `MissingWebToken` failure surface.
+/// `finalize_qr_login` tolerates this (WPF L591-598 parity —
+/// the canonical cookie comes from step 4); see
+/// `step3_missing_set_cookie_is_tolerated_and_continues_to_step4`.
 async fn mount_return_aspx_step3_without_token(server: &MockServer) {
     Mock::given(method("POST"))
         .and(path("/beanfun_block/bflogin/return.aspx"))
@@ -195,6 +197,7 @@ async fn mount_return_aspx_step4_with_token(server: &MockServer, token: &str) {
         )
         .mount(server)
         .await;
+    mount_after_landing(server).await;
 }
 
 /// Step 4 mock that responds **without** a `bfWebToken` cookie.
@@ -210,6 +213,22 @@ async fn mount_return_aspx_step4_without_token(server: &MockServer) {
             ResponseTemplate::new(302)
                 .append_header("Location", format!("{}/after", server.uri()).as_str()),
         )
+        .mount(server)
+        .await;
+    mount_after_landing(server).await;
+}
+
+/// `GET /after` → `200 OK` landing page. Step 4 uses
+/// [`login_completed`] which auto-follows redirects (WPF L863
+/// parity), so the 302 above needs a reachable target or reqwest
+/// surfaces 404 as `LoginError::Unknown`. Step 3 stays on
+/// `post_return_aspx` (no-redirect) and never hits this endpoint,
+/// but mounting it unconditionally keeps the per-step fixtures
+/// symmetric and harmless.
+async fn mount_after_landing(server: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/after"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(""))
         .mount(server)
         .await;
 }
@@ -344,52 +363,74 @@ async fn send_login_empty_form_yields_send_login_no_form_data() {
 }
 
 #[tokio::test]
-async fn step3_missing_set_cookie_yields_missing_web_token() {
-    // Steps 1 & 2 succeed; step 3 returns 302 without a
-    // `bfWebToken` cookie. Even though `finalize_qr_login` discards
-    // step 3's *value*, the underlying `post_return_aspx` helper
-    // still requires a cookie to be present (otherwise it raises
-    // MissingWebToken). This locks the strictness of step 3 — a
-    // future refactor that loosens it (e.g. tolerating a missing
-    // cookie because we don't use the value anyway) would be a real
-    // behaviour change worth a deliberate decision, not a silent
-    // drift, so we want the test to catch it.
+async fn step3_missing_set_cookie_is_tolerated_and_continues_to_step4() {
+    // Steps 1 & 2 succeed; step 3 returns 302 **without** a
+    // `bfWebToken` cookie; step 4 returns 302 WITH the cookie.
     //
-    // Step 4's mock is intentionally NOT mounted: if step 3 errors,
-    // step 4 must short-circuit. The trailing `received_requests`
-    // check belt-and-braces the assertion.
+    // Locks WPF parity: `QRCodeLogin` L591-598 wraps the step 3
+    // cookie read inside `if (!string.IsNullOrEmpty(setCookieHeader))`
+    // and silently falls through to `return "OK"` (L600) when the
+    // server omits the cookie. The canonical `bfWebToken` comes from
+    // step 4's `LoginCompleted` (L868 `GetCookie("bfWebToken")`), so
+    // step 3's token is only a side effect — missing it is NOT a
+    // fatal condition.
+    //
+    // Before this test was flipped (2026-04-16 hotfix), a strict
+    // `MissingWebToken` at step 3 surfaced to the UI as
+    // `auth.missing_web_token` even on fully-valid QR sessions,
+    // because beanfun's live TW server does sometimes omit the
+    // `Set-Cookie` header on this hop. See `qr_finalize.rs` module
+    // "Leniency on missing bfWebToken" section.
     let server = MockServer::start().await;
     mount_qrlogin_handshake_ok(&server).await;
     mount_send_login_happy(&server).await;
     mount_return_aspx_step3_without_token(&server).await;
+    mount_return_aspx_step4_with_token(&server, STEP4_WEB_TOKEN).await;
     let client = client_for(&server, LoginRegion::TW);
 
-    let err = finalize_qr_login(&client, &fake_init())
+    let session = finalize_qr_login(&client, &fake_init())
         .await
-        .expect_err("missing Set-Cookie on step 3 must error");
-    assert!(
-        matches!(err, LoginError::MissingWebToken),
-        "expected MissingWebToken, got {err:?}"
+        .expect("step 3 MissingWebToken must be tolerated — WPF L591-598 parity");
+
+    // Step 4's token is the one that should surface on Session.
+    assert_eq!(
+        session.web_token, STEP4_WEB_TOKEN,
+        "web_token must come from step 4 even when step 3 omitted the cookie"
     );
 
+    // Belt-and-braces: step 3 AND step 4 both reached the server.
+    // If step 3 had erred (pre-hotfix behaviour), we'd see exactly
+    // ONE return.aspx hit instead of two.
     let received = server.received_requests().await.unwrap();
     let return_aspx_hits = received
         .iter()
         .filter(|r| r.url.path() == "/beanfun_block/bflogin/return.aspx")
         .count();
     assert_eq!(
-        return_aspx_hits, 1,
-        "step 3 failure must short-circuit step 4 (saw {return_aspx_hits} return.aspx calls)"
+        return_aspx_hits, 2,
+        "step 3 tolerance must let step 4 run (saw {return_aspx_hits} return.aspx calls)"
     );
 }
 
 #[tokio::test]
 async fn step4_login_completed_missing_token_yields_missing_web_token() {
-    // Steps 1, 2, and 3 succeed; step 4 (LoginCompleted's POST)
-    // returns 302 without a `bfWebToken` cookie. This is the
-    // **canonical** MissingWebToken failure surface: step 4 is
-    // where we extract the user-facing token, so any cookie issue
-    // here propagates to the caller verbatim.
+    // Steps 1 & 2 succeed; neither step 3 NOR step 4 sets
+    // `bfWebToken`. The cookie jar therefore stays empty through the
+    // whole flow, and `login_completed` surfaces
+    // `LoginError::MissingWebToken` after the redirect chain settles.
+    //
+    // Why both steps must omit the cookie (vs. "just step 4"): under
+    // WPF parity, `login_completed` reads `bfWebToken` from the
+    // shared cookie jar (WPF L868 `GetCookie("bfWebToken")`), not
+    // from step 4's immediate `Set-Cookie` header. reqwest records
+    // every `Set-Cookie` observed on any hop — step 3's included —
+    // into that shared jar, so if step 3 supplies a token the jar
+    // is NOT empty when step 4 reads it, regardless of whether step
+    // 4 itself sets the cookie. Mirroring WPF behaviour on that
+    // point: `LoginCompleted` would also return step 3's token in
+    // the same scenario. The canonical MissingWebToken surface is
+    // therefore "no hop in the chain set bfWebToken", not "step 4
+    // specifically omitted it".
     //
     // WPF parallel: `LoginCompleted` L868-873 sets `errmsg =
     // "LoginNoWebtoken"` when `GetCookie("bfWebToken") == ""` after
@@ -398,13 +439,13 @@ async fn step4_login_completed_missing_token_yields_missing_web_token() {
     let server = MockServer::start().await;
     mount_qrlogin_handshake_ok(&server).await;
     mount_send_login_happy(&server).await;
-    mount_return_aspx_step3_with_token(&server, STEP3_DISCARDED_TOKEN).await;
+    mount_return_aspx_step3_without_token(&server).await;
     mount_return_aspx_step4_without_token(&server).await;
     let client = client_for(&server, LoginRegion::TW);
 
     let err = finalize_qr_login(&client, &fake_init())
         .await
-        .expect_err("missing Set-Cookie on step 4 must error");
+        .expect_err("empty cookie jar after step 4 must surface as MissingWebToken");
     assert!(
         matches!(err, LoginError::MissingWebToken),
         "expected MissingWebToken, got {err:?}"
