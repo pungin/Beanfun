@@ -29,7 +29,7 @@
 
 use reqwest::header;
 
-use super::ensure_success;
+use super::{ensure_success, truncate_chars, BODY_LOG_PREVIEW_CHARS};
 use crate::core::parser::{extract_hidden_inputs, HiddenInput};
 use crate::services::beanfun::{BeanfunClient, LoginError};
 
@@ -61,6 +61,19 @@ pub async fn send_login(
     let body = client.bounded_text(resp).await?;
     let inputs = extract_hidden_inputs(&body);
     if inputs.is_empty() {
+        // Diagnostic: scraping zero hidden inputs usually means one of
+        // (a) upstream credential step silently failed and the server
+        // handed us an error / redirect page, (b) Beanfun served an
+        // anti-bot interstitial, or (c) the form markup shape changed.
+        // The bounded body preview gives the operator enough context
+        // to tell them apart without blowing up log volume. WPF's
+        // equivalent (`errmsg = "SendLoginNoFormData"`) is silent
+        // about the body, so this is a parity-superset.
+        tracing::warn!(
+            step = "SendLogin",
+            body_preview = %truncate_chars(&body, BODY_LOG_PREVIEW_CHARS),
+            "SendLogin scrape returned 0 hidden inputs"
+        );
         return Err(LoginError::SendLoginNoFormData);
     }
     Ok(inputs)

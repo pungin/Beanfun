@@ -16,6 +16,7 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
+use super::{truncate_chars, BODY_LOG_PREVIEW_CHARS};
 use crate::services::beanfun::{BeanfunClient, LoginError, LoginRegion};
 
 /// Region-aware session-key retrieval. Delegates to the TW or HK helper
@@ -40,7 +41,22 @@ async fn get_session_key_tw(client: &BeanfunClient) -> Result<String, LoginError
     let final_url = resp.url().clone();
     let _ = client.bounded_text(resp).await?;
 
-    session_key_from_url(final_url.as_str()).ok_or(LoginError::MissingSessionKey)
+    session_key_from_url(final_url.as_str()).ok_or_else(|| {
+        // Diagnostic: when the portal-default redirect chain ends on a
+        // URL whose query doesn't carry `[sp][Ss]?[Kk]ey=…` we want
+        // the operator to see what URL we actually landed on. The URL
+        // query may contain user-agent-derived identifiers but not
+        // credentials; logging the full URL is safe in this context
+        // and is the minimum context needed to tell "Beanfun changed
+        // its redirect target" apart from a transient network glitch.
+        tracing::warn!(
+            step = "GetSessionKey",
+            region = ?LoginRegion::TW,
+            final_url = %final_url,
+            "session key regex did not match the redirected URL"
+        );
+        LoginError::MissingSessionKey
+    })
 }
 
 /// HK: the default.aspx response body itself contains an OTP1 span whose
@@ -54,7 +70,21 @@ async fn get_session_key_hk(client: &BeanfunClient) -> Result<String, LoginError
         return Err(LoginError::EmptyResponse);
     }
 
-    session_key_from_hk_body(&body).ok_or(LoginError::MissingSessionKey)
+    session_key_from_hk_body(&body).ok_or_else(|| {
+        // Diagnostic: when the HK OTP1 span regex doesn't match we log
+        // a bounded body preview so the operator can tell apart
+        // (a) an anti-bot / rate-limit interstitial, (b) an error
+        // page, and (c) a new markup shape where the span id changed.
+        // Preview is bounded to the shared `BODY_LOG_PREVIEW_CHARS`
+        // limit and cut at a UTF-8 boundary by `truncate_chars`.
+        tracing::warn!(
+            step = "GetSessionKey",
+            region = ?LoginRegion::HK,
+            body_preview = %truncate_chars(&body, BODY_LOG_PREVIEW_CHARS),
+            "OTP1 span regex did not match the response body"
+        );
+        LoginError::MissingSessionKey
+    })
 }
 
 // -----------------------------------------------------------------------------

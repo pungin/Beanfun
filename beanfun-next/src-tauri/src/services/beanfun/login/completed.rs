@@ -108,6 +108,19 @@ pub async fn login_completed(
     let form = build_completed_form(session_key, akey);
     let web_token = post_return_aspx(client, &form).await?;
 
+    // Operator observability: single success line at the shared login
+    // tail — covers HK Regular, HK TOTP, and QR Code flows in one log
+    // site (they all funnel through `login_completed` by design).
+    // `account_id` is non-secret; skey / web_token / akey are session
+    // bearers and deliberately not logged — `Session::Debug` already
+    // redacts them for safe capture elsewhere.
+    tracing::info!(
+        step = "LoginCompleted",
+        region = ?client.config().region,
+        account_id = %account_id,
+        "login flow completed successfully"
+    );
+
     Ok(Session::new(
         client.config().region,
         session_key,

@@ -77,6 +77,19 @@ pub async fn login_tw_regular(
     .await?;
     let web_token = post_return_aspx(client, &form).await?;
 
+    // Operator observability: emit a single success line per completed
+    // login so "happy path" is no longer silent in operator logs.
+    // `account_id` is non-secret (exposed verbatim via `SessionInfo` to
+    // the frontend) and the skey / web_token values are deliberately
+    // omitted — both are session bearers whose `Session::Debug` impl
+    // already redacts them to keep `tracing` captures safe.
+    tracing::info!(
+        step = "TwRegular",
+        region = ?LoginRegion::TW,
+        account_id = %creds.account,
+        "login flow completed successfully"
+    );
+
     Ok(Session::new(
         LoginRegion::TW,
         skey,
