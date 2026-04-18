@@ -2207,10 +2207,10 @@ namespace Beanfun
                         {
                             try
                             {
-                                Clipboard.SetText(accountList.t_Password.Text);
-                                ShowOtpCopiedHint();
+                                WindowsAPI.CopyText(accountList.t_Password.Text);
                             }
                             catch { }
+                            ShowOtpCopiedHint();
                         }
                         else
                         {
@@ -2300,10 +2300,13 @@ namespace Beanfun
                     );
         }
 
-        private void ShowOtpCopiedHint()
+        public void ShowOtpCopiedHint(string message = null)
         {
             accountList.toastText.Text =
-                TryFindResource("GetOtpSuccessAndCopy") as string ?? "Copied!";
+                "✓ " + (message ?? TryFindResource("GetOtpSuccessAndCopy") as string ?? "Copied!");
+            accountList.toastBorder.Background = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#CC2E7D32")
+            );
             accountList.toastBorder.Visibility = Visibility.Visible;
             var timer = new System.Windows.Threading.DispatcherTimer
             {
@@ -2313,6 +2316,9 @@ namespace Beanfun
             {
                 timer.Stop();
                 accountList.toastBorder.Visibility = Visibility.Collapsed;
+                accountList.toastBorder.Background = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("#CC333333")
+                );
             };
             timer.Start();
         }
@@ -2395,7 +2401,7 @@ namespace Beanfun
             else
             {
                 App.LoginMethod = (int)LoginMethod.Regular;
-                loginMethodChanged();
+                Dispatcher.BeginInvoke(new System.Action(() => loginMethodChanged()));
             }
         }
 

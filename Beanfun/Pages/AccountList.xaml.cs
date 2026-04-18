@@ -47,7 +47,7 @@ namespace Beanfun
                 return;
             try
             {
-                Clipboard.SetText(account.sid);
+                WindowsAPI.CopyText(account.sid);
             }
             catch { }
         }
@@ -109,9 +109,10 @@ namespace Beanfun
                 return;
             try
             {
-                Clipboard.SetText(t_Password.Text);
+                WindowsAPI.CopyText(t_Password.Text);
             }
             catch { }
+            App.MainWnd.ShowOtpCopiedHint(TryFindResource("CopyFinished") as string ?? "Copied");
         }
 
         private void btnAddServiceAccount_Click(object sender, RoutedEventArgs e)

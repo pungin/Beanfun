@@ -59,7 +59,7 @@ namespace Beanfun
             {
                 try
                 {
-                    Clipboard.SetText(qrcodeClass.deeplink);
+                    WindowsAPI.CopyText(qrcodeClass.deeplink);
                     MessageBox.Show(
                         Application.Current.TryFindResource("CopyDeeplinkSuccess") as string
                     );
@@ -96,13 +96,15 @@ namespace Beanfun
                 {
                     var encoder = new PngBitmapEncoder();
                     encoder.Frames.Add(BitmapFrame.Create(bmp));
-                    using (var stream = new System.IO.MemoryStream())
-                    {
-                        encoder.Save(stream);
-                        stream.Position = 0;
-                        var bitmap = new System.Drawing.Bitmap(stream);
-                        System.Windows.Forms.Clipboard.SetImage(bitmap);
-                    }
+                    var stream = new System.IO.MemoryStream();
+                    encoder.Save(stream);
+
+                    var data = new DataObject();
+                    data.SetData("PNG", stream);
+                    stream.Position = 0;
+                    data.SetData(DataFormats.Bitmap, bmp);
+                    Clipboard.SetDataObject(data, true);
+
                     ShowToast(
                         Application.Current.TryFindResource("CopyQRCodeSuccess") as string
                             ?? "QR Code copied!"
@@ -111,7 +113,9 @@ namespace Beanfun
                 catch
                 {
                     ShowToast(
-                        Application.Current.TryFindResource("CopyFailed") as string ?? "Copy failed"
+                        Application.Current.TryFindResource("CopyFailed") as string
+                            ?? "Copy failed",
+                        false
                     );
                 }
             }
@@ -153,9 +157,15 @@ namespace Beanfun
             _enlargeWnd.Show();
         }
 
-        private void ShowToast(string message)
+        private void ShowToast(string message, bool success = true)
         {
-            toastText.Text = message;
+            toastText.Text = (success ? "✓ " : "") + message;
+            toastBorder.Background = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)
+                    System.Windows.Media.ColorConverter.ConvertFromString(
+                        success ? "#CC2E7D32" : "#CC333333"
+                    )
+            );
             toastBorder.Visibility = Visibility.Visible;
             var timer = new System.Windows.Threading.DispatcherTimer
             {
