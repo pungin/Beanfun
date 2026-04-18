@@ -10,6 +10,8 @@
 //! |-------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
 //! | [`get_accounts`]                          | happy multi-row (sort by ssn) / quota notice with `進階認證` / quota notice with other text / partial create_time failures degrade to `None` / no rows |
 //! | [`get_service_contract`]                  | happy / `intResult != 1` returns empty                                                                                                                  |
+//! | [`get_email`]                             | TW happy regex capture / TW regex miss returns empty / HK short-circuits empty without request                                                         |
+//! | [`get_remain_point`]                      | happy numeric capture / regex miss returns `0` / non-numeric capture returns `0`                                                                       |
 //! | [`add_service_account`]                   | happy / empty name skips request / `intResult != 1` returns false                                                                                       |
 //! | [`change_service_account_display_name`]   | happy / `new_name == account.sname` skips request / empty `new_name` skips request                                                                      |
 //!
@@ -18,9 +20,9 @@
 //! locks the HTTP wire shapes and the orchestration on top of them.
 
 use beanfun_next_lib::services::beanfun::{
-    add_service_account, change_service_account_display_name, get_accounts, get_service_contract,
-    AmountLimitNotice, BeanfunClient, ClientConfig, Endpoints, LoginRegion, ServiceAccount,
-    Session,
+    add_service_account, change_service_account_display_name, get_accounts, get_email,
+    get_remain_point, get_service_contract, AmountLimitNotice, BeanfunClient, ClientConfig,
+    Endpoints, LoginRegion, ServiceAccount, Session,
 };
 use url::Url;
 use wiremock::matchers::{body_string_contains, method, path, query_param};
@@ -487,4 +489,140 @@ async fn change_display_name_empty_new_name_returns_false_no_request() {
 
     assert!(!ok);
     assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+// -----------------------------------------------------------------------------
+// get_email
+// -----------------------------------------------------------------------------
+
+/// Build a TW [`Session`] with an HK region flag — used only by the
+/// HK short-circuit test. The other session fields are irrelevant
+/// because `get_email` never reaches the HTTP layer on HK.
+fn test_session_hk() -> Session {
+    Session::new(
+        LoginRegion::HK,
+        SESSION_KEY,
+        WEB_TOKEN,
+        ACCOUNT_ID,
+        SERVICE_CODE,
+        SERVICE_REGION,
+    )
+}
+
+/// Mount `loader.ashx` returning the supplied body (200). The caller
+/// controls whether the body contains a matching
+/// `BeanFunBlock.LoggedInUserData.Email` assignment.
+async fn mount_loader(server: &MockServer, body: &str) {
+    Mock::given(method("GET"))
+        .and(path("/beanfun_block/loader.ashx"))
+        .and(query_param("service_code", "999999"))
+        .and(query_param("service_region", "T0"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(body.to_owned()))
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn get_email_tw_happy_returns_captured_address() {
+    let server = MockServer::start().await;
+    mount_loader(
+        &server,
+        r#"<script>BeanFunBlock.LoggedInUserData.Email = "alice@example.com";BeanFunBlock.LoggedInUserData.MessageCount = 0;</script>"#,
+    )
+    .await;
+
+    let client = client_for(&server);
+    let session = test_session();
+    let email = get_email(&client, &session).await.unwrap();
+
+    assert_eq!(email, "alice@example.com");
+}
+
+/// When the regex anchor is absent the function returns `""`, mirroring
+/// WPF's `regex.IsMatch ? ... : ""` ternary at `BeanfunClient.cs` L255-258.
+#[tokio::test]
+async fn get_email_tw_regex_miss_returns_empty() {
+    let server = MockServer::start().await;
+    mount_loader(&server, "<html>no match here</html>").await;
+
+    let client = client_for(&server);
+    let session = test_session();
+    let email = get_email(&client, &session).await.unwrap();
+
+    assert_eq!(email, "");
+}
+
+/// HK sessions short-circuit to `""` **without** firing a request —
+/// WPF does exactly this at `BeanfunClient.cs` L245-246. An empty
+/// `received_requests` list is the structural assertion.
+#[tokio::test]
+async fn get_email_hk_short_circuits_empty_no_request() {
+    let server = MockServer::start().await;
+    let client = client_for(&server);
+    let session = test_session_hk();
+    let email = get_email(&client, &session).await.unwrap();
+
+    assert_eq!(email, "");
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+// -----------------------------------------------------------------------------
+// get_remain_point
+// -----------------------------------------------------------------------------
+
+/// Mount `get_remain_point.ashx` returning the supplied body (200).
+/// The server picks a JSON-ish shape with the `"RemainPoint" : "…"`
+/// field the regex anchors on.
+async fn mount_remain_point(server: &MockServer, body: &str) {
+    Mock::given(method("GET"))
+        .and(path(
+            "/beanfun_block/generic_handlers/get_remain_point.ashx",
+        ))
+        .and(query_param("webtoken", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(body.to_owned()))
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn get_remain_point_happy_returns_parsed_int() {
+    let server = MockServer::start().await;
+    mount_remain_point(&server, r#"{ "RemainPoint" : "1234" }"#).await;
+
+    let client = client_for(&server);
+    let session = test_session();
+    let pts = get_remain_point(&client, &session).await.unwrap();
+
+    assert_eq!(pts, 1234);
+}
+
+/// Regex miss → `0`, per WPF's `regex.IsMatch ? int.Parse(...) : 0`
+/// ternary at `BeanfunClient.cs` L232-235.
+#[tokio::test]
+async fn get_remain_point_regex_miss_returns_zero() {
+    let server = MockServer::start().await;
+    mount_remain_point(&server, r#"{"OtherField":"value"}"#).await;
+
+    let client = client_for(&server);
+    let session = test_session();
+    let pts = get_remain_point(&client, &session).await.unwrap();
+
+    assert_eq!(pts, 0);
+}
+
+/// Regex hits but the capture is not a valid `i32` → `0`, per WPF's
+/// blanket `try { ... } catch { return 0; }` around `int.Parse` at
+/// `BeanfunClient.cs` L229-240. A non-numeric capture is the single
+/// realistic trigger here — our `.parse::<i32>().ok()` swallows the
+/// `ParseIntError` the same way WPF's catch does.
+#[tokio::test]
+async fn get_remain_point_non_numeric_capture_returns_zero() {
+    let server = MockServer::start().await;
+    mount_remain_point(&server, r#"{ "RemainPoint" : "not_a_number" }"#).await;
+
+    let client = client_for(&server);
+    let session = test_session();
+    let pts = get_remain_point(&client, &session).await.unwrap();
+
+    assert_eq!(pts, 0);
 }

@@ -65,7 +65,20 @@ pub const DEFAULT_MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
 /// between the TW and HK endpoints, so the region is a first-class part of
 /// the client configuration rather than a runtime flag on individual
 /// calls.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// # IPC exposure (P10.2 Q4=C hybrid — data-only path)
+///
+/// This enum is pure data (no secrets, no resources) so it rides the
+/// Q4=A path: a [`serde::Serialize`] / [`serde::Deserialize`] /
+/// [`specta::Type`] derive applied here lets the command layer
+/// reference [`LoginRegion`] directly in DTOs (e.g.
+/// `commands::dto::SessionInfo`) without needing a shadow type.
+///
+/// Serde represents the variants as their unit names — the frontend
+/// sees a `"TW" | "HK"` union type.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, specta::Type,
+)]
 pub enum LoginRegion {
     /// Taiwan — `tw.beanfun.com` portal, `login.beanfun.com` login host.
     TW,

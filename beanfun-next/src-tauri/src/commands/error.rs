@@ -277,10 +277,10 @@ impl std::error::Error for CommandError {}
 // stay quarantined to this module.
 // ---------------------------------------------------------------------
 
-/// Stringify an [`io::ErrorKind`] via its `Debug` impl. [`ErrorKind`]
-/// is `#[non_exhaustive]` and does not implement `Display` nor serde;
-/// its `Debug` form ("NotFound", "PermissionDenied", …) is stable
-/// enough for diagnostic display.
+/// Stringify an [`io::ErrorKind`] via its `Debug` impl.
+/// [`io::ErrorKind`] is `#[non_exhaustive]` and does not implement
+/// `Display` nor serde; its `Debug` form ("NotFound",
+/// "PermissionDenied", …) is stable enough for diagnostic display.
 fn io_kind_str(err: &io::Error) -> String {
     format!("{:?}", err.kind())
 }

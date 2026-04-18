@@ -38,12 +38,12 @@ pub mod session;
 pub mod verify;
 
 pub use account::{
-    add_service_account, change_service_account_display_name, get_accounts, get_service_contract,
-    unconnected_game_add_account, unconnected_game_add_account_check,
-    unconnected_game_add_account_check_nickname, unconnected_game_change_password,
-    unconnected_game_init_add_account_payload, AccountListResult, AddAccountInit,
-    AddAccountOutcome, AddAccountSession, AmountLimitNotice, ChangePasswordOutcome, CheckOutcome,
-    ServiceAccount,
+    add_service_account, change_service_account_display_name, get_accounts, get_email,
+    get_remain_point, get_service_contract, unconnected_game_add_account,
+    unconnected_game_add_account_check, unconnected_game_add_account_check_nickname,
+    unconnected_game_change_password, unconnected_game_init_add_account_payload, AccountListResult,
+    AddAccountInit, AddAccountOutcome, AddAccountSession, AmountLimitNotice, ChangePasswordOutcome,
+    CheckOutcome, ServiceAccount,
 };
 pub use client::{BeanfunClient, ClientConfig, Endpoints, LoginRegion};
 pub use error::LoginError;

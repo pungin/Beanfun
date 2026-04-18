@@ -9,6 +9,8 @@
 //! | [`get_accounts`]                                | `GetAccounts`                                  |
 //! | `get_create_time` (private helper)              | `GetCreateTime`                                |
 //! | [`get_service_contract`]                        | `GetServiceContract`                           |
+//! | [`get_email`]                                   | `getEmail` (TW only; HK short-circuits empty)  |
+//! | [`get_remain_point`]                            | `getRemainPoint`                               |
 //! | [`add_service_account`]                         | `AddServiceAccount`                            |
 //! | [`change_service_account_display_name`]         | `ChangeServiceAccountDisplayName`              |
 //! | [`unconnected_game_init_add_account_payload`]   | `UnconnectedGame_InitAddAccountPayload` (+ private `_InitAccountPayload` helper) |
@@ -162,7 +164,7 @@ use super::session::Session;
 /// nullable `string` fields (the constructor used inside `GetAccounts`
 /// leaves `slastusedtime` / `sauthtype` `null`, and `screatetime` becomes
 /// `null` whenever the per-row `GetCreateTime` HTTP call fails).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 pub struct ServiceAccount {
     /// `true` when the row's anchor has a non-empty `onclick` handler
     /// (WPF: `match.Groups[1].Value != ""`). Disabled accounts still
@@ -200,7 +202,8 @@ pub struct ServiceAccount {
 /// WPF stuffs the localised text directly into a UI string (`I18n.ToSimplified`
 /// / `TryFindResource("AuthReLogin")`). We keep the service layer i18n-free
 /// and let the UI choose what to render.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub enum AmountLimitNotice {
     /// No `divServiceAccountAmountLimitNotice` element on the page.
     None,
@@ -219,7 +222,7 @@ pub enum AmountLimitNotice {
 
 /// Result of [`get_accounts`]: the sorted account list plus the optional
 /// quota notice.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 pub struct AccountListResult {
     /// Service accounts sorted by ascending `ssn` (WPF
     /// `accountList.Sort((x, y) => x.ssn.CompareTo(y.ssn))`). Callers
@@ -344,6 +347,110 @@ pub async fn get_service_contract(
         return Ok(String::new());
     }
     Ok(parsed.str_result.unwrap_or_default())
+}
+
+/// Fetch the logged-in user's e-mail address (TW only).
+///
+/// Mirrors `BeanfunClient.cs::getEmail` (L243-259):
+///
+/// 1. If `session.region == HK`: return `Ok("")` immediately without
+///    firing a request — the HK portal does not expose this endpoint
+///    and WPF short-circuits the same way.
+/// 2. Otherwise: `GET https://tw.beanfun.com/beanfun_block/loader.ashx?service_code=999999&service_region=T0`
+///    with `Referer: https://tw.beanfun.com/`.
+/// 3. Regex-match
+///    `BeanFunBlock.LoggedInUserData.Email = "(.*)";BeanFunBlock.LoggedInUserData.MessageCount`
+///    on the body and return the captured group.
+/// 4. If the regex does not match: return `Ok("")` (WPF same).
+///
+/// # Why no HK endpoint?
+///
+/// WPF's `getEmail` hard-codes `tw.beanfun.com` and explicitly short-
+/// circuits on HK — there is no HK equivalent of the TW loader page
+/// that exposes the e-mail in the JavaScript payload. The empty-
+/// string return is the WPF contract for HK callers; the UI layer
+/// hides the "e-mail" row when the call returns empty anyway (see
+/// `AccountList.xaml.cs` L204-214 → `m_GetEmail_Click`).
+///
+/// # Errors
+///
+/// - [`LoginError::Http`] on transport failure (WPF swallows this as
+///   the return-value becomes `""`; we surface the error so higher
+///   layers can log / retry — the command-layer wrapper can map back
+///   to `""` if WPF-exact behaviour is required).
+/// - [`LoginError::BodyTooLarge`] if the loader page exceeds the
+///   configured cap (unlikely in practice — WPF never encountered
+///   this, but our bounded reader is a defensive layer).
+pub async fn get_email(client: &BeanfunClient, session: &Session) -> Result<String, LoginError> {
+    if session.region == LoginRegion::HK {
+        return Ok(String::new());
+    }
+
+    let url = client.portal_url("beanfun_block/loader.ashx")?;
+    let referer = client.config().endpoints.portal_base.as_str().to_owned();
+    let resp = client
+        .http()
+        .get(url)
+        .query(&[("service_code", "999999"), ("service_region", "T0")])
+        .header(reqwest::header::REFERER, referer)
+        .send()
+        .await?;
+    ensure_success(&resp, "loader.ashx (get_email)")?;
+    let body = client.bounded_text(resp).await?;
+
+    Ok(capture_first(email_regex(), &body).unwrap_or_default())
+}
+
+/// Fetch the remaining Beanfun points balance for the current session.
+///
+/// Mirrors `BeanfunClient.cs::getRemainPoint` (L214-241):
+///
+/// 1. `GET {portal_base}beanfun_block/generic_handlers/get_remain_point.ashx?webtoken=1`
+///    — no custom headers, the `bfWebToken` cookie comes from the
+///    jar automatically.
+/// 2. Regex-match `"RemainPoint" : "(.*)" }` (note the surrounding
+///    spaces — WPF's literal pattern) and parse the capture as a
+///    signed 32-bit integer.
+/// 3. Return `Ok(0)` when the regex does not match **or** the capture
+///    fails to parse — WPF wraps both paths in a blanket `catch {
+///    return 0; }`.
+///
+/// # Why the exact regex shape?
+///
+/// The server emits the JSON with a single space on either side of
+/// the colon (`"RemainPoint" : "1234" }`). WPF treats the shape as
+/// a fingerprint and anchors with the literal-space pattern; we
+/// preserve the spacing so any server-side change to the layout
+/// would fail our test suite the same way it would fail WPF — and
+/// deliberately so, since the server-shaped regex is the only
+/// indicator we have that the endpoint still speaks the expected
+/// dialect.
+///
+/// # Errors
+///
+/// - [`LoginError::Http`] on transport failure. (WPF's blanket catch
+///   would treat this as `0`; we surface the error so the command
+///   layer can log. If strict WPF parity is required, the command
+///   wrapper maps `Err` back to `0`.)
+/// - [`LoginError::BodyTooLarge`] if the payload exceeds the
+///   configured cap.
+pub async fn get_remain_point(
+    client: &BeanfunClient,
+    _session: &Session,
+) -> Result<i32, LoginError> {
+    let url = client.portal_url("beanfun_block/generic_handlers/get_remain_point.ashx")?;
+    let resp = client
+        .http()
+        .get(url)
+        .query(&[("webtoken", "1")])
+        .send()
+        .await?;
+    ensure_success(&resp, "get_remain_point.ashx")?;
+    let body = client.bounded_text(resp).await?;
+
+    Ok(capture_first(remain_point_regex(), &body)
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(0))
 }
 
 /// Create a new service account under the given `service_code` /
@@ -1251,6 +1358,32 @@ fn lbl_error_message_regex() -> &'static Regex {
 /// (matching WPF's `regex.IsMatch ? Groups[1].Value : ""` ternary).
 fn extract_lbl_error_message(html: &str) -> String {
     capture_first(lbl_error_message_regex(), html).unwrap_or_default()
+}
+
+/// Memoised regex for the `BeanFunBlock.LoggedInUserData.Email` JavaScript
+/// assignment inside the TW `loader.ashx` response. Mirrors WPF
+/// `BeanfunClient.cs` L252-253 verbatim.
+///
+/// The trailing `;BeanFunBlock.LoggedInUserData.MessageCount` anchor is
+/// inherited from WPF — it bounds the `(.*)` greedy capture so the
+/// match stops before the next JS assignment on the same line.
+fn email_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(
+            r#"BeanFunBlock\.LoggedInUserData\.Email = "(.*)";BeanFunBlock\.LoggedInUserData\.MessageCount"#,
+        )
+        .expect("email regex")
+    })
+}
+
+/// Memoised regex for the `"RemainPoint" : "…"` JSON field emitted by
+/// `get_remain_point.ashx`. Mirrors WPF `BeanfunClient.cs` L231 verbatim,
+/// **including** the literal spaces on either side of the colon — the
+/// server-shaped formatting is effectively part of the contract.
+fn remain_point_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#""RemainPoint" : "(.*)" \}"#).expect("remain_point regex"))
 }
 
 /// Memoised regex for the `verify_code=<token>` query parameter on the

@@ -110,7 +110,7 @@ fn resolve_storage_root() -> Result<PathBuf, CommandError> {
 /// # Target path
 ///
 /// `<CARGO_MANIFEST_DIR>/../src/types/bindings.ts`, resolved at
-/// compile time via [`env!("CARGO_MANIFEST_DIR")`][std::env]. Cargo
+/// compile time via [`env!("CARGO_MANIFEST_DIR")`][std::env!]. Cargo
 /// guarantees this constant points at the crate root (i.e.
 /// `src-tauri/`), whose parent is the Tauri project root.
 /// [`tauri_specta::Builder::export`] auto-creates the parent
