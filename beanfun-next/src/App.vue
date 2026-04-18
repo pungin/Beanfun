@@ -1,40 +1,92 @@
-<template>
-  <main class="container">
-    <h1>Welcome to Tauri + Vue</h1>
+<script setup lang="ts">
+/**
+ * Root shell for the beanfun-next frontend.
+ *
+ * # Boot sequence (runs once in `onMounted`)
+ *
+ * 1. `config.loadAll()` — pull every Config.xml entry into the
+ *    in-memory cache. Subsequent `config.get(key)` calls return
+ *    instantly without an IPC hop.
+ * 2. `ui.applyAll()` — push the loaded values out as DOM side
+ *    effects: `setPrimaryColor` for the theme + the registered
+ *    locale applier for vue-i18n. Either step soft-fails to
+ *    defaults — a corrupt Config.xml entry must never soft-brick
+ *    boot.
+ *
+ * Both calls run sequentially; `ui.applyAll()` reads from the cache
+ * `loadAll()` populates so the order matters.
+ *
+ * # Why `<el-config-provider>` at the root
+ *
+ * Element Plus components read their locale from the nearest
+ * `<el-config-provider>` ancestor; placing it at the app root means
+ * every `<el-*>` (across every page in P12) inherits the
+ * user-selected language without per-page boilerplate. The locale
+ * prop is bound to the UI store's reactive `language` getter, so
+ * `setLanguage(...)` flips both the application's vue-i18n locale
+ * and Element Plus's component-level translations in one shot.
+ */
 
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
-    </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
-  </main>
+import { computed, onMounted } from 'vue'
+import { ElConfigProvider, ElMessage } from 'element-plus'
+import enLocale from 'element-plus/dist/locale/en.mjs'
+import zhCnLocale from 'element-plus/dist/locale/zh-cn.mjs'
+import zhTwLocale from 'element-plus/dist/locale/zh-tw.mjs'
+
+import { useConfigStore } from './stores/config'
+import { useUiStore, type AppLocale } from './stores/ui'
+
+const config = useConfigStore()
+const ui = useUiStore()
+
+/**
+ * Map our internal locale code to the matching Element Plus locale
+ * pack. Centralized so adding a fourth locale (P12+) is a one-line
+ * edit instead of a hunt-through-templates exercise.
+ */
+const ELP_LOCALE_MAP: Record<AppLocale, typeof zhTwLocale> = {
+  'zh-TW': zhTwLocale,
+  'zh-CN': zhCnLocale,
+  'en-US': enLocale,
+}
+
+const elpLocale = computed(() => ELP_LOCALE_MAP[ui.language])
+
+onMounted(async () => {
+  try {
+    await config.loadAll()
+  } catch (err) {
+    // The wrapCommand toast already fired; we just keep boot going so
+    // the user can still see *something* (default theme + zh-TW) and
+    // retry from Settings instead of staring at a blank window.
+    console.error('[App.vue] config.loadAll failed; falling back to defaults', err)
+    ElMessage.warning('Config.xml 載入失敗，使用預設設定。')
+  }
+
+  ui.applyAll()
+})
+</script>
+
+<template>
+  <el-config-provider :locale="elpLocale">
+    <RouterView />
+  </el-config-provider>
 </template>
 
-<style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
-}
-</style>
 <style>
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  font-family:
+    'Plus Jakarta Sans',
+    'Inter',
+    'Noto Sans TC',
+    'PingFang TC',
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1f2329;
+  background-color: #f5f6f8;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -43,93 +95,12 @@
   -webkit-text-size-adjust: 100%;
 }
 
-.container {
+html,
+body,
+#app {
   margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
+  padding: 0;
+  height: 100%;
+  width: 100%;
 }
 </style>

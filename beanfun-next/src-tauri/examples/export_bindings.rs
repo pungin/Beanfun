@@ -35,7 +35,10 @@
 //! where `bindings.ts` lives. The [`beanfun_next_lib::commands::build_specta_builder`]
 //! helper is likewise the single source of truth for which commands
 //! get exported, so drift between runtime dispatch and emitted TS
-//! is impossible by construction.
+//! is impossible by construction. The TypeScript exporter (header
+//! injection, comment style, formatter) comes from
+//! [`beanfun_next_lib::default_typescript_exporter`] so this binary
+//! and the dev-mode auto-export emit byte-identical output.
 //!
 //! # Runtime type parameter
 //!
@@ -63,14 +66,15 @@
 //! consistent with the existing `export_specta_bindings` stderr
 //! format in `lib.rs`.
 
-use beanfun_next_lib::{commands::build_specta_builder, default_bindings_path};
-use specta_typescript::Typescript;
+use beanfun_next_lib::{
+    commands::build_specta_builder, default_bindings_path, default_typescript_exporter,
+};
 
 fn main() {
     let builder = build_specta_builder::<tauri::Wry>();
     let target = default_bindings_path();
 
-    if let Err(err) = builder.export(Typescript::default(), &target) {
+    if let Err(err) = builder.export(default_typescript_exporter(), &target) {
         eprintln!(
             "export_bindings: tauri-specta export failed: {err} (target={})",
             target.display()

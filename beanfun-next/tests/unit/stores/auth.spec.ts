@@ -1,0 +1,255 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+
+import type {
+  CommandError,
+  Result,
+  SessionInfo,
+  QrStart,
+  QrStatus,
+  VerifySubmit,
+} from '../../../src/types/bindings'
+
+vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn() } }))
+
+vi.mock('../../../src/types/bindings', () => ({
+  commands: {
+    loginRegular: vi.fn(),
+    loginTotp: vi.fn(),
+    loginQrStart: vi.fn(),
+    loginQrCheck: vi.fn(),
+    getVerifyPageInfo: vi.fn(),
+    getVerifyCaptcha: vi.fn(),
+    submitVerify: vi.fn(),
+    logout: vi.fn(),
+  },
+}))
+
+import { commands } from '../../../src/types/bindings'
+import {
+  CommandInvocationError,
+  __resetInvokeRegistriesForTesting,
+} from '../../../src/services/invoke'
+import { AUTH_ACTIONS, useAuthStore } from '../../../src/stores/auth'
+
+const mockLoginRegular = vi.mocked(commands.loginRegular)
+const mockLoginTotp = vi.mocked(commands.loginTotp)
+const mockLoginQrStart = vi.mocked(commands.loginQrStart)
+const mockLoginQrCheck = vi.mocked(commands.loginQrCheck)
+const mockSubmitVerify = vi.mocked(commands.submitVerify)
+const mockLogout = vi.mocked(commands.logout)
+
+const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ status: 'ok', data })
+
+const err = (error: CommandError): Promise<Result<never, CommandError>> =>
+  Promise.resolve({ status: 'error', error })
+
+const SESSION: SessionInfo = {
+  region: 'TW',
+  account_id: 'alice',
+  service_code: '610074',
+  service_region: 'T9',
+}
+
+describe('useAuthStore', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    __resetInvokeRegistriesForTesting()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const fn of Object.values(commands) as ReturnType<typeof vi.fn>[]) fn.mockReset()
+  })
+
+  describe('initial state', () => {
+    it('starts logged out with no pending flow', () => {
+      const auth = useAuthStore()
+      expect(auth.session).toBeNull()
+      expect(auth.isLoggedIn).toBe(false)
+      expect(auth.pendingTotp).toBe(false)
+      expect(auth.pendingVerify).toBe(false)
+      expect(auth.qrChallenge).toBeNull()
+      expect(auth.pendingAction).toBeNull()
+    })
+  })
+
+  describe('loginRegular', () => {
+    it('returns the session and flips isLoggedIn on success', async () => {
+      mockLoginRegular.mockReturnValueOnce(ok(SESSION))
+      const auth = useAuthStore()
+      const result = await auth.loginRegular('TW', 'alice', 'pw')
+      expect(result).toEqual(SESSION)
+      expect(auth.session).toEqual(SESSION)
+      expect(auth.isLoggedIn).toBe(true)
+      expect(auth.pendingAction).toBeNull()
+    })
+
+    it('returns null and sets pendingTotp on auth.totp_required', async () => {
+      mockLoginRegular.mockReturnValueOnce(
+        err({ code: 'auth.totp_required', message: 'need totp', details: null }),
+      )
+      const auth = useAuthStore()
+      const result = await auth.loginRegular('TW', 'alice', 'pw')
+      expect(result).toBeNull()
+      expect(auth.pendingTotp).toBe(true)
+      expect(auth.pendingVerify).toBe(false)
+      expect(auth.session).toBeNull()
+    })
+
+    it('returns null and sets pendingVerify on auth.verify_required', async () => {
+      mockLoginRegular.mockReturnValueOnce(
+        err({ code: 'auth.verify_required', message: 'need verify', details: null }),
+      )
+      const auth = useAuthStore()
+      const result = await auth.loginRegular('TW', 'alice', 'pw')
+      expect(result).toBeNull()
+      expect(auth.pendingVerify).toBe(true)
+      expect(auth.pendingTotp).toBe(false)
+    })
+
+    it('throws CommandInvocationError for other error codes (and toasts)', async () => {
+      mockLoginRegular.mockReturnValueOnce(
+        err({ code: 'beanfun.bad_credentials', message: 'wrong', details: null }),
+      )
+      const auth = useAuthStore()
+      await expect(auth.loginRegular('TW', 'alice', 'pw')).rejects.toBeInstanceOf(
+        CommandInvocationError,
+      )
+      expect(auth.pendingTotp).toBe(false)
+      expect(auth.pendingVerify).toBe(false)
+    })
+  })
+
+  describe('loginTotp', () => {
+    it('clears pending flags on success', async () => {
+      const auth = useAuthStore()
+      auth.pendingTotp = true
+      mockLoginTotp.mockReturnValueOnce(ok(SESSION))
+      const result = await auth.loginTotp('123456')
+      expect(result).toEqual(SESSION)
+      expect(auth.pendingTotp).toBe(false)
+      expect(auth.pendingVerify).toBe(false)
+      expect(auth.session).toEqual(SESSION)
+    })
+
+    it('chains TOTP → verify when verify_required follows TOTP', async () => {
+      const auth = useAuthStore()
+      auth.pendingTotp = true
+      mockLoginTotp.mockReturnValueOnce(
+        err({ code: 'auth.verify_required', message: 'need verify', details: null }),
+      )
+      const result = await auth.loginTotp('123456')
+      expect(result).toBeNull()
+      expect(auth.pendingTotp).toBe(false)
+      expect(auth.pendingVerify).toBe(true)
+    })
+  })
+
+  describe('loginQrStart / loginQrCheck', () => {
+    it('stores the QR challenge on start and clears on approval', async () => {
+      const challenge: QrStart = {
+        bitmap_base64: 'data:image/png;base64,xx',
+        deeplink: 'beanfun://qr',
+      }
+      mockLoginQrStart.mockReturnValueOnce(ok(challenge))
+      const auth = useAuthStore()
+      const result = await auth.loginQrStart('TW')
+      expect(result).toEqual(challenge)
+      expect(auth.qrChallenge).toEqual(challenge)
+
+      const approved: QrStatus = { status: 'approved', session: SESSION }
+      mockLoginQrCheck.mockReturnValueOnce(ok(approved))
+      const status = await auth.loginQrCheck()
+      expect(status).toEqual(approved)
+      expect(auth.session).toEqual(SESSION)
+      expect(auth.qrChallenge).toBeNull()
+    })
+
+    it('clears qrChallenge on expiry but leaves session untouched', async () => {
+      const auth = useAuthStore()
+      auth.qrChallenge = { bitmap_base64: 'x', deeplink: null }
+      const expired: QrStatus = { status: 'expired' }
+      mockLoginQrCheck.mockReturnValueOnce(ok(expired))
+      const status = await auth.loginQrCheck()
+      expect(status).toEqual(expired)
+      expect(auth.qrChallenge).toBeNull()
+      expect(auth.session).toBeNull()
+    })
+
+    it('keeps qrChallenge intact on pending status', async () => {
+      const auth = useAuthStore()
+      const ch: QrStart = { bitmap_base64: 'x', deeplink: null }
+      auth.qrChallenge = ch
+      mockLoginQrCheck.mockReturnValueOnce(ok({ status: 'pending' }))
+      await auth.loginQrCheck()
+      expect(auth.qrChallenge).toEqual(ch)
+    })
+  })
+
+  describe('submitVerify', () => {
+    it('clears pendingVerify only when result is success', async () => {
+      const auth = useAuthStore()
+      auth.pendingVerify = true
+      const success: VerifySubmit = { result: 'success' }
+      mockSubmitVerify.mockReturnValueOnce(ok(success))
+      const r = await auth.submitVerify('1234', 'CAP1')
+      expect(r).toEqual(success)
+      expect(auth.pendingVerify).toBe(false)
+    })
+
+    it('keeps pendingVerify on wrong_captcha', async () => {
+      const auth = useAuthStore()
+      auth.pendingVerify = true
+      const wrong: VerifySubmit = { result: 'wrong_captcha' }
+      mockSubmitVerify.mockReturnValueOnce(ok(wrong))
+      const r = await auth.submitVerify('1234', 'CAPX')
+      expect(r).toEqual(wrong)
+      expect(auth.pendingVerify).toBe(true)
+    })
+  })
+
+  describe('logout', () => {
+    it('clears session and all flow state', async () => {
+      const auth = useAuthStore()
+      auth.session = SESSION
+      auth.pendingTotp = true
+      auth.pendingVerify = true
+      auth.qrChallenge = { bitmap_base64: 'x', deeplink: null }
+      mockLogout.mockReturnValueOnce(ok(null))
+      await auth.logout()
+      expect(auth.session).toBeNull()
+      expect(auth.pendingTotp).toBe(false)
+      expect(auth.pendingVerify).toBe(false)
+      expect(auth.qrChallenge).toBeNull()
+    })
+  })
+
+  describe('withGuard', () => {
+    it('rejects concurrent actions while one is in flight', async () => {
+      let resolveFirst!: (r: Result<SessionInfo, CommandError>) => void
+      mockLoginRegular.mockReturnValueOnce(
+        new Promise<Result<SessionInfo, CommandError>>((resolve) => {
+          resolveFirst = resolve
+        }),
+      )
+
+      const auth = useAuthStore()
+      const inFlight = auth.loginRegular('TW', 'a', 'p')
+
+      expect(auth.pendingAction).toBe(AUTH_ACTIONS.LoginRegular)
+
+      await expect(auth.loginRegular('TW', 'a', 'p')).rejects.toThrow(/already in progress/)
+
+      resolveFirst({ status: 'ok', data: SESSION })
+      await inFlight
+      expect(auth.pendingAction).toBeNull()
+    })
+
+    it('clears pendingAction even when the action throws', async () => {
+      mockLoginRegular.mockReturnValueOnce(
+        err({ code: 'beanfun.bad_credentials', message: 'wrong', details: null }),
+      )
+      const auth = useAuthStore()
+      await expect(auth.loginRegular('TW', 'a', 'p')).rejects.toThrow()
+      expect(auth.pendingAction).toBeNull()
+    })
+  })
+})

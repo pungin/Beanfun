@@ -145,6 +145,19 @@ fn resolve_storage_root() -> Result<PathBuf, CommandError> {
 /// new command fails to resolve); shipping the app itself has no
 /// dependency on this path succeeding.
 ///
+/// # Header injection (frontend lint suppression)
+///
+/// The header prepended by [`default_typescript_exporter`] disables
+/// `@ts-nocheck` and `eslint`/`prettier` for the whole file. The
+/// frontend repo runs `vue-tsc --noEmit` and `eslint .` in CI; the
+/// generated bindings file otherwise trips dozens of `noUnusedLocals`
+/// (TS6133) and `@typescript-eslint/no-explicit-any` errors that come
+/// from `tauri-specta`'s framework prelude (e.g. `TAURI_CHANNEL` /
+/// `__makeEvents__` declared but currently unreferenced because we
+/// don't emit any specta events yet). Suppressing the entire generated
+/// artefact is the standard treatment — we already use the same
+/// pattern for the `vite-env.d.ts` shim in `eslint.config.js`.
+///
 /// # Target path
 ///
 /// [`default_bindings_path`] — see that helper for the resolution
@@ -156,11 +169,9 @@ fn resolve_storage_root() -> Result<PathBuf, CommandError> {
 /// not need to pre-exist.
 #[cfg(debug_assertions)]
 fn export_specta_bindings<R: tauri::Runtime>(builder: &tauri_specta::Builder<R>) {
-    use specta_typescript::Typescript;
-
     let target = default_bindings_path();
 
-    if let Err(err) = builder.export(Typescript::default(), &target) {
+    if let Err(err) = builder.export(default_typescript_exporter(), &target) {
         eprintln!(
             "[dev] tauri-specta export failed: {err} (target={})",
             target.display()
@@ -170,6 +181,23 @@ fn export_specta_bindings<R: tauri::Runtime>(builder: &tauri_specta::Builder<R>)
 
 #[cfg(not(debug_assertions))]
 fn export_specta_bindings<R: tauri::Runtime>(_: &tauri_specta::Builder<R>) {}
+
+/// Build the `specta-typescript` exporter used by every code path that
+/// regenerates `bindings.ts` (the dev-mode boot helper above and the
+/// `export_bindings` example binary).
+///
+/// Centralizing the exporter config means any future change — bigint
+/// behavior, comment style, formatter — applies in one place. The
+/// header suppresses `vue-tsc` / ESLint warnings on the generated
+/// artefact; see the [`export_specta_bindings`] doc comment above for
+/// the full rationale.
+pub fn default_typescript_exporter() -> specta_typescript::Typescript {
+    specta_typescript::Typescript::default().header(
+        "// @ts-nocheck\n\
+         /* eslint-disable */\n\
+         /* prettier-ignore */\n",
+    )
+}
 
 /// Tauri application entry point.
 ///
