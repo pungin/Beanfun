@@ -254,6 +254,9 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         storage::remove_account,
         storage::import_records,
         storage::export_records,
+        // storage AES backup (P12.2 — D10.0; AccRecovery WPF parity)
+        storage::backup_export,
+        storage::backup_restore,
         // update (P10.3 — D4)
         update::check_update,
         // launcher (P10.3 — D5a launch)
@@ -416,6 +419,9 @@ mod bindings_file_tests {
         "removeAccount",
         "importRecords",
         "exportRecords",
+        // --- P12.2 D10.0 — storage AES backup ------------------------
+        "backupExport",
+        "backupRestore",
         // --- P10.3 — D4 update ---------------------------------------
         "checkUpdate",
         // --- P10.3 — D5 launcher -------------------------------------

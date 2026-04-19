@@ -41,6 +41,7 @@ const ACCOUNT: Account = {
   password: 'pw',
   verify: '',
   method: 0,
+  auto_login: false,
 }
 
 const SERVICE_ACCOUNT: ServiceAccount = {
@@ -115,6 +116,116 @@ describe('useAccountStore — stored Beanfun credentials', () => {
     await store.exportRecords('C:\\backup.json')
     expect(store.accounts).toEqual([ACCOUNT])
   })
+
+  it('findStoredAccount returns the matching record', () => {
+    const store = useAccountStore()
+    store.accounts = [ACCOUNT, { ...ACCOUNT, region: 'HK', account_id: 'bob' }]
+    expect(store.findStoredAccount('TW', 'alice')).toEqual(ACCOUNT)
+  })
+
+  it('findStoredAccount returns undefined when no row matches', () => {
+    const store = useAccountStore()
+    store.accounts = [ACCOUNT]
+    expect(store.findStoredAccount('TW', 'missing')).toBeUndefined()
+    expect(store.findStoredAccount('HK', 'alice')).toBeUndefined()
+  })
+})
+
+describe('useAccountStore — saveLoginCredentials (WPF SaveLoginCredentials parity)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const fn of Object.values(commands) as ReturnType<typeof vi.fn>[]) fn.mockReset()
+  })
+
+  const BASE_INPUT = {
+    region: 'TW' as const,
+    accountId: 'alice',
+    password: 'plaintext-pw',
+    rememberPassword: true,
+    verify: '',
+    rememberVerify: false,
+    method: 0,
+    autoLogin: false,
+  }
+
+  it('TW Regular + remember writes the password verbatim', async () => {
+    vi.mocked(commands.saveAccount).mockReturnValueOnce(ok([]))
+    const store = useAccountStore()
+    await store.saveLoginCredentials(BASE_INPUT)
+    expect(commands.saveAccount).toHaveBeenCalledTimes(1)
+    const written = vi.mocked(commands.saveAccount).mock.calls[0]![0] as Account
+    expect(written).toEqual({
+      region: 'TW',
+      account_id: 'alice',
+      account_name: '',
+      password: 'plaintext-pw',
+      verify: '',
+      method: 0,
+      auto_login: false,
+    })
+  })
+
+  it('TW Regular + remember off writes empty password', async () => {
+    vi.mocked(commands.saveAccount).mockReturnValueOnce(ok([]))
+    const store = useAccountStore()
+    await store.saveLoginCredentials({ ...BASE_INPUT, rememberPassword: false })
+    const written = vi.mocked(commands.saveAccount).mock.calls[0]![0] as Account
+    expect(written.password).toBe('')
+  })
+
+  it('TW QR is skipped (no IPC)', async () => {
+    const store = useAccountStore()
+    await store.saveLoginCredentials({ ...BASE_INPUT, method: 1 })
+    expect(commands.saveAccount).not.toHaveBeenCalled()
+  })
+
+  it('HK QR is skipped (Q1 = B fix vs WPF garbage record)', async () => {
+    const store = useAccountStore()
+    await store.saveLoginCredentials({ ...BASE_INPUT, region: 'HK', method: 1 })
+    expect(commands.saveAccount).not.toHaveBeenCalled()
+  })
+
+  it('GamePass is skipped (no IPC) — WPF GamePassLoginCompleted bypass parity', async () => {
+    const store = useAccountStore()
+    await store.saveLoginCredentials({ ...BASE_INPUT, method: 2 })
+    expect(commands.saveAccount).not.toHaveBeenCalled()
+  })
+
+  it('HK Regular + rememberVerify writes verify field', async () => {
+    vi.mocked(commands.saveAccount).mockReturnValueOnce(ok([]))
+    const store = useAccountStore()
+    await store.saveLoginCredentials({
+      ...BASE_INPUT,
+      region: 'HK',
+      verify: 'V123',
+      rememberVerify: true,
+    })
+    const written = vi.mocked(commands.saveAccount).mock.calls[0]![0] as Account
+    expect(written.region).toBe('HK')
+    expect(written.verify).toBe('V123')
+  })
+
+  it('rememberVerify off writes empty verify even when verify code provided', async () => {
+    vi.mocked(commands.saveAccount).mockReturnValueOnce(ok([]))
+    const store = useAccountStore()
+    await store.saveLoginCredentials({
+      ...BASE_INPUT,
+      verify: 'V123',
+      rememberVerify: false,
+    })
+    const written = vi.mocked(commands.saveAccount).mock.calls[0]![0] as Account
+    expect(written.verify).toBe('')
+  })
+
+  it('account_name is always written as "" (WPF L1352 quirk parity)', async () => {
+    vi.mocked(commands.saveAccount).mockReturnValueOnce(ok([]))
+    const store = useAccountStore()
+    store.accounts = [{ ...ACCOUNT, account_name: 'My Existing Alias' }]
+    await store.saveLoginCredentials(BASE_INPUT)
+    const written = vi.mocked(commands.saveAccount).mock.calls[0]![0] as Account
+    expect(written.account_name).toBe('')
+  })
 })
 
 describe('useAccountStore — service accounts', () => {
@@ -175,6 +286,183 @@ describe('useAccountStore — service accounts', () => {
     await store.changeServiceAccountName('Renamed', SERVICE_ACCOUNT)
     expect(commands.changeDisplayName).toHaveBeenCalledWith('Renamed', SERVICE_ACCOUNT)
     expect(commands.refresh).toHaveBeenCalledTimes(1)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* D7 — Service-account ordering (WPF ApplyAccountOrder parity)        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Exercises the two ordering actions added in P12.2 D7:
+ *
+ * - {@link useAccountStore.setServiceAccountOrder} — explicit
+ *   sid-list reorder; the page calls this after a vuedraggable
+ *   `@end` event.
+ * - {@link useAccountStore.applyServiceAccountOrderFromSavedCsv} —
+ *   convenience wrapper that parses the CSV WPF persists under
+ *   `Config.xml::AccountOrder_<gameCode>`; the page calls this
+ *   after `getServiceAccounts` / `refreshServiceAccounts` to apply
+ *   the user's saved order on top of the server-sorted list.
+ *
+ * The invariants under test (every case asserts at least one) come
+ * from the WPF `ApplyAccountOrder` (L489-531) implementation:
+ *
+ * 1. Sids in the input list **that match a current account** are
+ *    emitted in input order.
+ * 2. Sids in the input list **that don't match** any current
+ *    account (e.g. stale rows since deleted upstream) are silently
+ *    dropped — never inserted, never thrown over.
+ * 3. Accounts in the store **not mentioned** by the input list
+ *    (e.g. fresh add-account rows) are appended in the store's
+ *    pre-existing relative order so they never disappear from the
+ *    UI.
+ *
+ * Together these ensure the result is **always a permutation of
+ * the same set** — no subset, no superset.
+ */
+describe('useAccountStore — service-account ordering (D7)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const fn of Object.values(commands) as ReturnType<typeof vi.fn>[]) fn.mockReset()
+  })
+
+  const THIRD_SA: ServiceAccount = {
+    ...SERVICE_ACCOUNT,
+    sid: 'sid-3',
+    ssn: '00003',
+    sname: 'Three',
+  }
+
+  it('setServiceAccountOrder reorders to match the supplied sid list', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(
+      ok({
+        accounts: [SERVICE_ACCOUNT, SECOND_SA, THIRD_SA],
+        amount_limit_notice: { kind: 'none' },
+      }),
+    )
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+
+    const next = store.setServiceAccountOrder(['sid-2', 'sid-3', 'sid-1'])
+
+    expect(next.map((a) => a.sid)).toEqual(['sid-2', 'sid-3', 'sid-1'])
+    expect(store.serviceAccounts.map((a) => a.sid)).toEqual(['sid-2', 'sid-3', 'sid-1'])
+  })
+
+  it('setServiceAccountOrder silently skips unknown sids in the input list', async () => {
+    /*
+     * WPF L515 `if (accountDict.ContainsKey(sid))` — sids in the
+     * saved order that no longer match a live account (e.g. row
+     * removed via Beanfun web) are skipped, never inserted as a
+     * placeholder.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(
+      ok({
+        accounts: [SERVICE_ACCOUNT, SECOND_SA],
+        amount_limit_notice: { kind: 'none' },
+      }),
+    )
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+
+    const next = store.setServiceAccountOrder(['sid-99', 'sid-2', 'sid-missing', 'sid-1'])
+
+    expect(next.map((a) => a.sid)).toEqual(['sid-2', 'sid-1'])
+    expect(next).toHaveLength(2)
+  })
+
+  it('setServiceAccountOrder appends accounts missing from the sid list (no silent drop)', async () => {
+    /*
+     * WPF L522-526 `foreach (var account in accountDict.Values)
+     * orderedList.Add(account)` — fresh accounts the saved order
+     * doesn't yet know about must reach the UI. Critical
+     * invariant: the result is a permutation of the input set,
+     * never a subset.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(
+      ok({
+        accounts: [SERVICE_ACCOUNT, SECOND_SA, THIRD_SA],
+        amount_limit_notice: { kind: 'none' },
+      }),
+    )
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+
+    /* Only mention sid-3; sid-1 and sid-2 should append in their original order. */
+    const next = store.setServiceAccountOrder(['sid-3'])
+
+    expect(next.map((a) => a.sid)).toEqual(['sid-3', 'sid-1', 'sid-2'])
+  })
+
+  it('setServiceAccountOrder is a no-op when the store is empty', async () => {
+    const store = useAccountStore()
+    expect(store.serviceAccounts).toEqual([])
+
+    const next = store.setServiceAccountOrder(['sid-1', 'sid-2'])
+
+    expect(next).toEqual([])
+    expect(store.serviceAccounts).toEqual([])
+  })
+
+  it('applyServiceAccountOrderFromSavedCsv returns the existing list when csv is undefined', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(
+      ok({
+        accounts: [SERVICE_ACCOUNT, SECOND_SA],
+        amount_limit_notice: { kind: 'none' },
+      }),
+    )
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+    const before = store.serviceAccounts.map((a) => a.sid)
+
+    const next = store.applyServiceAccountOrderFromSavedCsv(undefined)
+
+    expect(next.map((a) => a.sid)).toEqual(before)
+  })
+
+  it('applyServiceAccountOrderFromSavedCsv treats empty / whitespace csv as no-op', async () => {
+    /*
+     * WPF L497-499 `if (string.IsNullOrEmpty(orderString)) return;`
+     * — the saved key may exist with a zero-length value when the
+     * user has never reordered for this gameCode.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(
+      ok({
+        accounts: [SERVICE_ACCOUNT, SECOND_SA],
+        amount_limit_notice: { kind: 'none' },
+      }),
+    )
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+    const before = store.serviceAccounts.map((a) => a.sid)
+
+    expect(store.applyServiceAccountOrderFromSavedCsv('').map((a) => a.sid)).toEqual(before)
+    expect(store.applyServiceAccountOrderFromSavedCsv('   ').map((a) => a.sid)).toEqual(before)
+  })
+
+  it('applyServiceAccountOrderFromSavedCsv parses csv + skips unknown + appends missing', async () => {
+    /*
+     * Composite case covering the three WPF invariants in one
+     * realistic input — the saved csv mentions a stale sid
+     * (`sid-99`), reorders two known sids, and forgets a third
+     * (`sid-3`). Expected result: stale dropped, mentioned in
+     * order, forgotten appended.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(
+      ok({
+        accounts: [SERVICE_ACCOUNT, SECOND_SA, THIRD_SA],
+        amount_limit_notice: { kind: 'none' },
+      }),
+    )
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+
+    const next = store.applyServiceAccountOrderFromSavedCsv('sid-2,sid-99,sid-1')
+
+    expect(next.map((a) => a.sid)).toEqual(['sid-2', 'sid-1', 'sid-3'])
+    expect(store.serviceAccounts.map((a) => a.sid)).toEqual(['sid-2', 'sid-1', 'sid-3'])
   })
 })
 

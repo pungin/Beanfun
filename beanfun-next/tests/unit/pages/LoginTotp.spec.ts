@@ -150,14 +150,20 @@ vi.mock('../../../src/types/bindings', () => ({
     getVerifyCaptcha: vi.fn(),
     submitVerify: vi.fn(),
     logout: vi.fn(),
+    loadAccounts: vi.fn(),
+    saveAccount: vi.fn(),
   },
 }))
 
 import { commands } from '../../../src/types/bindings'
 import LoginTotp from '../../../src/pages/LoginTotp.vue'
+import { useAuthStore } from '../../../src/stores/auth'
 import { createAppI18n, i18nMessages, setLocale } from '../../../src/i18n'
+import type { Account } from '../../../src/types/bindings'
 
 const mockLoginTotp = vi.mocked(commands.loginTotp)
+const mockSaveAccount = vi.mocked(commands.saveAccount)
+const mockSetConfig = vi.mocked(commands.setConfig)
 
 const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ status: 'ok', data })
 
@@ -228,6 +234,8 @@ describe('LoginTotp', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockLoginTotp.mockReset()
+    mockSaveAccount.mockReset()
+    mockSetConfig.mockReset()
     elMessageError.mockReset()
   })
 
@@ -351,5 +359,143 @@ describe('LoginTotp', () => {
 
     expect(wrapper.find('[data-test="totp-submit"]').text()).toBe(i18nMessages['en-US'].Login)
     expect(wrapper.text()).toContain(i18nMessages['en-US'].loginTotp.title)
+  })
+})
+
+/**
+ * P12.2 D2 — credential persistence tests for the TOTP success
+ * branch.
+ *
+ * What this block locks down:
+ *
+ * 1. Successful TOTP submit reads `auth.loginIntent`
+ *    (stashed by IdPassForm before navigation) and calls
+ *    `commands.saveAccount` with the same WPF-shape payload as
+ *    the no-TOTP regular login path.
+ * 2. `commands.setConfig('AccountID', accountId)` is invoked
+ *    after a successful save.
+ * 3. `auth.verifyIntent` (set by VerifyPage on a prior round-trip)
+ *    is folded into the saved record.
+ * 4. Both intent slots are wiped after a successful persist
+ *    (single-shot consume).
+ * 5. Defensive guard: missing `auth.loginIntent` is logged but
+ *    does not block navigation to `/accounts` (deep-link / nav
+ *    restoration safety net).
+ */
+describe('LoginTotp — P12.2 D2 credential persistence', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockLoginTotp.mockReset()
+    mockSaveAccount.mockReset()
+    mockSetConfig.mockReset()
+    elMessageError.mockReset()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  function seedLoginIntent(): void {
+    const auth = useAuthStore()
+    auth.setLoginIntent({
+      region: 'TW',
+      accountId: 'alice',
+      password: 'hunter2',
+      rememberPassword: true,
+      autoLogin: false,
+    })
+  }
+
+  it('persists credentials with the WPF-shape payload after a successful TOTP', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    seedLoginIntent()
+
+    mockLoginTotp.mockReturnValueOnce(ok(FAKE_SESSION))
+    mockSaveAccount.mockReturnValueOnce(ok([] as Account[]))
+    mockSetConfig.mockReturnValueOnce(ok(null))
+
+    await fillAllCells(wrapper, '123456')
+
+    expect(mockSaveAccount).toHaveBeenCalledTimes(1)
+    expect(mockSaveAccount).toHaveBeenCalledWith({
+      region: 'TW',
+      account_id: 'alice',
+      account_name: '',
+      password: 'hunter2',
+      verify: '',
+      method: 0,
+      auto_login: false,
+    })
+    expect(mockSetConfig).toHaveBeenCalledWith('AccountID', 'alice')
+    expect(ctx.router.currentRoute.value.path).toBe('/accounts')
+  })
+
+  it('folds auth.verifyIntent into the saved record when present', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    seedLoginIntent()
+    const auth = useAuthStore()
+    auth.setVerifyIntent({ code: 'V789', remember: true })
+
+    mockLoginTotp.mockReturnValueOnce(ok(FAKE_SESSION))
+    mockSaveAccount.mockReturnValueOnce(ok([] as Account[]))
+    mockSetConfig.mockReturnValueOnce(ok(null))
+
+    await fillAllCells(wrapper, '123456')
+
+    expect(mockSaveAccount).toHaveBeenCalledWith(
+      expect.objectContaining({ verify: 'V789', account_id: 'alice' }),
+    )
+  })
+
+  it('clears both intent slots after a successful persist', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    seedLoginIntent()
+    const auth = useAuthStore()
+    auth.setVerifyIntent({ code: 'V', remember: true })
+
+    mockLoginTotp.mockReturnValueOnce(ok(FAKE_SESSION))
+    mockSaveAccount.mockReturnValueOnce(ok([] as Account[]))
+    mockSetConfig.mockReturnValueOnce(ok(null))
+
+    await fillAllCells(wrapper, '123456')
+
+    expect(auth.loginIntent).toBeNull()
+    expect(auth.verifyIntent).toBeNull()
+    void ctx
+  })
+
+  it('skips saveAccount + still navigates when loginIntent is missing (defensive guard)', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+
+    mockLoginTotp.mockReturnValueOnce(ok(FAKE_SESSION))
+
+    await fillAllCells(wrapper, '123456')
+
+    expect(mockSaveAccount).not.toHaveBeenCalled()
+    expect(mockSetConfig).not.toHaveBeenCalled()
+    expect(ctx.router.currentRoute.value.path).toBe('/accounts')
+  })
+
+  it('does not persist when the server still requires advance verify after TOTP', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    seedLoginIntent()
+
+    mockLoginTotp.mockReturnValueOnce(
+      err({
+        code: 'auth.advance_check_required',
+        message: 'verify required',
+        details: { url: null },
+      }),
+    )
+
+    await fillAllCells(wrapper, '123456')
+
+    expect(mockSaveAccount).not.toHaveBeenCalled()
+    expect(mockSetConfig).not.toHaveBeenCalled()
+    expect(ctx.router.currentRoute.value.path).toBe('/login/verify')
+    const auth = useAuthStore()
+    expect(auth.loginIntent?.accountId).toBe('alice')
   })
 })

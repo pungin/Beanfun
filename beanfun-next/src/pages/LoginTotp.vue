@@ -62,16 +62,32 @@ import { useRouter } from 'vue-router'
 import { ElButton, ElForm, ElIcon, ElInput } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
+import { useAccountStore } from '../stores/account'
 import { AUTH_ACTIONS, useAuthStore } from '../stores/auth'
+import { useConfigStore } from '../stores/config'
+import { LOGIN_METHOD } from '../constants/login'
 import { useOtpInputs, type FocusableInput } from '../composables/useOtpInputs'
 
 defineOptions({ name: 'LoginTotp' })
 
 const TOTP_LENGTH = 6
 
+/**
+ * `Config.xml` key tracking the most recently logged-in account id.
+ * Mirrors WPF `MainWindow.xaml.cs` L1340 / L1347 — kept in sync
+ * with the matching constant in `IdPassForm.vue`. Both files own
+ * a `SaveLoginCredentials`-equivalent post-success path; pulling
+ * the constant into a shared module would introduce a
+ * three-line file with one consumer per file, which loses more
+ * to navigation friction than it gains in DRY.
+ */
+const CONFIG_KEY_LAST_ACCOUNT_ID = 'AccountID'
+
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
+const accountStore = useAccountStore()
+const config = useConfigStore()
 
 const otp = useOtpInputs({
   length: TOTP_LENGTH,
@@ -123,10 +139,20 @@ async function submit(explicitCode?: string): Promise<void> {
   try {
     const session = await auth.loginTotp(code)
     if (session) {
+      // WPF parity: TOTP success funnels through the same
+      // `OnLoginCompleted` → `SaveLoginCredentials` chain as
+      // a no-TOTP regular login (`MainWindow.xaml.cs` L1308-1314,
+      // L1334-1363). The form-level state lives in
+      // `auth.loginIntent` (stashed by IdPassForm before it
+      // navigated here) — see `auth.ts::LoginIntent`.
+      await persistAfterFullSuccess()
       await router.push('/accounts')
       return
     }
     if (auth.pendingVerify) {
+      // No persistence here — the verify round-trip will land back
+      // on IdPassForm and the second-pass success there will run
+      // `persistAfterFullSuccess` with the verify code folded in.
       await router.push('/login/verify')
       return
     }
@@ -138,6 +164,47 @@ async function submit(explicitCode?: string): Promise<void> {
      */
     reset()
     await router.push('/login/id-pass')
+  }
+}
+
+/**
+ * Replays WPF `SaveLoginCredentials` (L1334-1363) on the TOTP
+ * success branch. Reads the form snapshot from
+ * `auth.loginIntent` (set by IdPassForm before pushing here)
+ * and any stashed verify code from `auth.verifyIntent` (rare
+ * verify-then-totp ordering — verify slot stays populated until
+ * an explicit `clearVerifyIntent`).
+ *
+ * The intent should always exist on this code path because the
+ * only way to land on `/login/totp` is via IdPassForm's
+ * `pendingTotp` branch, which stashes the intent before
+ * navigating. The defensive guard logs and returns rather than
+ * throws so a hypothetical race (deep-link to /login/totp via
+ * nav restoration?) does not brick the success navigation.
+ */
+async function persistAfterFullSuccess(): Promise<void> {
+  const intent = auth.loginIntent
+  if (!intent) {
+    console.warn('[LoginTotp] persistAfterFullSuccess: no loginIntent; skipping persist')
+    return
+  }
+  try {
+    await accountStore.saveLoginCredentials({
+      region: intent.region,
+      accountId: intent.accountId,
+      password: intent.password,
+      rememberPassword: intent.rememberPassword,
+      verify: auth.verifyIntent?.code ?? '',
+      rememberVerify: auth.verifyIntent?.remember ?? false,
+      method: LOGIN_METHOD.Regular,
+      autoLogin: intent.autoLogin,
+    })
+    await config.set(CONFIG_KEY_LAST_ACCOUNT_ID, intent.accountId)
+  } catch (err) {
+    console.error('[LoginTotp] persistAfterFullSuccess failed', err)
+  } finally {
+    auth.clearLoginIntent()
+    auth.clearVerifyIntent()
   }
 }
 

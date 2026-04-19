@@ -1,0 +1,102 @@
+/**
+ * Beanfun Next — design tokens (P12.2 D1)
+ *
+ * Single source of truth for the project's visual scale: surface
+ * palette, radius, shadow, blur, and motion presets. Lives at
+ * `:root` so both global utilities (see utilities.css) and
+ * per-component scoped styles can `var(--bf-…)` without
+ * re-declaring numbers.
+ *
+ * # Theme color bridge
+ *
+ * `composables/useThemeColor.ts::setPrimaryColor` writes
+ * `--el-color-primary` plus the Element Plus shade ladder
+ * (`--el-color-primary-dark-2`, `--el-color-primary-light-{3,5,7,8,9}`)
+ * onto `:root` at runtime so Element Plus components track the
+ * user's chosen preset. The mockups (Stitch + `_design-system.html`)
+ * use a separate naming convention — `--primary` (the dark accent)
+ * and `--primary-container` (the lighter brand color). This file
+ * bridges the two:
+ *
+ * - `--bf-primary` ← `--el-color-primary-dark-2` (the mockups'
+ *   "deep" accent; example for the Orange preset: `#723600`)
+ * - `--bf-primary-container` ← `--el-color-primary` (the mockups'
+ *   "container" / brand color; example for Orange: `#FF8201`)
+ *
+ * Falling back to the literal Orange-preset hex keeps the styles
+ * legible before `setPrimaryColor` runs (the brief boot window
+ * between `App.vue::onMounted` and `ui.applyAll()`).
+ *
+ * # Why CSS variables and not SCSS / Tailwind tokens
+ *
+ * - Runtime theme switching is the project's ground truth (8
+ *   presets + custom hex via `useThemeColor`); SCSS variables are
+ *   compile-time constants and would defeat the live-swap UX.
+ * - Tailwind would add a build-step + bundle bloat for the same
+ *   utility surface this file plus `utilities.css` provide. The
+ *   Element Plus component library already covers the heavy lifting.
+ *
+ * # WPF parity
+ *
+ * The dark/light decision was made deliberately during the P11
+ * design-system rebuild — this file documents the *new* visual
+ * vocabulary, not the WPF original. WPF parity for individual
+ * widgets is enforced at the per-page docblock level
+ * (`Pages/AccountList.xaml` ↔ `pages/AccountList.vue`, etc.).
+ */
+
+:root {
+  /* ---------- Theme color bridge to Element Plus runtime shades ---- */
+  --bf-primary: var(--el-color-primary-dark-2, #723600);
+  --bf-primary-container: var(--el-color-primary, #ff8201);
+  --bf-on-primary: #ffffff;
+
+  /* ---------- Surface palette (light mode only — see P11 design notes) */
+  --bf-surface: #faf8f6;
+  --bf-surface-bright: #f9f9f9;
+  --bf-surface-container-lowest: #ffffff;
+  --bf-surface-container-low: #f3f3f3;
+  --bf-surface-container: #eeeeee;
+  --bf-surface-container-high: #e8e8e8;
+  --bf-surface-variant: #e2e2e2;
+  --bf-on-surface: #221a11;
+  --bf-on-surface-variant: #54443a;
+  --bf-outline: #85736a;
+  --bf-outline-variant: #d7c3b6;
+  --bf-glass-border: rgba(255, 255, 255, 0.6);
+  --bf-inverse-on-surface: #f1f1f1;
+
+  /* ---------- Semantic colors (locked, not theme-driven) ----------- */
+  --bf-danger: #ba1a1a;
+  --bf-on-danger: #ffffff;
+  --bf-danger-container: #ffdad6;
+  --bf-on-danger-container: #93000a;
+  --bf-success: #3f6b2a;
+  --bf-warning: #8b5e00;
+
+  /* ---------- Radius scale --------------------------------------- */
+  --bf-radius-panel: 12px;
+  --bf-radius-card: 10px;
+  --bf-radius-button: 8px;
+  --bf-radius-input: 6px;
+  --bf-radius-pill: 9999px;
+
+  /* ---------- Shadow scale --------------------------------------- */
+  --bf-shadow-panel: 0 10px 30px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+  --bf-shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --bf-shadow-elevated: 0 20px 48px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.1);
+  --bf-shadow-floating: 0 8px 32px rgba(0, 0, 0, 0.04);
+  --bf-shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.04);
+
+  /* ---------- Blur strengths (Mica / Acrylic / Card / Hover) ------ */
+  --bf-blur-mica: blur(60px) saturate(1.8);
+  --bf-blur-acrylic: blur(30px) saturate(1.4);
+  --bf-blur-card: blur(20px) saturate(1.2);
+  --bf-blur-floating: blur(12px);
+  --bf-blur-hover: blur(16px) saturate(1.1);
+
+  /* ---------- Motion --------------------------------------------- */
+  --bf-motion-fast: 150ms cubic-bezier(0.2, 0, 0, 1);
+  --bf-motion-normal: 200ms cubic-bezier(0.2, 0, 0, 1);
+  --bf-motion-emphasized: 400ms cubic-bezier(0.2, 0, 0, 1);
+}

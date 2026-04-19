@@ -1,0 +1,202 @@
+<!-- Login Screen (IdPassForm) -->
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login - Beanfun Next</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-variant": "#e2e2e2",
+                        "secondary": "#545f6e",
+                        "outline-variant": "#dec1af",
+                        "on-secondary-fixed": "#111c29",
+                        "background": "#f9f9f9",
+                        "error-container": "#ffdad6",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-bright": "#f9f9f9",
+                        "on-secondary-fixed-variant": "#3d4855",
+                        "tertiary-container": "#00aefc",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-fixed": "#d8e3f5",
+                        "primary": "#954a00",
+                        "on-tertiary-fixed": "#001e30",
+                        "error": "#ba1a1a",
+                        "secondary-container": "#d8e3f5",
+                        "surface-container": "#eeeeee",
+                        "outline": "#8b7263",
+                        "on-tertiary-fixed-variant": "#004b70",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#574235",
+                        "on-secondary-container": "#5a6574",
+                        "on-primary-fixed": "#311400",
+                        "tertiary-fixed": "#cae6ff",
+                        "inverse-on-surface": "#f1f1f1",
+                        "surface-dim": "#dadada",
+                        "on-primary-fixed-variant": "#723600",
+                        "surface-tint": "#954a00",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#1a1c1c",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#ffdcc6",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-container": "#003e5e",
+                        "primary-fixed-dim": "#ffb786",
+                        "surface": "#f9f9f9",
+                        "secondary-fixed-dim": "#bcc7d8",
+                        "tertiary-fixed-dim": "#8dcdff",
+                        "tertiary": "#006493",
+                        "on-primary-container": "#5f2c00",
+                        "on-background": "#1a1c1c",
+                        "inverse-surface": "#2f3131",
+                        "surface-container-highest": "#e2e2e2",
+                        "surface-container-low": "#f3f3f3",
+                        "primary-container": "#ff8201",
+                        "on-secondary": "#ffffff",
+                        "inverse-primary": "#ffb786"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: theme('colors.background');
+        }
+        h1, h2, h3, h4, h5, h6, .font-headline {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background-color: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+        }
+
+        .glass-floating {
+            background-color: rgba(255, 255, 255, 0.45);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+            border-top: 1px solid rgba(241, 241, 241, 0.3); /* inverse-on-surface hint */
+        }
+
+        /* Fluent Input Styles */
+        .fluent-input {
+            border: none;
+            border-bottom: 2px solid theme('colors.outline-variant');
+            background: transparent;
+            transition: all 0.2s ease-out;
+        }
+
+        .fluent-input:focus {
+            outline: none;
+            border-bottom-color: theme('colors.primary-container');
+            box-shadow: none;
+        }
+
+        /* Gradient Text Utility */
+        .text-gradient-primary {
+            background: linear-gradient(135deg, theme('colors.primary'), theme('colors.primary-container'));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: transparent;
+        }
+
+        /* Ambient Glow */
+        .ambient-glow {
+            box-shadow: 0 0 40px rgba(255, 130, 1, 0.15); /* primary-container tint */
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-surface relative overflow-hidden text-on-surface">
+<!-- Ambient Background Texture (Mica effect approximation) -->
+<div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgoJPHJlY3Qgd2lkdGg9IjQiIGhlaWdodD0iNCIgZmlsbD0iI2ZmZiIvPgoJPHBhdGggZD0iTTAgMEg0VjRIMGoiIGZpbGw9IiNmOWY5ZjkiIGZpbGwtb3BhY2l0eT0iMC41Ii8+Cjwvc3ZnPg==')] opacity-40 z-0 pointer-events-none"></div>
+<div class="absolute inset-0 bg-gradient-to-br from-surface via-surface to-surface-container-low opacity-80 z-0 pointer-events-none"></div>
+<!-- Main Container: 3-Column Layout -->
+<main class="relative z-10 w-full max-w-4xl mx-auto px-6 h-[600px] flex items-stretch">
+<!-- Center Column: Main Login Panel (Elevated Glass) -->
+<div class="flex-1 glass-floating rounded-2xl flex flex-col items-center justify-center p-10 relative z-20 mx-4">
+<!-- Avatar / Logo Area -->
+<div class="mb-10 relative">
+<div class="w-[86px] h-[86px] rounded-full bg-surface-container-lowest border border-outline-variant/30 flex items-center justify-center ambient-glow">
+<!-- Placeholder for User Avatar or Game Logo -->
+<span class="material-symbols-outlined text-4xl text-primary" data-icon="person">person</span>
+</div>
+</div>
+<!-- Header -->
+<div class="text-center mb-8 w-full">
+<h1 class="font-headline text-3xl font-extrabold text-on-surface tracking-tight mb-2">Welcome Back</h1>
+<p class="font-body text-sm text-on-surface-variant">Sign in to your account</p>
+</div>
+<!-- Form Area -->
+<form class="w-full max-w-sm space-y-6">
+<!-- ComboBox (Account) -->
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-0 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors" data-icon="account_circle">account_circle</span>
+<input class="fluent-input w-full pl-8 pr-8 py-3 text-base text-on-surface placeholder:text-on-surface-variant/60" placeholder="Account ID or Email" type="text" value=""/>
+<!-- Dropdown Arrow Icon -->
+<button class="absolute right-0 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors focus:outline-none" type="button">
+<span class="material-symbols-outlined" data-icon="arrow_drop_down">arrow_drop_down</span>
+</button>
+</div>
+<!-- Password Input -->
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-0 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors" data-icon="lock">lock</span>
+<input class="fluent-input w-full pl-8 pr-10 py-3 text-base text-on-surface placeholder:text-on-surface-variant/60" placeholder="Password" type="password"/>
+<button class="absolute right-0 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors focus:outline-none" type="button">
+<span class="material-symbols-outlined" data-icon="visibility_off">visibility_off</span>
+</button>
+</div>
+<!-- Options Row -->
+<div class="flex items-center justify-between text-xs font-body mt-4">
+<div class="flex items-center space-x-4 text-on-surface-variant">
+<label class="flex items-center space-x-1.5 cursor-pointer group">
+<input class="rounded-[4px] border-outline-variant text-primary focus:ring-primary-container bg-transparent transition-colors" type="checkbox"/>
+<span class="group-hover:text-on-surface transition-colors">Remember</span>
+</label>
+<label class="flex items-center space-x-1.5 cursor-pointer group">
+<input class="rounded-[4px] border-outline-variant text-primary focus:ring-primary-container bg-transparent transition-colors" type="checkbox"/>
+<span class="group-hover:text-on-surface transition-colors">Auto Login</span>
+</label>
+</div>
+<a class="text-primary hover:text-primary-container transition-colors" href="#">Forgot?</a>
+</div>
+<!-- Action Row -->
+<div class="pt-6 space-y-4">
+<!-- Login Button -->
+<button class="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary font-headline font-bold py-3.5 px-6 rounded-lg hover:saturate-150 hover:shadow-[0_4px_16px_rgba(255,130,1,0.2)] transition-all duration-200 flex items-center justify-center space-x-2" type="submit">
+<span>Login</span>
+<span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<!-- Start Game (Frosted Secondary) -->
+<button class="w-full bg-surface-container-lowest/40 border-t border-inverse-on-surface/30 text-on-surface font-headline font-semibold py-3.5 px-6 rounded-lg hover:bg-surface-bright/60 transition-colors duration-200" type="button">
+                        Start Game as Guest
+                    </button>
+</div>
+</form>
+</div>
+</main>
+</body></html>

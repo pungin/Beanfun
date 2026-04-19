@@ -11,7 +11,7 @@
  * official template uses it too). This trade-off does not affect
  * frontend UX — the user never sees the URL bar.
  *
- * # Route hierarchy (P12.1 — login flow)
+ * # Route hierarchy
  *
  * ```
  * /                                redirect → /login
@@ -23,6 +23,8 @@
  *   /login/totp                    LoginTotp                 (D6 ✓)
  *   /login/wait                    LoginWait                 (D7 ✓)
  *   /login/verify                  VerifyPage                (D8 ✓)
+ * /accounts                        AccountList               (P12.2 D1 ✓, requiresAuth)
+ * /manage-account                  ManageAccount             (P12.2 D9 ✓, requiresAuth)
  * /:pathMatch(.*)*                 redirect → /              (D10 catch-all)
  * ```
  *
@@ -61,10 +63,14 @@
  * 2. **session-expired bridge** — wires
  *    `services/invoke.ts::registerSessionExpiredHandler` so any
  *    backend command failing with `auth.session_required` clears
- *    the local Pinia auth state via `auth.clearSession()` *and*
- *    forces a navigation back to `/login?sessionExpired=1`. The
- *    query flag exists so a future banner / toast on `LoginPage`
- *    can surface "your session expired, please log in again" UX
+ *    the local Pinia auth state via `auth.clearSession()`,
+ *    *also* clears the account store's session-scoped cache via
+ *    `clearAccountSession()` (P12.2 D1 fix — without this the
+ *    next login would briefly flash the previous session's
+ *    service-account list while the new fetch ran), and forces a
+ *    navigation back to `/login?sessionExpired=1`. The query
+ *    flag exists so a future banner / toast on `LoginPage` can
+ *    surface "your session expired, please log in again" UX
  *    without the user having to read the toast (P12.X concern;
  *    flag is reserved here so the contract is stable).
  */
@@ -82,28 +88,22 @@ import GamepassForm from '../pages/GamepassForm.vue'
 import LoginTotp from '../pages/LoginTotp.vue'
 import LoginWait from '../pages/LoginWait.vue'
 import VerifyPage from '../pages/VerifyPage.vue'
+import AccountList from '../pages/AccountList.vue'
+import ManageAccount from '../pages/ManageAccount.vue'
 
 /**
- * Where authenticated users land after a successful login —
- * currently a forward reference to the P12.2 `AccountList.vue`
- * route at `/accounts`.
+ * Where authenticated users land after a successful login.
  *
- * The four P12.1 D3-D8 login-success call sites
+ * Backed by the `AccountList` route registered in {@link routes}
+ * since P12.2 D1. Earlier P12.1 D3-D8 login-success call sites
  * (`IdPassForm.vue` / `LoginTotp.vue` / `QrForm.vue` /
- * `GamepassForm.vue`) all `router.push('/accounts')`; until P12.2
- * D2 registers the real route, these pushes fall through the
- * catch-all back to `/login` (a benign no-op — the user sees the
- * region picker instead of an account list, no error). Centralising
- * the constant here means the eventual fix-up only edits one
- * location plus the four call sites.
+ * `GamepassForm.vue`) all `router.push('/accounts')`; before P12.2
+ * D1 these fell through the catch-all back to `/login`, which was
+ * a documented benign no-op. Now they reach the real page.
  *
- * # Why not a `/post-login-stub` placeholder
- *
- * Adding a P12.1 stub page would require either tearing it down
- * later (extra D-step) or leaving it as dead code in production.
- * The catch-all already keeps the user inside the login funnel
- * with no broken state, so the stub adds no value over the current
- * fall-through.
+ * Centralising the path string here (rather than scattering it
+ * across the four call sites) is what made the P12.1 → P12.2
+ * hand-off a one-line change instead of a grep-and-replace.
  */
 export const LOGGED_IN_LANDING_PATH = '/accounts'
 
@@ -122,6 +122,8 @@ export const ROUTE_NAMES = {
   LoginTotp: 'login-totp',
   LoginWait: 'login-wait',
   LoginVerify: 'login-verify',
+  Accounts: 'accounts',
+  ManageAccount: 'manage-account',
 } as const
 
 /**
@@ -180,6 +182,36 @@ export const routes: RouteRecordRaw[] = [
     path: '/login',
     component: LoginPage,
     children: loginChildren,
+  },
+  {
+    path: LOGGED_IN_LANDING_PATH,
+    name: ROUTE_NAMES.Accounts,
+    component: AccountList,
+    /*
+     * P12.2 D1: first protected route that exercises the D10 guard
+     * infrastructure. Unauthenticated visits are redirected to
+     * `/login?redirect=/accounts` so a future post-login replay
+     * (P12.2 D-step) can land the user back on the page they
+     * originally targeted.
+     */
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/manage-account',
+    name: ROUTE_NAMES.ManageAccount,
+    component: ManageAccount,
+    /*
+     * P12.2 D9: stored-credential CRUD page (Users.dat add / edit /
+     * delete + plaintext JSON import / export). Reachable today only
+     * via direct hash navigation (`#/manage-account`); the Settings
+     * page entry button lands in P12.4 alongside the other settings
+     * surface — the WPF parent surface is `Setting.xaml` not
+     * `Login.xaml`, so wiring an entry from `AccountList.vue` would
+     * misplace the button. `requiresAuth: true` because the stored
+     * accounts are session-scoped UX (the page only makes sense for
+     * a logged-in user managing the credentials they just used).
+     */
+    meta: { requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -251,6 +283,28 @@ export interface RouterGuardDeps {
    * bridge calls this before redirecting.
    */
   clearSession: () => void
+  /**
+   * Optional companion wipe for *non-auth* session-scoped state
+   * (P12.2 D1: the `account` store's cached service-account list,
+   * email, remain-point, contract, and OTP selection). Fired by the
+   * session-expired bridge alongside {@link clearSession} so a
+   * subsequent re-login doesn't briefly flash the previous
+   * session's data while the new fetch runs.
+   *
+   * Optional so D10 era specs that only stubbed the auth callback
+   * keep working unchanged; production wiring in `main.ts`
+   * supplies both callbacks (P12.2 D1 fix-up of the D10 bug where
+   * `auth.session_required` cleared `auth` but left
+   * `account.serviceAccounts` populated).
+   *
+   * Why a second callback rather than chaining inside
+   * {@link clearSession}: SRP — the router shouldn't know which
+   * Pinia stores back which slice of session state, but it *is*
+   * the right layer to know "session expired = wipe every
+   * session-scoped thing in one shot". Composition stays in
+   * `main.ts` where every bootstrapped store is already in scope.
+   */
+  clearAccountSession?: () => void
 }
 
 /**
@@ -295,6 +349,7 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
 
   registerSessionExpiredHandler(() => {
     deps.clearSession()
+    deps.clearAccountSession?.()
     void router.push({
       path: '/login',
       query: { sessionExpired: '1' },

@@ -42,10 +42,21 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
+/*
+ * Project-wide design tokens + utility classes (P12.2 D1). Loaded
+ * after Element Plus's stylesheet so our `--bf-*` custom properties
+ * and `.bf-*` utilities can override / compose with ELP's base
+ * resets without an `!important` arms race. Order between the two
+ * project files matters: tokens declare `--bf-*` vars at `:root`,
+ * utilities consume them.
+ */
+import './styles/design-tokens.css'
+import './styles/utilities.css'
 
 import App from './App.vue'
 import { createAppI18n, wireI18n } from './i18n'
 import { createAppRouter, installRouterGuards } from './router'
+import { useAccountStore } from './stores/account'
 import { useAuthStore } from './stores/auth'
 
 const app = createApp(App)
@@ -63,9 +74,24 @@ const router = createAppRouter()
 app.use(router)
 
 const auth = useAuthStore()
+const account = useAccountStore()
+/*
+ * P12.2 D1 follow-up to the D10 session-expired bridge: also
+ * wipe the account store's session-scoped cache (service accounts,
+ * email, remain-point, contract, OTP selection) when the backend
+ * reports the session is gone. Without this, a re-login briefly
+ * flashes the previous user's service-account list while the
+ * fresh `getServiceAccounts()` round-trip runs.
+ *
+ * Composition lives here (not inside `clearSession()` itself) so
+ * the router and the auth store both stay unaware of which
+ * non-auth Pinia stores carry session-scoped state — `main.ts` is
+ * the only place where every store is in scope.
+ */
 installRouterGuards(router, {
   isAuthenticated: () => auth.isLoggedIn,
   clearSession: () => auth.clearSession(),
+  clearAccountSession: () => account.clearSessionData(),
 })
 
 app.mount('#app')

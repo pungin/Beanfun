@@ -33,7 +33,9 @@
 //! | [`entropy`]   | `Entropy(String)` — 8-char `[A-Z0-9]` DPAPI salt + registry              |
 //! | [`users_dat`] | `Records` / `save_records` / `load_records` / `import` / `export`        |
 //! | [`legacy`]    | P6 migrator — NRBF `Users.dat` → JSON auto-upgrade on load               |
+//! | [`aes_backup`]| AES-128-CBC backup of the JSON wire — WPF `AccRecovery` parity (P12.2)   |
 
+pub mod aes_backup;
 pub mod entropy;
 pub mod error;
 pub mod legacy;
@@ -42,6 +44,9 @@ pub mod users_dat;
 #[cfg(target_os = "windows")]
 pub mod dpapi;
 
+pub use aes_backup::{
+    decrypt_records as aes_backup_decrypt, encrypt_records as aes_backup_encrypt, BackupError,
+};
 pub use entropy::Entropy;
 pub use error::StorageError;
 pub use legacy::{migrate_legacy_payload, LegacyMigrateError};

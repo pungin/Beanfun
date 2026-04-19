@@ -132,6 +132,22 @@
 //! | `Json(serde_json::Error)`          | `storage.json_failed`            | `line` / `column`                  |
 //! | `LegacyDataDetected { raw_bytes }` | `storage.legacy_data_detected`   | `byte_count` (raw bytes omitted)   |
 //!
+//! ## `BackupError` — `storage.aes_backup_*`
+//!
+//! AES-128-CBC backup/restore failures from
+//! [`crate::services::storage::aes_backup`]. The `aes_backup_` prefix
+//! sits inside the `storage.*` namespace so a single match arm in the
+//! frontend can branch on `code.startsWith("storage.aes_backup_")` to
+//! map all three variants to the WPF `MsgDecryptFailed` toast (post-
+//! decrypt JSON / DPAPI failures fall back to the regular
+//! `storage.*` codes above and surface as `RecoveryFailed` instead).
+//!
+//! | Variant                                   | Code                                       | `details` fields            |
+//! | ----------------------------------------- | ------------------------------------------ | --------------------------- |
+//! | `InvalidCiphertext(base64::DecodeError)`  | `storage.aes_backup_invalid_ciphertext`    | `reason`                    |
+//! | `DecryptFailed`                           | `storage.aes_backup_decrypt_failed`        | — (opaque by design)        |
+//! | `InvalidUtf8(FromUtf8Error)`              | `storage.aes_backup_invalid_utf8`          | `reason`                    |
+//!
 //! ## `ConfigError` — `config.*`
 //!
 //! | Variant                       | Code                        | `details` fields |
@@ -252,6 +268,7 @@ use crate::services::config::error::ConfigError;
 use crate::services::game::error::GameError;
 use crate::services::process::error::ProcessError;
 use crate::services::registry::error::RegistryError;
+use crate::services::storage::aes_backup::BackupError;
 use crate::services::storage::error::StorageError;
 use crate::services::system::error::SystemError;
 use crate::services::updater::error::UpdaterError;
@@ -568,6 +585,33 @@ impl From<StorageError> for CommandError {
 }
 
 // ---------------------------------------------------------------------
+// BackupError → CommandError (services/storage/aes_backup)
+// ---------------------------------------------------------------------
+
+impl From<BackupError> for CommandError {
+    fn from(e: BackupError) -> Self {
+        let message = e.to_string();
+        match e {
+            BackupError::InvalidCiphertext(err) => {
+                CommandError::new("storage.aes_backup_invalid_ciphertext", message)
+                    .with_details(json!({ "reason": err.to_string() }))
+            }
+            // No `details` — the inner `cipher::block_padding::UnpadError`
+            // is intentionally opaque (RustCrypto's design choice to
+            // resist padding-oracle leakage). Adding a synthetic reason
+            // here would re-introduce that signal.
+            BackupError::DecryptFailed => {
+                CommandError::new("storage.aes_backup_decrypt_failed", message)
+            }
+            BackupError::InvalidUtf8(err) => {
+                CommandError::new("storage.aes_backup_invalid_utf8", message)
+                    .with_details(json!({ "reason": err.to_string() }))
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
 // ConfigError → CommandError (services/config)
 // ---------------------------------------------------------------------
 
@@ -878,6 +922,7 @@ mod from_impls_tests {
     use crate::services::process::error::ProcessError;
     use crate::services::registry::error::RegistryError;
     use crate::services::registry::Hive;
+    use crate::services::storage::aes_backup::BackupError;
     use crate::services::storage::error::StorageError;
     use crate::services::updater::error::UpdaterError;
     use std::io;
@@ -1018,6 +1063,50 @@ mod from_impls_tests {
         assert_eq!(
             err.details.as_ref().and_then(|v| v.get("io_kind")),
             Some(&json!("NotFound"))
+        );
+    }
+
+    // ----- BackupError (storage.aes_backup_*) -------------------------
+
+    #[test]
+    fn backup_invalid_ciphertext_carries_reason_string() {
+        let decode_err =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, "not!base64@")
+                .unwrap_err();
+        let err: CommandError = BackupError::InvalidCiphertext(decode_err).into();
+        assert_eq!(err.code, "storage.aes_backup_invalid_ciphertext");
+        let details = err.details.expect("details present");
+        assert!(
+            details
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| !s.is_empty()),
+            "reason must be a non-empty string sourced from base64::DecodeError",
+        );
+    }
+
+    #[test]
+    fn backup_decrypt_failed_is_opaque() {
+        let err: CommandError = BackupError::DecryptFailed.into();
+        assert_eq!(err.code, "storage.aes_backup_decrypt_failed");
+        assert!(
+            err.details.is_none(),
+            "DecryptFailed must surface no details — opaque by design (padding-oracle leakage avoidance)",
+        );
+    }
+
+    #[test]
+    fn backup_invalid_utf8_carries_reason_string() {
+        let utf8_err = String::from_utf8(vec![0xff, 0xfe, 0xfd]).unwrap_err();
+        let err: CommandError = BackupError::InvalidUtf8(utf8_err).into();
+        assert_eq!(err.code, "storage.aes_backup_invalid_utf8");
+        let details = err.details.expect("details present");
+        assert!(
+            details
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| !s.is_empty()),
+            "reason must be a non-empty string sourced from FromUtf8Error",
         );
     }
 

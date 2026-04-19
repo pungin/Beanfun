@@ -7,14 +7,28 @@
  * 1. `config.loadAll()` — pull every Config.xml entry into the
  *    in-memory cache. Subsequent `config.get(key)` calls return
  *    instantly without an IPC hop.
- * 2. `ui.applyAll()` — push the loaded values out as DOM side
- *    effects: `setPrimaryColor` for the theme + the registered
- *    locale applier for vue-i18n. Either step soft-fails to
- *    defaults — a corrupt Config.xml entry must never soft-brick
- *    boot.
+ * 2. `account.loadAccounts()` — decrypt `Users.dat` once into the
+ *    account store. Mirrors WPF `MainWindow ctor` calling
+ *    `accountManager.readRecord()` at startup so login-form
+ *    prefill (P12.2 D2.5 / D2.7) and the ManageAccount page
+ *    (P12.2 D9) read from a populated cache without a per-mount
+ *    IPC hop. Soft-fails the same way `config.loadAll` does — a
+ *    corrupt Users.dat or DPAPI failure must not soft-brick boot
+ *    (the user can still pick "register a new account" or recover
+ *    via Settings).
+ * 3. `ui.applyAll()` — push the loaded config values out as DOM
+ *    side effects: `setPrimaryColor` for the theme + the
+ *    registered locale applier for vue-i18n. Either step
+ *    soft-fails to defaults — a corrupt Config.xml entry must
+ *    never soft-brick boot.
  *
- * Both calls run sequentially; `ui.applyAll()` reads from the cache
- * `loadAll()` populates so the order matters.
+ * All three calls run sequentially; `ui.applyAll()` reads from the
+ * cache `config.loadAll()` populates so step 1 must finish before
+ * step 3. Step 2 is independent of steps 1/3 (account state is
+ * read by `IdPassForm` / `VerifyPage` mount-time prefill, not the
+ * root shell), but lives in the boot sequence rather than a
+ * lazy-on-mount hook so the very first navigation to `/login`
+ * never paints a half-empty form.
  *
  * # Why `<el-config-provider>` at the root
  *
@@ -33,9 +47,11 @@ import enLocale from 'element-plus/dist/locale/en.mjs'
 import zhCnLocale from 'element-plus/dist/locale/zh-cn.mjs'
 import zhTwLocale from 'element-plus/dist/locale/zh-tw.mjs'
 
+import { useAccountStore } from './stores/account'
 import { useConfigStore } from './stores/config'
 import { useUiStore, type AppLocale } from './stores/ui'
 
+const account = useAccountStore()
 const config = useConfigStore()
 const ui = useUiStore()
 
@@ -61,6 +77,20 @@ onMounted(async () => {
     // retry from Settings instead of staring at a blank window.
     console.error('[App.vue] config.loadAll failed; falling back to defaults', err)
     ElMessage.warning('Config.xml 載入失敗，使用預設設定。')
+  }
+
+  try {
+    await account.loadAccounts()
+  } catch (err) {
+    /*
+     * Same soft-fail pattern as `config.loadAll` — a corrupt
+     * `Users.dat` or DPAPI failure must not block boot. The
+     * `wrapCommand` toast already fired with the structured error
+     * code; the account cache stays empty and downstream prefill
+     * paths (IdPassForm / VerifyPage / ManageAccount) treat that
+     * as "no saved credentials" rather than crashing.
+     */
+    console.error('[App.vue] account.loadAccounts failed; starting with empty cache', err)
   }
 
   ui.applyAll()

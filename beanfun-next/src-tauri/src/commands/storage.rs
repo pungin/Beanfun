@@ -18,6 +18,15 @@
 //! - [`export_records`] — serialise the current `Users.dat`
 //!   contents as plaintext JSON to an external path (WPF
 //!   `exportRecord` L440-471).
+//! - [`backup_export`] — same as [`export_records`] but the JSON
+//!   is then AES-128-CBC encrypted under a user-supplied password
+//!   and returned as base64 (WPF `AccRecovery.Export_Button_Click`,
+//!   `Beanfun/Windows/AccRecovery.xaml.cs` L28-45). Wire format is
+//!   1:1 compatible — see [`crate::services::storage::aes_backup`].
+//! - [`backup_restore`] — inverse of [`backup_export`]: AES-decrypt
+//!   the user-supplied base64 ciphertext, then route through the
+//!   same `Users.dat` overwrite pipeline as [`import_records`]
+//!   (WPF `AccRecovery.Recovery_Button_Click` L47-79).
 //!
 //! # Q7 = A: plaintext pass-through
 //!
@@ -209,6 +218,54 @@ mod imp {
                 }))
             })?;
         Ok(())
+    }
+
+    /// Decrypt → serialize → AES-encrypt → base64 the current
+    /// `Users.dat` contents. Returns the base64 ciphertext directly
+    /// (no IO — the frontend renders it in a textarea so the user
+    /// can copy it elsewhere). Mirrors WPF
+    /// `AccRecovery.Export_Button_Click`.
+    ///
+    /// `password` is consumed by reference and never logged or
+    /// persisted; it lives only on the request stack frame for the
+    /// duration of the call.
+    pub(super) async fn backup_export_impl(
+        state: &AppState,
+        password: String,
+    ) -> Result<String, CommandError> {
+        let users_dat = users_dat_path(state);
+        let records = storage::load_records_with_legacy_migration(&users_dat).await?;
+        let json = storage::export_records(&records)?;
+        Ok(storage::aes_backup_encrypt(&json, &password))
+    }
+
+    /// AES-decrypt the user-supplied `ciphertext_b64` under
+    /// `password`, then route the decrypted JSON through the
+    /// shared `Users.dat` import pipeline (same path as
+    /// [`import_records_impl`]). Returns the post-restore account
+    /// list so the frontend can refresh in one round-trip without
+    /// a follow-up [`load_accounts`] call. Mirrors WPF
+    /// `AccRecovery.Recovery_Button_Click`.
+    ///
+    /// # Error mapping
+    ///
+    /// - `storage.aes_backup_*` — AES / base64 / UTF-8 failure
+    ///   (the frontend maps these to the WPF `MsgDecryptFailed`
+    ///   toast: "wrong password / corrupted blob").
+    /// - `storage.json_failed` / `storage.dpapi_*` /
+    ///   `storage.io_failed` / etc. — post-decrypt JSON validation
+    ///   or `Users.dat` overwrite failure (frontend maps to WPF
+    ///   `RecoveryFailed` toast: "decrypt OK, but the contents
+    ///   were not a valid Users.dat backup").
+    pub(super) async fn backup_restore_impl(
+        state: &AppState,
+        password: String,
+        ciphertext_b64: String,
+    ) -> Result<Vec<Account>, CommandError> {
+        let plaintext_json = storage::aes_backup_decrypt(&ciphertext_b64, &password)?;
+        let users_dat = users_dat_path(state);
+        let records = storage::import_records(&users_dat, &plaintext_json).await?;
+        Ok(records.0)
     }
 
     /// Upsert `account` into `records` by `(region, account_id)`
@@ -436,6 +493,88 @@ pub async fn export_records(state: State<'_, AppState>, path: String) -> Result<
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (state, path);
+        Err(platform_unsupported_error())
+    }
+}
+
+/// AES-128-CBC backup of the current `Users.dat` contents under a
+/// user-supplied `password`. Returns the base64 ciphertext directly
+/// (no file IO — the frontend `windows/AccRecovery.vue` shows it
+/// in a textarea so users can copy/paste it to their preferred
+/// transport channel).
+///
+/// Wire format is byte-for-byte compatible with WPF
+/// `Beanfun/Windows/AccRecovery.xaml.cs::Export_Button_Click` so
+/// users migrating between launchers can copy backups in either
+/// direction. See [`crate::services::storage::aes_backup`] for the
+/// crypto specification and threat-model caveats.
+///
+/// # Errors
+///
+/// - `storage.*` (DPAPI / registry / IO) — failure during the
+///   `Users.dat` decrypt step.
+/// - `storage.platform_unsupported` — non-Windows build.
+///
+/// AES encryption itself cannot fail on the happy path (key/IV
+/// derivation is infallible and `cbc::Encryptor` returns `Vec<u8>`
+/// rather than `Result`).
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_export(
+    state: State<'_, AppState>,
+    password: String,
+) -> Result<String, CommandError> {
+    #[cfg(target_os = "windows")]
+    {
+        imp::backup_export_impl(&state, password).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (state, password);
+        Err(platform_unsupported_error())
+    }
+}
+
+/// Inverse of [`backup_export`]: AES-decrypt the user-supplied
+/// `ciphertext_b64` under `password`, validate the recovered JSON
+/// against the `WireRecords` shape, and overwrite `Users.dat`.
+/// Returns the post-restore account list so the frontend can
+/// refresh without a follow-up [`load_accounts`] call.
+///
+/// Mirrors WPF `AccRecovery.Recovery_Button_Click`.
+///
+/// # Errors
+///
+/// - `storage.aes_backup_invalid_ciphertext` — `ciphertext_b64`
+///   is not valid base64. Frontend maps to WPF `MsgDecryptFailed`
+///   toast.
+/// - `storage.aes_backup_decrypt_failed` — AES-CBC PKCS7 unpad
+///   failure (almost always wrong password). Frontend maps to WPF
+///   `MsgDecryptFailed` toast.
+/// - `storage.aes_backup_invalid_utf8` — decrypted bytes are not
+///   valid UTF-8 (rare wrong-password symptom). Frontend maps to
+///   WPF `MsgDecryptFailed` toast.
+/// - `storage.json_failed` — decryption succeeded but the recovered
+///   plaintext is not a valid `WireRecords` JSON. Frontend maps to
+///   WPF `RecoveryFailed` toast.
+/// - `storage.*` (DPAPI / registry / IO) — failure during the
+///   `Users.dat` re-encrypt + overwrite step. Frontend maps to WPF
+///   `RecoveryFailed` toast.
+/// - `storage.platform_unsupported` — non-Windows build.
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_restore(
+    state: State<'_, AppState>,
+    password: String,
+    ciphertext: String,
+) -> Result<Vec<Account>, CommandError> {
+    #[cfg(target_os = "windows")]
+    {
+        imp::backup_restore_impl(&state, password, ciphertext).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (state, password, ciphertext);
         Err(platform_unsupported_error())
     }
 }

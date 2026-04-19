@@ -81,21 +81,34 @@
  * verification waits for those D-steps.
  */
 
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElButton, ElCheckbox, ElForm, ElFormItem, ElIcon, ElInput, ElMessage } from 'element-plus'
 import { ArrowLeft, Lock, User } from '@element-plus/icons-vue'
 
-import { useAuthStore, AUTH_ACTIONS } from '../stores/auth'
+import { useAccountStore } from '../stores/account'
+import { useAuthStore, AUTH_ACTIONS, type LoginIntent } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
+import { LOGIN_METHOD } from '../constants/login'
 import type { LoginRegion } from '../types/bindings'
 
 defineOptions({ name: 'IdPassForm' })
 
+/**
+ * `Config.xml` key tracking the most recently logged-in account id.
+ * Mirrors WPF `MainWindow.xaml.cs` L1340 / L1347
+ * (`ConfigAppSettings.SetValue("AccountID", accountId)`) — used by
+ * mount-time prefill (this file) and the WPF startup
+ * `loginMethodInit` flow (re-implemented across the account store
+ * + this prefill).
+ */
+const CONFIG_KEY_LAST_ACCOUNT_ID = 'AccountID'
+
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
+const accountStore = useAccountStore()
 const config = useConfigStore()
 
 /**
@@ -127,6 +140,59 @@ watch(remember, (next) => {
 })
 
 const submitting = computed(() => auth.pendingAction === AUTH_ACTIONS.LoginRegular)
+
+/**
+ * Mount-time prefill — replays WPF `loginMethodChanged`
+ * (`MainWindow.xaml.cs` L1054-1092) which checks for a stored
+ * record matching `(App.LoginRegion, t_AccountID.Text)` and
+ * fills `t_Password.Password` / `checkBox_RememberPWD` /
+ * `checkBox_AutoLogin` when the record carries a saved password.
+ *
+ * Differences from WPF:
+ *
+ * - WPF reads the account from `t_AccountID.Text`, which is
+ *   pre-populated by `loginMethodInit` from `LastLoginAccountID`
+ *   (Config) — we cut out the middle-man and read
+ *   `LastLoginAccountID` directly. The visible behaviour is
+ *   identical for the boot-into-id-pass case, which is the only
+ *   path that exists in the SPA today (P12.2 D8 lands the
+ *   ManageAccount-style account dropdown).
+ * - VerifyPage prefill (WPF L1078-1091) is **not** done here —
+ *   the SPA splits IdPassForm and VerifyPage into separate
+ *   mounted components, so each owns its own prefill. See
+ *   `VerifyPage.vue::onMounted`.
+ *
+ * `findStoredAccount` is a synchronous local-cache lookup (no
+ * IPC); the cache is populated by `App.vue`'s boot
+ * `account.loadAccounts()` step. Soft-fails to "no prefill" when
+ * the cache hasn't loaded (boot in progress / load failed).
+ */
+onMounted(() => {
+  prefillFromStoredRecord()
+})
+
+function prefillFromStoredRecord(): void {
+  const region = readRegion()
+  const lastAccountId = config.get(CONFIG_KEY_LAST_ACCOUNT_ID)
+  if (!lastAccountId) return
+  const stored = accountStore.findStoredAccount(region, lastAccountId)
+  if (!stored) return
+
+  account.value = stored.account_id
+  /*
+   * Only prefill password / remember / autoLogin when a non-empty
+   * password was saved. WPF L1067 short-circuits on `pwd != "" &&
+   * pwd != null`; matching keeps the form clean for users who
+   * deliberately unchecked Remember last time (the empty
+   * password row is still in `Users.dat` for `account_id`
+   * round-trip but should not auto-fill anything).
+   */
+  if (stored.password) {
+    password.value = stored.password
+    remember.value = true
+    autoLogin.value = stored.auto_login
+  }
+}
 
 function goBack(): void {
   /*
@@ -162,10 +228,31 @@ async function submit(): Promise<void> {
     return
   }
 
+  /*
+   * Snapshot the form state into the auth store *before* firing
+   * the IPC so that downstream login-flow pages (LoginTotp,
+   * VerifyPage) can read it back regardless of which branch the
+   * `loginRegular` call resolves on (success / pendingTotp /
+   * pendingVerify / throw). See `auth.ts::LoginIntent` docblock
+   * for the full lifecycle rationale — single-shot, overwrite
+   * always, cleared on save / clearSession.
+   */
+  const intent: LoginIntent = {
+    region: readRegion(),
+    accountId: account.value.trim(),
+    password: password.value,
+    rememberPassword: remember.value,
+    autoLogin: autoLogin.value,
+  }
+  auth.setLoginIntent(intent)
+
   try {
-    const session = await auth.loginRegular(readRegion(), account.value.trim(), password.value)
+    const session = await auth.loginRegular(intent.region, intent.accountId, intent.password)
     if (session) {
-      // Full success — go to the post-login landing page (P12.2).
+      // Full success — persist credentials per WPF `OnLoginCompleted`
+      // → `SaveLoginCredentials` (L1308-1313, L1334-1363) before
+      // navigating to the post-login landing page.
+      await persistAfterFullSuccess(intent)
       await router.push('/accounts')
       return
     }
@@ -174,6 +261,11 @@ async function submit(): Promise<void> {
      * instead of throwing. Inspect both flags rather than assuming
      * mutual exclusion so a future server change that sets both
      * doesn't silently route to the wrong screen.
+     *
+     * The `loginIntent` slot stays populated for the downstream
+     * page to consume — the persistence call moves to that page's
+     * success path (LoginTotp on TOTP success, IdPassForm second
+     * mount on verify-then-id-pass).
      */
     if (auth.pendingTotp) {
       await router.push('/login/totp')
@@ -186,7 +278,60 @@ async function submit(): Promise<void> {
   } catch {
     // The auth store already surfaced the error toast via
     // `surfaceCommandError`; staying on the form lets the user
-    // correct the credentials and retry.
+    // correct the credentials and retry. We deliberately leave
+    // `loginIntent` populated — a retry submission overwrites it
+    // anyway, and clearing here would erase the user's password
+    // before they can see the error toast.
+  }
+}
+
+/**
+ * Run the WPF `SaveLoginCredentials` (L1334-1363) sequence after
+ * a fully-successful Regular login (no further pending flags):
+ *
+ * 1. Pull any stashed verify code from `auth.verifyIntent` (set
+ *    by VerifyPage on the prior verify round-trip; absent for a
+ *    first-pass success).
+ * 2. Call `account.saveLoginCredentials` — atomic upsert with
+ *    GamePass / QR skip rules, see action docblock.
+ * 3. `config.set('AccountID', accountId)` so the next boot's
+ *    prefill (and `LastLoginAccountID` consumers in P12.2 D8+)
+ *    points at this row.
+ * 4. Single-shot consume: clear both intent slots so a follow-up
+ *    sign-in starts fresh.
+ *
+ * `method` is hard-pinned to `LOGIN_METHOD.Regular` because this
+ * file owns the Regular flow (TOTP / QR / GamePass live in
+ * sibling components, each with its own persist call site).
+ *
+ * Failures inside `saveLoginCredentials` / `config.set` already
+ * surface a toast via `wrapCommand`; we still navigate because
+ * the *login* itself succeeded — the persistence is a
+ * convenience, not a blocker.
+ */
+async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
+  try {
+    await accountStore.saveLoginCredentials({
+      region: intent.region,
+      accountId: intent.accountId,
+      password: intent.password,
+      rememberPassword: intent.rememberPassword,
+      verify: auth.verifyIntent?.code ?? '',
+      rememberVerify: auth.verifyIntent?.remember ?? false,
+      method: LOGIN_METHOD.Regular,
+      autoLogin: intent.autoLogin,
+    })
+    await config.set(CONFIG_KEY_LAST_ACCOUNT_ID, intent.accountId)
+  } catch (err) {
+    /*
+     * `wrapCommand` inside the store already toasted; just log so
+     * the dev console has context for why the next boot might not
+     * prefill. Login itself is unaffected.
+     */
+    console.error('[IdPassForm] persistAfterFullSuccess failed', err)
+  } finally {
+    auth.clearLoginIntent()
+    auth.clearVerifyIntent()
   }
 }
 </script>

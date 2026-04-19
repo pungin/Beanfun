@@ -85,6 +85,7 @@ import { useRouter } from 'vue-router'
 import { ElButton, ElCheckbox, ElForm, ElFormItem, ElIcon, ElInput, ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
+import { useAccountStore } from '../stores/account'
 import { AUTH_ACTIONS, useAuthStore } from '../stores/auth'
 import { CommandInvocationError } from '../services/invoke'
 
@@ -93,6 +94,7 @@ defineOptions({ name: 'VerifyPage' })
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
+const accountStore = useAccountStore()
 
 const verifyCode = ref('')
 const captchaCode = ref('')
@@ -109,8 +111,43 @@ const refreshing = computed(
 )
 
 onMounted(() => {
+  prefillFromStoredRecord()
   void bootstrap()
 })
+
+/**
+ * Mount-time prefill — replays WPF
+ * `MainWindow.xaml.cs::loginWorker_RunWorkerCompleted` (L1482-1487)
+ * / `totpWorker_RunWorkerCompleted` (L1595-1600), both of which
+ * pre-populate `verifyPage.t_Verify.Text` with
+ * `accountManager.getVerifyByAccount(LoginRegion, t_AccountID.Text)`
+ * and check `RememberVerify` when a non-empty saved verify code
+ * exists.
+ *
+ * SPA reads the same `(region, accountId)` pair from
+ * `auth.loginIntent` (stashed by IdPassForm before the verify
+ * round-trip pushed us here). Soft-fails to "no prefill" when:
+ *
+ * - The intent slot is missing (deep-link / nav restoration —
+ *   the user can still type the verify code by hand), or
+ * - The account cache has no row matching the intent (no
+ *   previously-saved verify for this account).
+ *
+ * Runs *before* `bootstrap()` so the form is fully populated
+ * the first time the user sees it; bootstrap's IPC round-trip
+ * fills in the captcha image and the auth-type label
+ * asynchronously without overwriting the prefilled fields.
+ */
+function prefillFromStoredRecord(): void {
+  const intent = auth.loginIntent
+  if (!intent) return
+  const stored = accountStore.findStoredAccount(intent.region, intent.accountId)
+  if (!stored) return
+  if (!stored.verify) return
+
+  verifyCode.value = stored.verify
+  remember.value = true
+}
 
 /**
  * Two-step boot: page-info → captcha image. WPF runs both inline in
@@ -192,9 +229,21 @@ async function submit(): Promise<void> {
   if (submitting.value) return
 
   try {
-    const outcome = await auth.submitVerify(verifyCode.value.trim(), captchaCode.value.trim())
+    const submittedVerify = verifyCode.value.trim()
+    const outcome = await auth.submitVerify(submittedVerify, captchaCode.value.trim())
     switch (outcome.result) {
       case 'success':
+        /*
+         * Stash the verify code + remember flag so the next
+         * IdPassForm second-pass success can fold them into the
+         * persistent record. WPF holds the same data inside
+         * `verifyPage.t_Verify.Text` / `checkBoxRememberVerify`
+         * because the page control stays alive across the
+         * subsequent `do_Login` retry; the SPA navigates away,
+         * so the auth store carries the values across the page
+         * boundary instead. See `auth.ts::VerifyIntent`.
+         */
+        auth.setVerifyIntent({ code: submittedVerify, remember: remember.value })
         ElMessage.success(t('loginVerify.success'))
         await router.push('/login/id-pass')
         return

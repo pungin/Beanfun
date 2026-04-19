@@ -1104,6 +1104,73 @@ async exportRecords(path: string) : Promise<Result<null, CommandError>> {
 }
 },
 /**
+ * AES-128-CBC backup of the current `Users.dat` contents under a
+ * user-supplied `password`. Returns the base64 ciphertext directly
+ * (no file IO — the frontend `windows/AccRecovery.vue` shows it
+ * in a textarea so users can copy/paste it to their preferred
+ * transport channel).
+ * 
+ * Wire format is byte-for-byte compatible with WPF
+ * `Beanfun/Windows/AccRecovery.xaml.cs::Export_Button_Click` so
+ * users migrating between launchers can copy backups in either
+ * direction. See [`crate::services::storage::aes_backup`] for the
+ * crypto specification and threat-model caveats.
+ * 
+ * # Errors
+ * 
+ * - `storage.*` (DPAPI / registry / IO) — failure during the
+ * `Users.dat` decrypt step.
+ * - `storage.platform_unsupported` — non-Windows build.
+ * 
+ * AES encryption itself cannot fail on the happy path (key/IV
+ * derivation is infallible and `cbc::Encryptor` returns `Vec<u8>`
+ * rather than `Result`).
+ */
+async backupExport(password: string) : Promise<Result<string, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("backup_export", { password }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Inverse of [`backup_export`]: AES-decrypt the user-supplied
+ * `ciphertext_b64` under `password`, validate the recovered JSON
+ * against the `WireRecords` shape, and overwrite `Users.dat`.
+ * Returns the post-restore account list so the frontend can
+ * refresh without a follow-up [`load_accounts`] call.
+ * 
+ * Mirrors WPF `AccRecovery.Recovery_Button_Click`.
+ * 
+ * # Errors
+ * 
+ * - `storage.aes_backup_invalid_ciphertext` — `ciphertext_b64`
+ * is not valid base64. Frontend maps to WPF `MsgDecryptFailed`
+ * toast.
+ * - `storage.aes_backup_decrypt_failed` — AES-CBC PKCS7 unpad
+ * failure (almost always wrong password). Frontend maps to WPF
+ * `MsgDecryptFailed` toast.
+ * - `storage.aes_backup_invalid_utf8` — decrypted bytes are not
+ * valid UTF-8 (rare wrong-password symptom). Frontend maps to
+ * WPF `MsgDecryptFailed` toast.
+ * - `storage.json_failed` — decryption succeeded but the recovered
+ * plaintext is not a valid `WireRecords` JSON. Frontend maps to
+ * WPF `RecoveryFailed` toast.
+ * - `storage.*` (DPAPI / registry / IO) — failure during the
+ * `Users.dat` re-encrypt + overwrite step. Frontend maps to WPF
+ * `RecoveryFailed` toast.
+ * - `storage.platform_unsupported` — non-Windows build.
+ */
+async backupRestore(password: string, ciphertext: string) : Promise<Result<Account[], CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("backup_restore", { password, ciphertext }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Check whether a newer Beanfun release is available on the
  * upstream GitHub releases feed.
  * 

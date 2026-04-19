@@ -42,8 +42,8 @@ const subline = computed(() => t('loginShell.subline'))
 </script>
 
 <template>
-  <main class="login-shell">
-    <section class="login-shell__panel glass-panel">
+  <main class="login-shell bf-mica-bg">
+    <section class="login-shell__panel bf-glass-panel">
       <header class="login-shell__header">
         <h1 class="login-shell__title">{{ heading }}</h1>
         <p class="login-shell__subline">{{ subline }}</p>
@@ -56,42 +56,26 @@ const subline = computed(() => t('loginShell.subline'))
 </template>
 
 <style scoped>
+/*
+ * P12.2 D1 refactor: page-level chrome (background gradient + glass
+ * surface) moved to project-wide utility classes
+ * (`bf-mica-bg`, `bf-glass-panel`) declared in `src/styles/utilities.css`.
+ * Only LoginPage-specific layout (size/spacing) stays here so adding
+ * a second top-level page (P12.2 AccountList) reuses the same
+ * primitives instead of copy-pasting the rgba/blur soup.
+ */
 .login-shell {
   box-sizing: border-box;
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 2rem;
-  background:
-    radial-gradient(
-      1200px 800px at 10% -10%,
-      color-mix(in srgb, var(--el-color-primary, #ff8201) 30%, transparent),
-      transparent 60%
-    ),
-    radial-gradient(
-      900px 700px at 110% 110%,
-      color-mix(in srgb, var(--el-color-primary, #ff8201) 22%, transparent),
-      transparent 55%
-    ),
-    linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%);
 }
 
 .login-shell__panel {
   width: 100%;
   max-width: 560px;
-  border-radius: 12px;
   overflow: hidden;
-}
-
-.glass-panel {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(30px) saturate(1.4);
-  -webkit-backdrop-filter: blur(30px) saturate(1.4);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 10px 30px rgba(0, 0, 0, 0.08),
-    0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .login-shell__header {
@@ -105,13 +89,13 @@ const subline = computed(() => t('loginShell.subline'))
   font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: -0.01em;
-  color: #1f1a16;
+  color: var(--bf-on-surface);
 }
 
 .login-shell__subline {
   margin: 0.5rem 0 0;
   font-size: 0.875rem;
-  color: #54443a;
+  color: var(--bf-on-surface-variant);
 }
 
 .login-shell__body {

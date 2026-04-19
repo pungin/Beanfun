@@ -18,8 +18,9 @@
 //!       2. AppState::new(root)         → shared runtime state
 //!       3. commands::build_specta_builder() → tauri-specta Builder
 //!       4. tauri::Builder::default()
-//!           .plugin(tauri_plugin_opener)
-//!           .manage(app_state)         ← State<'_, AppState> in every cmd
+//!           .plugin(tauri_plugin_opener)   ← cross-platform URL opener
+//!           .plugin(tauri_plugin_dialog)   ← native open / save file picker
+//!           .manage(app_state)             ← State<'_, AppState> in every cmd
 //!           .invoke_handler(specta.invoke_handler())
 //!           .run(tauri::generate_context!())
 //! ```
@@ -307,6 +308,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
         .invoke_handler(invoke_handler)
         .run(tauri::generate_context!())

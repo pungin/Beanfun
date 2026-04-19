@@ -1,0 +1,153 @@
+<!-- QR Code Login (QrForm) -->
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QR Code Login</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-variant": "#e2e2e2",
+                        "secondary": "#545f6e",
+                        "outline-variant": "#dec1af",
+                        "on-secondary-fixed": "#111c29",
+                        "background": "#f9f9f9",
+                        "error-container": "#ffdad6",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-bright": "#f9f9f9",
+                        "on-secondary-fixed-variant": "#3d4855",
+                        "tertiary-container": "#00aefc",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-fixed": "#d8e3f5",
+                        "primary": "#954a00",
+                        "on-tertiary-fixed": "#001e30",
+                        "error": "#ba1a1a",
+                        "secondary-container": "#d8e3f5",
+                        "surface-container": "#eeeeee",
+                        "outline": "#8b7263",
+                        "on-tertiary-fixed-variant": "#004b70",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#574235",
+                        "on-secondary-container": "#5a6574",
+                        "on-primary-fixed": "#311400",
+                        "tertiary-fixed": "#cae6ff",
+                        "inverse-on-surface": "#f1f1f1",
+                        "surface-dim": "#dadada",
+                        "on-primary-fixed-variant": "#723600",
+                        "surface-tint": "#954a00",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#1a1c1c",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#ffdcc6",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-container": "#003e5e",
+                        "primary-fixed-dim": "#ffb786",
+                        "surface": "#f9f9f9",
+                        "secondary-fixed-dim": "#bcc7d8",
+                        "tertiary-fixed-dim": "#8dcdff",
+                        "tertiary": "#006493",
+                        "on-primary-container": "#5f2c00",
+                        "on-background": "#1a1c1c",
+                        "inverse-surface": "#2f3131",
+                        "surface-container-highest": "#e2e2e2",
+                        "surface-container-low": "#f3f3f3",
+                        "primary-container": "#ff8201",
+                        "on-secondary": "#ffffff",
+                        "inverse-primary": "#ffb786"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.surface');
+            color: theme('colors.on-surface');
+            font-family: theme('fontFamily.body');
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-family: theme('fontFamily.headline');
+        }
+        .glass-panel {
+            background-color: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(30px);
+            border-top: 1px solid rgba(241, 241, 241, 0.3);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
+        }
+        .qr-glow {
+            box-shadow: 0 0 20px rgba(255, 130, 1, 0.2);
+        }
+        .btn-gradient {
+            background: linear-gradient(135deg, theme('colors.primary') 0%, theme('colors.primary-container') 100%);
+        }
+        .btn-gradient:hover {
+            filter: saturate(1.4);
+            box-shadow: 0 4px 12px rgba(255, 130, 1, 0.2);
+        }
+        .ghost-border {
+            border: 1px solid rgba(222, 193, 175, 0.15); /* outline-variant at 15% */
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+<!-- Ambient Background Elements -->
+<div class="absolute inset-0 z-0">
+<div class="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-primary-container rounded-full mix-blend-multiply filter blur-[120px] opacity-10"></div>
+<div class="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-tertiary-container rounded-full mix-blend-multiply filter blur-[150px] opacity-10"></div>
+</div>
+<!-- Main Container -->
+<main class="relative z-10 w-full max-w-[480px]">
+<!-- Glass Panel -->
+<div class="glass-panel rounded-2xl p-8 flex flex-col items-center">
+<!-- Header -->
+<div class="text-center mb-8">
+<h1 class="text-3xl font-extrabold text-on-surface mb-2 tracking-tight">Scan to Login</h1>
+<p class="text-on-surface-variant text-sm">Open the app and scan the QR code to proceed.</p>
+</div>
+<!-- QR Code Area -->
+<div class="relative w-[180px] h-[180px] mb-8 bg-surface-container-lowest rounded-xl flex items-center justify-center p-4 qr-glow ghost-border">
+<img alt="QR Code" class="w-[150px] h-[150px] object-cover rounded-lg" data-alt="high contrast black and white abstract qr code pattern centered on pure white background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAxwazSb7gpiUFAhqVReprpBlkg4FWDryavrG5qe_N5NUjprNdo1lJv3xeTEP3x7SdCa2MAoiLeWM2X5esjBU8AKyoRYUILEwTYyc7EZ58lYAEyIuEMeUqjdkym3l34-vwz5rHDt71b1D464dnmv5gIxf4PxJDlTONLvv_a9XrrOo6HW-JkGdV5WJ8ZLNsNAKk497VTFXcP2Qqs7_vmNSa_6C09mx9UMgNKlrbOBcUAu90IDOgwjGpIfIj_JCOUaBRSG7DBW2OoRZ8"/>
+</div>
+<!-- Tip Image / Instructions -->
+<div class="flex items-center gap-3 mb-8 bg-surface-container-low px-4 py-3 rounded-lg ghost-border w-full max-w-[280px]">
+<span class="material-symbols-outlined text-primary">qr_code_scanner</span>
+<span class="text-sm text-on-surface-variant font-medium">Use your camera or app to scan</span>
+</div>
+<!-- Primary Action -->
+<button class="w-[250px] h-12 btn-gradient text-on-primary rounded-lg font-bold text-sm tracking-wide transition-all duration-200 mb-8 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-lg">link</span>
+                {{ t('CopyDeeplink') }}
+            </button>
+<!-- Secondary Actions Row -->
+<div class="flex w-full justify-between items-center mt-2 border-t border-surface-container-high pt-6">
+<button class="text-sm font-medium text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-lg">arrow_back</span>
+                    {{ t('BackRegularLogin') }}
+                </button>
+<button class="text-sm font-bold text-primary hover:text-primary-container transition-colors flex items-center gap-1">
+                    {{ t('GameStart') }}
+                    <span class="material-symbols-outlined text-lg">arrow_forward</span>
+</button>
+</div>
+</div>
+</main>
+</body></html>

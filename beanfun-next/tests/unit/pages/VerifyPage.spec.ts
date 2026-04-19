@@ -176,13 +176,17 @@ vi.mock('../../../src/types/bindings', () => ({
     getVerifyCaptcha: vi.fn(),
     submitVerify: vi.fn(),
     logout: vi.fn(),
+    loadAccounts: vi.fn(),
+    saveAccount: vi.fn(),
   },
 }))
 
 import { commands } from '../../../src/types/bindings'
 import VerifyPage from '../../../src/pages/VerifyPage.vue'
+import { useAccountStore } from '../../../src/stores/account'
 import { useAuthStore } from '../../../src/stores/auth'
 import { createAppI18n, i18nMessages, setLocale } from '../../../src/i18n'
+import type { Account } from '../../../src/types/bindings'
 
 const mockGetVerifyPageInfo = vi.mocked(commands.getVerifyPageInfo)
 const mockGetVerifyCaptcha = vi.mocked(commands.getVerifyCaptcha)
@@ -518,5 +522,149 @@ describe('VerifyPage', () => {
       i18nMessages['en-US'].AuthConfirm,
     )
     expect(wrapper.text()).toContain(i18nMessages['en-US'].loginVerify.title)
+  })
+})
+
+/**
+ * P12.2 D2 — verify-page prefill + verify-intent-on-success tests.
+ *
+ * What this block locks down:
+ *
+ * 1. Mount-time prefill: when `auth.loginIntent` points at a stored
+ *    account that has a saved `verify` code, both the verify input
+ *    and the Remember checkbox are pre-populated.
+ * 2. Mount-time prefill: missing intent → no prefill.
+ * 3. Mount-time prefill: stored record without `verify` → no
+ *    prefill (and Remember stays off).
+ * 4. Mount-time prefill: intent present but no matching stored
+ *    record → no prefill.
+ * 5. Submit success: stashes the submitted verify code + Remember
+ *    flag into `auth.verifyIntent` so the next IdPassForm second-
+ *    pass success can fold them into the saved record.
+ * 6. Submit success leaves `loginIntent` intact so IdPassForm has
+ *    its credentials to retry the login from.
+ */
+describe('VerifyPage — P12.2 D2 prefill + verifyIntent stash', () => {
+  const STORED_ALICE: Account = {
+    region: 'TW',
+    account_id: 'alice',
+    account_name: '',
+    password: 'pw',
+    verify: 'V0001',
+    method: 0,
+    auto_login: false,
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockGetVerifyPageInfo.mockReset()
+    mockGetVerifyCaptcha.mockReset()
+    mockSubmitVerify.mockReset()
+    elMessageError.mockReset()
+    elMessageSuccess.mockReset()
+  })
+
+  function seedLoginIntent(): void {
+    const auth = useAuthStore()
+    auth.setLoginIntent({
+      region: 'TW',
+      accountId: 'alice',
+      password: 'pw',
+      rememberPassword: true,
+      autoLogin: false,
+    })
+  }
+
+  it('prefills verify code + Remember checkbox from the stored record', async () => {
+    mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
+    mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
+
+    const ctx = mountForm()
+    seedLoginIntent()
+    const account = useAccountStore()
+    account.accounts = [STORED_ALICE]
+
+    const wrapper = await ctx.mountIt()
+    expect((wrapper.get('[data-test="verify-input"]').element as HTMLInputElement).value).toBe(
+      'V0001',
+    )
+    const rememberInput = wrapper.get('[data-test="verify-remember"] .el-checkbox-stub__input')
+    expect((rememberInput.element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('does not prefill when no loginIntent is set', async () => {
+    mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
+    mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
+
+    const ctx = mountForm()
+    const account = useAccountStore()
+    account.accounts = [STORED_ALICE]
+
+    const wrapper = await ctx.mountIt()
+    expect((wrapper.get('[data-test="verify-input"]').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('does not prefill when stored record has empty verify', async () => {
+    mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
+    mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
+
+    const ctx = mountForm()
+    seedLoginIntent()
+    const account = useAccountStore()
+    account.accounts = [{ ...STORED_ALICE, verify: '' }]
+
+    const wrapper = await ctx.mountIt()
+    expect((wrapper.get('[data-test="verify-input"]').element as HTMLInputElement).value).toBe('')
+    const rememberInput = wrapper.get('[data-test="verify-remember"] .el-checkbox-stub__input')
+    expect((rememberInput.element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('does not prefill when no stored record matches the intent', async () => {
+    mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
+    mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
+
+    const ctx = mountForm()
+    seedLoginIntent()
+
+    const wrapper = await ctx.mountIt()
+    expect((wrapper.get('[data-test="verify-input"]').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('on success stashes the submitted verify code + remember flag into auth.verifyIntent', async () => {
+    mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
+    mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
+    mockSubmitVerify.mockReturnValueOnce(ok(SUCCESS))
+
+    const ctx = mountForm()
+    seedLoginIntent()
+    const auth = useAuthStore()
+
+    const wrapper = await ctx.mountIt()
+    await fillVerifyAndCaptcha(wrapper, '4321', 'CAPX')
+    const rememberInput = wrapper.get('[data-test="verify-remember"] .el-checkbox-stub__input')
+    await rememberInput.setValue(true)
+    await wrapper.get('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(auth.verifyIntent).toEqual({ code: '4321', remember: true })
+    expect(ctx.router.currentRoute.value.path).toBe('/login/id-pass')
+  })
+
+  it('on success leaves loginIntent intact for IdPassForm to retry from', async () => {
+    mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
+    mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
+    mockSubmitVerify.mockReturnValueOnce(ok(SUCCESS))
+
+    const ctx = mountForm()
+    seedLoginIntent()
+    const auth = useAuthStore()
+
+    const wrapper = await ctx.mountIt()
+    await fillVerifyAndCaptcha(wrapper, '4321', 'CAPX')
+    await wrapper.get('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(auth.loginIntent?.accountId).toBe('alice')
+    void ctx
   })
 })

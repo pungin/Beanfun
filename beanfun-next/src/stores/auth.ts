@@ -78,6 +78,79 @@ import type {
   VerifySubmit,
 } from '../types/bindings'
 
+/**
+ * Transient form snapshot stashed by `IdPassForm` immediately
+ * before calling {@link useAuthStore.loginRegular}, so subsequent
+ * login-flow pages can read back the user's inputs without
+ * shipping a plaintext password through `Config.xml` or query
+ * params.
+ *
+ * # Lifetimes
+ *
+ * - **Set** by `IdPassForm.vue::submit` right before the
+ *   `loginRegular` IPC call (so the slot is populated regardless
+ *   of whether the call resolves to `SessionInfo`, `null` +
+ *   pending flag, or throws — see WPF parity matrix in
+ *   `IdPassForm.vue` docblock).
+ * - **Read** by `LoginTotp.vue` (TOTP success path needs the
+ *   original region / account / password to call
+ *   `account.saveLoginCredentials`), `VerifyPage.vue` (mount
+ *   prefill of stored verify code uses `region` + `accountId` to
+ *   find the stored record), and `IdPassForm.vue` (second-pass
+ *   success after the verify round-trip combines this with
+ *   {@link VerifyIntent}).
+ * - **Cleared** by {@link useAuthStore.clearLoginIntent} after a
+ *   credential save fires (single-shot semantics — a stale
+ *   intent must never silently feed into a *later* unrelated
+ *   submit), by {@link useAuthStore.clearSession} (logout / 401
+ *   bridge), and on every fresh `setLoginIntent` (always
+ *   overwrite, never append).
+ *
+ * # Why a store slot rather than route params or component refs
+ *
+ * - **Route params**: would expose the password as a string in
+ *   the URL and the browser back/forward stack — not just bad
+ *   UX, an actual leak surface.
+ * - **Component refs**: WPF kept `IdPassForm` mounted in a
+ *   `ContentControl` so `t_AccountID.Text` / `t_Password.Password`
+ *   stayed alive across the verify round-trip. Vue's router
+ *   unmounts the form when navigating to `/login/verify`, so the
+ *   refs would be `null` by the time `VerifyPage` mounts. A
+ *   store-level slot is the SPA equivalent of WPF's "control
+ *   stays alive" assumption.
+ *
+ * Mirrors WPF `MainWindow.xaml.cs::SaveLoginCredentials` reading
+ * `idPassForm.t_AccountID.Text`, `idPassForm.t_Password.Password`,
+ * `idPassForm.checkBox_RememberPWD.IsChecked`,
+ * `idPassForm.checkBox_AutoLogin.IsChecked` (L1344-1360).
+ */
+export interface LoginIntent {
+  region: LoginRegion
+  accountId: string
+  password: string
+  rememberPassword: boolean
+  autoLogin: boolean
+}
+
+/**
+ * Transient verify-form snapshot stashed by `VerifyPage` on
+ * successful `submitVerify`, consumed once by `IdPassForm`'s
+ * second-pass `loginRegular` success path so the saved record
+ * gets `verify` filled per the user's `RememberVerify` choice.
+ *
+ * Same lifetime pattern as {@link LoginIntent} — single-shot,
+ * cleared by {@link useAuthStore.clearVerifyIntent} after
+ * persistence and by {@link useAuthStore.clearSession}.
+ *
+ * Mirrors WPF `MainWindow.xaml.cs::SaveLoginCredentials` reading
+ * `verifyPage.checkBoxRememberVerify.IsChecked` /
+ * `verifyPage.t_Verify.Text` (L1357).
+ */
+export interface VerifyIntent {
+  code: string
+  remember: boolean
+}
+
 /** Codes the auth flow swallows instead of toasting. */
 const FLOW_CONTINUATION_CODES = {
   TotpRequired: 'auth.totp_required',
@@ -150,6 +223,24 @@ export const useAuthStore = defineStore('auth', () => {
    * - {@link logout}.
    */
   const advanceCheckUrl = ref<string | null>(null)
+
+  /**
+   * Transient `IdPassForm` submission snapshot.
+   *
+   * See {@link LoginIntent} for the full lifecycle docblock.
+   * Mutated only via {@link setLoginIntent} / {@link clearLoginIntent}
+   * / {@link clearSession} so call sites grep cleanly.
+   */
+  const loginIntent = ref<LoginIntent | null>(null)
+
+  /**
+   * Transient `VerifyPage` submission snapshot.
+   *
+   * See {@link VerifyIntent} for the full lifecycle docblock.
+   * Mutated only via {@link setVerifyIntent} / {@link clearVerifyIntent}
+   * / {@link clearSession} so call sites grep cleanly.
+   */
+  const verifyIntent = ref<VerifyIntent | null>(null)
 
   const isLoggedIn = computed(() => session.value !== null)
 
@@ -412,6 +503,48 @@ export const useAuthStore = defineStore('auth', () => {
     pendingVerify.value = false
     qrChallenge.value = null
     advanceCheckUrl.value = null
+    /*
+     * Transient login-flow snapshots ({@link loginIntent} /
+     * {@link verifyIntent}) are scoped to a single login attempt by
+     * design — a follow-up sign-in must start from a clean slate
+     * regardless of whether the previous attempt finished, errored,
+     * or got pre-empted by a session-expired bridge. Wiping them
+     * here keeps the "every reset path lives in one function" SRP
+     * (the same rationale that already applies to `qrChallenge` /
+     * `pendingTotp` / `pendingVerify`).
+     */
+    loginIntent.value = null
+    verifyIntent.value = null
+  }
+
+  /**
+   * Stash the IdPassForm submit inputs so downstream login-flow
+   * pages can consume them. Always overwrites — never appends —
+   * so a stale half-filled intent from a previous attempt cannot
+   * leak through.
+   */
+  function setLoginIntent(intent: LoginIntent): void {
+    loginIntent.value = intent
+  }
+
+  /** Wipe the {@link loginIntent} slot. Single-shot consume after save. */
+  function clearLoginIntent(): void {
+    loginIntent.value = null
+  }
+
+  /**
+   * Stash the VerifyPage submit inputs so the next IdPassForm
+   * second-pass save can fold the verify code into the stored
+   * record. Same overwrite-always semantics as
+   * {@link setLoginIntent}.
+   */
+  function setVerifyIntent(intent: VerifyIntent): void {
+    verifyIntent.value = intent
+  }
+
+  /** Wipe the {@link verifyIntent} slot. Single-shot consume after save. */
+  function clearVerifyIntent(): void {
+    verifyIntent.value = null
   }
 
   async function logout(): Promise<void> {
@@ -429,6 +562,8 @@ export const useAuthStore = defineStore('auth', () => {
     qrChallenge,
     advanceCheckUrl,
     pendingAction,
+    loginIntent,
+    verifyIntent,
 
     loginRegular,
     loginTotp,
@@ -441,5 +576,9 @@ export const useAuthStore = defineStore('auth', () => {
     submitVerify,
     clearSession,
     logout,
+    setLoginIntent,
+    clearLoginIntent,
+    setVerifyIntent,
+    clearVerifyIntent,
   }
 })

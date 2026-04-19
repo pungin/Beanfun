@@ -166,15 +166,22 @@ vi.mock('../../../src/types/bindings', () => ({
     getVerifyCaptcha: vi.fn(),
     submitVerify: vi.fn(),
     logout: vi.fn(),
+    loadAccounts: vi.fn(),
+    saveAccount: vi.fn(),
   },
 }))
 
 import { commands } from '../../../src/types/bindings'
 import IdPassForm from '../../../src/pages/IdPassForm.vue'
+import { useAccountStore } from '../../../src/stores/account'
+import { useAuthStore } from '../../../src/stores/auth'
 import { useConfigStore } from '../../../src/stores/config'
 import { createAppI18n, i18nMessages, setLocale } from '../../../src/i18n'
+import type { Account } from '../../../src/types/bindings'
 
 const mockLoginRegular = vi.mocked(commands.loginRegular)
+const mockSaveAccount = vi.mocked(commands.saveAccount)
+const mockSetConfig = vi.mocked(commands.setConfig)
 
 const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ status: 'ok', data })
 
@@ -256,6 +263,8 @@ describe('IdPassForm', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockLoginRegular.mockReset()
+    mockSaveAccount.mockReset()
+    mockSetConfig.mockReset()
     elMessageError.mockReset()
   })
 
@@ -447,5 +456,216 @@ describe('IdPassForm', () => {
     await flushPromises()
 
     expect(wrapper.find('.el-button-stub').text()).toBe(i18nMessages['en-US'].Login)
+  })
+})
+
+/**
+ * P12.2 D2 — credential persistence integration tests.
+ *
+ * What this block locks down (matches WPF
+ * `MainWindow.xaml.cs::SaveLoginCredentials` L1334-1363 +
+ * `loginMethodChanged` L1054-1092 prefill):
+ *
+ * 1. Mount-time prefill: `Config.AccountID` + matching stored
+ *    record → account / password / remember / autoLogin all
+ *    populated.
+ * 2. Mount-time prefill: missing config key → no prefill.
+ * 3. Mount-time prefill: stored record has empty password →
+ *    account prefilled but checkboxes left untouched.
+ * 4. Submit success: `commands.saveAccount` called with the
+ *    SaveLoginCredentials-shaped payload and `commands.setConfig`
+ *    persists `AccountID`.
+ * 5. Submit success after a verify round-trip:
+ *    `auth.verifyIntent` is folded into the saved record.
+ * 6. Submit success: both intent slots are cleared after
+ *    persistence (single-shot consume).
+ */
+describe('IdPassForm — P12.2 D2 credential persistence', () => {
+  const STORED_ALICE: Account = {
+    region: 'TW',
+    account_id: 'alice',
+    account_name: '',
+    password: 'stored-pw',
+    verify: '',
+    method: 0,
+    auto_login: true,
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockLoginRegular.mockReset()
+    mockSaveAccount.mockReset()
+    mockSetConfig.mockReset()
+    elMessageError.mockReset()
+  })
+
+  it('mount prefills account / password / remember / autoLogin from stored record', async () => {
+    const ctx = mountForm()
+    const account = useAccountStore()
+    account.accounts = [STORED_ALICE]
+    const config = useConfigStore()
+    config.entries['AccountID'] = 'alice'
+
+    const wrapper = await ctx.mountIt()
+    const inputs = wrapper.findAll('.el-input-stub')
+    expect((inputs[0].element as HTMLInputElement).value).toBe('alice')
+    expect((inputs[1].element as HTMLInputElement).value).toBe('stored-pw')
+
+    const checkboxes = wrapper.findAll('.el-checkbox-stub__input')
+    expect((checkboxes[0].element as HTMLInputElement).checked).toBe(true)
+    expect((checkboxes[1].element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('mount with no Config.AccountID leaves form blank', async () => {
+    const ctx = mountForm()
+    const account = useAccountStore()
+    account.accounts = [STORED_ALICE]
+    const wrapper = await ctx.mountIt()
+    const inputs = wrapper.findAll('.el-input-stub')
+    expect((inputs[0].element as HTMLInputElement).value).toBe('')
+    expect((inputs[1].element as HTMLInputElement).value).toBe('')
+  })
+
+  it('mount with stored record but empty password prefills account only (WPF L1067 short-circuit parity)', async () => {
+    const ctx = mountForm()
+    const account = useAccountStore()
+    account.accounts = [{ ...STORED_ALICE, password: '', auto_login: true }]
+    const config = useConfigStore()
+    config.entries['AccountID'] = 'alice'
+
+    const wrapper = await ctx.mountIt()
+    const inputs = wrapper.findAll('.el-input-stub')
+    expect((inputs[0].element as HTMLInputElement).value).toBe('alice')
+    expect((inputs[1].element as HTMLInputElement).value).toBe('')
+    const checkboxes = wrapper.findAll('.el-checkbox-stub__input')
+    expect((checkboxes[0].element as HTMLInputElement).checked).toBe(false)
+    expect((checkboxes[1].element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('submit success calls saveAccount with the WPF-shape payload + persists AccountID', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+
+    mockLoginRegular.mockReturnValueOnce(ok(FAKE_SESSION))
+    mockSaveAccount.mockReturnValueOnce(ok([]))
+    mockSetConfig.mockReturnValueOnce(ok(null))
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('alice')
+    await inputs[1].setValue('hunter2')
+    const checkboxes = wrapper.findAll('.el-checkbox-stub__input')
+    await checkboxes[0].setValue(true)
+
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(mockSaveAccount).toHaveBeenCalledTimes(1)
+    expect(mockSaveAccount).toHaveBeenCalledWith({
+      region: 'TW',
+      account_id: 'alice',
+      account_name: '',
+      password: 'hunter2',
+      verify: '',
+      method: 0,
+      auto_login: false,
+    })
+    expect(mockSetConfig).toHaveBeenCalledWith('AccountID', 'alice')
+    expect(ctx.router.currentRoute.value.path).toBe('/accounts')
+  })
+
+  it('second-pass submit folds auth.verifyIntent into the saved record', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    const auth = useAuthStore()
+    auth.setVerifyIntent({ code: 'V789', remember: true })
+
+    mockLoginRegular.mockReturnValueOnce(ok(FAKE_SESSION))
+    mockSaveAccount.mockReturnValueOnce(ok([]))
+    mockSetConfig.mockReturnValueOnce(ok(null))
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('alice')
+    await inputs[1].setValue('hunter2')
+    const checkboxes = wrapper.findAll('.el-checkbox-stub__input')
+    await checkboxes[0].setValue(true)
+
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(mockSaveAccount).toHaveBeenCalledWith(
+      expect.objectContaining({ verify: 'V789', region: 'TW', account_id: 'alice' }),
+    )
+  })
+
+  it('clears both intent slots after a successful persist', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    const auth = useAuthStore()
+    auth.setVerifyIntent({ code: 'V', remember: true })
+
+    mockLoginRegular.mockReturnValueOnce(ok(FAKE_SESSION))
+    mockSaveAccount.mockReturnValueOnce(ok([]))
+    mockSetConfig.mockReturnValueOnce(ok(null))
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('alice')
+    await inputs[1].setValue('hunter2')
+
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(auth.loginIntent).toBeNull()
+    expect(auth.verifyIntent).toBeNull()
+  })
+
+  it('pendingTotp branch leaves the loginIntent populated for LoginTotp to consume', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    const auth = useAuthStore()
+
+    mockLoginRegular.mockReturnValueOnce(
+      err({ code: 'auth.totp_required', message: 'totp required', details: null }),
+    )
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('alice')
+    await inputs[1].setValue('hunter2')
+
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(ctx.router.currentRoute.value.path).toBe('/login/totp')
+    expect(mockSaveAccount).not.toHaveBeenCalled()
+    expect(auth.loginIntent).toEqual({
+      region: 'TW',
+      accountId: 'alice',
+      password: 'hunter2',
+      rememberPassword: false,
+      autoLogin: false,
+    })
+  })
+
+  it('pendingVerify branch leaves the loginIntent populated for VerifyPage to consume', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    const auth = useAuthStore()
+
+    mockLoginRegular.mockReturnValueOnce(
+      err({
+        code: 'auth.advance_check_required',
+        message: 'verify',
+        details: { url: 'https://x' },
+      }),
+    )
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('alice')
+    await inputs[1].setValue('pw')
+
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(ctx.router.currentRoute.value.path).toBe('/login/verify')
+    expect(auth.loginIntent?.accountId).toBe('alice')
   })
 })

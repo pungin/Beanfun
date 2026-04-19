@@ -35,15 +35,30 @@ vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn() } }))
  * Per-form behaviour tests live in their own D-step specs.
  */
 describe('router config', () => {
-  it('declares the root redirect, login shell, and catch-all', () => {
-    expect(routes).toHaveLength(3)
+  it('declares the root redirect, login shell, accounts page, manage-account page, and catch-all', () => {
+    /*
+     * P12.2 D9 added the stored-credential management page
+     * (`/manage-account`) as a 5th top-level route, sandwiched
+     * between the post-login landing (`/accounts`) and the
+     * catch-all so the redirect short-circuit at the bottom still
+     * wins for unknown paths.
+     */
+    expect(routes).toHaveLength(5)
 
-    const [root, login, catchAll] = routes
+    const [root, login, accounts, manageAccount, catchAll] = routes
     expect(root.path).toBe('/')
     expect(root.redirect).toBe('/login')
 
     expect(login.path).toBe('/login')
     expect(login.name).toBeUndefined()
+
+    expect(accounts.path).toBe(LOGGED_IN_LANDING_PATH)
+    expect(accounts.name).toBe(ROUTE_NAMES.Accounts)
+    expect(accounts.meta?.requiresAuth).toBe(true)
+
+    expect(manageAccount.path).toBe('/manage-account')
+    expect(manageAccount.name).toBe(ROUTE_NAMES.ManageAccount)
+    expect(manageAccount.meta?.requiresAuth).toBe(true)
 
     expect(catchAll.path).toBe('/:pathMatch(.*)*')
     expect(catchAll.redirect).toBe('/')
@@ -120,7 +135,7 @@ describe('router config', () => {
     expect(verifyChild!.component).toBeDefined()
   })
 
-  it('exports stable login route-name constants', () => {
+  it('exports stable route-name constants for every named route', () => {
     expect(ROUTE_NAMES.LoginRegion).toBe('login-region')
     expect(ROUTE_NAMES.LoginIdPass).toBe('login-id-pass')
     expect(ROUTE_NAMES.LoginQr).toBe('login-qr')
@@ -128,6 +143,8 @@ describe('router config', () => {
     expect(ROUTE_NAMES.LoginTotp).toBe('login-totp')
     expect(ROUTE_NAMES.LoginWait).toBe('login-wait')
     expect(ROUTE_NAMES.LoginVerify).toBe('login-verify')
+    expect(ROUTE_NAMES.Accounts).toBe('accounts')
+    expect(ROUTE_NAMES.ManageAccount).toBe('manage-account')
   })
 })
 
@@ -211,6 +228,38 @@ describe('createAppRouter', () => {
     expect(router.currentRoute.value.path).toBe('/login/verify')
   })
 
+  it('resolves /accounts to the AccountList route (post-login landing)', async () => {
+    const router = createAppRouter()
+    /*
+     * Without the D10 guard installed, even an unauthenticated visit
+     * resolves the route — the guard is what redirects, the route
+     * itself is always reachable. The guard-installed integration is
+     * exercised separately below.
+     */
+    await router.push(LOGGED_IN_LANDING_PATH)
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe(ROUTE_NAMES.Accounts)
+    expect(router.currentRoute.value.path).toBe('/accounts')
+    expect(router.currentRoute.value.meta.requiresAuth).toBe(true)
+  })
+
+  it('resolves /manage-account to the ManageAccount route (P12.2 D9)', async () => {
+    /*
+     * D9 ships only the route + page — no in-app entry button yet
+     * (the Settings entry lands in P12.4). Direct hash navigation
+     * (`#/manage-account`) is the only path today, so the route
+     * resolution itself is the public contract this spec locks in.
+     * `requiresAuth: true` mirrors `/accounts`; the guard-installed
+     * redirect is covered by the integration block below.
+     */
+    const router = createAppRouter()
+    await router.push('/manage-account')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe(ROUTE_NAMES.ManageAccount)
+    expect(router.currentRoute.value.path).toBe('/manage-account')
+    expect(router.currentRoute.value.meta.requiresAuth).toBe(true)
+  })
+
   it('returns a fresh instance per call (no shared singleton state)', () => {
     const a = createAppRouter()
     const b = createAppRouter()
@@ -220,15 +269,85 @@ describe('createAppRouter', () => {
 })
 
 describe('LOGGED_IN_LANDING_PATH', () => {
-  it('is the P12.2 AccountList route forward reference (`/accounts`)', () => {
+  it('points at the AccountList route registered in `routes`', () => {
     /*
-     * Documented in router/index.ts as the centralized post-login
-     * redirect target that P12.1 D3-D8 already push to via the four
-     * `router.push('/accounts')` call sites. P12.2 D2 must register
-     * the matching route entry so the catch-all fall-through stops
-     * being the post-login destination.
+     * The constant + route entry must agree — every login-success
+     * call site (`IdPassForm` / `LoginTotp` / `QrForm` /
+     * `GamepassForm`) pushes `LOGGED_IN_LANDING_PATH`, so a typo in
+     * either side would silently route the user back through the
+     * catch-all to /login. This test makes the contract explicit.
      */
     expect(LOGGED_IN_LANDING_PATH).toBe('/accounts')
+    const accountsRoute = routes.find((r) => r.path === LOGGED_IN_LANDING_PATH)
+    expect(accountsRoute).toBeDefined()
+    expect(accountsRoute!.name).toBe(ROUTE_NAMES.Accounts)
+  })
+})
+
+describe('installRouterGuards — integration with production /accounts route', () => {
+  beforeEach(() => {
+    __resetInvokeRegistriesForTesting()
+  })
+  afterEach(() => {
+    __resetInvokeRegistriesForTesting()
+  })
+
+  it('redirects unauthenticated /accounts visits back to /login with the deep link preserved', async () => {
+    /*
+     * End-to-end check that the production route table's
+     * `meta.requiresAuth: true` on `/accounts` is actually wired to
+     * the D10 guard. The synthetic-router specs above prove the
+     * guard semantics; this case proves the **integration** so a
+     * future contributor that forgets the meta flag (or removes
+     * `installRouterGuards` from `main.ts`) trips a red test.
+     */
+    const router = createAppRouter()
+    installRouterGuards(router, { isAuthenticated: () => false, clearSession: () => {} })
+
+    await router.push('/accounts')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(router.currentRoute.value.query.redirect).toBe('/accounts')
+  })
+
+  it('lets authenticated /accounts visits land on the AccountList route', async () => {
+    const router = createAppRouter()
+    installRouterGuards(router, { isAuthenticated: () => true, clearSession: () => {} })
+
+    await router.push('/accounts')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe(ROUTE_NAMES.Accounts)
+    expect(router.currentRoute.value.path).toBe('/accounts')
+  })
+
+  it('redirects unauthenticated /manage-account visits back to /login with the deep link preserved', async () => {
+    /*
+     * Same contract as `/accounts`: D9 marks `/manage-account` as
+     * `requiresAuth: true`, and the production guard must honour
+     * the meta flag end-to-end. A missing flag would silently let
+     * a logged-out user land on the credential CRUD page.
+     */
+    const router = createAppRouter()
+    installRouterGuards(router, { isAuthenticated: () => false, clearSession: () => {} })
+
+    await router.push('/manage-account')
+    await router.isReady()
+
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(router.currentRoute.value.query.redirect).toBe('/manage-account')
+  })
+
+  it('lets authenticated /manage-account visits land on the ManageAccount route', async () => {
+    const router = createAppRouter()
+    installRouterGuards(router, { isAuthenticated: () => true, clearSession: () => {} })
+
+    await router.push('/manage-account')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe(ROUTE_NAMES.ManageAccount)
+    expect(router.currentRoute.value.path).toBe('/manage-account')
   })
 })
 
@@ -391,5 +510,66 @@ describe('installRouterGuards — session-expired bridge', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(router.currentRoute.value.path).toBe('/login')
     expect(router.currentRoute.value.query.sessionExpired).toBe('1')
+  })
+
+  it('also fires clearAccountSession (when supplied) so non-auth stores wipe in lockstep', async () => {
+    /*
+     * P12.2 D1 fix-up of the D10 bug. Production wiring in
+     * `main.ts` passes both `clearSession` (auth store) and
+     * `clearAccountSession` (account store's
+     * `clearSessionData()`); the bridge must fire both so a
+     * subsequent re-login doesn't flash the previous session's
+     * cached service-account list / email / remain-point /
+     * contract while the new fetch runs.
+     *
+     * Order matters loosely: `clearSession` first so the
+     * `isLoggedIn` flag flips before any reactive watcher on
+     * the account store reacts to the wipe. We assert the
+     * relative order via the call-time index.
+     */
+    const router = createAppRouter()
+    const order: string[] = []
+    const clearSession = vi.fn(() => {
+      order.push('auth')
+    })
+    const clearAccountSession = vi.fn(() => {
+      order.push('account')
+    })
+    installRouterGuards(router, {
+      isAuthenticated: () => false,
+      clearSession,
+      clearAccountSession,
+    })
+
+    const { surfaceCommandError } = await import('../../../src/services/invoke')
+    surfaceCommandError(
+      { code: 'auth.session_required', message: 'gone', details: null },
+      { silent: true },
+    )
+
+    expect(clearSession).toHaveBeenCalledTimes(1)
+    expect(clearAccountSession).toHaveBeenCalledTimes(1)
+    expect(order).toEqual(['auth', 'account'])
+  })
+
+  it('omits clearAccountSession gracefully when the caller did not supply it (back-compat)', async () => {
+    /*
+     * The `clearAccountSession` field is `?: () => void`, so
+     * pre-D1 specs that only stub `clearSession` keep working.
+     * The bridge must not throw when the field is undefined.
+     */
+    const router = createAppRouter()
+    const clearSession = vi.fn()
+    installRouterGuards(router, { isAuthenticated: () => false, clearSession })
+
+    const { surfaceCommandError } = await import('../../../src/services/invoke')
+    expect(() =>
+      surfaceCommandError(
+        { code: 'auth.session_required', message: 'gone', details: null },
+        { silent: true },
+      ),
+    ).not.toThrow()
+
+    expect(clearSession).toHaveBeenCalledTimes(1)
   })
 })

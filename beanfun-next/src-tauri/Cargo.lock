@@ -15,6 +15,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "aes"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
+dependencies = [
+ "cfg-if",
+ "cipher",
+ "cpufeatures",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -321,15 +332,18 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 name = "beanfun-next"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "anyhow",
  "assert_matches",
  "axum",
  "base64 0.22.1",
+ "cbc",
  "chrono",
  "cipher",
  "des",
  "html-escape",
  "indexmap 2.14.0",
+ "md-5",
  "nrbf",
  "open",
  "percent-encoding",
@@ -346,6 +360,7 @@ dependencies = [
  "specta-typescript",
  "tauri",
  "tauri-build",
+ "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-specta",
  "tempfile",
@@ -397,6 +412,15 @@ name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
+dependencies = [
+ "generic-array",
+]
+
+[[package]]
+name = "block-padding"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8894febbff9f758034a5b8e12d87918f56dfc64a8e1fe757d65e29041538d93"
 dependencies = [
  "generic-array",
 ]
@@ -536,6 +560,15 @@ checksum = "374b7c592d9c00c1f4972ea58390ac6b18cbb6ab79011f3bdc90a0b82ca06b77"
 dependencies = [
  "serde",
  "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "cbc"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26b52a9543ae338f279b96b0b9fed9c8093744685043739079ce85cd58f289a6"
+dependencies = [
+ "cipher",
 ]
 
 [[package]]
@@ -2087,6 +2120,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
+ "block-padding",
  "generic-array",
 ]
 
@@ -2419,6 +2453,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2669,6 +2713,7 @@ checksum = "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272"
 dependencies = [
  "bitflags 2.11.1",
  "block2",
+ "libc",
  "objc2",
  "objc2-core-foundation",
 ]
@@ -3579,6 +3624,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "rfd"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a15ad77d9e70a92437d8f74c35d99b4e4691128df018833e99f90bcd36152672"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "glib-sys",
+ "gobject-sys",
+ "gtk-sys",
+ "js-sys",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "raw-window-handle",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4467,6 +4536,48 @@ dependencies = [
  "tauri-utils",
  "toml 0.9.12+spec-1.1.0",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-dialog"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1fa4150c95ae391946cc8b8f905ab14797427caba3a8a2f79628e956da91809"
+dependencies = [
+ "log",
+ "raw-window-handle",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "tauri-plugin-fs",
+ "thiserror 2.0.18",
+ "url",
+]
+
+[[package]]
+name = "tauri-plugin-fs"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36e1ec28b79f3d0683f4507e1615c36292c0ea6716668770d4396b9b39871ed8"
+dependencies = [
+ "anyhow",
+ "dunce",
+ "glob",
+ "log",
+ "objc2-foundation",
+ "percent-encoding",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "tauri",
+ "tauri-plugin",
+ "tauri-utils",
+ "thiserror 2.0.18",
+ "toml 0.9.12+spec-1.1.0",
+ "url",
 ]
 
 [[package]]

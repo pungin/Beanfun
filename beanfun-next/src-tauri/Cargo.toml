@@ -29,6 +29,14 @@ sha2 = "0.10"
 # `tauri-specta` 2.0.0-rc.x (P10 chunk 10.1).
 tauri = { version = "2", features = ["specta"] }
 tauri-plugin-opener = "2"
+# Native file picker (open / save dialogs) — used by `pages/ManageAccount.vue`
+# (P12.2 D9) for plaintext Users.dat import / export, mirroring the WPF
+# `Microsoft.Win32.OpenFileDialog` / `SaveFileDialog` calls in the legacy
+# AccountManager flow. Implementation is the cross-platform `rfd` crate
+# under the hood (Win32 IFileOpenDialog on Windows, AppKit on macOS, Zenity
+# on Linux); no extra config needed beyond declaring the plugin in `lib.rs`
+# and granting `dialog:default` in `capabilities/default.json`.
+tauri-plugin-dialog = "2"
 
 # Cross-platform URL / file opener (ShellExecuteW on Windows,
 # LSOpenCFURLRef on macOS, xdg-open on Linux). Already pulled in as
@@ -77,8 +85,21 @@ tokio = { version = "1", features = ["full"] }
 
 # Crypto
 des = "0.8"
-cipher = "0.4"
+# `block-padding` feature exposes the `Pkcs7` padding type; `alloc` feature
+# enables `BlockEncryptMut::encrypt_padded_vec_mut::<Pkcs7>` / `BlockDecryptMut::
+# decrypt_padded_vec_mut` (the heap-allocating variants). Both are required by
+# `services::storage::aes_backup` for WPF AES backup wire format.
+cipher = { version = "0.4", features = ["block-padding", "alloc"] }
 sha2 = "0.10"
+# AES-128-CBC + PKCS7 + MD5 derived key/IV — wire-format compatible with
+# WPF `Beanfun/Windows/AccRecovery.xaml.cs` AES backup format. MD5 is
+# weak-by-modern-standards but the legacy WPF clients ship millions of
+# `Users.dat` backups in this format; matching it byte-for-byte preserves
+# cross-machine portability for users migrating off the legacy launcher.
+# Threat model is *portability*, not confidentiality (P12.2 D10 Q3).
+md-5 = "0.10"
+aes = "0.8"
+cbc = "0.1"
 
 # Parsing / text
 quick-xml = { version = "0.37", features = ["serialize"] }

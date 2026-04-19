@@ -71,6 +71,8 @@ describe('useAuthStore', () => {
       expect(auth.qrChallenge).toBeNull()
       expect(auth.advanceCheckUrl).toBeNull()
       expect(auth.pendingAction).toBeNull()
+      expect(auth.loginIntent).toBeNull()
+      expect(auth.verifyIntent).toBeNull()
     })
   })
 
@@ -324,13 +326,21 @@ describe('useAuthStore', () => {
   })
 
   describe('clearSession', () => {
-    it('wipes session, pendingTotp, pendingVerify, qrChallenge and advanceCheckUrl synchronously', () => {
+    it('wipes session, pendingTotp, pendingVerify, qrChallenge, advanceCheckUrl and intent slots synchronously', () => {
       const auth = useAuthStore()
       auth.session = SESSION
       auth.pendingTotp = true
       auth.pendingVerify = true
       auth.qrChallenge = { bitmap_base64: 'x', deeplink: null }
       auth.advanceCheckUrl = 'https://tw.newlogin.beanfun.com/LoginCheck/AdvanceCheck.aspx?SN=keep'
+      auth.setLoginIntent({
+        region: 'TW',
+        accountId: 'alice',
+        password: 'pw',
+        rememberPassword: true,
+        autoLogin: false,
+      })
+      auth.setVerifyIntent({ code: 'V123', remember: true })
 
       auth.clearSession()
 
@@ -340,6 +350,8 @@ describe('useAuthStore', () => {
       expect(auth.pendingVerify).toBe(false)
       expect(auth.qrChallenge).toBeNull()
       expect(auth.advanceCheckUrl).toBeNull()
+      expect(auth.loginIntent).toBeNull()
+      expect(auth.verifyIntent).toBeNull()
     })
 
     it('does not invoke the backend logout command (D10 session-expired path skips IPC)', () => {
@@ -388,6 +400,59 @@ describe('useAuthStore', () => {
       expect(auth.pendingVerify).toBe(false)
       expect(auth.qrChallenge).toBeNull()
       expect(auth.advanceCheckUrl).toBeNull()
+    })
+  })
+
+  describe('login / verify intent slots', () => {
+    it('setLoginIntent overwrites the slot (no append, no merge)', () => {
+      const auth = useAuthStore()
+      auth.setLoginIntent({
+        region: 'TW',
+        accountId: 'alice',
+        password: 'pw',
+        rememberPassword: true,
+        autoLogin: false,
+      })
+      auth.setLoginIntent({
+        region: 'HK',
+        accountId: 'bob',
+        password: 'pw2',
+        rememberPassword: false,
+        autoLogin: true,
+      })
+      expect(auth.loginIntent).toEqual({
+        region: 'HK',
+        accountId: 'bob',
+        password: 'pw2',
+        rememberPassword: false,
+        autoLogin: true,
+      })
+    })
+
+    it('clearLoginIntent wipes the slot without touching verifyIntent', () => {
+      const auth = useAuthStore()
+      auth.setLoginIntent({
+        region: 'TW',
+        accountId: 'alice',
+        password: 'pw',
+        rememberPassword: true,
+        autoLogin: false,
+      })
+      auth.setVerifyIntent({ code: 'V', remember: true })
+      auth.clearLoginIntent()
+      expect(auth.loginIntent).toBeNull()
+      expect(auth.verifyIntent).toEqual({ code: 'V', remember: true })
+    })
+
+    it('setVerifyIntent + clearVerifyIntent are independent of loginIntent', () => {
+      const auth = useAuthStore()
+      auth.setVerifyIntent({ code: 'V1', remember: true })
+      expect(auth.verifyIntent).toEqual({ code: 'V1', remember: true })
+      auth.setVerifyIntent({ code: 'V2', remember: false })
+      expect(auth.verifyIntent).toEqual({ code: 'V2', remember: false })
+      auth.clearVerifyIntent()
+      expect(auth.verifyIntent).toBeNull()
+      expect(auth.loginIntent).toBeNull()
     })
   })
 
