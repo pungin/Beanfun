@@ -110,6 +110,7 @@ import {
   Plus,
   Refresh,
   Service,
+  Setting as SettingIcon,
   SwitchButton,
   User,
   VideoPlay,
@@ -332,6 +333,35 @@ function makeStub(label: string): () => void {
 const handleTools = makeStub('Tools button (game-specific tools window)')
 const handleMemberCenter = makeStub('Member Center link')
 const handleCustomerService = makeStub('Customer Service link')
+
+/* --------------- P12.4 D6 — Settings / About header navigation --------------- */
+
+/**
+ * Push the SPA into the Settings page. Mirrors WPF
+ * `MainWindow::btn_Setting_Click` (L1071-1078) which navigates the
+ * top-level frame to `Settings.xaml`. The route is `requiresAuth:
+ * false` (see `router/index.ts`), so the same handler also works
+ * if the AccountList is reached via a future direct deep-link from
+ * an unauthenticated state — but in steady state this button is
+ * only mounted on the post-login AccountList.
+ *
+ * No `await` on `router.push` because the caller is a click
+ * handler that doesn't need to know when the navigation resolves;
+ * any rejection would be a vue-router internal error and is
+ * already logged by the global error handler in `main.ts`.
+ */
+function handleOpenSettings(): void {
+  void router.push('/settings')
+}
+
+/**
+ * Push the SPA into the About page. Mirrors WPF
+ * `MainWindow::btn_About_Click` (L1057-1064). Same `void` /
+ * fire-and-forget rationale as {@link handleOpenSettings}.
+ */
+function handleOpenAbout(): void {
+  void router.push('/about')
+}
 
 /* --------------- D8c/D8d/D8e — game info bar + Tools visibility --------------- */
 
@@ -1769,8 +1799,38 @@ function handleDragEnd(): void {
   <main class="account-list bf-mica-bg">
     <div class="account-list__container">
       <header class="account-list__header">
-        <h1 class="account-list__title bf-text-gradient">{{ t('accountList.title') }}</h1>
-        <p class="account-list__subline">{{ t('accountList.subtitle') }}</p>
+        <div class="account-list__header-text">
+          <h1 class="account-list__title bf-text-gradient">{{ t('accountList.title') }}</h1>
+          <p class="account-list__subline">{{ t('accountList.subtitle') }}</p>
+        </div>
+        <!--
+          P12.4 D6: Settings + About entry buttons. Mirrors WPF
+          `MainWindow.xaml` titlebar L112-139 — both icons sit in the
+          window chrome alongside Logout / Min / Close. We reuse the
+          existing `bf-btn-ghost-icon` styling that the in-row Tools
+          + Logout buttons already use so the chrome stays visually
+          consistent across the page.
+        -->
+        <div class="account-list__header-actions">
+          <button
+            type="button"
+            class="bf-btn-ghost-icon account-list__icon-btn"
+            :title="t('Settings')"
+            data-test="account-list-settings"
+            @click="handleOpenSettings"
+          >
+            <el-icon><SettingIcon /></el-icon>
+          </button>
+          <button
+            type="button"
+            class="bf-btn-ghost-icon account-list__icon-btn"
+            :title="t('settings.aboutLink')"
+            data-test="account-list-about"
+            @click="handleOpenAbout"
+          >
+            <el-icon><InfoFilled /></el-icon>
+          </button>
+        </div>
       </header>
 
       <!-- Game info bar (D8d) — real game name + image + change-game button. -->
@@ -2210,8 +2270,23 @@ function handleDragEnd(): void {
 /* --------------- header --------------- */
 
 .account-list__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   text-align: left;
   margin-bottom: 0.25rem;
+}
+
+.account-list__header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.account-list__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
 }
 
 .account-list__title {

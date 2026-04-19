@@ -194,6 +194,7 @@ vi.mock('@element-plus/icons-vue', () => {
     Plus: stub('PlusStub'),
     Refresh: stub('RefreshStub'),
     Service: stub('ServiceStub'),
+    Setting: stub('SettingStub'),
     SwitchButton: stub('SwitchButtonStub'),
     User: stub('UserStub'),
     VideoPlay: stub('VideoPlayStub'),

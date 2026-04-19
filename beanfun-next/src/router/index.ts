@@ -90,6 +90,8 @@ import LoginWait from '../pages/LoginWait.vue'
 import VerifyPage from '../pages/VerifyPage.vue'
 import AccountList from '../pages/AccountList.vue'
 import ManageAccount from '../pages/ManageAccount.vue'
+import SettingsPage from '../pages/Settings.vue'
+import AboutPage from '../pages/About.vue'
 
 /**
  * Where authenticated users land after a successful login.
@@ -124,6 +126,8 @@ export const ROUTE_NAMES = {
   LoginVerify: 'login-verify',
   Accounts: 'accounts',
   ManageAccount: 'manage-account',
+  Settings: 'settings',
+  About: 'about',
 } as const
 
 /**
@@ -195,6 +199,36 @@ export const routes: RouteRecordRaw[] = [
      * originally targeted.
      */
     meta: { requiresAuth: true },
+  },
+  {
+    path: '/settings',
+    name: ROUTE_NAMES.Settings,
+    component: SettingsPage,
+    /*
+     * P12.4 D6: Settings page is reachable from both the
+     * post-login `AccountList` top-bar icon and (per WPF parity
+     * `Settings.xaml.cs::Button_Click` L85-94) the pre-login
+     * funnel — WPF's `return_page == loginPage` branch lets
+     * unauthenticated users open Settings to change language /
+     * theme before logging in. We therefore intentionally leave
+     * `requiresAuth` undefined (= public). The Game section
+     * inside the page guards itself on `game.selectedGame`, so
+     * an unauthenticated visit just shows the App section + the
+     * empty-state banner instead of crashing on a missing
+     * selection.
+     */
+  },
+  {
+    path: '/about',
+    name: ROUTE_NAMES.About,
+    component: AboutPage,
+    /*
+     * P12.4 D7: same public-route rationale as `/settings` —
+     * WPF allowed the About page from both pre-login and
+     * post-login surfaces. The page only reads `commands.version`
+     * and `commands.checkUpdate`, neither of which require an
+     * authenticated session.
+     */
   },
   {
     path: '/manage-account',

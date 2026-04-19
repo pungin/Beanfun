@@ -387,6 +387,23 @@ const zhTW = {
     exportDefaultFilename: 'Beanfun-Accounts.json',
     footerHint: '所有帳號均以 Windows DPAPI 加密儲存於本機 Users.dat。',
   },
+  settings: {
+    subtitle: '調整 App 行為與每款遊戲的啟動偏好。',
+    aboutLink: '關於',
+    gamePathPlaceholder: '尚未設定，點擊以選取遊戲執行檔。',
+    gameSectionEmpty: '尚未選擇任何遊戲，遊戲相關設定將於選擇遊戲後出現。',
+    disableHardwareAccelerationTip:
+      '關閉硬體加速可降低 GPU 使用，但介面動畫會較不流暢。\n更動後需完全重新啟動 Beanfun 才會套用。',
+    tradLoginTip: '使用傳統登入流程（多次跳轉），\n適合自動登入失敗或無法跳出登入視窗時使用。',
+    killPatcherTip: '阻止 beanfun! 啟動的更新程式 (Patcher.aspx) 自動執行。',
+    skipPlayWindowTip: '直接啟動遊戲，跳過 Play 視窗確認步驟。',
+  },
+  webBrowser: {
+    title: '瀏覽器',
+    empty: '尚未指定要開啟的網址。',
+    cookieRequired: '此頁面需要 Beanfun 登入 Cookie 才能完整顯示，將改以系統預設瀏覽器開啟。',
+    openExternally: '在外部瀏覽器開啟',
+  },
   errors: {
     auth: {
       session_required: '您的登入狀態已失效，請重新登入。',
@@ -563,6 +580,23 @@ const zhCN = {
     exportSuccess: '账号数据导出成功。',
     exportDefaultFilename: 'Beanfun-Accounts.json',
     footerHint: '所有账号均以 Windows DPAPI 加密存储于本机 Users.dat。',
+  },
+  settings: {
+    subtitle: '调整 App 行为与每款游戏的启动偏好。',
+    aboutLink: '关于',
+    gamePathPlaceholder: '尚未设定，点击以选取游戏执行档。',
+    gameSectionEmpty: '尚未选择任何游戏，游戏相关设定将于选择游戏后出现。',
+    disableHardwareAccelerationTip:
+      '关闭硬件加速可降低 GPU 使用，但界面动画会较不流畅。\n更动后需完全重新启动 Beanfun 才会套用。',
+    tradLoginTip: '使用传统登录流程（多次跳转），\n适合自动登录失败或无法跳出登录窗口时使用。',
+    killPatcherTip: '阻止 beanfun! 启动的更新程序 (Patcher.aspx) 自动执行。',
+    skipPlayWindowTip: '直接启动游戏，跳过 Play 窗口确认步骤。',
+  },
+  webBrowser: {
+    title: '浏览器',
+    empty: '尚未指定要开启的网址。',
+    cookieRequired: '此页面需要 Beanfun 登录 Cookie 才能完整显示，将改以系统默认浏览器开启。',
+    openExternally: '在外部浏览器开启',
   },
   errors: {
     auth: {
@@ -748,6 +782,25 @@ const enUS = {
     exportSuccess: 'Accounts exported successfully.',
     exportDefaultFilename: 'Beanfun-Accounts.json',
     footerHint: 'All accounts are stored in Users.dat encrypted with Windows DPAPI.',
+  },
+  settings: {
+    subtitle: 'Adjust application behavior and per-game launcher preferences.',
+    aboutLink: 'About',
+    gamePathPlaceholder: 'Not set — click to choose the game executable.',
+    gameSectionEmpty: 'No game selected. Game-specific settings will appear once you pick one.',
+    disableHardwareAccelerationTip:
+      'Disabling hardware acceleration lowers GPU use but makes UI animations less smooth.\nA full Beanfun restart is required for the change to take effect.',
+    tradLoginTip:
+      'Use the traditional multi-redirect login flow.\nHandy when auto-login fails or the login window does not appear.',
+    killPatcherTip: 'Prevent the beanfun! launcher (Patcher.aspx) from auto-running.',
+    skipPlayWindowTip: 'Launch the game directly, skipping the Play window confirmation step.',
+  },
+  webBrowser: {
+    title: 'Browser',
+    empty: 'No URL specified.',
+    cookieRequired:
+      'This page requires the beanfun! login cookie to render fully; opening it in your default browser instead.',
+    openExternally: 'Open in external browser',
   },
   errors: {
     auth: {

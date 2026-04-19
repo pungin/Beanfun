@@ -35,17 +35,24 @@ vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn() } }))
  * Per-form behaviour tests live in their own D-step specs.
  */
 describe('router config', () => {
-  it('declares the root redirect, login shell, accounts page, manage-account page, and catch-all', () => {
+  it('declares the root redirect, login shell, accounts page, settings, about, manage-account page, and catch-all', () => {
     /*
      * P12.2 D9 added the stored-credential management page
      * (`/manage-account`) as a 5th top-level route, sandwiched
      * between the post-login landing (`/accounts`) and the
      * catch-all so the redirect short-circuit at the bottom still
      * wins for unknown paths.
+     *
+     * P12.4 D6/D7 inserted `/settings` and `/about` ahead of
+     * `/manage-account` (mirrors the WPF top-bar Settings + About
+     * entry points reachable from both pre- and post-login
+     * surfaces — both routes are intentionally `requiresAuth:
+     * undefined` because WPF allowed these pages from the login
+     * funnel too).
      */
-    expect(routes).toHaveLength(5)
+    expect(routes).toHaveLength(7)
 
-    const [root, login, accounts, manageAccount, catchAll] = routes
+    const [root, login, accounts, settings, about, manageAccount, catchAll] = routes
     expect(root.path).toBe('/')
     expect(root.redirect).toBe('/login')
 
@@ -55,6 +62,14 @@ describe('router config', () => {
     expect(accounts.path).toBe(LOGGED_IN_LANDING_PATH)
     expect(accounts.name).toBe(ROUTE_NAMES.Accounts)
     expect(accounts.meta?.requiresAuth).toBe(true)
+
+    expect(settings.path).toBe('/settings')
+    expect(settings.name).toBe(ROUTE_NAMES.Settings)
+    expect(settings.meta?.requiresAuth).toBeUndefined()
+
+    expect(about.path).toBe('/about')
+    expect(about.name).toBe(ROUTE_NAMES.About)
+    expect(about.meta?.requiresAuth).toBeUndefined()
 
     expect(manageAccount.path).toBe('/manage-account')
     expect(manageAccount.name).toBe(ROUTE_NAMES.ManageAccount)

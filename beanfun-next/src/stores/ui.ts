@@ -15,9 +15,33 @@
  * | `minimizeToTray`    | `minimize_to_tray`            | `false`     |
  * | `disableHwAccel`    | `disableHardwareAcceleration` | `false`     |
  * | `updateChannel`     | `updateChannel`               | `Stable`    |
+ * | `autoStartGame`     | `autoStartGame`               | `false`     |
+ * | `askUpdate`         | `ask_update`                  | `true`      |
+ * | `tradLogin`         | `tradLogin`                   | `true`      |
+ * | `autoKillPatcher`   | `autoKillPatcher`             | `true`      |
+ * | `skipPlayWnd`       | `skipPlayWnd`                 | `true`      |
+ * | `loginMethod`       | `loginMethod`                 | `0`         |
  *
  * The Config keys mirror the legacy WPF names verbatim so backend
  * `Config.xml` stays compatible with old installs (P10.2 design).
+ *
+ * # Adding a new UI-toggleable setting (P12.4 D2 lessons)
+ *
+ * The 5 booleans + `loginMethod` added in P12.4 D2 follow the same
+ * shape as the original 5 entries: a `UI_CONFIG_KEYS` literal, a
+ * `parseBool`-backed `computed` getter with a documented WPF-default,
+ * a thin async setter that delegates to `config.set` after
+ * `stringifyBool` round-trips it. Any future Settings checkbox
+ * lands here rather than calling `config.set` direct from the page,
+ * so the page stays a thin view layer (SRP — the page doesn't know
+ * the WPF Config key naming convention; the store does).
+ *
+ * `loginMethod` is the only non-boolean of this group: WPF stores
+ * `"0"` (Regular) or `"1"` (QrCode) and the Settings ComboBox is
+ * `SelectedIndex == 0 ? "0" : "1"` (`Settings.xaml.cs` L263). The
+ * `LoginMethodValue` literal type pins those two values so a
+ * future enum widening (e.g. WeChat-only login) can't silently
+ * compile through.
  *
  * # Apply hooks
  *
@@ -53,9 +77,31 @@ export type AppLocale = 'zh-TW' | 'zh-CN' | 'en-US'
 export const SUPPORTED_LOCALES: readonly AppLocale[] = ['zh-TW', 'zh-CN', 'en-US'] as const
 export const DEFAULT_LOCALE: AppLocale = 'zh-TW'
 
-/** Update channel literal — mirrors backend `Channel` enum. */
-export type UpdateChannel = 'Stable' | 'Development'
+/**
+ * Update channel literal — mirrors backend `Channel` enum
+ * (`services::updater::github::Channel`) and the WPF
+ * `Config.xml::updateChannel` value verbatim. The Settings UI
+ * surfaces `'Beta'` under the `Development` i18n label
+ * (`t('Development')` resolves to "測試版"), but the wire / config
+ * value stays `'Beta'` so a `Config.xml` written by either client
+ * round-trips cleanly through the other (P12.4 D3 parity fix —
+ * D2 mistakenly typed this as `'Development'`, which would have
+ * failed Channel deserialisation on the first `checkUpdate` call).
+ */
+export type UpdateChannel = 'Stable' | 'Beta'
 export const DEFAULT_UPDATE_CHANNEL: UpdateChannel = 'Stable'
+
+/**
+ * Login-method literal — `"0"` is the WPF `LoginMethod.Regular`
+ * enum value, `"1"` is `LoginMethod.QRCode` (legacy
+ * `App.LoginMethod` int — `MainWindow.xaml.cs` L1027). The
+ * Settings ComboBox stores either `"0"` or `"1"` verbatim into
+ * `Config.xml` (`Settings.xaml.cs` L263). Pin the literal so a
+ * future enum widening (e.g. WeChat-only login) trips a type
+ * error here instead of silently compiling.
+ */
+export type LoginMethodValue = '0' | '1'
+export const DEFAULT_LOGIN_METHOD: LoginMethodValue = '0'
 
 /**
  * Config keys touched by the UI store. Centralized so a future
@@ -70,6 +116,12 @@ export const UI_CONFIG_KEYS = {
   MinimizeToTray: 'minimize_to_tray',
   DisableHardwareAcceleration: 'disableHardwareAcceleration',
   UpdateChannel: 'updateChannel',
+  AutoStartGame: 'autoStartGame',
+  AskUpdate: 'ask_update',
+  TradLogin: 'tradLogin',
+  AutoKillPatcher: 'autoKillPatcher',
+  SkipPlayWnd: 'skipPlayWnd',
+  LoginMethod: 'loginMethod',
 } as const
 
 type LocaleApplier = (locale: AppLocale) => void
@@ -90,7 +142,10 @@ const isAppLocale = (value: string | undefined): value is AppLocale =>
   value !== undefined && (SUPPORTED_LOCALES as readonly string[]).includes(value)
 
 const isUpdateChannel = (value: string | undefined): value is UpdateChannel =>
-  value === 'Stable' || value === 'Development'
+  value === 'Stable' || value === 'Beta'
+
+const isLoginMethod = (value: string | undefined): value is LoginMethodValue =>
+  value === '0' || value === '1'
 
 const parseBool = (value: string | undefined, fallback: boolean): boolean => {
   if (value === undefined) return fallback
@@ -132,6 +187,27 @@ export const useUiStore = defineStore('ui', () => {
     return isUpdateChannel(raw) ? raw : DEFAULT_UPDATE_CHANNEL
   })
 
+  const autoStartGame = computed<boolean>(() =>
+    parseBool(config.get(UI_CONFIG_KEYS.AutoStartGame), false),
+  )
+
+  const askUpdate = computed<boolean>(() => parseBool(config.get(UI_CONFIG_KEYS.AskUpdate), true))
+
+  const tradLogin = computed<boolean>(() => parseBool(config.get(UI_CONFIG_KEYS.TradLogin), true))
+
+  const autoKillPatcher = computed<boolean>(() =>
+    parseBool(config.get(UI_CONFIG_KEYS.AutoKillPatcher), true),
+  )
+
+  const skipPlayWnd = computed<boolean>(() =>
+    parseBool(config.get(UI_CONFIG_KEYS.SkipPlayWnd), true),
+  )
+
+  const loginMethod = computed<LoginMethodValue>(() => {
+    const raw = config.get(UI_CONFIG_KEYS.LoginMethod)
+    return isLoginMethod(raw) ? raw : DEFAULT_LOGIN_METHOD
+  })
+
   /* ---------- setters: write to Config.xml + apply side-effects ---------- */
 
   async function setThemeColor(hex: string): Promise<void> {
@@ -154,6 +230,30 @@ export const useUiStore = defineStore('ui', () => {
 
   async function setUpdateChannel(value: UpdateChannel): Promise<void> {
     await config.set(UI_CONFIG_KEYS.UpdateChannel, value)
+  }
+
+  async function setAutoStartGame(value: boolean): Promise<void> {
+    await config.set(UI_CONFIG_KEYS.AutoStartGame, stringifyBool(value))
+  }
+
+  async function setAskUpdate(value: boolean): Promise<void> {
+    await config.set(UI_CONFIG_KEYS.AskUpdate, stringifyBool(value))
+  }
+
+  async function setTradLogin(value: boolean): Promise<void> {
+    await config.set(UI_CONFIG_KEYS.TradLogin, stringifyBool(value))
+  }
+
+  async function setAutoKillPatcher(value: boolean): Promise<void> {
+    await config.set(UI_CONFIG_KEYS.AutoKillPatcher, stringifyBool(value))
+  }
+
+  async function setSkipPlayWnd(value: boolean): Promise<void> {
+    await config.set(UI_CONFIG_KEYS.SkipPlayWnd, stringifyBool(value))
+  }
+
+  async function setLoginMethod(value: LoginMethodValue): Promise<void> {
+    await config.set(UI_CONFIG_KEYS.LoginMethod, value)
   }
 
   /* ---------- boot hook ---------- */
@@ -195,12 +295,24 @@ export const useUiStore = defineStore('ui', () => {
     minimizeToTray,
     disableHwAccel,
     updateChannel,
+    autoStartGame,
+    askUpdate,
+    tradLogin,
+    autoKillPatcher,
+    skipPlayWnd,
+    loginMethod,
 
     setThemeColor,
     setLanguage,
     setMinimizeToTray,
     setDisableHwAccel,
     setUpdateChannel,
+    setAutoStartGame,
+    setAskUpdate,
+    setTradLogin,
+    setAutoKillPatcher,
+    setSkipPlayWnd,
+    setLoginMethod,
 
     applyAll,
   }

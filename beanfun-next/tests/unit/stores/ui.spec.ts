@@ -28,6 +28,7 @@ import { useConfigStore } from '../../../src/stores/config'
 import {
   __resetUiAppliersForTesting,
   DEFAULT_LOCALE,
+  DEFAULT_LOGIN_METHOD,
   DEFAULT_UPDATE_CHANNEL,
   registerLocaleApplier,
   SUPPORTED_LOCALES,
@@ -60,6 +61,13 @@ describe('useUiStore', () => {
       expect(ui.minimizeToTray).toBe(false)
       expect(ui.disableHwAccel).toBe(false)
       expect(ui.updateChannel).toBe(DEFAULT_UPDATE_CHANNEL)
+      // P12.4 D2 — WPF defaults from Settings.xaml.cs ctor.
+      expect(ui.autoStartGame).toBe(false)
+      expect(ui.askUpdate).toBe(true)
+      expect(ui.tradLogin).toBe(true)
+      expect(ui.autoKillPatcher).toBe(true)
+      expect(ui.skipPlayWnd).toBe(true)
+      expect(ui.loginMethod).toBe(DEFAULT_LOGIN_METHOD)
     })
 
     it('reflects values from config.entries verbatim', async () => {
@@ -69,7 +77,13 @@ describe('useUiStore', () => {
           Language: 'en-US',
           minimize_to_tray: 'true',
           disableHardwareAcceleration: 'true',
-          updateChannel: 'Development',
+          updateChannel: 'Beta',
+          autoStartGame: 'true',
+          ask_update: 'false',
+          tradLogin: 'false',
+          autoKillPatcher: 'false',
+          skipPlayWnd: 'false',
+          loginMethod: '1',
         }),
       )
       const config = useConfigStore()
@@ -80,7 +94,13 @@ describe('useUiStore', () => {
       expect(ui.language).toBe('en-US')
       expect(ui.minimizeToTray).toBe(true)
       expect(ui.disableHwAccel).toBe(true)
-      expect(ui.updateChannel).toBe('Development')
+      expect(ui.updateChannel).toBe('Beta')
+      expect(ui.autoStartGame).toBe(true)
+      expect(ui.askUpdate).toBe(false)
+      expect(ui.tradLogin).toBe(false)
+      expect(ui.autoKillPatcher).toBe(false)
+      expect(ui.skipPlayWnd).toBe(false)
+      expect(ui.loginMethod).toBe('1')
     })
 
     it('falls back to defaults for invalid stored values', async () => {
@@ -89,6 +109,9 @@ describe('useUiStore', () => {
           Language: 'fr-FR',
           updateChannel: 'Bogus',
           minimize_to_tray: 'maybe',
+          autoStartGame: 'maybe',
+          ask_update: '',
+          loginMethod: '7',
         }),
       )
       const config = useConfigStore()
@@ -98,6 +121,13 @@ describe('useUiStore', () => {
       expect(ui.language).toBe(DEFAULT_LOCALE)
       expect(ui.updateChannel).toBe(DEFAULT_UPDATE_CHANNEL)
       expect(ui.minimizeToTray).toBe(false)
+      // P12.4 D2 — boolean fallbacks honour WPF default (autoStartGame
+      // defaults to `false`; askUpdate defaults to `true`).
+      expect(ui.autoStartGame).toBe(false)
+      expect(ui.askUpdate).toBe(true)
+      // loginMethod accepts only `'0'` / `'1'` literals — anything else
+      // falls back to Regular per `isLoginMethod` guard.
+      expect(ui.loginMethod).toBe(DEFAULT_LOGIN_METHOD)
     })
   })
 
@@ -140,8 +170,45 @@ describe('useUiStore', () => {
 
     it('setUpdateChannel writes the literal channel value', async () => {
       const ui = useUiStore()
-      await ui.setUpdateChannel('Development')
-      expect(mockSetConfig).toHaveBeenCalledWith(UI_CONFIG_KEYS.UpdateChannel, 'Development')
+      await ui.setUpdateChannel('Beta')
+      expect(mockSetConfig).toHaveBeenCalledWith(UI_CONFIG_KEYS.UpdateChannel, 'Beta')
+    })
+
+    // P12.4 D2 — five new boolean setters round-trip through Config.xml.
+    it('setAutoStartGame serializes to "true"/"false" string', async () => {
+      const ui = useUiStore()
+      await ui.setAutoStartGame(true)
+      expect(mockSetConfig).toHaveBeenCalledWith(UI_CONFIG_KEYS.AutoStartGame, 'true')
+    })
+
+    it('setAskUpdate serializes to "true"/"false" string', async () => {
+      const ui = useUiStore()
+      await ui.setAskUpdate(false)
+      expect(mockSetConfig).toHaveBeenCalledWith(UI_CONFIG_KEYS.AskUpdate, 'false')
+    })
+
+    it('setTradLogin serializes to "true"/"false" string', async () => {
+      const ui = useUiStore()
+      await ui.setTradLogin(false)
+      expect(mockSetConfig).toHaveBeenCalledWith(UI_CONFIG_KEYS.TradLogin, 'false')
+    })
+
+    it('setAutoKillPatcher serializes to "true"/"false" string', async () => {
+      const ui = useUiStore()
+      await ui.setAutoKillPatcher(true)
+      expect(mockSetConfig).toHaveBeenCalledWith(UI_CONFIG_KEYS.AutoKillPatcher, 'true')
+    })
+
+    it('setSkipPlayWnd serializes to "true"/"false" string', async () => {
+      const ui = useUiStore()
+      await ui.setSkipPlayWnd(false)
+      expect(mockSetConfig).toHaveBeenCalledWith(UI_CONFIG_KEYS.SkipPlayWnd, 'false')
+    })
+
+    it('setLoginMethod writes the literal "0"/"1" string', async () => {
+      const ui = useUiStore()
+      await ui.setLoginMethod('1')
+      expect(mockSetConfig).toHaveBeenCalledWith(UI_CONFIG_KEYS.LoginMethod, '1')
     })
   })
 
