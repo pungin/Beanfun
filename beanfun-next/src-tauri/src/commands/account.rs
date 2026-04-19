@@ -905,8 +905,7 @@ mod tests {
         let success = serde_json::to_value(AddAccountOutcome::Success).expect("ser");
         assert_eq!(success, serde_json::json!({"kind": "success"}));
 
-        let err =
-            serde_json::to_value(AddAccountOutcome::ErrorMessage("bad".into())).expect("ser");
+        let err = serde_json::to_value(AddAccountOutcome::ErrorMessage("bad".into())).expect("ser");
         assert_eq!(
             err,
             serde_json::json!({"kind": "error_message", "data": "bad"})
