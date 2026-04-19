@@ -98,6 +98,37 @@
  *   WPF's "remove-then-add at index" sequence (D8 Q5 = mockup
  *   parity, see `windows/ChangeAccount.vue` docblock for the
  *   detailed rationale).
+ * - `gameList.*` — Game-picker dialog (`windows/GameList.vue`,
+ *   P12.3 D5). The dialog title reuses the WPF `GameSelected`
+ *   resource verbatim (parity with the legacy `Window.Title`
+ *   binding on `GameList.xaml` L9). The 4-state load machine
+ *   (loading / error / empty / loaded) is a frontend addition —
+ *   WPF assumed `GameList[region]` was already populated by the
+ *   prior `reLoadGameInfo()` call when the dialog opened, so the
+ *   user never saw a loading or error state inside the dialog
+ *   itself; if the prior fetch had failed they got the empty
+ *   `WrapPanel` with no recovery affordance. The SPA surfaces
+ *   each state explicitly so the user can retry without
+ *   navigating back to the parent shell. The `subtitle` /
+ *   `imageAlt` strings are accessibility-only additions (mockup
+ *   chrome + `<img alt>`) and have no WPF equivalent. Action
+ *   strings (`Retry`) reuse the existing `accountList.retry` key
+ *   to stay phrasing-aligned with the AccountList load-failure
+ *   banner.
+ * - `unconnectedGameAddAccount.*` — Unconnected-game add-account
+ *   dialog (`windows/UnconnectedGame_AddAccount.vue`, P12.3 D6).
+ *   Frontend-only addition: a brief loading placeholder shown
+ *   while [`commands.unconnectedGameInitAddAccountPayload`] is in
+ *   flight on first open. WPF blocked the constructor on the same
+ *   call (no UI rendered until the payload returned), and on
+ *   failure showed `UnknownError` MessageBox before the window was
+ *   even painted. The SPA renders the dialog chrome immediately
+ *   for snappier perceived performance, then swaps in this
+ *   placeholder until the IPC resolves. Every other localized
+ *   string (game name interpolations, validation messages,
+ *   hyperlink labels, ToS phrasing) reuses the existing WPF
+ *   `UnconnectedGame_AddAccount_{1..27}` resource keys verbatim so
+ *   the dialog stays exactly translated to WPF's wording.
  * - `accRecovery.*` — AES backup / restore dialog copy
  *   (`windows/AccRecovery.vue`, P12.2 D10.3). The dialog itself
  *   reuses every WPF resource key it needs (`DataRecovery` /
@@ -294,6 +325,8 @@ const zhTW = {
     changeGame: '切換遊戲',
     moreActions: '更多操作',
     dragHandle: '拖曳排序',
+    gamePlaceholder: '尚未選擇遊戲',
+    gamePathPickerPending: '遊戲路徑設定畫面尚未完成（P12.4 將補上），請稍候再試。',
   },
   addAccountDialog: {
     subtitle: '將 Beanfun 帳號加入本機，下次可直接從清單快速登入。',
@@ -313,6 +346,16 @@ const zhTW = {
     accountNameLabel: '備註',
     accountIdReadonlyHint: '帳號為唯一鍵，無法直接修改；如需更換請先刪除後再新增。',
     save: '儲存',
+  },
+  gameList: {
+    subtitle: '選擇要登入或啟動的 beanfun! 遊戲。',
+    loading: '載入遊戲清單中…',
+    empty: '此區域目前沒有可用的遊戲。',
+    loadFailed: '無法載入遊戲清單，請檢查網路後重試。',
+    imageAlt: '{name} 遊戲封面',
+  },
+  unconnectedGameAddAccount: {
+    loading: '載入中，請稍候…',
   },
   accRecovery: {
     dataPlaceholder: '匯出時將自動填入；若要回復請於此處貼上既有的密文。',
@@ -459,6 +502,8 @@ const zhCN = {
     changeGame: '切换游戏',
     moreActions: '更多操作',
     dragHandle: '拖动排序',
+    gamePlaceholder: '尚未选择游戏',
+    gamePathPickerPending: '游戏路径设定画面尚未完成（P12.4 将补上），请稍后再试。',
   },
   addAccountDialog: {
     subtitle: '将 Beanfun 账号加入本机，下次可直接从列表快速登录。',
@@ -478,6 +523,16 @@ const zhCN = {
     accountNameLabel: '备注',
     accountIdReadonlyHint: '账号为唯一键，无法直接修改；如需更换请先删除后再新增。',
     save: '保存',
+  },
+  gameList: {
+    subtitle: '选择要登录或启动的 beanfun! 游戏。',
+    loading: '加载游戏列表中…',
+    empty: '此区域目前没有可用的游戏。',
+    loadFailed: '无法加载游戏列表，请检查网络后重试。',
+    imageAlt: '{name} 游戏封面',
+  },
+  unconnectedGameAddAccount: {
+    loading: '加载中，请稍候…',
   },
   accRecovery: {
     dataPlaceholder: '导出时将自动填入；若要恢复请于此处贴上既有的密文。',
@@ -626,6 +681,9 @@ const enUS = {
     changeGame: 'Switch Game',
     moreActions: 'More actions',
     dragHandle: 'Drag to reorder',
+    gamePlaceholder: 'No game selected',
+    gamePathPickerPending:
+      'Game path picker is not yet available (coming in P12.4). Please try again later.',
   },
   addAccountDialog: {
     subtitle: 'Save a beanfun! credential locally so you can sign in faster next time.',
@@ -648,6 +706,16 @@ const enUS = {
     accountIdReadonlyHint:
       'Account ID is the primary key and cannot be edited in place. Delete and re-add to change it.',
     save: 'Save',
+  },
+  gameList: {
+    subtitle: 'Pick a beanfun! game to sign in or launch.',
+    loading: 'Loading game list…',
+    empty: 'No games are available for this region.',
+    loadFailed: 'Unable to load the game list. Check your connection and try again.',
+    imageAlt: '{name} cover image',
+  },
+  unconnectedGameAddAccount: {
+    loading: 'Loading, please wait…',
   },
   accRecovery: {
     dataPlaceholder:

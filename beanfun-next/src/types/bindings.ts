@@ -805,6 +805,286 @@ async getRemainPoint() : Promise<Result<number, CommandError>> {
 }
 },
 /**
+ * Open the unconnected-game add-account dialog session — runs the
+ * auth.aspx → 02.aspx GET / POST pair to seed cookies + parse the
+ * initial view-state triplet, returning game name + account-id
+ * length range + nickname-check support flag.
+ * 
+ * # Contract
+ * 
+ * Mirrors [`services::beanfun::unconnected_game_init_add_account_payload`][svc]
+ * verbatim. Pulls `service_code` / `service_region` from the active
+ * [`Session`][sn] (same lock-down as [`add_service_account`] — the
+ * dialog only ever targets the user's currently selected
+ * unconnected game).
+ * 
+ * # Errors
+ * 
+ * - `auth.session_required` — no login is active.
+ * - Every [`LoginError`][le] surfaced by the service
+ * (`AccountMgmtMissingViewState` /
+ * `AccountMgmtMissingViewStateGenerator` /
+ * `AccountMgmtMissingEventValidation` /
+ * `AccountMgmtMissingGameName` /
+ * `AccountMgmtMissingAccountLen` from the parser, plus
+ * transport / non-2xx / body-too-large from the HTTP layer).
+ * 
+ * # Frontend usage
+ * 
+ * Called once on `UnconnectedGame_AddAccount.vue` mount. The
+ * returned [`AddAccountInit::session`] is stashed in component
+ * state and threaded through every subsequent
+ * [`unconnected_game_add_account_check`] /
+ * [`unconnected_game_add_account_check_nickname`] /
+ * [`unconnected_game_add_account`] call — the frontend treats it
+ * as an opaque cursor (no field inspection).
+ * 
+ * [svc]: crate::services::beanfun::unconnected_game_init_add_account_payload
+ * [sn]: crate::services::beanfun::Session
+ * [le]: crate::services::beanfun::LoginError
+ */
+async unconnectedGameInitAddAccountPayload() : Promise<Result<AddAccountInit, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("unconnected_game_init_add_account_payload") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Validate a candidate account-id (and optional display name)
+ * before final submission — POST `02.aspx` with
+ * `__EVENTTARGET=lbtnCheckAccount`.
+ * 
+ * # Contract
+ * 
+ * Mirrors [`services::beanfun::unconnected_game_add_account_check`][svc]
+ * verbatim:
+ * 
+ * - `mgmt_session` is the round-tripped [`AddAccountSession`] from
+ * the previous call (`init_add_account_payload` for the first
+ * check, or the prior `CheckOutcome.session` for follow-ups).
+ * - `name` is the candidate account id.
+ * - `account_dn` is the optional display-name field — `Some("")` /
+ * `Some(non_empty)` opt into the `t1` (TW) / `txtServiceAccountDN`
+ * (HK) form field; `None` skips it entirely (matches WPF's
+ * `txtServiceAccountDN != null` gate).
+ * 
+ * Returns a [`CheckOutcome`] carrying the refreshed view-state
+ * triplet plus the optional `lblErrorMessage` text.
+ * 
+ * # Errors
+ * 
+ * As for [`unconnected_game_init_add_account_payload`].
+ * 
+ * [svc]: crate::services::beanfun::unconnected_game_add_account_check
+ */
+async unconnectedGameAddAccountCheck(mgmtSession: AddAccountSession, name: string, accountDn: string | null) : Promise<Result<CheckOutcome, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("unconnected_game_add_account_check", { mgmtSession, name, accountDn }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Validate a candidate display name before final submission —
+ * POST `02.aspx` with `__EVENTTARGET=lbtnCheckNickName` (the
+ * account-id field is sent empty for this endpoint).
+ * 
+ * # Contract
+ * 
+ * Mirrors [`services::beanfun::unconnected_game_add_account_check_nickname`][svc]
+ * verbatim. See [`unconnected_game_add_account_check`] for the
+ * `mgmt_session` / `account_dn` round-trip semantics.
+ * 
+ * # Errors
+ * 
+ * As for [`unconnected_game_add_account_check`].
+ * 
+ * [svc]: crate::services::beanfun::unconnected_game_add_account_check_nickname
+ */
+async unconnectedGameAddAccountCheckNickname(mgmtSession: AddAccountSession, accountDn: string | null) : Promise<Result<CheckOutcome, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("unconnected_game_add_account_check_nickname", { mgmtSession, accountDn }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Finalise unconnected-game account creation — POST `02.aspx`
+ * with the full add-account form (id + password ×2 + optional
+ * display name + `chkBox1=on` + `imgbtn_Submit.x/y=0`).
+ * 
+ * # Contract
+ * 
+ * Mirrors [`services::beanfun::unconnected_game_add_account`][svc]
+ * verbatim. Returns [`AddAccountOutcome::Success`] when the
+ * response carries no (or empty) `lblErrorMessage`, otherwise
+ * [`AddAccountOutcome::ErrorMessage`] carrying the message text.
+ * 
+ * # Why pre-validate empty inputs?
+ * 
+ * The service layer rejects empty `name` / `new_password` /
+ * `new_password_confirm` with `LoginError::Unknown(_)` (mapped
+ * to `auth.unknown` at the `CommandError` boundary). This is a
+ * backstop — the frontend dialog (`UnconnectedGame_AddAccount.vue`)
+ * runs WPF-equivalent client-side validation (length range,
+ * password mismatch, contract checkbox) before invoking, so this
+ * path should never trigger in practice. Surfacing the typed
+ * error keeps the contract honest if a future caller bypasses
+ * the dialog.
+ * 
+ * # Errors
+ * 
+ * - `auth.session_required` — no login is active.
+ * - `auth.unknown` — empty `name` / `new_password` /
+ * `new_password_confirm` (defensive).
+ * - Any [`LoginError`][le] surfaced by the service.
+ * 
+ * [svc]: crate::services::beanfun::unconnected_game_add_account
+ * [le]: crate::services::beanfun::LoginError
+ */
+async unconnectedGameAddAccount(mgmtSession: AddAccountSession, name: string, newPassword: string, newPasswordConfirm: string, accountDn: string | null) : Promise<Result<AddAccountOutcome, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("unconnected_game_add_account", { mgmtSession, name, newPassword, newPasswordConfirm, accountDn }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Drive the 5-step unconnected-game change-password flow — auth
+ * preamble + 01Accounts.aspx GET / POST + 03.aspx GET / POST
+ * (HK uses `http://` for the last 3 steps by upstream design;
+ * see service-layer module docs).
+ * 
+ * # Contract
+ * 
+ * Mirrors [`services::beanfun::unconnected_game_change_password`][svc]
+ * verbatim. Returns one of:
+ * 
+ * - [`ChangePasswordOutcome::VerifyCodeSent`] — server emitted a
+ * `verify_code=<token>` query parameter on the final redirect
+ * URL. Caller surfaces the token to the user so they can paste
+ * it into the Beanfun verify dialog.
+ * - [`ChangePasswordOutcome::ErrorMessage`] — server rendered a
+ * non-empty `lblErrorMessage` span. Caller shows the verbatim
+ * text in the dialog.
+ * 
+ * # Why pull `service_code` / `service_region` from the session?
+ * 
+ * Same reason as [`unconnected_game_init_add_account_payload`] —
+ * the dialog only ever targets the user's currently selected
+ * unconnected game.
+ * 
+ * # Why expose `num` over IPC?
+ * 
+ * `num` is the 0-based row index inside `gvServiceAccountList`
+ * the user clicked on (WPF `MainWindow.xaml.cs::ResetPassword_Click`
+ * passes `int`; we use `i32` for direct parity). The frontend
+ * gets it from the row position the user invoked "change
+ * password" on, so it has to flow through IPC. The backend has no
+ * other way to know which row the user picked.
+ * 
+ * # Errors
+ * 
+ * - `auth.session_required` — no login is active.
+ * - All three `AccountMgmtMissing*` view-state variants from the
+ * parser steps (step 2 + step 4 of the 5-step flow).
+ * - Any [`LoginError`][le] surfaced by the service (transport /
+ * non-2xx on any of the five HTTP calls).
+ * 
+ * [svc]: crate::services::beanfun::unconnected_game_change_password
+ * [le]: crate::services::beanfun::LoginError
+ */
+async unconnectedGameChangePassword(num: number, email: string) : Promise<Result<ChangePasswordOutcome, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("unconnected_game_change_password", { num, email }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update the **active service code / region** on the live
+ * [`Session`][sn] so subsequent session-gated commands target the
+ * game the user just picked from `windows/GameList.vue`.
+ * 
+ * # Why a backend command (not a frontend-only Pinia mutation)?
+ * 
+ * Every other account-family command (`get_accounts` /
+ * `add_service_account` / `change_display_name` /
+ * `unconnected_game_*` / `get_contract` / etc.) deliberately pulls
+ * `service_code` / `service_region` off the in-memory
+ * [`Session`][sn] inside the command body — the IPC contract
+ * **does not** accept the pair as a parameter, on the
+ * "single-source-of-truth" rationale documented in
+ * [`add_service_account`]'s docblock. That contract works for the
+ * post-login first paint (the login flow seeds the session with the
+ * region's default game) but breaks the moment the user picks a
+ * different game from the picker dialog: the frontend's
+ * `useGameStore.selectedGameCode` updates, but the backend session
+ * keeps pointing at the original game, and the next
+ * `get_accounts` / `add_service_account` round-trip silently
+ * queries the wrong service.
+ * 
+ * WPF avoided this entirely because `MainWindow.service_code`
+ * **is** the source of truth — there's no separate per-call
+ * session struct, the field is mutated in place by
+ * `MainWindow.GameList.SelectionChanged` (mirrored at L661 / L520
+ * / L523 of `MainWindow.xaml.cs`) before the next
+ * `bfClient.GetAccounts(service_code, service_region)` runs (L638
+ * of the same file). Re-introducing that mutability on the SPA
+ * backend keeps the IPC contract intact while preserving WPF's
+ * "switching games re-targets every subsequent service call"
+ * semantic.
+ * 
+ * # Contract
+ * 
+ * - Acquires the [`AppState::auth`] **write** lock (rare path —
+ * only fires on game-picker confirmation, and the `tokio::sync::RwLock`
+ * queues writers behind any in-flight readers from concurrent
+ * commands).
+ * - Returns `auth.session_required` when no session is active
+ * (the picker is gated behind the AccountList route which
+ * itself is auth-required, but the defensive guard keeps the
+ * contract honest).
+ * - **Stateless on the wire**: empty input is rejected by the
+ * service-layer parser at the next `get_accounts` call, not
+ * here — this command is a pure swap and has no policy on
+ * what counts as a valid `(code, region)` pair (mirrors WPF's
+ * "any string the picker dialog supplies is fine; let the
+ * gamezone POST surface a server-side error if it's bogus"
+ * stance).
+ * 
+ * # Frontend usage
+ * 
+ * Called from `pages/AccountList.vue::onGameChanged` (P12.3 D8)
+ * inside the `<GameList @select>` handler, **before** the
+ * follow-up `useAccountStore.refresh()` that paints the new
+ * game's account list. Persisting `loginGame` to `Config.xml`
+ * (so the choice survives a re-login) is a separate concern
+ * owned by the frontend (`useConfigStore.set('loginGame', ...)`)
+ * because Config.xml is a frontend-mediated cache (see
+ * `useConfigStore` docblock).
+ * 
+ * # Errors
+ * 
+ * - `auth.session_required` — no login is active.
+ * 
+ * [sn]: crate::services::beanfun::Session
+ */
+async setActiveService(serviceCode: string, serviceRegion: string) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_active_service", { serviceCode, serviceRegion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Retrieve the one-time game-launch password for a given service
  * account.
  * 
@@ -1495,6 +1775,49 @@ async autoPaste(req: AutoPasteRequest) : Promise<Result<null, CommandError>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Fetch the per-region INI of executable metadata + the ordered
+ * list of game services for the active session's region.
+ * 
+ * Mirrors `MainWindow.xaml.cs::reLoadGameInfo` (L682-729) — one
+ * atomic fetch returns both halves so the frontend never observes
+ * a half-populated state.
+ * 
+ * # Returns
+ * 
+ * A [`GameInfoBundle`] with:
+ * 
+ * - `ini` — `HashMap<String, GameIniEntry>` keyed by
+ * `<service_code>_<service_region>` (e.g. `"610074_T9"`).
+ * - `services` — `Vec<GameService>` preserving server ordering.
+ * 
+ * # Errors
+ * 
+ * - `auth.session_required` — no login is active.
+ * - Every [`LoginError`][le] surfaced by the underlying service —
+ * `network.http_failed`, `network.body_too_large`,
+ * `network.json_decode_failed`, `auth.invalid_utf8`,
+ * `auth.invalid_url`, `auth.unknown` (non-2xx),
+ * `game.service_list_missing` (catastrophic upstream
+ * regression — `Services.ServiceList = …;` literal absent).
+ * 
+ * # Frontend usage
+ * 
+ * Called once per session by `useGameStore.loadGames()` on
+ * AccountList mount, with optional `force=true` re-runs if the
+ * user manually retries from the GameList dialog's error
+ * banner.
+ * 
+ * [le]: crate::services::beanfun::LoginError
+ */
+async listGames() : Promise<Result<GameInfoBundle, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_games") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -1580,6 +1903,134 @@ accounts: ServiceAccount[];
  */
 amount_limit_notice: AmountLimitNotice }
 /**
+ * Initial state returned by [`unconnected_game_init_add_account_payload`].
+ * 
+ * The `session` field round-trips through the rest of the add-account
+ * flow; the other three are one-shot UI metadata WPF stuffs into the
+ * dialog header (game title, length range, optional nickname-check
+ * button). They live on this struct (not on the session) precisely
+ * because they are *not* threaded through subsequent POSTs.
+ * 
+ * # IPC contract
+ * 
+ * Derives `serde::Serialize + specta::Type` so
+ * [`unconnected_game_init_add_account_payload`] can return the
+ * bundle verbatim to the frontend's `UnconnectedGame_AddAccount.vue`
+ * dialog.
+ */
+export type AddAccountInit = { 
+/**
+ * View-state triplet for the next POST (`add_account_check` or
+ * `add_account`). Caller stores and re-passes verbatim.
+ */
+session: AddAccountSession; 
+/**
+ * `<span id="lblGameName">…</span>` content — game title shown in
+ * the dialog header (e.g. "新楓之谷").
+ */
+game_name: string; 
+/**
+ * `<span id="lblAccountLen">…</span>` content — account-id length
+ * range as a hyphen-separated string (e.g. `"6 - 12"`). The dialog
+ * uses this for client-side length validation; we surface it
+ * verbatim because the format is server-controlled.
+ */
+account_len: string; 
+/**
+ * Whether the page rendered a "check nickname" hyperlink (WPF
+ * L283: `response.Contains("<a id=\"lbtnCheckNickName\"")`).
+ * `false` ⇒ caller hides the nickname row, matching
+ * `UnconnectedGame_AddAccount.xaml.cs` L32-37.
+ */
+check_nickname_supported: boolean }
+/**
+ * Outcome of [`unconnected_game_add_account`].
+ * 
+ * WPF returns a `string` where `""` means success and any non-empty
+ * value is `lblErrorMessage` text. Our enum makes the two paths
+ * mutually exclusive at the type level so callers cannot
+ * accidentally branch on the wrong condition.
+ * 
+ * The `null` return path WPF uses for early-validation failures
+ * (empty name / pwd) is **not** a valid runtime outcome here — the
+ * public function rejects those inputs with `Err(LoginError::Unknown(_))`
+ * instead, so that callers can distinguish "user submitted empty
+ * fields" from "server said no" without nesting `Option<…>`.
+ * 
+ * # IPC contract
+ * 
+ * Derives `serde::Serialize + specta::Type` so
+ * [`unconnected_game_add_account`] surfaces the typed outcome
+ * to the frontend. Uses the same `tag="kind", content="data"`
+ * internally-tagged shape as [`AmountLimitNotice`] so the
+ * frontend's discriminated-union switch reads consistently
+ * across enum DTOs (`switch (outcome.kind) { case "success": ... }`).
+ */
+export type AddAccountOutcome = 
+/**
+ * Server accepted the submission (WPF: `result == ""` at
+ * `UnconnectedGame_AddAccount.xaml.cs` L221).
+ */
+{ kind: "success" } | 
+/**
+ * Server rejected with a displayable message (WPF: `result != "" && result != null`).
+ * Carries the verbatim `lblErrorMessage` content.
+ */
+{ kind: "error_message"; data: string }
+/**
+ * Round-trippable view-state triplet that the add-account dialog
+ * threads through three POSTs to `02.aspx`
+ * (`init_add_account_payload` → `add_account_check[_nickname]` →
+ * `add_account`).
+ * 
+ * WPF stuffs these three strings into a mutable `NameValueCollection`
+ * that the UI mutates between calls. We package them as an owned
+ * struct so the service layer is the sole authority on what gets
+ * posted: the caller can store / pass it around but cannot accidentally
+ * inject extra fields. The HK-only `__VIEWSTATEENCRYPTED` empty-string
+ * field is materialised by `build_viewstate_payload_prefix` off
+ * `region`, so callers don't need to know about it.
+ * 
+ * # IPC round-trip (P12.3 D3)
+ * 
+ * The struct derives `serde::Serialize + Deserialize + specta::Type`
+ * so [`unconnected_game_add_account_check`] /
+ * [`unconnected_game_add_account_check_nickname`] /
+ * [`unconnected_game_add_account`] can hand the triplet back to
+ * the frontend after each step and accept it on the next call.
+ * The frontend treats the payload as an **opaque cursor**: it
+ * is stored verbatim and re-passed without inspection (mirroring
+ * WPF's `NameValueCollection` carry-through, but without the
+ * shared mutability hazard).
+ */
+export type AddAccountSession = { 
+/**
+ * `__VIEWSTATE` value parsed from the most recent `02.aspx`
+ * response (or the initial `auth.aspx → 02.aspx` GET / POST pair
+ * for the very first session).
+ */
+viewstate: string; 
+/**
+ * `__VIEWSTATEGENERATOR`. WPF treats this as required for the
+ * account-management pages (unlike the verify flow, which makes
+ * it optional).
+ */
+viewstate_generator: string; 
+/**
+ * `__EVENTVALIDATION`. Always required after the first `02.aspx`
+ * POST returns it.
+ */
+event_validation: string; 
+/**
+ * Captured at session-creation time so `build_viewstate_payload_prefix`
+ * knows whether to splice in the HK-only `__VIEWSTATEENCRYPTED`
+ * field. We snapshot here rather than re-reading
+ * `client.config().region` so the session can be safely held across
+ * region changes (purely defensive — production never swaps regions
+ * mid-session).
+ */
+region: LoginRegion }
+/**
  * Server-side notice shown when the user has hit the account quota.
  * 
  * WPF stuffs the localised text directly into a UI string (`I18n.ToSimplified`
@@ -1658,6 +2109,48 @@ password: string;
  */
 specialClick: boolean }
 /**
+ * Outcome of [`unconnected_game_change_password`].
+ * 
+ * The 5-step flow ends with one of:
+ * - server emitting a `verify_code=<token>` query parameter on the
+ * final redirect URL (success path — caller surfaces the token to
+ * the user so they can paste it into the Beanfun verify dialog),
+ * - server rendering a non-empty `lblErrorMessage` span (rejection),
+ * - both signals absent (catch-all, WPF returns `null` and the UI
+ * shows a generic "UnknownError"; we surface this as
+ * `Err(LoginError::Unknown(_))`).
+ * 
+ * The `verify_code` token we carry in [`Self::VerifyCodeSent`] is the
+ * **content after `verify_code=`** terminated at the next `&` — i.e.
+ * exactly what the WPF dialog ends up displaying after its
+ * `result.Replace("verify_code", "")` strip
+ * (`UnconnectedGame_ChangePassword.xaml.cs` L30-35). See the
+ * "WPF deviation: `verify_code` extraction shape" section in the
+ * module docs for why we drop WPF's sentinel-prefix + greedy-regex
+ * shape rather than mirroring it on the wire.
+ * 
+ * # IPC contract
+ * 
+ * Derives `serde::Serialize + specta::Type` so
+ * [`unconnected_game_change_password`] surfaces the typed
+ * outcome to the frontend. Uses the same `tag="kind",
+ * content="data"` internally-tagged shape as
+ * [`AddAccountOutcome`] / [`AmountLimitNotice`] so all enum
+ * DTOs read consistently from the JS side.
+ */
+export type ChangePasswordOutcome = 
+/**
+ * Server confirmed the password-reset request and emitted a
+ * verification token. Carries the token (without the
+ * `verify_code=` prefix).
+ */
+{ kind: "verify_code_sent"; data: string } | 
+/**
+ * Server rejected the submission with a displayable
+ * `lblErrorMessage` body.
+ */
+{ kind: "error_message"; data: string }
+/**
  * Which release channel the user is subscribed to.
  * 
  * Mirrors WPF `updateChannel` config value. Binary rather than
@@ -1684,6 +2177,39 @@ export type Channel =
  * draft or not. Matches WPF `"Beta"` and `"Preview"` both.
  */
 "Beta"
+/**
+ * Outcome of either [`unconnected_game_add_account_check`] or
+ * [`unconnected_game_add_account_check_nickname`]: the POST always
+ * succeeds at the HTTP level (server returns 200 with a fresh page),
+ * and the result is the *next* view-state triplet plus the optional
+ * `lblErrorMessage` text the page surfaces.
+ * 
+ * `error_message == ""` matches the WPF "passed the check" branch
+ * (`UnconnectedGame_AddAccount.xaml.cs` L61 / L83 treat empty as the
+ * "unknown error" sentinel after a `null` payload short-circuit, but
+ * any **populated** value is shown verbatim to the user). We preserve
+ * the same shape so callers can re-use WPF's branching logic.
+ * 
+ * # IPC contract
+ * 
+ * Derives `serde::Serialize + specta::Type` so the two
+ * `unconnected_game_add_account_check*` Tauri commands return
+ * the refreshed [`AddAccountSession`] alongside the validation
+ * outcome in one round-trip.
+ */
+export type CheckOutcome = { 
+/**
+ * Refreshed view-state triplet from the response — caller passes
+ * this back into the next call (`add_account` or another check).
+ */
+session: AddAccountSession; 
+/**
+ * `<span id="lblErrorMessage">…</span>` content from the response,
+ * empty when the span is absent. WPF passes this string straight
+ * to `lblErrorMessage.Content` in the dialog, so we pass through
+ * the server text verbatim (no i18n / classification).
+ */
+error_message: string }
 /**
  * IPC-facing error DTO. Preserves a stable `{ code, message, details }`
  * shape across every Tauri command.
@@ -1730,6 +2256,75 @@ message: string;
  * `code` before reading fields.
  */
 details: JsonValue | null }
+/**
+ * Atomic bundle returned by [`list_games`] — the INI map keyed by
+ * `<service_code>_<service_region>` plus the ordered service
+ * list for the active region.
+ * 
+ * Keeping both halves in one round-trip mirrors WPF's
+ * `reLoadGameInfo()`, which fetches both inside one method, and
+ * avoids an inconsistent intermediate state where the frontend
+ * has services but no INI to launch them with.
+ */
+export type GameInfoBundle = { 
+/**
+ * INI section name → typed entry. Section names are
+ * `<service_code>_<service_region>` (e.g. `"610074_T9"`).
+ */
+ini: Partial<{ [key in string]: GameIniEntry }>; 
+/**
+ * Display-ordered list of services for the current region —
+ * preserves the server's ordering verbatim so any "newest
+ * game first" / "promoted game pinned" curation upstream
+ * flows through to the UI without us re-sorting.
+ */
+services: GameService[] }
+/**
+ * One entry from the per-region INI returned by
+ * `get_service_ini.ashx`.
+ * 
+ * Every field defaults to the empty string when the corresponding
+ * INI key is absent — matching WPF's `INIData[gameCode]["..."]`
+ * access pattern, which yields `""` for missing keys via
+ * `IniParser`'s `KeyDataCollection` indexer (not `null`, even
+ * though WPF L530 still bothers to guard `exe == null`; see the
+ * [`GameIniEntry::is_runnable`] doc for how we reconcile both
+ * branches).
+ */
+export type GameIniEntry = { 
+/**
+ * `exe` key — full executable command line (path + arguments
+ * separated by `.exe `). WPF L536-545 splits this with
+ * `(.*).exe` / `.exe (.*)` regexes into `game_exe` and
+ * `game_commandLine`. Empty string means "this gameCode has
+ * no INI definition" (per the [`Self::is_runnable`] gate).
+ */
+exe: string; 
+/**
+ * `login_action_type` — short integer encoded as text. Drives
+ * the `tradLogin` / `panel_GetOtp` UI branch in WPF L548-563.
+ * Empty defaults to action type 8 (WPF L547).
+ */
+login_action_type: string; 
+/**
+ * `win_class_name` — Win32 class name of the game window the
+ * launcher should focus / paste OTP into. Drives
+ * `accountList.autoPaste.Visibility` (WPF L565-573, only
+ * `"MapleStoryClass"` opts in).
+ */
+win_class_name: string; 
+/**
+ * `dir_value_name` — registry value name under `dir_reg` that
+ * stores the game's installation directory (WPF L574-607).
+ */
+dir_value_name: string; 
+/**
+ * `dir_reg` — registry key path (with the leading
+ * `HKEY_LOCAL_MACHINE\` stripped before use, WPF L580). The
+ * launcher reads `dir_reg::dir_value_name` and writes it back
+ * into `Config.xml` for future launches.
+ */
+dir_reg: string }
 /**
  * IPC-shaped summary of a running game process, returned by
  * [`list_game_processes`].
@@ -1783,6 +2378,60 @@ name: string;
  * rationale.
  */
 executablePath: string | null }
+/**
+ * One service from the `Services.ServiceList` JS literal returned
+ * by `game_zone/`.
+ * 
+ * Field naming follows WPF's `class GameService` exactly so the
+ * frontend's `GameList.vue` can map field-for-field. Image
+ * **bytes** are not loaded here — the frontend constructs an
+ * `<img src>` URL via the region-aware base URL (see
+ * [`image_base_url`]) and lets the WebView fetch directly.
+ */
+export type GameService = { 
+/**
+ * `ServiceFamilyName` — display name (e.g. `"新楓之谷"`).
+ * Surfaces the raw Traditional-Chinese name; `vue-i18n`
+ * handles localisation at render time.
+ */
+name: string; 
+/**
+ * `ServiceCode` — six-digit game id (e.g. `"610074"`).
+ */
+service_code: string; 
+/**
+ * `ServiceRegion` — two-character sub-region (e.g. `"T9"`).
+ */
+service_region: string; 
+/**
+ * `ServiceWebsiteURL` — official site URL, surfaced verbatim
+ * for the per-account row context menu's "Official Site"
+ * item (P12.2 D-step / P12.4 WebBrowser).
+ */
+website_url: string; 
+/**
+ * `ServiceXLargeImageName` — file name for the extra-large
+ * game banner (e.g. `"610074.jpg"`). Resolve to a URL via
+ * [`image_base_url`].
+ */
+xlarge_image_name: string; 
+/**
+ * `ServiceLargeImageName` — file name for the large game
+ * banner used by both the GameList grid and the LoginPage
+ * hero illustration in WPF.
+ */
+large_image_name: string; 
+/**
+ * `ServiceSmallImageName` — file name for the small game
+ * icon used in the AccountList header bar.
+ */
+small_image_name: string; 
+/**
+ * `ServiceDownloadURL` — installer / patcher URL surfaced as
+ * a "Download" affordance when the game executable is
+ * missing locally (P12.3 launcher fallback).
+ */
+download_url: string }
 /**
  * User-selected launch mode, mirroring WPF `enum GameStartMode`
  * (`Beanfun/MainWindow.xaml.cs` L32-37).

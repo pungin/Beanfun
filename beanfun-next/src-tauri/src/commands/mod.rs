@@ -135,6 +135,7 @@ pub mod auth;
 pub mod config;
 pub mod dto;
 pub mod error;
+pub mod game;
 pub mod launcher;
 pub mod otp;
 pub mod session;
@@ -240,6 +241,14 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         account::get_contract,
         account::get_email,
         account::get_remain_point,
+        // account (P12.3 D3 — unconnected-game flows)
+        account::unconnected_game_init_add_account_payload,
+        account::unconnected_game_add_account_check,
+        account::unconnected_game_add_account_check_nickname,
+        account::unconnected_game_add_account,
+        account::unconnected_game_change_password,
+        // account (P12.3 D8a — game switcher session sync)
+        account::set_active_service,
         // otp (P10.2)
         otp::get_otp,
         // system (P10.3 — D1 open_url)
@@ -269,6 +278,8 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         launcher::kill_game_processes,
         // launcher (P10.3 — D5d auto-paste)
         launcher::auto_paste,
+        // game (P12.3 D2 — list_games)
+        game::list_games,
     ])
 }
 
@@ -431,6 +442,16 @@ mod bindings_file_tests {
         "listGameProcesses",
         "killGameProcesses",
         "autoPaste",
+        // --- P12.3 D2 — game catalogue ------------------------------
+        "listGames",
+        // --- P12.3 D3 — unconnected-game account flows --------------
+        "unconnectedGameInitAddAccountPayload",
+        "unconnectedGameAddAccountCheck",
+        "unconnectedGameAddAccountCheckNickname",
+        "unconnectedGameAddAccount",
+        "unconnectedGameChangePassword",
+        // --- P12.3 D8a — game switcher session sync -----------------
+        "setActiveService",
     ];
 
     /// DTO type names the frontend imports from `bindings.ts`.
@@ -492,6 +513,16 @@ mod bindings_file_tests {
         "GameStartMode",
         "GameProcessInfo",
         "AutoPasteRequest",
+        // --- P12.3 D2 — game catalogue ------------------------------
+        "GameIniEntry",
+        "GameService",
+        "GameInfoBundle",
+        // --- P12.3 D3 — unconnected-game DTOs ------------------------
+        "AddAccountSession",
+        "AddAccountInit",
+        "CheckOutcome",
+        "AddAccountOutcome",
+        "ChangePasswordOutcome",
         // --- P10.3 — updater ----------------------------------------
         "Channel",
         "UpdateInfo",

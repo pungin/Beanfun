@@ -58,6 +58,7 @@ import { createAppI18n, wireI18n } from './i18n'
 import { createAppRouter, installRouterGuards } from './router'
 import { useAccountStore } from './stores/account'
 import { useAuthStore } from './stores/auth'
+import { useGameStore } from './stores/game'
 
 const app = createApp(App)
 
@@ -75,6 +76,7 @@ app.use(router)
 
 const auth = useAuthStore()
 const account = useAccountStore()
+const game = useGameStore()
 /*
  * P12.2 D1 follow-up to the D10 session-expired bridge: also
  * wipe the account store's session-scoped cache (service accounts,
@@ -82,6 +84,15 @@ const account = useAccountStore()
  * reports the session is gone. Without this, a re-login briefly
  * flashes the previous user's service-account list while the
  * fresh `getServiceAccounts()` round-trip runs.
+ *
+ * P12.3 D4 follow-up: same rationale for the game catalogue store
+ * (per-region `ini` + `services` + `selectedGameCode`). Without this,
+ * the next user's first frame after `LoginPage` would flash the
+ * previous user's game grid + selection before the post-login
+ * `loadGames()` fetch returned. `clearAccountSession` is the right
+ * fan-out site because both wipes happen at the same lifecycle
+ * point (`auth.session_required`); composing them into one callback
+ * keeps the router decoupled from the per-store split (SRP).
  *
  * Composition lives here (not inside `clearSession()` itself) so
  * the router and the auth store both stay unaware of which
@@ -91,7 +102,10 @@ const account = useAccountStore()
 installRouterGuards(router, {
   isAuthenticated: () => auth.isLoggedIn,
   clearSession: () => auth.clearSession(),
-  clearAccountSession: () => account.clearSessionData(),
+  clearAccountSession: () => {
+    account.clearSessionData()
+    game.clearGameData()
+  },
 })
 
 app.mount('#app')

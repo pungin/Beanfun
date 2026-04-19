@@ -508,6 +508,9 @@ impl From<LoginError> for CommandError {
             LoginError::AccountMgmtMissingAccountLen => {
                 CommandError::new("auth.account_mgmt_missing_account_len", message)
             }
+            LoginError::GameListServiceListMissing => {
+                CommandError::new("game.service_list_missing", message)
+            }
             LoginError::Http(err) => {
                 let details = reqwest_details(&err);
                 CommandError::new("network.http_failed", message).with_details(details)

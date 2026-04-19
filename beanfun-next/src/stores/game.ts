@@ -1,0 +1,342 @@
+/**
+ * Game store — per-region game catalogue (INI metadata + service
+ * list) plus the active selection.
+ *
+ * # Scope (P12.3 D4)
+ *
+ * Owns:
+ *
+ * - `ini` — `Record<gameCode, GameIniEntry>` from
+ *   `get_service_ini.ashx` (executable, login action type, win class,
+ *   registry hints; everything the launcher needs to spawn the game
+ *   binary).
+ * - `services` — ordered `GameService[]` from `game_zone/`'s
+ *   `Services.ServiceList` literal (display-side metadata: name,
+ *   image file names, official site URL).
+ * - `selectedGameCode` — the active `<service_code>_<service_region>`
+ *   pair (e.g. `"610074_T9"`). Mirrors WPF
+ *   `MainWindow.service_code + "_" + service_region`.
+ * - `loadState` / `loadError` — 4-state load machine (`idle`,
+ *   `loading`, `loaded`, `error`) that lets `GameList.vue` render a
+ *   loading shimmer / inline error banner / loaded grid without each
+ *   consumer re-implementing the booleans.
+ *
+ * # Why one store for both halves
+ *
+ * `ini` and `services` come from a single
+ * [`commands.listGames`][cmd] round-trip (atomic in WPF
+ * `MainWindow.reLoadGameInfo` — see backend module docs for
+ * rationale). Splitting them into two stores would invite mid-load
+ * races where the UI sees `services.value.length > 0` but
+ * `ini.value` is still empty (or vice versa) — exactly the
+ * inconsistent-intermediate-state bug WPF avoids.
+ *
+ * # Caching policy
+ *
+ * Per-session cache: {@link loadGames} short-circuits when
+ * `loadState === 'loaded'` unless `force === true`. The store has no
+ * region-keyed dictionary (unlike WPF's `GameList[region]`) because
+ * the active session pins the region — re-entering the page after a
+ * region switch goes through {@link clearGameData} (auth store
+ * logout / session-expired) so the next `loadGames` runs fresh.
+ *
+ * # Cross-store wiring
+ *
+ * - `clearGameData` is composed into `main.ts`'s
+ *   `installRouterGuards.clearAccountSession` callback **alongside**
+ *   `account.clearSessionData()`, so the session-expired bridge
+ *   wipes every session-scoped store in one shot. SRP: this file
+ *   exposes the wipe; composition stays in `main.ts`.
+ * - The store **never** imports `useAuthStore` — region passes in
+ *   via the {@link imageUrl} / {@link selectGame} parameters from
+ *   the calling component. Caller (`AccountList.vue`) already has
+ *   `auth.session.region` in scope so the parameter is free, and
+ *   keeping the store auth-unaware avoids the circular import that
+ *   bit `auth.ts → invoke.ts → ...` patterns would suffer.
+ *
+ * [cmd]: ../types/bindings.ts (search for `listGames`)
+ */
+
+import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
+
+import { commands } from '../types/bindings'
+import type { GameIniEntry, GameInfoBundle, GameService, LoginRegion } from '../types/bindings'
+import { CommandInvocationError, safeInvoke, surfaceCommandError } from '../services/invoke'
+
+/**
+ * `<service_code>_<service_region>` pairs WPF treats as
+ * "unconnected" games (no Beanfun-managed in-game wallet — the
+ * service has its own per-account credential separate from the
+ * Beanfun login).
+ *
+ * Mirrors `MainWindow.xaml.cs::selectedGameChanged` L646-655 — the
+ * sole place WPF flips `MainWindow.UnconnectedGame` between `true`
+ * and `false`. The list is hard-coded in WPF (no server-side
+ * configuration), so we mirror it as a frozen literal here.
+ *
+ * Frontend consumers branch on this through
+ * {@link useGameStore.isUnconnectedGame}: when `true`,
+ * `AccountList.vue` swaps in the unconnected-game add-account /
+ * change-password dialogs (P12.3 D6 / D7) instead of the
+ * regular-game `AddServiceAccount.vue` and shows a
+ * change-password row affordance the regular flow doesn't have.
+ *
+ * Adding a new unconnected game is a one-line change here —
+ * grep-replace from WPF lands cleanly because the constant uses
+ * the same `<code>_<region>` shape.
+ */
+export const UNCONNECTED_GAME_CODES: ReadonlySet<string> = new Set(['610153_TN', '610085_TC'])
+
+/**
+ * Build the `<service_code>_<service_region>` key WPF uses to index
+ * into `INIData` and to test against {@link UNCONNECTED_GAME_CODES}.
+ *
+ * Pure helper — no store state read — so it's exported separately
+ * for use in unit tests and in `AccountList.vue` mount-time
+ * resolution (where the page already has `service_code` /
+ * `service_region` from the session and just needs the joined
+ * string to look up INI).
+ */
+export function gameCodeOf(serviceCode: string, serviceRegion: string): string {
+  return `${serviceCode}_${serviceRegion}`
+}
+
+/**
+ * Build the per-region `<img src>` URL for a game banner image
+ * file name.
+ *
+ * Mirrors `services::beanfun::games::image_base_url` byte-for-byte
+ * (the backend exposes the helper alongside the DTOs but does **not**
+ * proxy the bytes — the WebView fetches each banner directly, see
+ * the backend module docblock for "why no proxy" rationale).
+ *
+ * # WPF deviation: HK uses `http://` by upstream design
+ *
+ * WPF `MainWindow.AddGameServiceFromJson` (L772-785) builds the HK
+ * URLs as `http://hk.images...` — that's not a typo, it's the URL
+ * shape Beanfun's HK CDN actually serves at. Tauri's WebView2
+ * tolerates mixed content for `<img>` tags by default, so the
+ * banner renders without CSP gymnastics. If a future CSP tightens
+ * `img-src` to `https:` only, this helper is the one place to
+ * coerce the protocol; today it preserves WPF parity verbatim.
+ *
+ * `name === ''` returns the bare base URL — the resulting `<img>`
+ * will 404, but the caller (template `:src` binding) typically
+ * gates the render on `name.length > 0` already. Surfacing the
+ * empty path rather than `null` keeps the return type a plain
+ * `string` so templates don't have to handle two shapes.
+ */
+export function imageUrl(name: string, region: LoginRegion): string {
+  const base =
+    region === 'TW'
+      ? 'https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/'
+      : 'http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/'
+  return `${base}${name}`
+}
+
+/**
+ * 4-state load machine. Mirrors the same pattern
+ * `pages/ManageAccount.vue` (P12.2 D9) uses for its data load —
+ * exposing the state lets templates render exactly one of the four
+ * branches without juggling `loading || error || empty`-style
+ * boolean compounds.
+ *
+ * - `idle` — initial, before the first `loadGames` call.
+ * - `loading` — IPC in flight.
+ * - `loaded` — `services` and `ini` populated (may still be empty
+ *   arrays / objects if the server returned an empty catalogue,
+ *   which is a legitimate "no games" state distinct from `error`).
+ * - `error` — `loadError` is non-`null`. Caller renders the retry
+ *   banner.
+ */
+export type GameLoadState = 'idle' | 'loading' | 'loaded' | 'error'
+
+export const useGameStore = defineStore('game', () => {
+  const ini = ref<Record<string, GameIniEntry>>({})
+  const services = ref<GameService[]>([])
+  const selectedGameCode = ref<string | null>(null)
+  const loadState = ref<GameLoadState>('idle')
+  const loadError = ref<string | null>(null)
+
+  /**
+   * Read the [`GameService`] for the current selection, or `null`
+   * when nothing is selected / the selection is not in the
+   * fetched catalogue.
+   *
+   * Returning `null` (rather than throwing) lets templates
+   * `v-if="game.selectedGame"` directly. Mirrors WPF's
+   * `MainWindow.SelectedGame` field — null until the first
+   * `selectedGameChanged()` populates it from the catalogue
+   * loop (`MainWindow.xaml.cs` L661-674).
+   */
+  const selectedGame = computed<GameService | null>(() => {
+    if (selectedGameCode.value === null) return null
+    const target = selectedGameCode.value
+    return (
+      services.value.find((s) => gameCodeOf(s.service_code, s.service_region) === target) ?? null
+    )
+  })
+
+  /**
+   * Read the [`GameIniEntry`] for the current selection, or `null`
+   * when nothing is selected / the selection has no INI section.
+   *
+   * Mirrors WPF's `INIData[gameCode]` access pattern — WPF returns
+   * an empty `KeyDataCollection` for missing sections (every field
+   * read yields `""`), the Rust port returns `None` so the caller
+   * can branch explicitly. The frontend mostly cares about
+   * `selectedIni?.win_class_name` (auto-paste enable) and
+   * `selectedIni?.exe.length > 0` (launchable gate).
+   */
+  const selectedIni = computed<GameIniEntry | null>(() => {
+    if (selectedGameCode.value === null) return null
+    return ini.value[selectedGameCode.value] ?? null
+  })
+
+  /**
+   * `true` when the active selection is one of the
+   * {@link UNCONNECTED_GAME_CODES}. Drives `AccountList.vue`'s
+   * dialog routing (regular vs. unconnected `AddServiceAccount`)
+   * and the change-password row affordance visibility.
+   *
+   * Mirrors WPF `MainWindow.UnconnectedGame` (L91, set inside
+   * `selectedGameChanged` L646-655). Computed off
+   * {@link selectedGameCode} so the boolean is always in sync with
+   * the active selection — no separate `boolean` ref to keep
+   * consistent (DRY).
+   */
+  const isUnconnectedGame = computed<boolean>(() => {
+    if (selectedGameCode.value === null) return false
+    return UNCONNECTED_GAME_CODES.has(selectedGameCode.value)
+  })
+
+  /**
+   * Apply a successful [`commands.listGames`][cmd] response to the
+   * store. Single-write authority — every caller (the public
+   * action plus tests) goes through this helper so future field
+   * additions to `GameInfoBundle` land in one place (DRY).
+   *
+   * [cmd]: ../types/bindings.ts
+   */
+  function applyBundle(bundle: GameInfoBundle): void {
+    ini.value = { ...bundle.ini } as Record<string, GameIniEntry>
+    services.value = bundle.services
+    loadState.value = 'loaded'
+    loadError.value = null
+  }
+
+  /**
+   * Fetch the per-region game catalogue.
+   *
+   * # Caching
+   *
+   * Idempotent unless `force === true`. Once `loadState === 'loaded'`,
+   * subsequent calls return the cached state without firing a
+   * second IPC round-trip. The cache is wiped by
+   * {@link clearGameData} (logout / session-expired bridge), so the
+   * next post-login `loadGames` always runs fresh.
+   *
+   * # Concurrency
+   *
+   * If `loadState === 'loading'` (a previous call is still in
+   * flight), a second call short-circuits to a no-op `Promise<void>`
+   * — there's only ever one `commands.listGames()` request live at
+   * once. WPF makes the same single-flight assumption implicitly
+   * via UI thread serialisation; we make it explicit here.
+   *
+   * # Error handling
+   *
+   * Failures are surfaced two ways:
+   *
+   * 1. {@link loadError} carries the message string for
+   *    `GameList.vue` / the AccountList game-info bar's inline
+   *    "Retry" banner.
+   * 2. {@link surfaceCommandError} fires the standard toast for
+   *    the rest of the UI (matches every other store action).
+   *
+   * The action **does not throw** — callers (mount hooks, retry
+   * buttons) treat the post-call `loadState === 'loaded'` /
+   * `'error'` as the success signal. Throwing would force every
+   * call site into `try { } catch { }`, which buys nothing on top
+   * of the toast + inline banner combo.
+   */
+  async function loadGames(force = false): Promise<void> {
+    if (!force && loadState.value === 'loaded') return
+    if (loadState.value === 'loading') return
+
+    loadState.value = 'loading'
+    loadError.value = null
+
+    const result = await safeInvoke(commands.listGames())
+    if (result.ok) {
+      applyBundle(result.data)
+      return
+    }
+    loadError.value = result.error.message
+    loadState.value = 'error'
+    surfaceCommandError(result.error)
+    /*
+     * Do not throw — see "Error handling" in the docblock above. The
+     * caller is expected to inspect `loadState` / `loadError` after
+     * `await`. The `CommandInvocationError` import below is kept
+     * because tests sometimes assert that the store *did not* leak
+     * the error as a thrown exception, and grepping for the type
+     * keeps that intent explicit.
+     */
+    void CommandInvocationError
+  }
+
+  /**
+   * Set the active game by `(service_code, service_region)` pair.
+   *
+   * Mirrors `MainWindow.xaml.cs::GameList.SelectionChanged` (the
+   * `Windows/GameList.xaml.cs` handler that runs when the user
+   * picks a game from the list dialog) — WPF immediately writes
+   * `App.MainWnd.service_code` / `service_region` and calls
+   * `selectedGameChanged()` to re-render the AccountList shell. We
+   * keep the store side minimal (just the joined gameCode) and
+   * leave the post-selection refresh (account list reload, game
+   * banner image swap) to the caller — `AccountList.vue` watches
+   * `selectedGameCode` and orchestrates the rest.
+   */
+  function selectGame(serviceCode: string, serviceRegion: string): void {
+    selectedGameCode.value = gameCodeOf(serviceCode, serviceRegion)
+  }
+
+  /**
+   * Wipe every piece of game-scoped state. Composed into
+   * `main.ts::installRouterGuards.clearAccountSession` so the
+   * session-expired bridge clears the catalogue alongside the
+   * account store (P12.3 D4 — without this, a re-login briefly
+   * flashes the previous user's game grid before the new
+   * `loadGames()` runs).
+   *
+   * Resets `loadState` to `'idle'` (not `'loaded'`) so the next
+   * `loadGames()` is treated as a fresh fetch by the caching
+   * branch.
+   */
+  function clearGameData(): void {
+    ini.value = {}
+    services.value = []
+    selectedGameCode.value = null
+    loadState.value = 'idle'
+    loadError.value = null
+  }
+
+  return {
+    ini,
+    services,
+    selectedGameCode,
+    loadState,
+    loadError,
+
+    selectedGame,
+    selectedIni,
+    isUnconnectedGame,
+
+    loadGames,
+    selectGame,
+    clearGameData,
+  }
+})

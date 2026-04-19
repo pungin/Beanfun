@@ -187,6 +187,7 @@ vi.mock('@element-plus/icons-vue', () => {
     DocumentCopy: stub('DocumentCopyStub'),
     EditPen: stub('EditPenStub'),
     InfoFilled: stub('InfoFilledStub'),
+    Key: stub('KeyStub'),
     Message: stub('MessageStub'),
     MoreFilled: stub('MoreFilledStub'),
     Operation: stub('OperationStub'),
@@ -277,6 +278,22 @@ vi.mock('../../../src/types/bindings', () => ({
     autoPaste: vi.fn(),
     setConfig: vi.fn(),
     getAllConfig: vi.fn(),
+    /*
+     * D8 added the game-catalogue IPC + Start Game pipeline IPCs +
+     * the new `set_active_service` mutator. Mocked here so the
+     * page-level `setupGameOnMount` (which fires on every mount)
+     * doesn't blow up when the SUT-under-test doesn't otherwise
+     * exercise the game flow. Defaults are seeded in `beforeEach`
+     * so existing D1-D11 tests keep passing without per-test wire
+     * (see the "D8 mount-time pipeline" section in beforeEach).
+     */
+    listGames: vi.fn(),
+    setActiveService: vi.fn(),
+    detectGamePath: vi.fn(),
+    listGameProcesses: vi.fn(),
+    killGameProcesses: vi.fn(),
+    launchGame: vi.fn(),
+    openUrl: vi.fn(),
   },
 }))
 
@@ -286,6 +303,7 @@ import AccountList from '../../../src/pages/AccountList.vue'
 import { useAccountStore } from '../../../src/stores/account'
 import { useAuthStore } from '../../../src/stores/auth'
 import { useConfigStore } from '../../../src/stores/config'
+import { useGameStore } from '../../../src/stores/game'
 import { createAppI18n, i18nMessages } from '../../../src/i18n'
 
 const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ status: 'ok', data })
@@ -335,6 +353,113 @@ const FAKE_SESSION: SessionInfo = {
   account_id: 'alice',
   service_code: '610074',
   service_region: 'T9',
+}
+
+/* ---------------------------------------------------------------- */
+/*  D8 — game catalogue fixtures                                     */
+/* ---------------------------------------------------------------- */
+
+/*
+ * MapleStory TW — the canonical "tools-bearing" connected game
+ * (`610074_T9` ∈ TOOLS_GAME_CODES). Used by the Tools-button
+ * visibility tests, the Add Account connected branch, and the
+ * post-OTP auto-paste `specialClick` derivation (TW MapleStory →
+ * SEA pre-click sequence).
+ */
+const MAPLESTORY_TW: import('../../../src/types/bindings').GameService = {
+  name: 'MapleStory TW',
+  service_code: '610074',
+  service_region: 'T9',
+  website_url: 'https://maplestory.beanfun.com',
+  xlarge_image_name: '610074_xlarge.jpg',
+  large_image_name: '610074_large.jpg',
+  small_image_name: '610074_small.jpg',
+  download_url: 'https://maplestory.beanfun.com/download',
+}
+
+/*
+ * KartRider Rush+ — a non-tools connected game used to assert
+ * the Tools button stays hidden for codes outside the
+ * `TOOLS_GAME_CODES` whitelist.
+ */
+const KARTRIDER_TW: import('../../../src/types/bindings').GameService = {
+  name: 'KartRider TW',
+  service_code: '610099',
+  service_region: 'T9',
+  website_url: 'https://kart.beanfun.com',
+  xlarge_image_name: '610099_xlarge.jpg',
+  large_image_name: '610099_large.jpg',
+  small_image_name: '610099_small.jpg',
+  download_url: '',
+}
+
+/*
+ * "新瑪奇" (Mabinogi) — the canonical unconnected game
+ * (`610153_TN` ∈ UNCONNECTED_GAME_CODES, see `stores/game.ts`).
+ * Used by the Add Account / Change Password unconnected-branch
+ * tests below.
+ */
+const MABINOGI_TN: import('../../../src/types/bindings').GameService = {
+  name: 'Mabinogi',
+  service_code: '610153',
+  service_region: 'TN',
+  website_url: 'https://mabinogi.beanfun.com',
+  xlarge_image_name: '610153_xlarge.jpg',
+  large_image_name: '610153_large.jpg',
+  small_image_name: '610153_small.jpg',
+  download_url: 'https://mabinogi.beanfun.com/download',
+}
+
+/*
+ * INI fixture for MapleStory TW. `login_action_type=8` is WPF's
+ * default (the "OTP first, no auto-launch" branch); D8f tests
+ * override this per-case to exercise the direct-launch (`0` / `1`
+ * + tradLogin) and OTP+launch (`1` + !tradLogin) chains.
+ */
+const MAPLESTORY_TW_INI: import('../../../src/types/bindings').GameIniEntry = {
+  exe: 'C:\\Beanfun\\MapleStory.exe',
+  login_action_type: '8',
+  win_class_name: 'MapleStoryClass',
+  dir_value_name: 'ExecPath',
+  dir_reg: 'SOFTWARE\\Gamania\\MapleStory',
+}
+
+const KARTRIDER_TW_INI: import('../../../src/types/bindings').GameIniEntry = {
+  exe: 'C:\\Beanfun\\KartRider.exe',
+  login_action_type: '8',
+  win_class_name: 'KartRiderClass',
+  dir_value_name: 'ExecPath',
+  dir_reg: 'SOFTWARE\\Gamania\\KartRider',
+}
+
+const MABINOGI_TN_INI: import('../../../src/types/bindings').GameIniEntry = {
+  exe: 'C:\\Beanfun\\Mabinogi.exe',
+  login_action_type: '8',
+  win_class_name: 'MabinogiClass',
+  dir_value_name: 'ExecPath',
+  dir_reg: 'SOFTWARE\\Gamania\\Mabinogi',
+}
+
+/**
+ * Seed the {@link useGameStore} catalogue + active selection in
+ * one shot, matching the post-`setupGameOnMount` shape the page
+ * sees once both the game catalogue and the saved-loginGame
+ * restore have settled.
+ *
+ * Tests that need to bypass the mount-time picker auto-open and
+ * jump straight into the "game already chosen" surface use this
+ * helper — the mount path itself is exercised by the dedicated
+ * D8c cases below.
+ */
+function seedActiveGame(
+  service: import('../../../src/types/bindings').GameService,
+  ini: import('../../../src/types/bindings').GameIniEntry,
+): void {
+  const gameStore = useGameStore()
+  gameStore.services = [service]
+  gameStore.ini = { [`${service.service_code}_${service.service_region}`]: ini }
+  gameStore.selectedGameCode = `${service.service_code}_${service.service_region}`
+  gameStore.loadState = 'loaded'
 }
 
 /**
@@ -442,6 +567,80 @@ const CopyBoxStub = defineComponent({
 })
 
 /**
+ * D8 — stub for the `<GameList />` picker. Same SRP rationale as
+ * the dialog stubs above: the page only owns the open / select
+ * wiring; the dialog's catalogue rendering / loading states /
+ * card click handling lives in `tests/unit/windows/GameList.spec.ts`.
+ *
+ * Forwards `region` into a `data-region` attribute so D8c specs
+ * can assert the page passed `auth.session.region` correctly,
+ * and exposes a manual `select` button so tests can synthesise
+ * the user's selection without poking at internal refs.
+ */
+const GameListStub = defineComponent({
+  name: 'GameList',
+  props: {
+    visible: { type: Boolean, default: false },
+    region: { type: String, default: '' },
+  },
+  emits: ['update:visible', 'select'],
+  setup(props) {
+    return () =>
+      h('div', {
+        class: 'game-list-stub',
+        'data-test': 'game-list-stub',
+        'data-visible': String(props.visible),
+        'data-region': props.region,
+      })
+  },
+})
+
+/**
+ * D8g — stub for the `<UnconnectedGameAddAccount />` dialog. Same
+ * SRP rationale as the regular `AddServiceAccount` stub above —
+ * the page only owns the open / created wiring, the dialog's
+ * own form / submit / contract-preview behaviour is covered by
+ * `tests/unit/windows/UnconnectedGame_AddAccount.spec.ts`.
+ */
+const UnconnectedGameAddAccountStub = defineComponent({
+  name: 'UnconnectedGameAddAccount',
+  props: { visible: { type: Boolean, default: false } },
+  emits: ['update:visible', 'created'],
+  setup(props) {
+    return () =>
+      h('div', {
+        class: 'unconnected-add-stub',
+        'data-test': 'unconnected-add-stub',
+        'data-visible': String(props.visible),
+      })
+  },
+})
+
+/**
+ * D8h — stub for the `<UnconnectedGameChangePassword />` dialog.
+ * Forwards `accountIndex` so D8h specs can assert the page wired
+ * the correct row index (mirrors WPF
+ * `accountList.list_Account.SelectedIndex` argument).
+ */
+const UnconnectedGameChangePasswordStub = defineComponent({
+  name: 'UnconnectedGameChangePassword',
+  props: {
+    visible: { type: Boolean, default: false },
+    accountIndex: { type: Number, default: -1 },
+  },
+  emits: ['update:visible', 'verify-code-sent'],
+  setup(props) {
+    return () =>
+      h('div', {
+        class: 'unconnected-changepw-stub',
+        'data-test': 'unconnected-changepw-stub',
+        'data-visible': String(props.visible),
+        'data-account-index': String(props.accountIndex),
+      })
+  },
+})
+
+/**
  * Standalone harness — memory-history router with the page mounted at
  * `/accounts` plus a stub `/login` so the post-logout `router.push`
  * resolves cleanly. Mirrors the per-page sandbox pattern from
@@ -476,6 +675,9 @@ function buildHarness(): {
             ChangeServiceAccountDisplayName: ChangeServiceAccountDisplayNameStub,
             ServiceAccountInfo: ServiceAccountInfoStub,
             CopyBox: CopyBoxStub,
+            GameList: GameListStub,
+            UnconnectedGameAddAccount: UnconnectedGameAddAccountStub,
+            UnconnectedGameChangePassword: UnconnectedGameChangePasswordStub,
           },
         },
       })
@@ -538,6 +740,33 @@ describe('AccountList page', () => {
      * specific value they need (TW 1234 / HK 1234 / HK 0 / etc.).
      */
     vi.mocked(commands.getRemainPoint).mockReturnValue(ok(0))
+    /*
+     * D8 mount-time pipeline defaults:
+     *
+     * - `listGames` returns an empty bundle so `setupGameOnMount`
+     *   succeeds (no error fallback) but finds nothing to restore.
+     *   With no `loginGame` in Config.xml either, the picker is
+     *   auto-opened (the stub renders a div either way) AND
+     *   `loadList()` fires once — same single-fetch cadence the
+     *   pre-D8 specs expected.
+     * - `setActiveService` returns ok so any test that does seed a
+     *   matching `loginGame` doesn't blow up on the backend swap.
+     * - `detectGamePath` returns ok-with-empty so the Start Game
+     *   pipeline takes the `MsgCantFindGame` branch by default
+     *   (only the D8f explicit cases override this).
+     * - `listGameProcesses` returns an empty array so the
+     *   `MsgGameAlreadyRun` branch is opt-in.
+     * - `launchGame` / `openUrl` / `killGameProcesses` all default
+     *   to ok so the full Start Game chain can be exercised
+     *   end-to-end without per-test re-mocking.
+     */
+    vi.mocked(commands.listGames).mockReturnValue(ok({ ini: {}, services: [] }))
+    vi.mocked(commands.setActiveService).mockReturnValue(ok(null))
+    vi.mocked(commands.detectGamePath).mockReturnValue(ok(null))
+    vi.mocked(commands.listGameProcesses).mockReturnValue(ok([]))
+    vi.mocked(commands.killGameProcesses).mockReturnValue(ok([]))
+    vi.mocked(commands.launchGame).mockReturnValue(ok(null))
+    vi.mocked(commands.openUrl).mockReturnValue(ok(null))
   })
 
   it('shows the loading state while getAccounts is in flight', async () => {
@@ -693,10 +922,19 @@ describe('AccountList page', () => {
      * `<AddServiceAccount v-model:visible>` binding. The dialog's
      * own form / submit / contract preview behaviour is covered by
      * `tests/unit/windows/AddServiceAccount.spec.ts`.
+     *
+     * D8g extended the button handler to branch between connected
+     * and unconnected games on `game.isUnconnectedGame`. The
+     * connected-game branch is the original D3 surface — seed
+     * MapleStory TW (a connected game) so the click takes the
+     * `addAccountVisible` flip rather than the new
+     * `unconnectedAddVisible` flip (the latter has its own D8g
+     * case below).
      */
     vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
 
     const ctx = buildHarness()
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
     const wrapper = await ctx.mountIt()
     await flushPromises()
 
@@ -955,11 +1193,18 @@ describe('AccountList page', () => {
      * This case locks the button to its own dedicated stub
      * marker so a future regression that swaps the binding back
      * fails loudly.
+     *
+     * D8e introduced the `v-if="showToolsButton"` gate that only
+     * renders the button for the three whitelisted gameCodes.
+     * Seed MapleStory TW (`610074_T9` ∈ TOOLS_GAME_CODES) so the
+     * button is reachable; the visibility-by-gameCode invariant
+     * is exercised by the dedicated D8e cases below.
      */
     vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const ctx = buildHarness()
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
     const wrapper = await ctx.mountIt()
     await flushPromises()
 
@@ -1602,5 +1847,536 @@ describe('AccountList page', () => {
     expect(wrapper.find('[data-test="account-list-rows"]').exists()).toBe(true)
     /* Balance display collapsed to the WPF-parity placeholder. */
     expect(wrapper.get('[data-test="account-list-balance-value"]').text()).toBe('—')
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  D8c — mount-time game setup pipeline                             */
+  /* ---------------------------------------------------------------- */
+
+  /*
+   * D8c locks down the mount-time `setupGameOnMount` orchestration —
+   * load catalogue → restore `loginGame` from Config.xml → either
+   * delegate to `selectActiveGame` (saved value valid) or auto-open
+   * the picker + paint the default-session account list.
+   *
+   * The four cases below cover every branch of the flow chart in
+   * `setupGameOnMount`'s docblock (`pages/AccountList.vue`):
+   *
+   * 1. Catalogue load fails              → fall through to loadList
+   * 2. No saved loginGame                → loadList + open picker
+   * 3. Saved loginGame matches session   → selectActiveGame skips
+   *                                        setActiveService IPC
+   * 4. Saved loginGame differs from sess → selectActiveGame fires
+   *                                        setActiveService + clears
+   *                                        stale account selection
+   */
+
+  it('D8c: catalogue load fails → falls through to loadList with default session (no picker)', async () => {
+    /*
+     * Mirrors `setupGameOnMount` step 2: when `game.loadGames()`
+     * leaves the store in `loadState === 'error'`, the page bails
+     * out to the default-session `loadList()` so the user still
+     * sees the account list (with the previously-selected game
+     * the backend session is pinned to). The picker stays closed
+     * because surfacing it on top of an error state would be a UX
+     * regression — `gameStore.loadGames` already toasted the
+     * structured cause.
+     */
+    vi.mocked(commands.listGames).mockReturnValueOnce(
+      err({ code: 'beanfun.transport', message: 'catalogue down', details: null }),
+    )
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(commands.listGames).toHaveBeenCalledTimes(1)
+    /* loadList ran with the default session — account list rendered. */
+    expect(commands.getAccounts).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-test="account-list-rows"]').exists()).toBe(true)
+    /* Picker stayed closed (the GameList stub mounts behind v-if="auth.session"
+     * — when present, its `data-visible` attribute reads "false"). */
+    const picker = wrapper.find('[data-test="game-list-stub"]')
+    expect(picker.exists()).toBe(true)
+    expect(picker.attributes('data-visible')).toBe('false')
+    /* setActiveService was NOT called — error path doesn't reach selectActiveGame. */
+    expect(commands.setActiveService).not.toHaveBeenCalled()
+  })
+
+  it('D8c: no saved loginGame → opens picker AND fires loadList in parallel', async () => {
+    /*
+     * Mirrors the "step 5" branch — `loginGame` config key absent,
+     * so the page can't restore a previous selection. WPF would
+     * fall through to the default item; the SPA equivalent shows
+     * the picker so the user can pick explicitly while still
+     * painting the default-session account list behind it (no
+     * blank screen during the picker decision).
+     */
+    vi.mocked(commands.listGames).mockReturnValueOnce(
+      ok({
+        ini: { '610074_T9': MAPLESTORY_TW_INI },
+        services: [MAPLESTORY_TW],
+      }),
+    )
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    /* Config has NO `loginGame` entry — the default state. */
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    /* Catalogue loaded + account list painted. */
+    expect(commands.listGames).toHaveBeenCalledTimes(1)
+    expect(commands.getAccounts).toHaveBeenCalledTimes(1)
+    /* Picker auto-opened. */
+    const picker = wrapper.get('[data-test="game-list-stub"]')
+    expect(picker.attributes('data-visible')).toBe('true')
+    /* GameList received `region` prop from `auth.session.region`. */
+    expect(picker.attributes('data-region')).toBe('TW')
+    /* setActiveService NOT called — no saved value to restore. */
+    expect(commands.setActiveService).not.toHaveBeenCalled()
+  })
+
+  it('D8c: saved loginGame matches session → loads accounts WITHOUT setActiveService IPC', async () => {
+    /*
+     * Cold-mount optimisation guard. When the saved `loginGame`
+     * resolves to the same `(service_code, service_region)` pair
+     * the backend session is already pinned to (the common case
+     * for a returning user who logged into the same game), the
+     * `setActiveService` IPC is a wasted round-trip. The page's
+     * `sameAsSession` branch in `selectActiveGame` skips the IPC
+     * but still runs `loadList` so the first paint always shows
+     * data (or the empty state).
+     */
+    vi.mocked(commands.listGames).mockReturnValueOnce(
+      ok({
+        ini: { '610074_T9': MAPLESTORY_TW_INI },
+        services: [MAPLESTORY_TW],
+      }),
+    )
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    /* Session pinned to the same gameCode the saved value points at. */
+    useAuthStore().session = { ...FAKE_SESSION, service_code: '610074', service_region: 'T9' }
+    useConfigStore().entries['loginGame'] = '610074_T9'
+
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(commands.listGames).toHaveBeenCalledTimes(1)
+    /* No backend swap needed. */
+    expect(commands.setActiveService).not.toHaveBeenCalled()
+    /* Account list still loaded (selectActiveGame's `refresh: true`). */
+    expect(commands.getAccounts).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-test="account-list-rows"]').exists()).toBe(true)
+    /* Picker stays closed — the saved value resolved cleanly. */
+    expect(wrapper.get('[data-test="game-list-stub"]').attributes('data-visible')).toBe('false')
+  })
+
+  it('D8c: saved loginGame differs from session → fires setActiveService + clears stale selection + reloads', async () => {
+    /*
+     * The "user switched games last session" path. Saved
+     * `loginGame=610099_T9` (KartRider) but the session is still
+     * pinned to MapleStory's `610074_T9` (the post-login default).
+     * `selectActiveGame` must:
+     *   1. Persist `loginGame` (idempotent here).
+     *   2. Call `setActiveService` so the backend session matches
+     *      the saved selection (the next account-list IPC needs
+     *      the right pair).
+     *   3. Clear any stale `account.selectedSid`.
+     *   4. Run `loadList` so the account list reflects the new
+     *      game.
+     */
+    vi.mocked(commands.listGames).mockReturnValueOnce(
+      ok({
+        ini: {
+          '610074_T9': MAPLESTORY_TW_INI,
+          '610099_T9': KARTRIDER_TW_INI,
+        },
+        services: [MAPLESTORY_TW, KARTRIDER_TW],
+      }),
+    )
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = { ...FAKE_SESSION, service_code: '610074', service_region: 'T9' }
+    useConfigStore().entries['loginGame'] = '610099_T9'
+    /* Stale selection from the previous session. */
+    useAccountStore().selectedSid = 'sid-stale'
+
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    /* (a) Backend session updated to the saved selection. */
+    expect(commands.setActiveService).toHaveBeenCalledTimes(1)
+    expect(commands.setActiveService).toHaveBeenCalledWith('610099', 'T9')
+    /* (b) Account list reloaded for the new game. */
+    expect(commands.getAccounts).toHaveBeenCalledTimes(1)
+    /* (c) Stale selection cleared. */
+    expect(useAccountStore().selectedSid).toBeNull()
+    /* (d) Game switch reflected in the gameStore. */
+    expect(useGameStore().selectedGameCode).toBe('610099_T9')
+    /* Picker stays closed — the saved value resolved cleanly. */
+    expect(wrapper.get('[data-test="game-list-stub"]').attributes('data-visible')).toBe('false')
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  D8d — game info bar real name + image                            */
+  /* ---------------------------------------------------------------- */
+
+  it('D8d: game info bar shows the active game name + region-aware banner image', async () => {
+    /*
+     * Mirrors WPF `MainWindow.gameName.Content = selectedGame.name`
+     * (L662) plus the `gameImage.Source = imageBase + small_image_name`
+     * binding. The SPA derives both via the `gameNameDisplay` /
+     * `gameImageUrl` computeds — assert the rendered DOM matches
+     * the gameStore selection rather than the placeholder
+     * (`accountList.gamePlaceholder`).
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="account-list-game-name"]').text()).toBe('MapleStory TW')
+
+    const img = wrapper.get('[data-test="account-list-game-image"]')
+    /*
+     * TW base URL + small_image_name — must match `imageUrl` exactly
+     * so a future protocol / base-URL change in `stores/game.ts`
+     * surfaces here as a red test rather than silently 404'ing in
+     * the WebView.
+     */
+    expect(img.attributes('src')).toBe(
+      'https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/610074_small.jpg',
+    )
+    expect(img.attributes('alt')).toBe('MapleStory TW')
+  })
+
+  it('D8d: no selected game → falls back to placeholder name + generic icon (no <img>)', async () => {
+    /*
+     * Cold-mount surface: gameStore is empty, the page renders the
+     * `accountList.gamePlaceholder` copy and the generic VideoPlay
+     * glyph instead of an `<img>`. Lock this so a regression that
+     * accidentally renders an empty-src `<img>` (which would
+     * 404-spam the WebView console) trips the test.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    /* No `seedActiveGame` — gameStore stays empty. */
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="account-list-game-name"]').text()).toBe(
+      i18nMessages['zh-TW'].accountList.gamePlaceholder,
+    )
+    expect(wrapper.find('[data-test="account-list-game-image"]').exists()).toBe(false)
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  D8e — Tools button conditional visibility                        */
+  /* ---------------------------------------------------------------- */
+
+  it('D8e: Tools button hidden for a game outside TOOLS_GAME_CODES (KartRider)', async () => {
+    /*
+     * KartRider's `610099_T9` is NOT in the WPF whitelist
+     * (`MainWindow.xaml.cs` L1710-1713 — only MapleStory TW /
+     * MapleStory M / MapleStory R have tools windows). The
+     * `v-if="showToolsButton"` gate must keep the button out of
+     * the DOM entirely.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = { ...FAKE_SESSION, service_code: '610099', service_region: 'T9' }
+    seedActiveGame(KARTRIDER_TW, KARTRIDER_TW_INI)
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="account-list-tools"]').exists()).toBe(false)
+  })
+
+  it('D8e: Tools button visible for a game inside TOOLS_GAME_CODES (MapleStory TW)', async () => {
+    /*
+     * `610074_T9` IS in the WPF whitelist — button must render
+     * and be reachable. Pairs with the negative case above to
+     * lock the gate from both sides.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="account-list-tools"]').exists()).toBe(true)
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  D8f — Start Game pipeline (direct vs OTP+launch chain)           */
+  /* ---------------------------------------------------------------- */
+
+  it('D8f: Start Game direct branch (login_action_type=0) → runGame() with empty creds', async () => {
+    /*
+     * Mirrors WPF `Pages/AccountList.xaml.cs::Button_Click` L57-63:
+     *
+     *   if ((tradLogin && login_action_type == 1) || login_action_type == 0)
+     *       runGame();
+     *
+     * `login_action_type=0` always takes the direct branch
+     * regardless of `tradLogin`. Assert (a) `getOtp` is NOT
+     * called, (b) `launchGame` IS called with empty account/
+     * password (the game's own launcher prompts the user), and
+     * (c) the path resolution + Start Mode pipeline ran.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+    vi.mocked(commands.detectGamePath).mockReturnValueOnce(ok('C:\\Beanfun\\MapleStory.exe'))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    seedActiveGame(MAPLESTORY_TW, { ...MAPLESTORY_TW_INI, login_action_type: '0' })
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    await wrapper.get('[data-test="account-list-start"]').trigger('click')
+    await flushPromises()
+
+    /* OTP IPC not fired — direct branch skips it. */
+    expect(commands.getOtp).not.toHaveBeenCalled()
+    /* Path detection ran. */
+    expect(commands.detectGamePath).toHaveBeenCalledTimes(1)
+    expect(commands.detectGamePath).toHaveBeenCalledWith(
+      '610074_T9',
+      MAPLESTORY_TW_INI.dir_value_name,
+      MAPLESTORY_TW_INI.dir_reg,
+    )
+    /* launchGame called with empty creds + Auto mode (default config). */
+    expect(commands.launchGame).toHaveBeenCalledTimes(1)
+    expect(commands.launchGame).toHaveBeenCalledWith(
+      'C:\\Beanfun\\MapleStory.exe',
+      'Auto',
+      MAPLESTORY_TW_INI.exe,
+      '',
+      '',
+    )
+  })
+
+  it('D8f: Start Game OTP+launch chain (login_action_type=1, tradLogin=false) → getOtp → runGame(account, otp)', async () => {
+    /*
+     * Mirrors WPF `MainWindow.xaml.cs::getOtpWorker_RunWorkerCompleted`
+     * L2152-2155 (`!tradLogin && login_action_type == 1`). The
+     * Start Game button routes through `handleGetOtp`, which
+     * after the OTP IPC succeeds chains directly into `runGame`
+     * with the account + OTP — auto-paste and clipboard branches
+     * are skipped because the launcher binary itself receives
+     * the credentials via `command_line` substitution.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.getOtp).mockReturnValueOnce(ok('OTP-CHAIN-123'))
+    vi.mocked(commands.detectGamePath).mockReturnValueOnce(ok('C:\\Beanfun\\MapleStory.exe'))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    seedActiveGame(MAPLESTORY_TW, { ...MAPLESTORY_TW_INI, login_action_type: '1' })
+    /* Disable tradLogin so the OTP+launch chain is the active branch. */
+    useConfigStore().entries['tradLogin'] = 'false'
+    useAccountStore().selectedSid = 'sid-1'
+
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    await wrapper.get('[data-test="account-list-start"]').trigger('click')
+    await flushPromises()
+
+    /* getOtp fired with the selected account snapshot. */
+    expect(commands.getOtp).toHaveBeenCalledTimes(1)
+    expect(commands.getOtp).toHaveBeenCalledWith(SERVICE_ACCOUNT)
+    /* autoPaste NOT called — chain bypasses it for command-line substitution. */
+    expect(commands.autoPaste).not.toHaveBeenCalled()
+    /* launchGame called with account + OTP. */
+    expect(commands.launchGame).toHaveBeenCalledTimes(1)
+    expect(commands.launchGame).toHaveBeenCalledWith(
+      'C:\\Beanfun\\MapleStory.exe',
+      'Auto',
+      MAPLESTORY_TW_INI.exe,
+      'sid-1',
+      'OTP-CHAIN-123',
+    )
+  })
+
+  it('D8f: Start Game button is disabled when no game is selected (UI guard)', async () => {
+    /*
+     * Mirrors WPF UI binding (Start Game button disabled until
+     * `selectedGameChanged()` populates the gameCode). The SPA
+     * keeps the button always-rendered (the layout would jump on
+     * appear/disappear) but the `:disabled="startGameDisabled"`
+     * binding makes the affordance unreachable when no game is
+     * active. Ensuring the button is disabled — rather than the
+     * click handler's runtime fallback — pins the surface the
+     * user actually sees: a greyed-out button with cursor:
+     * not-allowed, no toast spam from accidental clicks. The
+     * runtime `GameSelected` guard inside `handleStartGame` is
+     * a belt-and-braces defence for any future caller that
+     * bypasses the binding (programmatic click, e2e harness,
+     * etc.); it doesn't need its own unit case because the
+     * default `setupGameOnMount` no-game cold path already
+     * exercises every other no-game guard in the page.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    /* No `seedActiveGame` — gameStore stays empty. */
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    const startBtn = wrapper.get('[data-test="account-list-start"]')
+    expect((startBtn.element as HTMLButtonElement).disabled).toBe(true)
+    /*
+     * No IPC is fired even though Pinia is in its initial state —
+     * proves the disabled binding is the only thing keeping the
+     * pipeline gated, with no spurious mount-time launch attempt.
+     */
+    expect(commands.getOtp).not.toHaveBeenCalled()
+    expect(commands.detectGamePath).not.toHaveBeenCalled()
+    expect(commands.launchGame).not.toHaveBeenCalled()
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  D8g — Add Account branching (connected vs unconnected)           */
+  /* ---------------------------------------------------------------- */
+
+  it('D8g: Add Account on an unconnected game opens UnconnectedGameAddAccount (NOT AddServiceAccount)', async () => {
+    /*
+     * Mirrors WPF `btnAddServiceAccount_Click`
+     * (`AccountList.xaml.cs` L117-135) which forks on
+     * `UnconnectedGame` (the same predicate driving
+     * `useGameStore.isUnconnectedGame`). The connected-game
+     * branch is exercised by the existing D3 wiring test above
+     * (now seeded with MapleStory TW); this case is the dual.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = { ...FAKE_SESSION, service_code: '610153', service_region: 'TN' }
+    seedActiveGame(MABINOGI_TN, MABINOGI_TN_INI)
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    /* Both stubs start hidden. */
+    expect(wrapper.get('[data-test="add-service-account-stub"]').attributes('data-visible')).toBe(
+      'false',
+    )
+    expect(wrapper.get('[data-test="unconnected-add-stub"]').attributes('data-visible')).toBe(
+      'false',
+    )
+
+    await wrapper.get('[data-test="account-list-add"]').trigger('click')
+    await flushPromises()
+
+    /* Unconnected dialog opened, connected one stayed closed. */
+    expect(wrapper.get('[data-test="unconnected-add-stub"]').attributes('data-visible')).toBe(
+      'true',
+    )
+    expect(wrapper.get('[data-test="add-service-account-stub"]').attributes('data-visible')).toBe(
+      'false',
+    )
+  })
+
+  it('D8g: Add Account with no selected game → MsgSelectGame warning, no dialog opens', async () => {
+    /*
+     * Same defensive guard as Start Game above. The mockup keeps
+     * the button always-visible so the layout doesn't jump; the
+     * runtime gate surfaces the WPF-locale warning rather than
+     * silently no-op'ing.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    /* No `seedActiveGame` — gameStore stays empty. */
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    await wrapper.get('[data-test="account-list-add"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="add-service-account-stub"]').attributes('data-visible')).toBe(
+      'false',
+    )
+    expect(wrapper.get('[data-test="unconnected-add-stub"]').attributes('data-visible')).toBe(
+      'false',
+    )
+    expect(ElMessage.warning).toHaveBeenCalledWith(i18nMessages['zh-TW'].GameSelected)
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  D8h — per-row Change Password (unconnected only)                 */
+  /* ---------------------------------------------------------------- */
+
+  it('D8h: Change Password row item is hidden for connected games (MapleStory TW)', async () => {
+    /*
+     * Mirrors WPF `m_ChangePassword.Visibility` (toggled by
+     * `selectedGameChanged()` on the same `UnconnectedGame`
+     * predicate). Connected games delegate password changes to
+     * the Beanfun member centre web flow opened from the page-
+     * level chrome — the per-row affordance only exists for
+     * unconnected games.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    /* Other menu items still rendered — only the change-password one is gated. */
+    expect(wrapper.find('[data-test="account-row-change-alias-sid-1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="account-row-change-password-sid-1"]').exists()).toBe(false)
+  })
+
+  it('D8h: Change Password row item visible for unconnected games + opens dialog with the row index', async () => {
+    /*
+     * Mirrors WPF `m_ChangePassword_Click` (`AccountList.xaml.cs`
+     * L227-235): `UnconnectedGame_ChangePassword(this,
+     * list_Account.SelectedIndex)`. The SPA captures the row's
+     * 0-based index in `account.serviceAccounts` at menu-trigger
+     * time so a downstream selection / reorder can't misroute
+     * the change-password POST.
+     *
+     * Pick row 2 (sid-2 → index 1) so the assertion catches a
+     * regression that hard-codes index 0 instead of using
+     * `findIndex(sid)`.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    useAuthStore().session = { ...FAKE_SESSION, service_code: '610153', service_region: 'TN' }
+    seedActiveGame(MABINOGI_TN, MABINOGI_TN_INI)
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    const stub = wrapper.get('[data-test="unconnected-changepw-stub"]')
+    expect(stub.attributes('data-visible')).toBe('false')
+    expect(stub.attributes('data-account-index')).toBe('-1')
+
+    /* Menu item exists (unconnected game) — click it. */
+    await wrapper.get('[data-test="account-row-change-password-sid-2"]').trigger('click')
+    await flushPromises()
+
+    expect(stub.attributes('data-visible')).toBe('true')
+    /* sid-2 is index 1 in POPULATED_LIST. */
+    expect(stub.attributes('data-account-index')).toBe('1')
   })
 })

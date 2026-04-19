@@ -103,6 +103,7 @@ import {
   DocumentCopy,
   EditPen,
   InfoFilled,
+  Key,
   Message,
   MoreFilled,
   Operation,
@@ -118,7 +119,8 @@ import draggable from 'vuedraggable'
 import { useAuthStore } from '../stores/auth'
 import { useAccountStore } from '../stores/account'
 import { useConfigStore } from '../stores/config'
-import { commands, type ServiceAccount } from '../types/bindings'
+import { useGameStore, gameCodeOf, imageUrl } from '../stores/game'
+import { commands, type GameStartMode, type ServiceAccount } from '../types/bindings'
 import {
   CommandInvocationError,
   safeInvoke,
@@ -128,7 +130,10 @@ import {
 import AddServiceAccount from '../windows/AddServiceAccount.vue'
 import ChangeServiceAccountDisplayName from '../windows/ChangeServiceAccountDisplayName.vue'
 import CopyBox from '../windows/CopyBox.vue'
+import GameList from '../windows/GameList.vue'
 import ServiceAccountInfo from '../windows/ServiceAccountInfo.vue'
+import UnconnectedGameAddAccount from '../windows/UnconnectedGame_AddAccount.vue'
+import UnconnectedGameChangePassword from '../windows/UnconnectedGame_ChangePassword.vue'
 
 defineOptions({ name: 'AccountList' })
 
@@ -144,6 +149,17 @@ const account = useAccountStore()
  * not a generic settings object).
  */
 const configStore = useConfigStore()
+/*
+ * D8 — game store wire-in. Aliased to `game` (matching the
+ * `account` / `auth` / `configStore` alias style used above).
+ * Required for: per-game catalogue (game info bar name+image),
+ * conditional Tools button visibility, isUnconnectedGame branch
+ * for Add Account & Change Password, INI lookup for the Start
+ * Game pipeline (`exe` → command-line template, `login_action_type`
+ * → direct/OTP branch, `dir_value_name`/`dir_reg` → game-path
+ * detection).
+ */
+const game = useGameStore()
 
 /* --------------- service-account list state --------------- */
 
@@ -199,7 +215,25 @@ async function loadList(): Promise<void> {
 }
 
 onMounted(() => {
-  void loadList()
+  /*
+   * D8 — defer the initial `loadList()` until `setupGameOnMount`
+   * has resolved which game to make active. Without the deferral,
+   * a saved `loginGame` that differs from the post-login session
+   * default would trigger TWO consecutive `getServiceAccounts`
+   * round-trips (one for the default, one after `setActiveService`
+   * swaps the session pair) — the user would see the spinner
+   * twice and a brief flash of the wrong game's accounts. The
+   * deferred path always lands on a single fetch:
+   *
+   * - saved loginGame valid       → setupGameOnMount → selectActiveGame → loadList
+   * - saved loginGame invalid     → setupGameOnMount → loadList + open picker
+   * - catalogue load fails        → setupGameOnMount → loadList (with session defaults)
+   *
+   * Mirrors WPF login + `MainWnd_Loaded` + `selectedGameChanged()`
+   * single-`GetAccounts` cadence (`MainWindow.xaml.cs` L520-540 +
+   * L661-674) — WPF doesn't double-fetch either.
+   */
+  void setupGameOnMount()
   /*
    * D11: lazy auto-fetch the Gash balance once on mount so the
    * displayed value matches WPF UX (login → AccountList paint →
@@ -285,24 +319,259 @@ function makeStub(label: string): () => void {
   }
 }
 
-const handleStartGame = makeStub('Start Game')
-const handleChangeGame = makeStub('Change Game (game switcher)')
-/**
- * WPF parity: `btn_Tools_Click` (`AccountList.xaml.cs` L237-249)
- * opens a game-specific tools window (`MapleTools` for `610074_T9` /
- * `610075_T9`, `KartTools` for `610096_TE`). The launcher and its
- * conditional visibility (WPF only Visible for those three game
- * codes — `MainWindow.xaml.cs` L1710-1713) require P12.3's game
- * switching infrastructure to know which `service_code` /
- * `service_region` is active. Until that lands, this is a `console.warn`
- * stub. Kept distinct from {@link handleChangeGame} to mirror the
- * WPF call-site split — Tools is a per-game launcher, ChangeGame is
- * the game switcher; collapsing them onto one handler would hide the
- * eventual P12.3 wire-up and the game-code visibility requirement.
+/*
+ * P12.3 D8: `handleStartGame`, `handleChangeGame`, `handleAddAccount`,
+ * and `handleChangePassword` are the **real** wire-ups for the game
+ * switcher + start-game + add-account + change-password flows
+ * (defined further down in the file). The Tools button's actual
+ * click handler still goes through this stub — the per-game tools
+ * windows (`MapleTools` for MapleStory codes, `KartTools` for
+ * KartRider) are P12.4 scope; P12.3 D8e only ships the conditional
+ * **visibility** of the button (see `showToolsButton` below).
  */
 const handleTools = makeStub('Tools button (game-specific tools window)')
 const handleMemberCenter = makeStub('Member Center link')
 const handleCustomerService = makeStub('Customer Service link')
+
+/* --------------- D8c/D8d/D8e — game info bar + Tools visibility --------------- */
+
+/**
+ * Display name shown on the game info bar. Falls back to the
+ * placeholder text when no game is selected (initial paint, while
+ * `setupGameOnMount` is hydrating the catalogue, or after the user
+ * dismisses the picker without choosing). Mirrors WPF
+ * `MainWindow.gameName.Content` (L662) which writes
+ * `selectedGame.name` after every `selectedGameChanged()`.
+ */
+const gameNameDisplay = computed<string>(() => {
+  return game.selectedGame?.name ?? t('accountList.gamePlaceholder')
+})
+
+/**
+ * Region-aware banner image URL for the current selection.
+ *
+ * Returns an empty string when no game is selected so the template
+ * `v-if="gameImageUrl"` gate hides the `<img>` cleanly without
+ * emitting a 404 to the WebView console. WPF used the small image
+ * variant (`small_image_name`) on the AccountList header bar (per
+ * the D8 mockup parity reference); we keep that field choice — the
+ * "large" / "xlarge" variants are reserved for the GameList grid /
+ * LoginPage hero respectively.
+ */
+const gameImageUrl = computed<string>(() => {
+  const selected = game.selectedGame
+  if (!selected) return ''
+  const region = auth.session?.region
+  if (!region) return ''
+  return imageUrl(selected.small_image_name, region)
+})
+
+/**
+ * D8e — Tools button conditional visibility.
+ *
+ * WPF `MainWindow.xaml.cs` L1710-1713 toggles `btn_Tools.Visibility`
+ * on every `selectedGameChanged()`:
+ *
+ * ```cs
+ * accountList.btn_Tools.Visibility =
+ *   (gameCode == "610074_T9" || gameCode == "610075_T9" || gameCode == "610096_TE")
+ *     ? Visibility.Visible : Visibility.Collapsed;
+ * ```
+ *
+ * The set is hard-coded in WPF (no server-side configuration), so
+ * we mirror it as a frozen literal here. Adding a new tools-bearing
+ * game is a one-line edit.
+ *
+ * # Why a Set (not Array.includes)
+ *
+ * O(1) membership check vs. O(n) for `[...].includes(...)` — the
+ * size is small enough that the perf delta is irrelevant, but the
+ * `Set` form better signals intent ("this is a membership test, not
+ * an ordered collection") and matches the {@link UNCONNECTED_GAME_CODES}
+ * convention from `stores/game.ts`.
+ */
+const TOOLS_GAME_CODES: ReadonlySet<string> = new Set(['610074_T9', '610075_T9', '610096_TE'])
+
+const showToolsButton = computed<boolean>(() => {
+  if (game.selectedGameCode === null) return false
+  return TOOLS_GAME_CODES.has(game.selectedGameCode)
+})
+
+/* --------------- D8c — game switcher + active-service pipeline --------------- */
+
+/**
+ * `<GameList />` modal visibility. Driven by either:
+ *
+ * - The Change Game button on the game info bar (user-initiated).
+ * - The mount-time auto-open path inside {@link setupGameOnMount}
+ *   when no valid `loginGame` config entry resolves against the
+ *   loaded catalogue.
+ */
+const gameListVisible = ref(false)
+
+function handleChangeGame(): void {
+  gameListVisible.value = true
+}
+
+/**
+ * Canonical "switch the active game" pipeline. Mirrors WPF
+ * `MainWindow.xaml.cs::selectedGameChanged()` (L661-680) end-to-end:
+ *
+ * | Step                                | WPF site                                   |
+ * |-------------------------------------|--------------------------------------------|
+ * | Update frontend `selectedGameCode`  | `MainWindow.service_code/region` writes    |
+ * | Persist `loginGame` to Config.xml   | `ConfigAppSettings.SetValue("loginGame",…)` (L661) |
+ * | Sync backend session pair           | (no equivalent — WPF mutates the field directly) |
+ * | Clear stale account selection       | `redrawSAccountList` → `SelectedIndex = -1` |
+ * | Re-fetch account list               | `bfClient.GetAccounts(code, region)` (L638) |
+ *
+ * # Why `setActiveService` is gated on `sameAsSession`
+ *
+ * On the cold-mount path (`setupGameOnMount` resolves saved
+ * `loginGame` to the same pair already on the session), the
+ * backend session is already correct and a `setActiveService`
+ * round-trip would be a wasted IPC. Skipping it on the equality
+ * branch is purely an optimisation — the swap is idempotent on the
+ * backend side, so a stray call would not corrupt state.
+ *
+ * # Why `loadList()` runs unconditionally when `refresh === true`
+ *
+ * Even when the session pair is unchanged, the caller usually
+ * wants to re-paint the account list (e.g. cold mount needs the
+ * first paint regardless of swap). Callers that don't need the
+ * refresh (none in the current code base, but reserved for future
+ * background sync paths) can pass `refresh = false`.
+ *
+ * # Persisted Config.xml is best-effort
+ *
+ * `configStore.set` toasts on failure via `wrapCommand`; we don't
+ * re-catch here because a Config.xml write failure is non-fatal —
+ * the in-memory selection is still correct, and the next
+ * successful write will reconcile. Mirrors WPF L661 `SetValue`
+ * which silently swallows IO errors.
+ */
+async function selectActiveGame(
+  serviceCode: string,
+  serviceRegion: string,
+  refresh: boolean,
+): Promise<void> {
+  game.selectGame(serviceCode, serviceRegion)
+  /*
+   * Persist before any async work so a subsequent crash / window
+   * close still restores the user's last choice on next boot —
+   * matches WPF's "set first, then act" ordering at L661.
+   */
+  await configStore.set('loginGame', gameCodeOf(serviceCode, serviceRegion))
+
+  const session = auth.session
+  const sameAsSession =
+    session !== null &&
+    session.service_code === serviceCode &&
+    session.service_region === serviceRegion
+
+  if (!sameAsSession) {
+    try {
+      await wrapCommand(commands.setActiveService(serviceCode, serviceRegion))
+    } catch {
+      /*
+       * `wrapCommand` already toasted the structured error. Bail
+       * without refreshing — running `loadList()` against the old
+       * backend session would paint the previous game's accounts,
+       * which is a worse UX than leaving the list empty.
+       */
+      return
+    }
+  }
+
+  /*
+   * Clear stale per-account selection so the OTP / Start Game
+   * affordances don't carry over a sid that is unlikely to be
+   * present in the new game's account list. Mirrors WPF
+   * `redrawSAccountList`'s `SelectedIndex = -1` reset.
+   */
+  account.selectedSid = null
+
+  if (refresh) {
+    await loadList()
+  }
+}
+
+/**
+ * `<GameList @select>` handler. The dialog only emits this event
+ * for *different* picks (mirrors WPF's `if (service_code != ... ||
+ * service_region != ...)` early-exit), so this path always runs
+ * the full `selectActiveGame` pipeline including the backend swap
+ * and account-list refresh.
+ */
+function handleGameSelected(serviceCode: string, serviceRegion: string): void {
+  void selectActiveGame(serviceCode, serviceRegion, true)
+}
+
+/**
+ * Mount-time game selection bootstrap. Composed into `onMounted`
+ * above; runs once per AccountList mount.
+ *
+ * # Sequence
+ *
+ * 1. Load the per-region game catalogue. Idempotent — the store
+ *    short-circuits if a previous mount in the same session
+ *    already populated it.
+ * 2. If the catalogue load failed (`game.loadState === 'error'`),
+ *    fall back to loading the account list with whatever the
+ *    backend session was seeded with at login time. The
+ *    `gameStore.loadGames` action already toasted the error, so
+ *    the user sees a structured complaint without the page
+ *    bricking.
+ * 3. Resolve `loginGame` from Config.xml. WPF stores it as
+ *    `<service_code>_<service_region>` (`MainWindow.xaml.cs`
+ *    L520-540 / L661); we use {@link gameCodeOf} on the way in
+ *    and `lastIndexOf('_')` on the way out so a future game whose
+ *    code contains an underscore (none exist today) doesn't
+ *    silently round-trip incorrectly.
+ * 4. If `loginGame` resolves to a game in the loaded catalogue,
+ *    delegate to {@link selectActiveGame} (which handles the
+ *    backend swap + account refresh).
+ * 5. Otherwise (no saved value, malformed value, or value not in
+ *    the loaded catalogue), open the picker dialog AND kick off a
+ *    default-session `loadList()` so the user sees the empty /
+ *    default-game account list while the picker is open. Mirrors
+ *    WPF's `selectedGameChanged()` falling through to the default
+ *    item when no `loginGame` matches.
+ */
+async function setupGameOnMount(): Promise<void> {
+  await game.loadGames()
+
+  if (game.loadState === 'error') {
+    void loadList()
+    return
+  }
+
+  const saved = configStore.get('loginGame') ?? ''
+  const session = auth.session
+
+  if (saved && session) {
+    const sep = saved.lastIndexOf('_')
+    if (sep > 0) {
+      const code = saved.substring(0, sep)
+      const region = saved.substring(sep + 1)
+      const found = game.services.find(
+        (s) => s.service_code === code && s.service_region === region,
+      )
+      if (found) {
+        await selectActiveGame(code, region, true)
+        return
+      }
+    }
+  }
+
+  /*
+   * Picker auto-open + default-session account paint. The two run
+   * in parallel because they're independent — neither depends on
+   * the other completing.
+   */
+  void loadList()
+  gameListVisible.value = true
+}
 
 /* --------------- Gash balance refresh (D11) --------------- */
 
@@ -391,32 +660,458 @@ const formattedRemainPoint = computed(() => {
   return t('GashRemain', [`${value}${inGameSuffix}`])
 })
 
-/* --------------- add service account (D3) --------------- */
+/* --------------- add service account (D3 + D8g unconnected branch) --------------- */
 
 /**
  * `<AddServiceAccount />` modal visibility. Driven by the Plus
- * button at the bottom of the list.
- *
- * # WPF deviation: unconnected-game branch deferred
- *
- * WPF `btnAddServiceAccount_Click` (`AccountList.xaml.cs` L117-135)
- * picks between two dialogs based on `service_code/region`:
- *
- * - `610153/TN` (`楓之谷 R` legacy) or `610085/TC` (the
- *   "TC unconnected game") → `UnconnectedGame_AddAccount`
- * - everything else → `AddServiceAccount`
- *
- * We don't have a game switcher yet (P12.3), so the only reachable
- * service code is whatever the backend bound to the active
- * session. Until the game switcher lands, we always open
- * `AddServiceAccount` — when the switcher ships, this handler will
- * gain the same `service_code/region` discriminator and route to a
- * future `UnconnectedGameAddAccount.vue` modal.
+ * button at the bottom of the list **only** when the active game
+ * is a *connected* game. Unconnected games (per
+ * {@link UNCONNECTED_GAME_CODES}) take the {@link unconnectedAddVisible}
+ * branch instead — see {@link handleAddAccount} for the dispatch.
  */
 const addAccountVisible = ref(false)
 
+/**
+ * D8g — `<UnconnectedGameAddAccount />` modal visibility. Mirrors
+ * the WPF `btnAddServiceAccount_Click` second branch
+ * (`AccountList.xaml.cs` L117-135) which opens
+ * `UnconnectedGame_AddAccount` when the active service is in
+ * {@link UNCONNECTED_GAME_CODES}.
+ */
+const unconnectedAddVisible = ref(false)
+
+/**
+ * Add Service Account button handler. Branches between the two
+ * dialogs on {@link useGameStore.isUnconnectedGame}, mirroring WPF
+ * `btnAddServiceAccount_Click` (L117-135) verbatim.
+ *
+ * # Defensive guard
+ *
+ * If no game is selected yet (cold mount, picker still open),
+ * surface `MsgSelectGame` and bail. WPF doesn't need this guard
+ * because its UI binding disables the button until
+ * `selectedGameChanged()` fires; the SPA mockup keeps the button
+ * always-visible (the game-info-bar layout would jump if it
+ * appeared/disappeared), so we add the runtime gate.
+ */
 function handleAddAccount(): void {
-  addAccountVisible.value = true
+  if (!game.selectedGame) {
+    ElMessage.warning(t('GameSelected'))
+    return
+  }
+  if (game.isUnconnectedGame) {
+    unconnectedAddVisible.value = true
+  } else {
+    addAccountVisible.value = true
+  }
+}
+
+/**
+ * Refresh the account list once an unconnected-game add succeeds.
+ * Mirrors WPF `redrawSAccountList()` after the dialog closes (the
+ * regular `AddServiceAccount.vue` path already wires a similar
+ * refresh inside its own success handler — see that component's
+ * docblock). Failures stay silent here because `loadList`'s own
+ * error path already toasts via `wrapCommand`.
+ */
+function handleUnconnectedAccountCreated(): void {
+  void loadList()
+}
+
+/* --------------- D8h — per-row change password (unconnected only) --------------- */
+
+/**
+ * `<UnconnectedGameChangePassword />` modal visibility + the
+ * `accountIndex` prop the dialog forwards to the backend.
+ *
+ * Mirrors WPF `m_ChangePassword_Click` (`AccountList.xaml.cs`
+ * L227-235) which opens `UnconnectedGame_ChangePassword(this,
+ * list_Account.SelectedIndex)`. The SPA captures the row at the
+ * menu-trigger time so a downstream selection change can't
+ * misroute the change-password POST.
+ *
+ * # Why one set of refs (not per-row)
+ *
+ * Same rationale as `changeAliasTarget` / `accountInfoTarget`
+ * above — the dialog is modal and the user can only change one
+ * password at a time.
+ */
+const changePasswordVisible = ref(false)
+/**
+ * 0-based row index inside `account.serviceAccounts` that the
+ * dialog should pass to the backend `unconnectedGameChangePassword`
+ * IPC. Mirrors WPF's `list_Account.SelectedIndex` argument. The
+ * default `-1` is a sentinel that should never reach the backend
+ * (the menu item is `v-if`-gated below); kept as a safe init so
+ * TypeScript can prove the prop is always a `number`.
+ */
+const changePasswordAccountIndex = ref(-1)
+
+function handleChangePassword(targetAccount: ServiceAccount): void {
+  const idx = account.serviceAccounts.findIndex((a) => a.sid === targetAccount.sid)
+  if (idx < 0) {
+    /*
+     * Race-condition safeguard: the row was removed from the list
+     * between menu-open and item-click (e.g. a concurrent refresh
+     * dropped it). Surface the same `MsgSelectAccount` toast WPF
+     * uses when `SelectedIndex < 0`.
+     */
+    ElMessage.warning(t('MsgSelectAccount'))
+    return
+  }
+  changePasswordAccountIndex.value = idx
+  changePasswordVisible.value = true
+}
+
+/*
+ * Refresh on `verify-code-sent` mirrors `redrawSAccountList()`
+ * (the WPF parent runs after the dialog `Close()`s). Strictly
+ * speaking the password-reset email step doesn't change the
+ * account list rows, but a refresh re-syncs server-side mutable
+ * fields (`slastusedtime` etc.) the user might rely on. Cheap,
+ * idempotent, and matches WPF's "refresh after every modal close"
+ * convention.
+ */
+function handleChangePasswordSent(): void {
+  void loadList()
+}
+
+/* --------------- D8f — Start Game pipeline --------------- */
+
+/**
+ * Parsed `login_action_type` for the active game's INI entry,
+ * defaulted per WPF `MainWindow.xaml.cs` L547 (empty INI → 8).
+ * Drives the {@link startGameDirect} branch and the OTP-completed
+ * "OTP+launch" chain inside {@link handleGetOtp}.
+ */
+const loginActionType = computed<number>(() => {
+  const raw = game.selectedIni?.login_action_type ?? ''
+  if (raw === '') return 8
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isNaN(parsed) ? 8 : parsed
+})
+
+/**
+ * `tradLogin` (傳統登入) preference. Stored in Config.xml under
+ * key `tradLogin`, default `"true"` per WPF `Settings.xaml.cs`
+ * L68. Case-insensitive parse mirrors the {@link autoPaste}
+ * historical-config defence above.
+ */
+const tradLogin = computed<boolean>(() => {
+  return configStore.getOr('tradLogin', 'true').toLowerCase() === 'true'
+})
+
+/**
+ * `true` when Start Game should bypass the OTP fetch and launch
+ * the game binary directly with empty credentials. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::Button_Click` L57-63:
+ *
+ * ```cs
+ * if ((tradLogin && login_action_type == 1) || login_action_type == 0)
+ *     runGame();              // direct, no creds
+ * else
+ *     btnGetOtp_Click();      // OTP first
+ * ```
+ *
+ * The other path (`!tradLogin && login_action_type == 1`) takes
+ * the OTP route and chains into `runGame(account, otp)` from the
+ * OTP-completed handler — see the {@link handleGetOtp} branch
+ * mirroring `MainWindow.xaml.cs` L2152-2155.
+ */
+const startGameDirect = computed<boolean>(() => {
+  if (!game.selectedIni) return false
+  return (tradLogin.value && loginActionType.value === 1) || loginActionType.value === 0
+})
+
+/**
+ * Whether the OTP+launch chain is the active OTP completion
+ * branch. Mirrors `MainWindow.xaml.cs` L2152
+ * (`!tradLogin && login_action_type == 1`). Used by
+ * {@link handleGetOtp} to chain into {@link runGame} instead of
+ * the auto-paste / clipboard branch.
+ */
+const otpLaunchChain = computed<boolean>(() => {
+  if (!game.selectedIni) return false
+  return !tradLogin.value && loginActionType.value === 1
+})
+
+/**
+ * Start Game button enable rule. Mirrors WPF UI bindings:
+ *
+ * - Game must be selected (no game = no INI = nothing to launch).
+ * - Direct-launch branch: account selection is **not** required
+ *   (the game's own launcher prompts the user for credentials).
+ * - OTP-required branch: account selection is mandatory because
+ *   `bfClient.GetOTP(account, ...)` needs a target.
+ */
+const startGameDisabled = computed<boolean>(() => {
+  if (!game.selectedGame) return true
+  if (startGameDirect.value) return false
+  return account.selectedServiceAccount === null
+})
+
+/**
+ * Map the `startGameMode` config value (string-encoded integer
+ * `"0"` / `"1"` / `"2"` per WPF `MainWindow.xaml.cs` L1837 +
+ * `enum GameStartMode` L32-37) to the backend [`GameStartMode`]
+ * tagged union.
+ *
+ * The backend enum re-serialises as PascalCase string literals
+ * (`"Auto"` / `"Normal"` / `"LocaleRemulator"`) over IPC — mapping
+ * here lets the frontend read the legacy integer config without
+ * the backend having to accept either shape. Defaults to `Auto`
+ * on missing / unparseable input, mirroring WPF's `int.Parse`
+ * fallback path (default `"0"` is `Auto`).
+ */
+function resolveStartMode(): GameStartMode {
+  const raw = configStore.getOr('startGameMode', '0')
+  const parsed = Number.parseInt(raw, 10)
+  if (Number.isNaN(parsed) || parsed <= 0) return 'Auto'
+  if (parsed === 1) return 'Normal'
+  return 'LocaleRemulator'
+}
+
+/**
+ * Test whether `gamePath` contains any non-ASCII char (>0x80) —
+ * mirrors WPF `MainWindow.xaml.cs` L1753-1763 which warns on
+ * "wide chars" in the path because Locale Emulator (the LR
+ * launch mode) is known to choke on multi-byte path characters.
+ *
+ * The check is purely advisory — we surface `MsgGamePathHaveWChar`
+ * but continue with the launch (matching WPF's `break` after the
+ * MessageBox).
+ */
+function pathHasWideChar(gamePath: string): boolean {
+  for (let i = 0; i < gamePath.length; i += 1) {
+    if (gamePath.charCodeAt(i) > 128) return true
+  }
+  return false
+}
+
+/**
+ * Resolve the install path for the active game's executable.
+ *
+ * Mirrors WPF L1727-1751:
+ * 1. Read from `settingPage.t_GamePath.Text` (= Config.xml under
+ *    `<dir_value_name>.<gameCode>` in the SPA backend, see
+ *    `commands/launcher.rs::detect_game_path`).
+ * 2. If empty / file missing → `MsgCantFindGame` Yes/No prompt.
+ *    - Yes (or no game selected) → would normally open the file
+ *      picker (`btn_SetGamePath_Click`). The Settings page is
+ *      P12.4 scope; until then we surface a
+ *      `accountList.gamePathPickerPending` toast so the user knows
+ *      the redirect target is missing.
+ *    - No → open the game's `download_url` (`Process.Start` with
+ *      `UseShellExecute = true` — IPC equivalent is
+ *      [`commands.openUrl`]).
+ *    Either branch returns `null` to signal "abort the launch".
+ * 3. Re-read after the prompt (WPF L1747-1751 paranoid double-check
+ *    in case the user picked a path mid-flow). Replicated for
+ *    parity even though the SPA's prompt path doesn't currently
+ *    mutate the config inline.
+ *
+ * Returns the resolved game path on success, `null` when the
+ * launch should abort (user chose "No" / pending-Settings toast
+ * surfaced / re-read still empty).
+ */
+async function resolveGamePath(): Promise<string | null> {
+  const selected = game.selectedGame
+  const ini = game.selectedIni
+  if (!selected || !ini || game.selectedGameCode === null) {
+    ElMessage.warning(t('GameSelected'))
+    return null
+  }
+
+  const detectResult = await safeInvoke(
+    commands.detectGamePath(game.selectedGameCode, ini.dir_value_name, ini.dir_reg),
+  )
+  const detected = detectResult.ok ? (detectResult.data ?? '') : ''
+
+  if (detected !== '') return detected
+
+  /*
+   * MsgCantFindGame prompt mirrors WPF L1730-1746:
+   *   Yes → open the path picker (Settings page P12.4 stub).
+   *   No  → open the download URL.
+   * `ElMessageBox.confirm` rejects on Cancel (= the picker close
+   * button); we treat that as "cancel the launch" rather than a
+   * third option.
+   */
+  let prompt: 'yes' | 'no'
+  try {
+    await ElMessageBox.confirm(t('MsgCantFindGame'), '', {
+      confirmButtonText: t('Yes'),
+      cancelButtonText: t('No'),
+      type: 'warning',
+    })
+    prompt = 'yes'
+  } catch (cancelOrNo) {
+    /*
+     * `ElMessageBox.confirm` rejects with `'cancel'` on Cancel and
+     * `'close'` on the X / Esc. Treat `'cancel'` as the "No" branch
+     * so the user can use the cancel button as the WPF `No` button
+     * (matches mockup parity); `'close'` short-circuits the launch.
+     */
+    if (cancelOrNo === 'cancel') {
+      prompt = 'no'
+    } else {
+      return null
+    }
+  }
+
+  if (prompt === 'yes') {
+    /*
+     * Settings page (where `btn_SetGamePath_Click` lives) is
+     * P12.4 scope. Surface a pending-Settings toast so the user
+     * isn't left wondering why nothing happened — and so QA can
+     * spot the missing redirect.
+     */
+    ElMessage.info(t('accountList.gamePathPickerPending'))
+    return null
+  }
+
+  /*
+   * `download_url` is empty for some unconnected games (the
+   * Beanfun catalogue doesn't always populate it). Fall through
+   * to the same pending-Settings toast in that case so the user
+   * has a consistent fallback message instead of a silent no-op.
+   */
+  if (selected.download_url === '') {
+    ElMessage.info(t('accountList.gamePathPickerPending'))
+    return null
+  }
+  await safeInvoke(commands.openUrl(selected.download_url))
+  return null
+}
+
+/**
+ * Already-running-process check + optional kill prompt. Mirrors
+ * WPF L1765-1833:
+ * 1. Enumerate processes whose `executable_path` matches the
+ *    target `gamePath` (backend `list_game_processes`
+ *    encapsulates the WPF process-name regex + WMI filter).
+ * 2. If any match, prompt `MsgGameAlreadyRun` Yes/No.
+ *    - Yes → `kill_game_processes(pids)` and continue.
+ *    - No  → continue without killing (WPF launches anyway,
+ *      treating the prompt as advisory).
+ *
+ * Returns `true` to proceed with the launch, `false` to abort
+ * (user dismissed the prompt with Esc / X).
+ */
+async function checkAndKillRunningGameProcesses(gamePath: string): Promise<boolean> {
+  const listResult = await safeInvoke(commands.listGameProcesses(gamePath))
+  if (!listResult.ok) {
+    /*
+     * Process enumeration failed (rare — usually a WMI permission
+     * issue). The standard wrapCommand-style toast would be too
+     * loud here; log and continue so the user can still launch.
+     */
+    console.warn('[AccountList] listGameProcesses failed:', listResult.error)
+    return true
+  }
+  if (listResult.data.length === 0) return true
+
+  let confirmed: boolean
+  try {
+    await ElMessageBox.confirm(t('MsgGameAlreadyRun'), '', {
+      confirmButtonText: t('Yes'),
+      cancelButtonText: t('No'),
+      type: 'warning',
+    })
+    confirmed = true
+  } catch (cancelOrNo) {
+    /*
+     * Mirrors WPF: only the explicit Yes branch kills processes.
+     * `cancel` (No) and `close` (Esc / X) both fall through to
+     * "launch anyway" — WPF doesn't gate the launch on the kill
+     * prompt either.
+     */
+    void cancelOrNo
+    confirmed = false
+  }
+
+  if (confirmed) {
+    const pids = listResult.data.map((p) => p.pid)
+    await safeInvoke(commands.killGameProcesses(pids))
+  }
+  return true
+}
+
+/**
+ * Main launch entry point. Mirrors WPF `runGame(account, password)`
+ * (`MainWindow.xaml.cs` L1724-1900) end-to-end with the WPF
+ * sub-routines factored into the helpers above for SRP.
+ *
+ * Empty `account` / `password` string args (the default) mean
+ * "no credentials" — `commands.launchGame` treats that as
+ * `command_line` substitution being disabled, matching WPF L1867-1879
+ * (`account != "" && password != "" && game_commandLine != ""`).
+ *
+ * # Why no try/catch around `commands.launchGame`
+ *
+ * The IPC funnels failures through `wrapCommand` already (toast +
+ * console). WPF L1895-1899 wraps the launch in a try/catch that
+ * surfaces `MsgLocalePluginRunError` for LR-mode failures; the
+ * backend `launch_game` already maps LR-resource / spawn errors to
+ * structured `CommandError` codes that the frontend toasts via
+ * `wrapCommand`. Re-catching here would double-toast.
+ */
+async function runGame(accountId = '', password = ''): Promise<void> {
+  const ini = game.selectedIni
+  if (!ini) {
+    ElMessage.warning(t('GameSelected'))
+    return
+  }
+
+  const gamePath = await resolveGamePath()
+  if (gamePath === null) return
+
+  if (pathHasWideChar(gamePath)) {
+    /*
+     * Advisory-only — WPF L1760-1762 shows the MsgBox then
+     * `break`s out of the scan loop and continues the launch. We
+     * do the same with a non-blocking warning toast.
+     */
+    ElMessage.warning(t('MsgGamePathHaveWChar'))
+  }
+
+  const proceed = await checkAndKillRunningGameProcesses(gamePath)
+  if (!proceed) return
+
+  const mode = resolveStartMode()
+
+  await wrapCommand(commands.launchGame(gamePath, mode, ini.exe, accountId, password))
+}
+
+/**
+ * Start Game button click handler. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::Button_Click` (L55-71):
+ *
+ * - {@link startGameDirect} branch → `runGame()` with empty
+ *   credentials.
+ * - Otherwise → defer to {@link handleGetOtp}, which itself
+ *   forks on {@link otpLaunchChain} after the OTP arrives:
+ *   * `true`  → `runGame(account, otp)` (the OTP+launch chain).
+ *   * `false` → existing auto-paste / clipboard flow.
+ *
+ * # Why no in-flight UI lock
+ *
+ * Same SRP rationale as the existing {@link handleGetOtp}
+ * docblock — the SPA's IPC-level concurrency model means a
+ * stuck `launchGame` call cannot deadlock other UI affordances.
+ * Adding a global busy guard here would just reproduce the WPF
+ * foot-gun where a slow launch blocks Logout.
+ */
+async function handleStartGame(): Promise<void> {
+  if (!game.selectedGame) {
+    ElMessage.warning(t('GameSelected'))
+    return
+  }
+  if (startGameDirect.value) {
+    await runGame()
+    return
+  }
+  await handleGetOtp()
 }
 
 /* --------------- per-row context menu (D4) --------------- */
@@ -838,6 +1533,26 @@ async function handleGetOtp(): Promise<void> {
 
   otpValue.value = otp
 
+  /*
+   * D8f — OTP+launch chain. WPF `MainWindow.xaml.cs` L2152-2155
+   * (`getOtpWorker_RunWorkerCompleted` first branch):
+   *
+   *   if (!tradLogin && login_action_type == 1)
+   *       runGame(account, otp);
+   *
+   * This is the path used by Start Game when {@link startGameDirect}
+   * is `false` (so we routed through `handleGetOtp` → `runGame`).
+   * The auto-paste / clipboard branches below are skipped — the
+   * launcher binary itself receives the credentials via
+   * `command_line` substitution, and re-running auto-paste on top
+   * would type the OTP into the login dialog twice.
+   */
+  if (otpLaunchChain.value) {
+    gettingOtp.value = false
+    await runGame(target.sid, otp)
+    return
+  }
+
   if (!autoPaste.value) {
     await clipboardWriteOtp(otp, true)
     gettingOtp.value = false
@@ -856,6 +1571,13 @@ async function handleGetOtp(): Promise<void> {
   const specialClick = session?.service_code === '610074' && session?.service_region === 'T9'
 
   /*
+   * D8 — `className` flows from the per-game INI (WPF
+   * `accountList.win_class_name`, captured by
+   * `selectedGameChanged()` L562). Falls back to `'MapleStoryClass'`
+   * only when the INI hasn't loaded yet (cold mount race) so the
+   * paste call still has the historical default that worked across
+   * the MapleStory family before P12.3's INI wiring landed.
+   *
    * `safeInvoke` (not `wrapCommand`) so we can branch on
    * `process.window_not_found` without firing the wrapCommand toast
    * — that case is a graceful fallback to clipboard, not a user-
@@ -863,9 +1585,10 @@ async function handleGetOtp(): Promise<void> {
    * via `surfaceCommandError` so the toast pipeline stays consistent
    * (console log + i18n translate + ElMessage.error).
    */
+  const className = game.selectedIni?.win_class_name || 'MapleStoryClass'
   const result = await safeInvoke(
     commands.autoPaste({
-      className: 'MapleStoryClass',
+      className,
       account: target.sid,
       password: otp,
       specialClick,
@@ -1050,12 +1773,27 @@ function handleDragEnd(): void {
         <p class="account-list__subline">{{ t('accountList.subtitle') }}</p>
       </header>
 
-      <!-- Game info bar (P12.3 will replace the placeholders with real game data) -->
+      <!-- Game info bar (D8d) — real game name + image + change-game button. -->
       <section class="account-list__game bf-glass-panel">
         <div class="account-list__game-row">
           <div class="account-list__game-meta">
             <div class="account-list__game-icon" aria-hidden="true">
-              <el-icon :size="24"><VideoPlay /></el-icon>
+              <!--
+                D8d: prefer the per-game banner image when the catalogue
+                has hydrated; fall back to the generic VideoPlay glyph
+                so the layout doesn't collapse during the brief setup
+                window before `setupGameOnMount` resolves. The icon's
+                container size is fixed regardless so the row height
+                stays stable across the swap.
+              -->
+              <img
+                v-if="gameImageUrl"
+                :src="gameImageUrl"
+                :alt="gameNameDisplay"
+                class="account-list__game-icon-img"
+                data-test="account-list-game-image"
+              />
+              <el-icon v-else :size="24"><VideoPlay /></el-icon>
             </div>
             <button
               type="button"
@@ -1064,7 +1802,9 @@ function handleDragEnd(): void {
               data-test="account-list-change-game"
               @click="handleChangeGame"
             >
-              <span class="account-list__game-name">MapleStory</span>
+              <span class="account-list__game-name" data-test="account-list-game-name">
+                {{ gameNameDisplay }}
+              </span>
               <span class="account-list__game-status">
                 <span class="account-list__game-status-dot" />
                 {{ t('accountList.statusOnline') }}
@@ -1072,7 +1812,16 @@ function handleDragEnd(): void {
             </button>
           </div>
           <div class="account-list__game-actions">
+            <!--
+              D8e: Tools button is only rendered for the three game
+              codes WPF whitelisted (`610074_T9` / `610075_T9` /
+              `610096_TE`). Hidden via `v-if` rather than `display:
+              none` so QA can't see a hover affordance for a button
+              that isn't reachable, and so the surrounding flex row
+              tightens up cleanly when the button is absent.
+            -->
             <button
+              v-if="showToolsButton"
               type="button"
               class="bf-btn-ghost-icon account-list__icon-btn"
               :title="t('accountList.toolsButton')"
@@ -1095,7 +1844,7 @@ function handleDragEnd(): void {
         <button
           type="button"
           class="bf-btn-gradient account-list__start-btn"
-          :disabled="!account.selectedServiceAccount"
+          :disabled="startGameDisabled"
           data-test="account-list-start"
           @click="handleStartGame"
         >
@@ -1278,6 +2027,24 @@ function handleDragEnd(): void {
                         <el-icon><Message /></el-icon>
                         <span>{{ t('CheckEmail') }}</span>
                       </el-dropdown-item>
+                      <!--
+                        D8h: Change Password menu item only appears for
+                        unconnected games (mirrors WPF
+                        `m_ChangePassword.Visibility` toggled by
+                        `selectedGameChanged()` on the same predicate).
+                        Connected games delegate password changes to
+                        the Beanfun member centre web flow, which is
+                        opened from the page-level chrome — no
+                        per-row affordance is needed there.
+                      -->
+                      <el-dropdown-item
+                        v-if="game.isUnconnectedGame"
+                        :data-test="`account-row-change-password-${a.sid}`"
+                        @click="handleChangePassword(a)"
+                      >
+                        <el-icon><Key /></el-icon>
+                        <span>{{ t('ChangePassword') }}</span>
+                      </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
@@ -1322,6 +2089,51 @@ function handleDragEnd(): void {
            writing into `copyBoxTitle` / `copyBoxValue` before flipping
            `copyBoxVisible`. -->
       <CopyBox v-model:visible="copyBoxVisible" :title="copyBoxTitle" :value="copyBoxValue" />
+
+      <!-- D8c: Game picker dialog. Driven by either the Change Game
+           button on the game info bar or the mount-time auto-open
+           inside `setupGameOnMount` (when no valid `loginGame`
+           resolves against the loaded catalogue). The dialog
+           handles its own close on `@select`; we just listen for
+           the discriminator pair and run the canonical
+           `selectActiveGame` pipeline.
+
+           `v-if="auth.session"` gate is purely a TS narrowing
+           helper — the route guard already prevents AccountList
+           from mounting without a hydrated session, so the
+           condition will always be `true` at user-visible mount
+           time. Removing it would force `region` to a `'TW'`
+           fallback (see `gameImageUrl` for the same defensive
+           pattern); the gate is the cleaner option here because
+           the dialog can't usefully open without a region anyway. -->
+      <GameList
+        v-if="auth.session"
+        v-model:visible="gameListVisible"
+        :region="auth.session.region"
+        @select="handleGameSelected"
+      />
+
+      <!-- D8g: Unconnected-game Add Account dialog. Mounted alongside
+           the regular `<AddServiceAccount />` above; `handleAddAccount`
+           dispatches between the two on `game.isUnconnectedGame`.
+           The `created` event refreshes the row list so the new
+           account appears immediately. -->
+      <UnconnectedGameAddAccount
+        v-model:visible="unconnectedAddVisible"
+        @created="handleUnconnectedAccountCreated"
+      />
+
+      <!-- D8h: Unconnected-game Change Password dialog. Driven by the
+           per-row Change Password menu item (which is itself
+           `v-if`-gated on `game.isUnconnectedGame`). The `accountIndex`
+           prop is the row's 0-based index in `account.serviceAccounts`,
+           captured at menu-trigger time so a downstream selection /
+           reorder can't misroute the change-password POST. -->
+      <UnconnectedGameChangePassword
+        v-model:visible="changePasswordVisible"
+        :account-index="changePasswordAccountIndex"
+        @verify-code-sent="handleChangePasswordSent"
+      />
 
       <!-- OTP section (D5: REAL Get OTP / clipboard / auto-paste flow) -->
       <section class="account-list__otp bf-glass-panel">
@@ -1452,6 +2264,14 @@ function handleDragEnd(): void {
   place-items: center;
   flex-shrink: 0;
   box-shadow: var(--bf-shadow-card);
+  overflow: hidden;
+}
+
+.account-list__game-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .account-list__game-info {

@@ -712,7 +712,19 @@ fn classify_amount_limit_notice(body: &str) -> AmountLimitNotice {
 /// inject extra fields. The HK-only `__VIEWSTATEENCRYPTED` empty-string
 /// field is materialised by `build_viewstate_payload_prefix` off
 /// `region`, so callers don't need to know about it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// # IPC round-trip (P12.3 D3)
+///
+/// The struct derives `serde::Serialize + Deserialize + specta::Type`
+/// so [`unconnected_game_add_account_check`] /
+/// [`unconnected_game_add_account_check_nickname`] /
+/// [`unconnected_game_add_account`] can hand the triplet back to
+/// the frontend after each step and accept it on the next call.
+/// The frontend treats the payload as an **opaque cursor**: it
+/// is stored verbatim and re-passed without inspection (mirroring
+/// WPF's `NameValueCollection` carry-through, but without the
+/// shared mutability hazard).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 pub struct AddAccountSession {
     /// `__VIEWSTATE` value parsed from the most recent `02.aspx`
     /// response (or the initial `auth.aspx → 02.aspx` GET / POST pair
@@ -741,7 +753,14 @@ pub struct AddAccountSession {
 /// dialog header (game title, length range, optional nickname-check
 /// button). They live on this struct (not on the session) precisely
 /// because they are *not* threaded through subsequent POSTs.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// # IPC contract
+///
+/// Derives `serde::Serialize + specta::Type` so
+/// [`unconnected_game_init_add_account_payload`] can return the
+/// bundle verbatim to the frontend's `UnconnectedGame_AddAccount.vue`
+/// dialog.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 pub struct AddAccountInit {
     /// View-state triplet for the next POST (`add_account_check` or
     /// `add_account`). Caller stores and re-passes verbatim.
@@ -772,7 +791,14 @@ pub struct AddAccountInit {
 /// "unknown error" sentinel after a `null` payload short-circuit, but
 /// any **populated** value is shown verbatim to the user). We preserve
 /// the same shape so callers can re-use WPF's branching logic.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// # IPC contract
+///
+/// Derives `serde::Serialize + specta::Type` so the two
+/// `unconnected_game_add_account_check*` Tauri commands return
+/// the refreshed [`AddAccountSession`] alongside the validation
+/// outcome in one round-trip.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 pub struct CheckOutcome {
     /// Refreshed view-state triplet from the response — caller passes
     /// this back into the next call (`add_account` or another check).
@@ -796,7 +822,17 @@ pub struct CheckOutcome {
 /// public function rejects those inputs with `Err(LoginError::Unknown(_))`
 /// instead, so that callers can distinguish "user submitted empty
 /// fields" from "server said no" without nesting `Option<…>`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// # IPC contract
+///
+/// Derives `serde::Serialize + specta::Type` so
+/// [`unconnected_game_add_account`] surfaces the typed outcome
+/// to the frontend. Uses the same `tag="kind", content="data"`
+/// internally-tagged shape as [`AmountLimitNotice`] so the
+/// frontend's discriminated-union switch reads consistently
+/// across enum DTOs (`switch (outcome.kind) { case "success": ... }`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub enum AddAccountOutcome {
     /// Server accepted the submission (WPF: `result == ""` at
     /// `UnconnectedGame_AddAccount.xaml.cs` L221).
@@ -825,7 +861,17 @@ pub enum AddAccountOutcome {
 /// "WPF deviation: `verify_code` extraction shape" section in the
 /// module docs for why we drop WPF's sentinel-prefix + greedy-regex
 /// shape rather than mirroring it on the wire.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// # IPC contract
+///
+/// Derives `serde::Serialize + specta::Type` so
+/// [`unconnected_game_change_password`] surfaces the typed
+/// outcome to the frontend. Uses the same `tag="kind",
+/// content="data"` internally-tagged shape as
+/// [`AddAccountOutcome`] / [`AmountLimitNotice`] so all enum
+/// DTOs read consistently from the JS side.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub enum ChangePasswordOutcome {
     /// Server confirmed the password-reset request and emitted a
     /// verification token. Carries the token (without the

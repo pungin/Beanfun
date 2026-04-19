@@ -340,6 +340,25 @@ pub enum LoginError {
     AccountMgmtMissingAccountLen,
 
     // ---------------------------------------------------------------------
+    // Game listing (`MainWindow.xaml.cs::reLoadGameInfo`, P12.3 D1)
+    // ---------------------------------------------------------------------
+    /// `MainWindow.xaml.cs::reLoadGameInfo` L707-708 — the
+    /// `game_zone/` HTML response did not contain the
+    /// `Services.ServiceList = …;` JS literal that drives the
+    /// GameList dialog.
+    ///
+    /// WPF silently swallows this case (its only guard is the
+    /// outer `if (reg.IsMatch(res))` with no `else` branch); the
+    /// Rust port surfaces a typed error so the GameList dialog
+    /// can show a retry banner instead of an empty grid. See
+    /// [`crate::services::beanfun::games`] module docs for the
+    /// "WPF deviation" rationale (strictly-additive UX
+    /// improvement; no behaviour regression for well-formed
+    /// responses).
+    #[error("game_zone/ response missing `Services.ServiceList = …;` literal")]
+    GameListServiceListMissing,
+
+    // ---------------------------------------------------------------------
     // Transport-level errors
     // ---------------------------------------------------------------------
     /// Wrapped `reqwest::Error` — network, TLS, connect, or body-read

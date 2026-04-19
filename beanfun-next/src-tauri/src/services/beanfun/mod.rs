@@ -32,6 +32,7 @@
 pub mod account;
 pub mod client;
 pub mod error;
+pub mod games;
 pub mod login;
 pub mod otp;
 pub mod session;
@@ -47,6 +48,10 @@ pub use account::{
 };
 pub use client::{BeanfunClient, ClientConfig, Endpoints, LoginRegion};
 pub use error::LoginError;
+pub use games::{
+    image_base_url, list_games, parse_service_ini, parse_service_list, GameInfoBundle,
+    GameIniEntry, GameService,
+};
 pub use otp::get_otp;
 pub use session::{Credentials, Session};
 pub use verify::{
