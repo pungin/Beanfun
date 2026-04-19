@@ -207,6 +207,17 @@
 //! | `OpenFailed { .. }`         | `system.open_url_failed`       | `url` / `io_kind`                    |
 //! | `SpawnBlockingFailed(..)`   | `system.spawn_blocking_failed` | `is_panic` / `is_cancelled`          |
 //!
+//! ## `MapleCacheError` — `maple_cache.*`
+//!
+//! | Variant                          | Code                                  | `details` fields                  |
+//! | -------------------------------- | ------------------------------------- | --------------------------------- |
+//! | `PathEmpty`                      | `maple_cache.path_empty`              | —                                 |
+//! | `PathNoParent { path }`          | `maple_cache.path_no_parent`          | `path`                            |
+//! | `PathNotFound { path }`          | `maple_cache.path_not_found`          | `path`                            |
+//! | `PathNotADir { path }`           | `maple_cache.path_not_a_dir`          | `path`                            |
+//! | `ReadDirFailed { path, source }` | `maple_cache.read_dir_failed`         | `path` / `io_kind`                |
+//! | `SpawnBlockingFailed(..)`        | `maple_cache.spawn_blocking_failed`   | `is_panic` / `is_cancelled`       |
+//!
 //! ## Command-layer `system.*` codes (no domain counterpart)
 //!
 //! Unlike the eight tables above, these codes are minted inside the
@@ -266,6 +277,7 @@ use specta::Type;
 use crate::services::beanfun::error::LoginError;
 use crate::services::config::error::ConfigError;
 use crate::services::game::error::GameError;
+use crate::services::maple_cache::error::MapleCacheError;
 use crate::services::process::error::ProcessError;
 use crate::services::registry::error::RegistryError;
 use crate::services::storage::aes_backup::BackupError;
@@ -820,6 +832,47 @@ impl From<SystemError> for CommandError {
     }
 }
 
+// ---------------------------------------------------------------------
+// MapleCacheError → CommandError (services/maple_cache — sweep
+// MapleStory's per-launch cache from the game install dir)
+// ---------------------------------------------------------------------
+
+impl From<MapleCacheError> for CommandError {
+    fn from(e: MapleCacheError) -> Self {
+        let message = e.to_string();
+        match e {
+            MapleCacheError::PathEmpty => CommandError::new("maple_cache.path_empty", message),
+            MapleCacheError::PathNoParent { path } => {
+                CommandError::new("maple_cache.path_no_parent", message)
+                    .with_details(json!({ "path": path }))
+            }
+            MapleCacheError::PathNotFound { path } => {
+                CommandError::new("maple_cache.path_not_found", message)
+                    .with_details(json!({ "path": path.display().to_string() }))
+            }
+            MapleCacheError::PathNotADir { path } => {
+                CommandError::new("maple_cache.path_not_a_dir", message)
+                    .with_details(json!({ "path": path.display().to_string() }))
+            }
+            MapleCacheError::ReadDirFailed { path, source } => {
+                let kind = io_kind_str(&source);
+                CommandError::new("maple_cache.read_dir_failed", message).with_details(json!({
+                    "path": path.display().to_string(),
+                    "io_kind": kind,
+                }))
+            }
+            MapleCacheError::SpawnBlockingFailed(join_err) => {
+                CommandError::new("maple_cache.spawn_blocking_failed", message).with_details(
+                    json!({
+                        "is_panic": join_err.is_panic(),
+                        "is_cancelled": join_err.is_cancelled(),
+                    }),
+                )
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -922,6 +975,7 @@ mod from_impls_tests {
     use crate::services::beanfun::error::LoginError;
     use crate::services::config::error::ConfigError;
     use crate::services::game::error::GameError;
+    use crate::services::maple_cache::error::MapleCacheError;
     use crate::services::process::error::ProcessError;
     use crate::services::registry::error::RegistryError;
     use crate::services::registry::Hive;
@@ -1215,6 +1269,39 @@ mod from_impls_tests {
         assert_eq!(err.code, "game.path_not_found");
         let details = err.details.expect("details present");
         assert_eq!(details.get("path"), Some(&json!(r"C:\Games\missing.exe")));
+    }
+
+    // ----- MapleCacheError -------------------------------------------
+
+    #[test]
+    fn maple_cache_path_empty_has_no_details() {
+        let err: CommandError = MapleCacheError::PathEmpty.into();
+        assert_eq!(err.code, "maple_cache.path_empty");
+        assert!(err.details.is_none());
+    }
+
+    #[test]
+    fn maple_cache_path_not_found_carries_stringified_path() {
+        let err: CommandError = MapleCacheError::PathNotFound {
+            path: std::path::PathBuf::from(r"C:\Games\MapleStory"),
+        }
+        .into();
+        assert_eq!(err.code, "maple_cache.path_not_found");
+        let details = err.details.expect("details present");
+        assert_eq!(details.get("path"), Some(&json!(r"C:\Games\MapleStory")));
+    }
+
+    #[test]
+    fn maple_cache_read_dir_failed_stringifies_io_kind_and_path() {
+        let err: CommandError = MapleCacheError::ReadDirFailed {
+            path: std::path::PathBuf::from(r"C:\Games\MapleStory"),
+            source: io::Error::from(io::ErrorKind::PermissionDenied),
+        }
+        .into();
+        assert_eq!(err.code, "maple_cache.read_dir_failed");
+        let details = err.details.expect("details present");
+        assert_eq!(details.get("path"), Some(&json!(r"C:\Games\MapleStory")));
+        assert_eq!(details.get("io_kind"), Some(&json!("PermissionDenied")));
     }
 
     // ----- UpdaterError ----------------------------------------------

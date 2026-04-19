@@ -14,6 +14,7 @@
 pub mod beanfun;
 pub mod config;
 pub mod game;
+pub mod maple_cache;
 pub mod storage;
 pub mod system;
 pub mod updater;

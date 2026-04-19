@@ -229,6 +229,7 @@
   <system:String x:Key="NotFindPerfectCore">未找到完美核心组合</system:String>
   <system:String x:Key="CoreGroup">第{0}组组合：</system:String>
   <system:String x:Key="GameSelected">选择游戏</system:String>
+  <system:String x:Key="ToolBox">工具箱</system:String>
   <system:String x:Key="ConvoyOperation">车队操作</system:String>
   <system:String x:Key="ConvoyManage">车队管理</system:String>
   <system:String x:Key="ConvoyRank">车队排名</system:String>

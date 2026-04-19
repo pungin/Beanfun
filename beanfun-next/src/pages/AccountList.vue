@@ -133,8 +133,10 @@ import ChangeServiceAccountDisplayName from '../windows/ChangeServiceAccountDisp
 import CopyBox from '../windows/CopyBox.vue'
 import GameList from '../windows/GameList.vue'
 import ServiceAccountInfo from '../windows/ServiceAccountInfo.vue'
+import ToolsDialogStack from '../windows/ToolsDialogStack.vue'
 import UnconnectedGameAddAccount from '../windows/UnconnectedGame_AddAccount.vue'
 import UnconnectedGameChangePassword from '../windows/UnconnectedGame_ChangePassword.vue'
+import { TOOLS_GAME_CODES } from '../constants/tools'
 
 defineOptions({ name: 'AccountList' })
 
@@ -324,15 +326,69 @@ function makeStub(label: string): () => void {
  * P12.3 D8: `handleStartGame`, `handleChangeGame`, `handleAddAccount`,
  * and `handleChangePassword` are the **real** wire-ups for the game
  * switcher + start-game + add-account + change-password flows
- * (defined further down in the file). The Tools button's actual
- * click handler still goes through this stub — the per-game tools
- * windows (`MapleTools` for MapleStory codes, `KartTools` for
- * KartRider) are P12.4 scope; P12.3 D8e only ships the conditional
- * **visibility** of the button (see `showToolsButton` below).
+ * (defined further down in the file). `handleTools` is REAL since
+ * P12.5 D7 — see {@link handleTools} below for the wiring.
  */
-const handleTools = makeStub('Tools button (game-specific tools window)')
 const handleMemberCenter = makeStub('Member Center link')
 const handleCustomerService = makeStub('Customer Service link')
+
+/* --------------- P12.5 D7 — Tools button real handler --------------- */
+
+/**
+ * Imperative handle to the {@link ToolsDialogStack} mounted at the
+ * bottom of the template. The wrapper component owns all five
+ * Tools-related dialog mounts (MapleTools / KartTools / WebBrowser
+ * / EquipCalculator / CoreCalculator) and exposes a single
+ * `openForGame(gameCode)` method we call from {@link handleTools}.
+ *
+ * # Why a `ref` (and not e.g. emit-up + parent-owned visibility)
+ *
+ * The dialog stack is opened by a one-shot click on the Tools
+ * toolbar button — it has no companion `v-model` state on the
+ * AccountList page that needs to round-trip the dialog's open
+ * state back. Holding the wrapper imperatively keeps the parent
+ * page's reactive surface focused on AccountList-specific state
+ * (selected service account, OTP, etc.) and avoids polluting
+ * this 2.7 kLoC SFC with five extra `ref<boolean>`s + their
+ * matching props plumbing. See `windows/ToolsDialogStack.vue`
+ * top docblock for the full design discussion.
+ */
+const toolsDialogRef = ref<InstanceType<typeof ToolsDialogStack> | null>(null)
+
+/**
+ * Tools toolbar button click handler. Mirrors WPF
+ * `AccountList.xaml.cs::btn_Tools_Click` (L237-250) — dispatches
+ * to MapleTools or KartTools based on the active gameCode.
+ *
+ * # Why guard on `selectedGameCode === null`
+ *
+ * The template gates the button with `v-if="showToolsButton"`
+ * which is itself `false` whenever `selectedGameCode === null`
+ * (see {@link showToolsButton}), so in practice the click can't
+ * fire without a selected game. The defensive null-check is
+ * cheap insurance against a future refactor that detaches the
+ * gate from the click handler — the WPF switch falls through to
+ * a no-op for any non-tools code, and the SPA's null branch
+ * matches that "do nothing" semantics.
+ *
+ * # Why `void`-prefix on the call
+ *
+ * `openForGame` is async (it awaits `commands.detectGamePath` to
+ * resolve the MapleStory game path before opening MapleTools).
+ * We don't need the click handler to wait for the resolution —
+ * the dialog opens after the await completes; surfacing a
+ * Promise back to the click handler would require either
+ * `async` propagation (unnecessary surface area) or an
+ * error-boundary toast for a backend lookup that has its own
+ * graceful empty-string fallback. Fire-and-forget matches the
+ * WPF synchronous `new MapleTools().Show()` shape closely
+ * enough for parity.
+ */
+function handleTools(): void {
+  const code = game.selectedGameCode
+  if (code === null) return
+  void toolsDialogRef.value?.openForGame(code)
+}
 
 /* --------------- P12.4 D6 — Settings / About header navigation --------------- */
 
@@ -408,20 +464,14 @@ const gameImageUrl = computed<string>(() => {
  *     ? Visibility.Visible : Visibility.Collapsed;
  * ```
  *
- * The set is hard-coded in WPF (no server-side configuration), so
- * we mirror it as a frozen literal here. Adding a new tools-bearing
- * game is a one-line edit.
- *
- * # Why a Set (not Array.includes)
- *
- * O(1) membership check vs. O(n) for `[...].includes(...)` — the
- * size is small enough that the perf delta is irrelevant, but the
- * `Set` form better signals intent ("this is a membership test, not
- * an ordered collection") and matches the {@link UNCONNECTED_GAME_CODES}
- * convention from `stores/game.ts`.
+ * The set is hard-coded in WPF (no server-side configuration). We
+ * import {@link TOOLS_GAME_CODES} from `src/constants/tools.ts` —
+ * P12.5 D7 promoted the literal to a shared module so
+ * `pages/Settings.vue` can consume the same gate (WPF L621 /
+ * L630-633 applies the identical predicate to the Settings-page
+ * Tools button). See the constants module docblock for the
+ * "visibility set vs routing partition" rationale.
  */
-const TOOLS_GAME_CODES: ReadonlySet<string> = new Set(['610074_T9', '610075_T9', '610096_TE'])
-
 const showToolsButton = computed<boolean>(() => {
   if (game.selectedGameCode === null) return false
   return TOOLS_GAME_CODES.has(game.selectedGameCode)
@@ -2194,6 +2244,17 @@ function handleDragEnd(): void {
         :account-index="changePasswordAccountIndex"
         @verify-code-sent="handleChangePasswordSent"
       />
+
+      <!-- P12.5 D7: Tools dialog stack — single mount that hosts
+           MapleTools / KartTools / WebBrowser / EquipCalculator /
+           CoreCalculator. Opened imperatively by `handleTools` via
+           the `toolsDialogRef` handle (see the `handleTools`
+           docblock for why imperative + why a single-component
+           wrapper). The wrapper mounts unconditionally so its
+           internal dialog mounts can play their open transitions
+           on first open; per-dialog visibility is owned inside
+           the wrapper. -->
+      <ToolsDialogStack ref="toolsDialogRef" />
 
       <!-- OTP section (D5: REAL Get OTP / clipboard / auto-paste flow) -->
       <section class="account-list__otp bf-glass-panel">

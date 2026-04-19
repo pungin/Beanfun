@@ -404,6 +404,13 @@ const zhTW = {
     cookieRequired: '此頁面需要 Beanfun 登入 Cookie 才能完整顯示，將改以系統預設瀏覽器開啟。',
     openExternally: '在外部瀏覽器開啟',
   },
+  mapleTools: {
+    subtitle: '楓之谷專用工具集合。',
+    recyclingErrors: '部分項目未能清理：',
+  },
+  kartTools: {
+    subtitle: '跑跑卡丁車車隊工具集合。',
+  },
   errors: {
     auth: {
       session_required: '您的登入狀態已失效，請重新登入。',
@@ -597,6 +604,13 @@ const zhCN = {
     empty: '尚未指定要开启的网址。',
     cookieRequired: '此页面需要 Beanfun 登录 Cookie 才能完整显示，将改以系统默认浏览器开启。',
     openExternally: '在外部浏览器开启',
+  },
+  mapleTools: {
+    subtitle: '枫之谷专用工具集合。',
+    recyclingErrors: '部分项目未能清理：',
+  },
+  kartTools: {
+    subtitle: '跑跑卡丁车车队工具集合。',
   },
   errors: {
     auth: {
@@ -801,6 +815,13 @@ const enUS = {
     cookieRequired:
       'This page requires the beanfun! login cookie to render fully; opening it in your default browser instead.',
     openExternally: 'Open in external browser',
+  },
+  mapleTools: {
+    subtitle: 'MapleStory-specific helpers.',
+    recyclingErrors: 'Some items could not be cleaned:',
+  },
+  kartTools: {
+    subtitle: 'KartRider guild helpers.',
   },
   errors: {
     auth: {

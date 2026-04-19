@@ -642,6 +642,41 @@ const UnconnectedGameChangePasswordStub = defineComponent({
 })
 
 /**
+ * P12.5 D7 — stub for the `<ToolsDialogStack />` wrapper. The
+ * page only owns the click → `openForGame(gameCode)` wiring; the
+ * wrapper's own dispatch / dialog mounting / event chain is
+ * locked down in `tests/unit/windows/ToolsDialogStack.spec.ts`.
+ *
+ * Exposes an `openForGame` Vitest mock function by returning it
+ * from `setup()` (rather than via `ctx.expose()`), because the
+ * AccountList template binds the wrapper as `<ToolsDialogStack
+ * ref="toolsDialogRef" />` and reads `toolsDialogRef.value
+ * .openForGame(...)`. With Composition API, a setup-returned
+ * value is reachable from the parent's `ref` AND surfaces on
+ * `wrapper.vm.openForGame` for direct assertion in tests —
+ * `ctx.expose({ ... })` empirically does not surface through
+ * vue-test-utils' `vm` proxy in our Vitest 4 / @vue/test-utils
+ * 2 setup, so the simpler return path is the reliable choice.
+ *
+ * Each mount creates a fresh `vi.fn` instance (setup() runs once
+ * per mount), keeping per-test state isolated without an
+ * explicit reset.
+ */
+const ToolsDialogStackStub = defineComponent({
+  name: 'ToolsDialogStack',
+  setup() {
+    const openForGame = vi.fn().mockResolvedValue(undefined)
+    return { openForGame }
+  },
+  render() {
+    return h('div', {
+      class: 'tools-dialog-stack-stub',
+      'data-test': 'tools-dialog-stack-stub',
+    })
+  },
+})
+
+/**
  * Standalone harness — memory-history router with the page mounted at
  * `/accounts` plus a stub `/login` so the post-logout `router.push`
  * resolves cleanly. Mirrors the per-page sandbox pattern from
@@ -679,6 +714,7 @@ function buildHarness(): {
             GameList: GameListStub,
             UnconnectedGameAddAccount: UnconnectedGameAddAccountStub,
             UnconnectedGameChangePassword: UnconnectedGameChangePasswordStub,
+            ToolsDialogStack: ToolsDialogStackStub,
           },
         },
       })
@@ -1179,52 +1215,45 @@ describe('AccountList page', () => {
     expect(stub.attributes('data-title')).toBe('')
   })
 
-  it('Tools toolbar button is wired to its own stub handler (NOT the change-game stub)', async () => {
+  it('P12.5 D7: Tools button click → ToolsDialogStack.openForGame(selectedGameCode)', async () => {
     /*
      * WPF parity guard: WPF `btn_Tools_Click`
      * (`AccountList.xaml.cs` L237-249) is a per-game tools
-     * window launcher — it opens MapleTools / KartTools by
-     * gameCode and is conditionally Visible only for those 3
-     * codes (`MainWindow.xaml.cs` L1710-1713). It is NOT the
-     * game switcher.
+     * window launcher — it switches on `gameCode` and opens
+     * MapleTools / KartTools accordingly. The SPA centralises
+     * that dispatch in `windows/ToolsDialogStack.vue` and the
+     * page just calls `toolsDialogRef.value?.openForGame(gameCode)`.
      *
-     * Pre-D10.5 the SPA mistakenly bound the Tools button click
-     * to the change-game stub, conflating two distinct WPF
-     * surfaces and making the eventual P12.3 wire-up ambiguous.
-     * This case locks the button to its own dedicated stub
-     * marker so a future regression that swaps the binding back
-     * fails loudly.
+     * This test pins:
+     * 1. The click is wired to the Tools-specific handler (not
+     *    the Change Game stub — which would never call
+     *    `openForGame`).
+     * 2. The handler passes the LIVE `selectedGameCode` from the
+     *    store, not a hard-coded literal (a future regression that
+     *    accidentally hard-codes `'610074_T9'` would silently
+     *    break MapleStory M / KartRider routing).
      *
-     * D8e introduced the `v-if="showToolsButton"` gate that only
-     * renders the button for the three whitelisted gameCodes.
-     * Seed MapleStory TW (`610074_T9` ∈ TOOLS_GAME_CODES) so the
-     * button is reachable; the visibility-by-gameCode invariant
-     * is exercised by the dedicated D8e cases below.
+     * The wrapper's own dispatch correctness lives in
+     * `tests/unit/windows/ToolsDialogStack.spec.ts`.
      */
     vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const ctx = buildHarness()
     seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
     const wrapper = await ctx.mountIt()
     await flushPromises()
 
-    consoleWarn.mockClear()
+    const stackStub = wrapper.findComponent(ToolsDialogStackStub)
+    expect(stackStub.exists()).toBe(true)
+    const openForGame = (stackStub.vm as unknown as { openForGame: ReturnType<typeof vi.fn> })
+      .openForGame
+    expect(openForGame).not.toHaveBeenCalled()
+
     await wrapper.get('[data-test="account-list-tools"]').trigger('click')
     await flushPromises()
 
-    expect(consoleWarn).toHaveBeenCalledTimes(1)
-    /*
-     * The stub marker text is the SUT contract — asserting it
-     * pins the binding to the Tools-specific handler rather than
-     * the Change Game one (which would log "Change Game ..." and
-     * fail this matcher).
-     */
-    const [logged] = consoleWarn.mock.calls[0] ?? []
-    expect(typeof logged).toBe('string')
-    expect(logged as string).toContain('[AccountList]')
-    expect(logged as string).toContain('Tools')
-    expect(logged as string).not.toContain('Change Game')
+    expect(openForGame).toHaveBeenCalledTimes(1)
+    expect(openForGame).toHaveBeenCalledWith('610074_T9')
   })
 
   it('logout: dismissing the confirm dialog is a hard cancel', async () => {

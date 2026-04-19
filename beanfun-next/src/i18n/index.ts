@@ -68,6 +68,26 @@ export const i18nMessages = {
  * - vitest specs (D10) can build a throw-away instance per case
  *   without bleeding state between tests.
  *
+ * # Fallback chain (P12.5 D11 — WPF parity fix)
+ *
+ * `zh-CN` falls back to `zh-TW` first, then `en-US`. This mirrors
+ * WPF `Beanfun/Helper/I18n.cs` exactly: the WPF `LoadLanguage`
+ * routine builds a `MergedDictionaries` stack walking up the
+ * culture parent chain (`zh-Hans → zh`), so any key missing from
+ * `Beanfun/Lang/zh-Hans.xaml` (currently ~30 keys including
+ * `Cancel`, `Yes`, `No`, `Tools`, `Weapon`, `ScrollBlack`,
+ * `PerfectCoreNeedSkills`, …) gets resolved from `zh.xaml` at
+ * runtime — Simplified Chinese WPF users see Traditional Chinese
+ * for those keys, never English. The vue-i18n per-locale fallback
+ * map gives the SPA the same two-layer chain (`zh-CN → zh-TW →
+ * en-US`) so SC users never see an English string the WPF app
+ * would have shown them in Chinese.
+ *
+ * Other locales keep the simple `'en-US'` fallback via the
+ * `default` arm (a no-op for `zh-TW` itself which is already the
+ * source of all WPF-generated Chinese strings, and the natural
+ * fallback chain end for `en-US`).
+ *
  * `missingWarn` / `fallbackWarn` are off in production to avoid
  * console spam from any WPF key that the en-US fallback dictionary
  * happens not to define yet.
@@ -78,7 +98,10 @@ export function createAppI18n() {
   return createI18n({
     legacy: false,
     locale: DEFAULT_LOCALE,
-    fallbackLocale: 'en-US',
+    fallbackLocale: {
+      'zh-CN': ['zh-TW', 'en-US'],
+      default: ['en-US'],
+    },
     messages: i18nMessages,
     missingWarn: isDev,
     fallbackWarn: isDev,

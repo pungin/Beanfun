@@ -130,6 +130,8 @@ import { useAuthStore } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
 import { useGameStore } from '../stores/game'
 import { useUiStore, type AppLocale, type LoginMethodValue, type UpdateChannel } from '../stores/ui'
+import { TOOLS_GAME_CODES } from '../constants/tools'
+import ToolsDialogStack from '../windows/ToolsDialogStack.vue'
 
 defineOptions({ name: 'SettingsPage' })
 
@@ -448,21 +450,82 @@ async function pickGamePath(): Promise<void> {
   gamePath.value = picked
 }
 
-/* --------------- D5 — Tools button (P12.5 stub) --------------- */
+/* --------------- P12.5 D7 — Tools button real handler --------------- */
 
 /**
- * Tools button click handler. WPF L271-275 delegates to
- * `accountList.btn_Tools_Click(null, null)` which opens the
- * per-game tools window (MapleTools / KartTools). P12.5 owns the
- * real handler; until then we surface a `console.warn` stub
- * identical to `AccountList.vue`'s `handleTools` so QA can grep
- * one marker for both call sites and so the user gets a consistent
- * "feature not yet ready" experience.
+ * Settings-page Tools button visibility gate. Mirrors WPF
+ * `MainWindow.xaml.cs::selectedGameChanged` L621 (when the game
+ * has a per-game launcher prefs panel, the Tools button is
+ * shown) and L630-633 (when it doesn't, the Tools button is
+ * still shown for `610096_TE` but hidden otherwise):
+ *
+ * ```cs
+ * // L621 (TW MapleStory branch)
+ * settingPage.btn_Tools.Visibility = Visibility.Visible;
+ *
+ * // L630-633 (KartRider / non-launcher branch)
+ * if (gameCode == "610096_TE")
+ *     settingPage.btn_Tools.Visibility = Visibility.Visible;
+ * else
+ *     settingPage.btn_Tools.Visibility = Visibility.Collapsed;
+ * ```
+ *
+ * Net effect: the WPF Settings Tools button is visible iff
+ * `gameCode ∈ {610074_T9, 610075_T9, 610096_TE}` — the same
+ * three codes the AccountList Tools button uses. We collapse
+ * the two WPF branches into a single `TOOLS_GAME_CODES`
+ * membership check (sourced from `src/constants/tools.ts`) for
+ * consistency with `pages/AccountList.vue::showToolsButton`.
+ *
+ * # Why P12.5 D7 added the gate (was unconditionally visible in D5)
+ *
+ * D5 shipped the Settings shell with the Tools button always
+ * visible because the click handler was a `console.warn` stub —
+ * a hidden stub button would have been QA-invisible. D7 wires
+ * the real dispatch to `ToolsDialogStack`, which is a no-op for
+ * non-tools-bearing games (matches WPF's switch fallthrough);
+ * that no-op would silently confuse a user clicking the button
+ * with no observable outcome. Adding the gate restores the WPF
+ * "the affordance only exists where it does something" UX
+ * invariant and matches `AccountList.vue`'s D8e gate
+ * one-for-one.
+ */
+const showToolsButton = computed<boolean>(() => {
+  if (game.selectedGameCode === null) return false
+  return TOOLS_GAME_CODES.has(game.selectedGameCode)
+})
+
+/**
+ * Imperative handle to the {@link ToolsDialogStack} mounted at
+ * the bottom of the template. Same pattern as the AccountList
+ * page (see `pages/AccountList.vue::toolsDialogRef` docblock for
+ * the full rationale on why imperative + why a single wrapper).
+ *
+ * The two pages each mount their own `ToolsDialogStack`
+ * instance — the dialog visibility refs live inside the wrapper,
+ * so two parallel mounts on different routes don't share state.
+ * In practice only one is alive at a time (vue-router unmounts
+ * the inactive page), so the duplication is purely a "mount
+ * site" concern, not a state-coupling one.
+ */
+const toolsDialogRef = ref<InstanceType<typeof ToolsDialogStack> | null>(null)
+
+/**
+ * Tools button click handler. Mirrors WPF
+ * `Settings.xaml.cs::btn_Tools_Click` L271-275, which delegates
+ * straight to `accountList.btn_Tools_Click(null, null)` — i.e.
+ * the same dispatch the AccountList page runs. We replicate that
+ * "one dispatch, two call sites" shape by routing both pages
+ * through the shared `ToolsDialogStack::openForGame`.
+ *
+ * `void`-prefix on the call: see
+ * `pages/AccountList.vue::handleTools` docblock for the
+ * fire-and-forget rationale.
  */
 function handleTools(): void {
-  console.warn(
-    '[Settings] Tools button — handler pending real D-step (P12.5 MapleTools/KartTools).',
-  )
+  const code = game.selectedGameCode
+  if (code === null) return
+  void toolsDialogRef.value?.openForGame(code)
 }
 
 /* --------------- D4 — DisableHardwareAcceleration restart prompt --------------- */
@@ -772,7 +835,16 @@ onMounted(() => {
                 </el-tooltip>
               </div>
 
-              <div class="settings__row">
+              <div v-if="showToolsButton" class="settings__row" data-test="settings-tools-row">
+                <!--
+                  P12.5 D7: WPF parity gate — the Tools button is only
+                  rendered for the three tools-bearing game codes
+                  (`MainWindow.xaml.cs` L621 / L630-633 hides it for
+                  any other game). Hidden via `v-if` rather than
+                  `display: none` so the surrounding row collapses
+                  cleanly when the button is absent (mirrors WPF
+                  `Visibility.Collapsed` semantics, not `Hidden`).
+                -->
                 <el-button
                   class="bf-btn-secondary settings__inline-btn"
                   data-test="settings-tools"
@@ -807,6 +879,15 @@ onMounted(() => {
           <span>{{ t('Back') }}</span>
         </el-button>
       </footer>
+
+      <!-- P12.5 D7: Tools dialog stack — same wrapper component the
+           AccountList page mounts. See `pages/AccountList.vue`'s
+           ToolsDialogStack mount comment + `windows/ToolsDialogStack.vue`
+           top docblock for the full design discussion. The wrapper
+           mounts unconditionally so its internal dialog mounts can
+           play their open transitions on first open; per-dialog
+           visibility is owned inside the wrapper. -->
+      <ToolsDialogStack ref="toolsDialogRef" />
     </div>
   </main>
 </template>

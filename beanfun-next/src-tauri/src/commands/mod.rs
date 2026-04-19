@@ -137,6 +137,7 @@ pub mod dto;
 pub mod error;
 pub mod game;
 pub mod launcher;
+pub mod maple_cache;
 pub mod otp;
 pub mod session;
 pub mod state;
@@ -280,6 +281,8 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         launcher::auto_paste,
         // game (P12.3 D2 — list_games)
         game::list_games,
+        // maple_cache (P12.5 D1 — Recycling button on MapleTools)
+        maple_cache::clean_maple_game_cache,
     ])
 }
 
@@ -452,6 +455,8 @@ mod bindings_file_tests {
         "unconnectedGameChangePassword",
         // --- P12.3 D8a — game switcher session sync -----------------
         "setActiveService",
+        // --- P12.5 D1 — MapleStory cache cleanup --------------------
+        "cleanMapleGameCache",
     ];
 
     /// DTO type names the frontend imports from `bindings.ts`.

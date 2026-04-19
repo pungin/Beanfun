@@ -1818,6 +1818,52 @@ async listGames() : Promise<Result<GameInfoBundle, CommandError>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Sweep MapleStory's per-launch cache from the directory holding
+ * `game_path`. Mirrors WPF `btn_Recycling_Click` exactly — wipes
+ * `blob_storage` / `GPUCache` / `VideoDecodeStats` / `XignCode`,
+ * recursively removes any stale `*.$$$` update directories, and
+ * deletes any `*.dmp` files plus the two Locale-Emulator helper
+ * DLLs (`localeemulator.dll` / `loaderdll.dll`) the launcher
+ * drops next to the executable.
+ * 
+ * `game_path` is the full path to the game's `.exe` (the same
+ * value `Settings.gamePath` shows the user); the parent
+ * directory is derived inside the service so the frontend
+ * doesn't need to do any path manipulation.
+ * 
+ * Returns a [`CleanCacheReport`] describing exactly which items
+ * were removed and which item-level failures (if any) occurred.
+ * Per-item failures do **not** abort the sweep — they're
+ * captured into [`CleanCacheReport::errors`] so the toast can
+ * surface "X removed, Y failed" instead of giving the user a
+ * false success.
+ * 
+ * # Errors
+ * 
+ * Pre-flight failures bubble up as `CommandError` and skip the
+ * sweep entirely:
+ * 
+ * - `maple_cache.path_empty` — `game_path` was empty.
+ * - `maple_cache.path_no_parent` — `game_path` had no parent.
+ * - `maple_cache.path_not_found` — resolved game directory does
+ * not exist.
+ * - `maple_cache.path_not_a_dir` — resolved path exists but is a
+ * regular file.
+ * - `maple_cache.read_dir_failed` — listing the directory's
+ * children failed before any cleanup could run.
+ * - `maple_cache.spawn_blocking_failed` — the blocking task
+ * panicked or was cancelled (should not happen in steady
+ * state).
+ */
+async cleanMapleGameCache(gamePath: string) : Promise<Result<CleanCacheReport, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clean_maple_game_cache", { gamePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -2210,6 +2256,40 @@ session: AddAccountSession;
  * the server text verbatim (no i18n / classification).
  */
 error_message: string }
+/**
+ * Outcome of a single [`clean_maple_game_cache`] run.
+ * 
+ * Carries enough information for the frontend to render a
+ * summary toast like "removed N directories and M files (K
+ * errors)". Names are stored relative to the game directory so
+ * the toast doesn't leak the user's full install path.
+ * 
+ * # Wire shape
+ * 
+ * Three flat arrays; the frontend pattern-matches on
+ * `report.errors.length === 0` to decide between the
+ * `MsgRecyclingDone` toast (matching WPF) and a richer
+ * "completed with errors" notification.
+ */
+export type CleanCacheReport = { 
+/**
+ * Names of directories that were successfully removed,
+ * relative to the game directory.
+ */
+deleted_dirs: string[]; 
+/**
+ * Names of files that were successfully removed, relative to
+ * the game directory.
+ */
+deleted_files: string[]; 
+/**
+ * Best-effort per-item failure descriptions in the form
+ * `"<name>: <io_kind>"` (e.g. `"XignCode: PermissionDenied"`).
+ * Mirrors WPF's "don't abort on partial failure" semantic
+ * while still letting the frontend surface a non-empty list
+ * to the user.
+ */
+errors: string[] }
 /**
  * IPC-facing error DTO. Preserves a stable `{ code, message, details }`
  * shape across every Tauri command.

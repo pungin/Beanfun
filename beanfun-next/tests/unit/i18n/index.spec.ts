@@ -82,8 +82,12 @@ describe('locale assets', () => {
    *    upstream convention and empirically ship with the same key
    *    set today.
    *
-   * Runtime gaps in zh-CN are filled by vue-i18n's `fallbackLocale:
-   * 'en-US'` (see `i18n/index.ts`), which matches WPF's behavior.
+   * Runtime gaps in zh-CN are filled by vue-i18n's per-locale
+   * fallback chain `zh-CN → zh-TW → en-US` (see `i18n/index.ts`
+   * `createAppI18n.fallbackLocale`), which mirrors WPF
+   * `Helper/I18n.cs::LoadLanguage`'s `MergedDictionaries` stack
+   * walking the culture parent chain (`zh-Hans → zh`). The
+   * `fallback chain` test below pins this WPF parity contract.
    */
   it('all three generated WPF dictionaries load non-empty', () => {
     expect(Object.keys(zhTwGenerated).length).toBeGreaterThan(0)
@@ -162,6 +166,40 @@ describe('createAppI18n', () => {
     expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['zh-TW'].loginShell.heading)
     setLocale(i18n, 'en-US')
     expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['en-US'].loginShell.heading)
+  })
+
+  it('zh-CN falls back to zh-TW (NOT en-US) for keys missing in zh-Hans.xaml (WPF parity)', () => {
+    /*
+     * P12.5 D11 regression guard.
+     *
+     * `Beanfun/Lang/zh-Hans.xaml` is missing ~30 keys that
+     * `zh.xaml` and `en.xaml` define (`Cancel`, `Yes`, `No`,
+     * `Tools`, `Weapon`, `ScrollBlack`, `PerfectCoreNeedSkills`,
+     * …). WPF runtime fills those via `MergedDictionaries`
+     * culture-parent chain (`zh-Hans → zh`), so a Simplified
+     * Chinese WPF user sees the Traditional Chinese string for
+     * those keys, NOT English.
+     *
+     * The vue-i18n per-locale fallback map in `i18n/index.ts`
+     * mirrors that chain (`zh-CN → zh-TW → en-US`). This test
+     * pins the parity by exercising a representative key
+     * (`Cancel`) that exists only in zh-TW + en-US — a
+     * regression that flips the chain back to a flat `en-US`
+     * fallback would render "Cancel" instead of "取消" and fail
+     * here loudly.
+     */
+    const i18n = createAppI18n()
+    setLocale(i18n, 'zh-CN')
+
+    const cancel = i18n.global.t('Cancel')
+    expect(cancel).toBe('取消')
+    /*
+     * Defensive: prove the en-US table really does carry a
+     * different (English) value for the same key, so the
+     * "fall back to zh-TW" assertion above isn't accidentally
+     * passing because both tables happen to share the value.
+     */
+    expect(i18nMessages['en-US'].Cancel).not.toBe('取消')
   })
 })
 
