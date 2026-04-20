@@ -141,9 +141,10 @@ wmi = "0.14"
 webview2-com-sys = "0.38"
 webview2-com = "0.38"
 # Same windows-core version as webview2-com-sys for PCWSTR / Interface types.
-[target.'cfg(windows)'.dependencies.wv2-windows-core]
-package = "windows-core"
-version = "0.61"
+# Inline form (instead of `[target.'cfg(windows)'.dependencies.wv2-windows-core]`)
+# avoids a standalone `version = "..."` line that the release workflow's
+# version-bump regex previously misidentified as the package version.
+wv2-windows-core = { package = "windows-core", version = "0.61" }
 
 [dev-dependencies]
 wiremock = "0.6"
