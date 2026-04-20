@@ -79,7 +79,7 @@ pub const LR_GUID: &str = "ef3e7b42-a87c-4c07-ae3e-eeebeef12762";
 ///
 /// Bytes come from `include_bytes!` at compile time — the Rust target
 /// binary carries the 5 files inline, matching WPF's embedded-resource
-/// approach and keeping beanfun-next self-contained.
+/// approach and keeping Beanfun self-contained.
 pub const LR_ASSETS: [(&str, &[u8]); 5] = [
     (
         "LRConfig.xml",

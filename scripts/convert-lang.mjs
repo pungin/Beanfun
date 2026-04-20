@@ -5,7 +5,7 @@
  * Convert legacy WPF `Beanfun/Lang/*.xaml` resource dictionaries
  * into vue-i18n flat KV JSON files in `src/locales/`.
  *
- * Run from the `beanfun-next/` directory:
+ * Run from the project root:
  *
  *     node scripts/convert-lang.mjs
  *

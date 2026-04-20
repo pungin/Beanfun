@@ -1,8 +1,8 @@
-# beanfun-next Todo
+# Beanfun Todo
 
-## Working tree — 待 commit（P12.4-followup-B-fix F1-F9）
+## 已完成
 
-已實作 + smoke test 通過，等待與下方新需求合併後一次 commit。
+### F. In-app browser fixes (P12.4-followup-B-fix)
 
 - [x] F1 backend allowlist 改 `*.beanfun.com` suffix match
 - [x] F2 砍 VideoReport button（目標 URL 長期 404）
@@ -11,8 +11,6 @@
 - [x] F7 WebviewWindow 開窗黑屏修復（visible(false) + on_page_load show + 5s safety net）
 - [x] F8 客服中心按鈕 wire-up（frontend region → static URL → useInAppBrowser）
 - [x] F9 會員中心按鈕 wire-up（backend command, web_token 不離開 Rust）
-
-## 新需求
 
 ### A. About 頁修改
 
@@ -44,11 +42,34 @@
 - [x] D4 updater: 純 semver `6.0.0` 掉入 Path B 誤判有新版 → 加 Path C semver 比較
 - [x] D5 視窗寬度 800 → 720
 
+### E. Repo 目錄重組
+
+- [x] E1 `git mv Beanfun/LocaleRemulator` → `src-tauri/LocaleRemulator`
+- [x] E2 `git mv Beanfun/Lang` → `Lang/`
+- [x] E3 更新 `build.rs` / `locale_remulator.rs` / `convert-lang.mjs` 路徑
+- [x] E4 `git rm -r Beanfun/` + `Beanfun.sln` + `.config/` + `stitch-prompt.md`
+- [x] E5 扁平化 `beanfun-next/` 到 repo 根
+- [x] E6 合併 `.gitignore`，移除 WPF 條目
+- [x] E7 CI: 重命名 `ci.yml`，移除 `format-check.yml` + `build-and-release.yml`
+- [x] E8 驗證：cargo check/test + npm typecheck/lint/vitest 全通過
+
+### F2. Post-restructure cleanup
+
+- [x] F2.1 App 名稱 `beanfun-next` → `Beanfun`（Cargo.toml / tauri.conf.json / package.json / window title）
+- [x] F2.2 Rust lib name `beanfun_next_lib` → `beanfun_lib`（全檔案更新）
+- [x] F2.3 CI workflows 檢查（ci.yml / commitlint.yml 結構正確）
+- [x] F2.4 `.gitignore` 清理
+- [x] F2.5 `README.md` 重寫（移除過時路徑和描述）
+- [x] F2.6 `include_bytes!` 路徑修正（`locale_remulator.rs`）
+- [x] F2.7 全域 `beanfun-next` 殘留引用掃描 + 修正（comments / tests / configs）
+- [x] F2.8 `cargo fmt` + `prettier --write` 格式化
+- [x] F2.9 驗證全通過：cargo check ✓ / cargo test (722 passed) ✓ / typecheck ✓ / lint ✓ / vitest (586 passed) ✓
+
 ## 待處理（下一輪）
 
-- [ ] CI / lint / test / 打包 exe 流程
+- [ ] CI / 打包 exe 流程
 
-## Smoke test
+## Smoke test 紀錄
 
 - [x] T1 About: 署名 / GitHub 連結 / 雙 email 各開一次
 - [x] T2 Tray: 勾選 → minimize → tray 出現 → 左鍵還原 → tray 消失
@@ -58,6 +79,6 @@
 - [x] T6 About 頁版號顯示 6.0.0
 - [x] T7 回歸: PlayerReport / 會員中心 / 客服中心 / game images
 
-## Commit
+## Commit 紀錄
 
-- [ ] Single commit（F1-F9 + A + B + C + Todo）
+- [x] `97ff386` feat(next): in-app browser fixes, UI polish, tray, updater & manifest
