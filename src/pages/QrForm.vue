@@ -374,7 +374,7 @@ function handleGameStart(): void {
 
     <el-button
       class="qr-form__deeplink"
-      size="large"
+      size="default"
       :disabled="!canCopyDeeplink"
       data-testid="qr-copy-deeplink"
       @click="copyDeeplink"
@@ -383,13 +383,13 @@ function handleGameStart(): void {
     </el-button>
 
     <div class="qr-form__actions">
-      <el-button class="qr-form__back" size="large" data-testid="qr-back" @click="goBack">
+      <el-button class="qr-form__back" size="default" data-testid="qr-back" @click="goBack">
         {{ t('BackRegularLogin') }}
       </el-button>
       <el-button
         class="qr-form__refresh"
         type="primary"
-        size="large"
+        size="default"
         :loading="isStarting"
         data-testid="qr-refresh"
         @click="refresh"
@@ -400,7 +400,7 @@ function handleGameStart(): void {
 
     <el-button
       class="qr-form__game-start"
-      size="large"
+      size="default"
       data-testid="qr-game-start"
       @click="handleGameStart"
     >
