@@ -146,7 +146,8 @@ jobs:
 
           $lastRelease = gh api repos/${{ github.repository }}/releases --paginate 2>$null | ConvertFrom-Json | Sort-Object created_at -Descending | Select-Object -First 1
 
-          $logArgs = @('log', '--pretty=format:"- [%h](' + $repoUrl + '/commit/%H) %s - %an (%ad)"', '--date=short', '--no-merges')
+          $fmt = "- [%h]($repoUrl/commit/%H) %s - %an (%ad)"
+          $logArgs = @('log', "--pretty=format:$fmt", '--date=short', '--no-merges')
           if ($lastRelease) {
               $logArgs += "$($lastRelease.tag_name)..HEAD"
           } else {
