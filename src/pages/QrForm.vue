@@ -251,6 +251,7 @@ onBeforeUnmount(() => {
 
 const bitmap = computed(() => auth.qrChallenge?.bitmap_base64 ?? null)
 const deeplink = computed(() => auth.qrChallenge?.deeplink ?? null)
+const showEnlarged = ref(false)
 const canCopyDeeplink = computed(() => {
   const link = deeplink.value
   return typeof link === 'string' && link.length > 0
@@ -265,7 +266,7 @@ async function copyQrImage(): Promise<void> {
     const res = await fetch(dataUrl)
     const blob = await res.blob()
     await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
-    ElMessage.success(t('CopyFinished'))
+    ElMessage.success(t('loginQr.copyQrSuccess'))
   } catch {
     ElMessage.error(t('CopyFailed'))
   }
@@ -336,6 +337,37 @@ function handleGameStart(): void {
       <div v-else class="qr-form__placeholder" />
     </div>
 
+    <div v-if="bitmap" class="qr-form__qr-actions">
+      <button
+        type="button"
+        class="qr-form__qr-btn"
+        data-testid="qr-enlarge"
+        @click="showEnlarged = true"
+      >
+        <span class="material-symbols-outlined">zoom_in</span>
+        {{ t('loginQr.enlarge') }}
+      </button>
+      <button
+        type="button"
+        class="qr-form__qr-btn"
+        data-testid="qr-copy-image"
+        @click="copyQrImage"
+      >
+        <span class="material-symbols-outlined">content_copy</span>
+        {{ t('loginQr.copyQr') }}
+      </button>
+    </div>
+
+    <!-- Enlarged QR dialog -->
+    <div v-if="showEnlarged" class="qr-form__overlay" @click="showEnlarged = false">
+      <div class="qr-form__enlarged" @click.stop>
+        <img :src="bitmap!" :alt="t('loginQr.title')" class="qr-form__enlarged-img" />
+        <button type="button" class="qr-form__enlarged-close" @click="showEnlarged = false">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+    </div>
+
     <p v-if="connectionLost" class="qr-form__error" data-testid="qr-connection-lost">
       {{ t('loginQr.connectionLost') }}
     </p>
@@ -383,6 +415,9 @@ function handleGameStart(): void {
   flex-direction: column;
   gap: 1rem;
   align-items: stretch;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .qr-form__header {
@@ -470,5 +505,78 @@ function handleGameStart(): void {
 .qr-form__game-start {
   width: 100%;
   font-weight: 700;
+}
+
+.qr-form__qr-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.qr-form__qr-btn {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 0.375rem 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--bf-on-surface-variant, #54443a);
+  transition: background 150ms ease;
+}
+.qr-form__qr-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+.qr-form__qr-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.qr-form__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+}
+
+.qr-form__enlarged {
+  position: relative;
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.qr-form__enlarged-img {
+  width: 360px;
+  height: 360px;
+  image-rendering: pixelated;
+  display: block;
+}
+
+.qr-form__enlarged-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  appearance: none;
+  background: rgba(0, 0, 0, 0.06);
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #333;
+  transition: background 150ms ease;
+}
+.qr-form__enlarged-close:hover {
+  background: rgba(0, 0, 0, 0.12);
 }
 </style>
