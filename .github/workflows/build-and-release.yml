@@ -30,7 +30,7 @@ env:
 
 jobs:
   build:
-    name: 'Build Beanfun.exe & Create Release'
+    name: 'Build Beanfun.exe + NSIS Installer & Create Release'
     runs-on: windows-latest
     permissions:
       contents: write
@@ -125,8 +125,14 @@ jobs:
           $pkg = $pkg -replace '"version"\s*:\s*"[\d.]+"', "`"version`": `"$semVer`""
           [System.IO.File]::WriteAllText("package.json", $pkg)
 
-      - name: Build Tauri application (standalone exe)
-        run: npm run tauri build -- --no-bundle
+      - name: Build Tauri application (standalone exe + NSIS installer)
+        # `--bundles nsis` builds the standalone exe at
+        # src-tauri/target/release/beanfun.exe (consumed by the rename step
+        # below) and additionally packs an NSIS installer at
+        # src-tauri/target/release/bundle/nsis/Beanfun_<ver>_x64-setup.exe
+        # using the offlineInstaller WebView2 mode configured in
+        # src-tauri/tauri.conf.json.
+        run: npm run tauri build -- --bundles nsis
 
       - name: Rename exe to Beanfun.exe
         shell: cmd
@@ -191,7 +197,11 @@ jobs:
             ---
 
             ### Download
-            **[Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)**
+
+            | Type | File | When to use |
+            |------|------|-------------|
+            | Portable | **[Beanfun.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun.exe)** | Drop-in replacement; requires WebView2 already installed (Win11 / most Win10) |
+            | Installer | **[Beanfun_${{ steps.prep_version.outputs.semantic_version }}_x64-setup.exe](${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.prep_version.outputs.tag_name }}/Beanfun_${{ steps.prep_version.outputs.semantic_version }}_x64-setup.exe)** | Bundles WebView2 runtime offline; for stripped-down Windows 10 (no Edge) or first-time install |
 
             ### What's New
             ${{ steps.prep_release.outputs.commits_text }}
@@ -199,8 +209,14 @@ jobs:
             Total commits: ${{ steps.prep_release.outputs.commit_count }}
 
             ### Installation
-            1. Download **Beanfun.exe** above.
+
+            **Portable (Beanfun.exe)**
+            1. Download `Beanfun.exe`.
             2. Replace your old file and run.
+
+            **Installer (Beanfun_${{ steps.prep_version.outputs.semantic_version }}_x64-setup.exe)**
+            1. Download the setup installer.
+            2. Run it; WebView2 runtime is bundled and will be installed automatically if missing.
 
             ${{ github.event.inputs.release_type == 'prerelease' && '> **NOTE:** This is a pre-release version. Use at your own risk.' || '' }}
 
@@ -214,7 +230,9 @@ jobs:
             | Source Commit | [View](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |
 
             </details>
-          files: src-tauri/target/release/Beanfun.exe
+          files: |
+            src-tauri/target/release/Beanfun.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe
           draft: false
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
 
