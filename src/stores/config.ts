@@ -102,7 +102,10 @@ export const useConfigStore = defineStore('config', () => {
   async function set(key: string, value: string | null): Promise<void> {
     const result = await safeInvoke(commands.setConfig(key, value))
     if (!result.ok) {
-      console.warn(`[config] set "${key}" failed (file may be read-only), using in-memory value`, result.error)
+      console.warn(
+        `[config] set "${key}" failed (file may be read-only), using in-memory value`,
+        result.error,
+      )
     }
     if (value === null) {
       delete entries.value[key]

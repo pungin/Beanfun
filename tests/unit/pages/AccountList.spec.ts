@@ -224,7 +224,12 @@ vi.mock('@element-plus/icons-vue', () => {
  * unit tests — those would belong in an E2E suite.
  */
 let capturedOnEnd:
-  | ((event: { oldIndex?: number; newIndex?: number; item: HTMLElement; from: HTMLElement }) => void)
+  | ((event: {
+      oldIndex?: number
+      newIndex?: number
+      item: HTMLElement
+      from: HTMLElement
+    }) => void)
   | null = null
 
 vi.mock('sortablejs', () => ({

@@ -102,8 +102,7 @@ defineOptions({ name: 'MapleToolsDialog' })
 const PLAYER_REPORT_URL =
   'https://event.beanfun.com/customerservice/PluginReporting/PlayerReport.aspx'
 
-const VIDEO_REPORT_URL =
-  'https://beanfun-event.beanfun.com/EventAD_Mobile/EventAD?eventAdId=3453'
+const VIDEO_REPORT_URL = 'https://beanfun-event.beanfun.com/EventAD_Mobile/EventAD?eventAdId=3453'
 
 const props = withDefaults(
   defineProps<{

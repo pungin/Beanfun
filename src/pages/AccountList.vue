@@ -1889,12 +1889,12 @@ onBeforeUnmount(destroySortable)
           </div>
         </header>
 
-      <!-- Game info bar (D8d) — real game name + image + change-game button. -->
-      <section class="account-list__game bf-glass-panel">
-        <div class="account-list__game-row">
-          <div class="account-list__game-meta">
-            <div class="account-list__game-icon" aria-hidden="true">
-              <!--
+        <!-- Game info bar (D8d) — real game name + image + change-game button. -->
+        <section class="account-list__game bf-glass-panel">
+          <div class="account-list__game-row">
+            <div class="account-list__game-meta">
+              <div class="account-list__game-icon" aria-hidden="true">
+                <!--
                 D8d: prefer the per-game banner image when the catalogue
                 has hydrated; fall back to the generic VideoPlay glyph
                 so the layout doesn't collapse during the brief setup
@@ -1902,33 +1902,33 @@ onBeforeUnmount(destroySortable)
                 container size is fixed regardless so the row height
                 stays stable across the swap.
               -->
-              <img
-                v-if="gameImageUrl"
-                :src="gameImageUrl"
-                :alt="gameNameDisplay"
-                class="account-list__game-icon-img"
-                data-test="account-list-game-image"
-              />
-              <el-icon v-else :size="24"><VideoPlay /></el-icon>
+                <img
+                  v-if="gameImageUrl"
+                  :src="gameImageUrl"
+                  :alt="gameNameDisplay"
+                  class="account-list__game-icon-img"
+                  data-test="account-list-game-image"
+                />
+                <el-icon v-else :size="24"><VideoPlay /></el-icon>
+              </div>
+              <button
+                type="button"
+                class="account-list__game-info"
+                :title="t('accountList.changeGame')"
+                data-test="account-list-change-game"
+                @click="handleChangeGame"
+              >
+                <span class="account-list__game-name" data-test="account-list-game-name">
+                  {{ gameNameDisplay }}
+                </span>
+                <span class="account-list__game-status">
+                  <span class="account-list__game-status-dot" />
+                  {{ t('accountList.statusOnline') }}
+                </span>
+              </button>
             </div>
-            <button
-              type="button"
-              class="account-list__game-info"
-              :title="t('accountList.changeGame')"
-              data-test="account-list-change-game"
-              @click="handleChangeGame"
-            >
-              <span class="account-list__game-name" data-test="account-list-game-name">
-                {{ gameNameDisplay }}
-              </span>
-              <span class="account-list__game-status">
-                <span class="account-list__game-status-dot" />
-                {{ t('accountList.statusOnline') }}
-              </span>
-            </button>
-          </div>
-          <div class="account-list__game-actions">
-            <!--
+            <div class="account-list__game-actions">
+              <!--
               D8e: Tools button is only rendered for the three game
               codes WPF whitelisted (`610074_T9` / `610075_T9` /
               `610096_TE`). Hidden via `v-if` rather than `display:
@@ -1936,146 +1936,146 @@ onBeforeUnmount(destroySortable)
               that isn't reachable, and so the surrounding flex row
               tightens up cleanly when the button is absent.
             -->
-            <button
-              v-if="showToolsButton"
-              type="button"
-              class="bf-btn-ghost-icon account-list__icon-btn"
-              :title="t('accountList.toolsButton')"
-              data-test="account-list-tools"
-              @click="handleTools"
-            >
-              <el-icon><Operation /></el-icon>
-            </button>
-            <button
-              type="button"
-              class="bf-btn-ghost-icon account-list__icon-btn account-list__icon-btn--danger"
-              :title="t('Logout')"
-              data-test="account-list-logout"
-              @click="handleLogout"
-            >
-              <el-icon><SwitchButton /></el-icon>
-            </button>
-          </div>
-        </div>
-        <button
-          type="button"
-          class="bf-btn-gradient account-list__start-btn"
-          :disabled="startGameDisabled"
-          data-test="account-list-start"
-          @click="handleStartGame"
-        >
-          <el-icon><VideoPlay /></el-icon>
-          <span>{{ t('GameStart') }}</span>
-        </button>
-      </section>
-
-      <!-- Quick actions row: balance + member center + support (all stubs) -->
-      <section class="account-list__quick">
-        <div class="account-list__balance bf-glass-card bf-ghost-border">
-          <div class="account-list__balance-text">
-            <span class="account-list__balance-label">
-              {{ t('accountList.gashBalance') }}
-            </span>
-            <span class="account-list__balance-value" data-test="account-list-balance-value">
-              {{ formattedRemainPoint }}
-            </span>
+              <button
+                v-if="showToolsButton"
+                type="button"
+                class="bf-btn-ghost-icon account-list__icon-btn"
+                :title="t('accountList.toolsButton')"
+                data-test="account-list-tools"
+                @click="handleTools"
+              >
+                <el-icon><Operation /></el-icon>
+              </button>
+              <button
+                type="button"
+                class="bf-btn-ghost-icon account-list__icon-btn account-list__icon-btn--danger"
+                :title="t('Logout')"
+                data-test="account-list-logout"
+                @click="handleLogout"
+              >
+                <el-icon><SwitchButton /></el-icon>
+              </button>
+            </div>
           </div>
           <button
             type="button"
-            class="account-list__balance-refresh"
-            :class="{ 'account-list__balance-refresh--spinning': refreshing }"
-            :title="t('accountList.refreshBalance')"
-            :disabled="refreshing"
-            data-test="account-list-refresh-balance"
-            @click="handleRefreshBalance"
+            class="bf-btn-gradient account-list__start-btn"
+            :disabled="startGameDisabled"
+            data-test="account-list-start"
+            @click="handleStartGame"
           >
-            <el-icon><Refresh /></el-icon>
+            <el-icon><VideoPlay /></el-icon>
+            <span>{{ t('GameStart') }}</span>
           </button>
-        </div>
-        <button
-          type="button"
-          class="account-list__quick-link bf-glass-card bf-ghost-border"
-          data-test="account-list-gash-recharge"
-          @click="handleGashRecharge"
-        >
-          <el-icon><Wallet /></el-icon>
-          <span>{{ t('GashRecharge') }}</span>
-        </button>
-        <button
-          type="button"
-          class="account-list__quick-link bf-glass-card bf-ghost-border"
-          data-test="account-list-app-gash-recharge"
-          @click="handleAppGashRecharge"
-        >
-          <el-icon><Iphone /></el-icon>
-          <span>{{ t('AppGashRecharge') }}</span>
-        </button>
-        <button
-          type="button"
-          class="account-list__quick-link bf-glass-card bf-ghost-border"
-          data-test="account-list-member-center"
-          @click="handleMemberCenter"
-        >
-          <el-icon><User /></el-icon>
-          <span>{{ t('accountList.memberCenter') }}</span>
-        </button>
-        <button
-          type="button"
-          class="account-list__quick-link bf-glass-card bf-ghost-border"
-          data-test="account-list-customer-service"
-          @click="handleCustomerService"
-        >
-          <el-icon><Service /></el-icon>
-          <span>{{ t('accountList.customerService') }}</span>
-        </button>
-      </section>
+        </section>
 
-      <!-- Service accounts list — 4 rendered states (REAL) -->
-      <section class="account-list__list bf-glass-panel">
-        <header class="account-list__list-header">
-          <h2 class="account-list__list-title">
-            {{ t('accountList.serviceAccountsHeading') }}
-          </h2>
-          <span class="account-list__list-count" data-test="account-list-count">
-            {{ t('accountList.accountCount', { count: accountCount }) }}
-          </span>
-        </header>
-
-        <div class="account-list__list-body bf-custom-scrollbar">
-          <p
-            v-if="loadState === 'loading'"
-            class="account-list__list-state"
-            data-test="account-list-loading"
-          >
-            {{ t('accountList.loading') }}
-          </p>
-
-          <div
-            v-else-if="loadState === 'error'"
-            class="account-list__list-state account-list__list-state--error"
-            data-test="account-list-error"
-          >
-            <p>{{ loadError ?? t('accountList.loadFailed') }}</p>
-            <el-button
-              type="primary"
-              plain
-              size="small"
-              data-test="account-list-retry"
-              @click="loadList"
+        <!-- Quick actions row: balance + member center + support (all stubs) -->
+        <section class="account-list__quick">
+          <div class="account-list__balance bf-glass-card bf-ghost-border">
+            <div class="account-list__balance-text">
+              <span class="account-list__balance-label">
+                {{ t('accountList.gashBalance') }}
+              </span>
+              <span class="account-list__balance-value" data-test="account-list-balance-value">
+                {{ formattedRemainPoint }}
+              </span>
+            </div>
+            <button
+              type="button"
+              class="account-list__balance-refresh"
+              :class="{ 'account-list__balance-refresh--spinning': refreshing }"
+              :title="t('accountList.refreshBalance')"
+              :disabled="refreshing"
+              data-test="account-list-refresh-balance"
+              @click="handleRefreshBalance"
             >
-              {{ t('accountList.retry') }}
-            </el-button>
+              <el-icon><Refresh /></el-icon>
+            </button>
           </div>
-
-          <p
-            v-else-if="serviceAccounts.length === 0"
-            class="account-list__list-state"
-            data-test="account-list-empty"
+          <button
+            type="button"
+            class="account-list__quick-link bf-glass-card bf-ghost-border"
+            data-test="account-list-gash-recharge"
+            @click="handleGashRecharge"
           >
-            {{ t('accountList.empty') }}
-          </p>
+            <el-icon><Wallet /></el-icon>
+            <span>{{ t('GashRecharge') }}</span>
+          </button>
+          <button
+            type="button"
+            class="account-list__quick-link bf-glass-card bf-ghost-border"
+            data-test="account-list-app-gash-recharge"
+            @click="handleAppGashRecharge"
+          >
+            <el-icon><Iphone /></el-icon>
+            <span>{{ t('AppGashRecharge') }}</span>
+          </button>
+          <button
+            type="button"
+            class="account-list__quick-link bf-glass-card bf-ghost-border"
+            data-test="account-list-member-center"
+            @click="handleMemberCenter"
+          >
+            <el-icon><User /></el-icon>
+            <span>{{ t('accountList.memberCenter') }}</span>
+          </button>
+          <button
+            type="button"
+            class="account-list__quick-link bf-glass-card bf-ghost-border"
+            data-test="account-list-customer-service"
+            @click="handleCustomerService"
+          >
+            <el-icon><Service /></el-icon>
+            <span>{{ t('accountList.customerService') }}</span>
+          </button>
+        </section>
 
-          <!--
+        <!-- Service accounts list — 4 rendered states (REAL) -->
+        <section class="account-list__list bf-glass-panel">
+          <header class="account-list__list-header">
+            <h2 class="account-list__list-title">
+              {{ t('accountList.serviceAccountsHeading') }}
+            </h2>
+            <span class="account-list__list-count" data-test="account-list-count">
+              {{ t('accountList.accountCount', { count: accountCount }) }}
+            </span>
+          </header>
+
+          <div class="account-list__list-body bf-custom-scrollbar">
+            <p
+              v-if="loadState === 'loading'"
+              class="account-list__list-state"
+              data-test="account-list-loading"
+            >
+              {{ t('accountList.loading') }}
+            </p>
+
+            <div
+              v-else-if="loadState === 'error'"
+              class="account-list__list-state account-list__list-state--error"
+              data-test="account-list-error"
+            >
+              <p>{{ loadError ?? t('accountList.loadFailed') }}</p>
+              <el-button
+                type="primary"
+                plain
+                size="small"
+                data-test="account-list-retry"
+                @click="loadList"
+              >
+                {{ t('accountList.retry') }}
+              </el-button>
+            </div>
+
+            <p
+              v-else-if="serviceAccounts.length === 0"
+              class="account-list__list-state"
+              data-test="account-list-empty"
+            >
+              {{ t('accountList.empty') }}
+            </p>
+
+            <!--
             D7: SortableJS (via `rowsRef` + `watch`) makes the row
             list drag-sortable. The `handle` option mirrors WPF's
             `_isHandlePressed` gate — only mouse-down on the grip
@@ -2083,77 +2083,72 @@ onBeforeUnmount(destroySortable)
             to `selectRow`. `ghostClass` styles the placeholder
             slot during drag (defined at bottom of <style scoped>).
           -->
-          <ul
-            v-else
-            ref="rowsRef"
-            class="account-list__rows"
-            data-test="account-list-rows"
-          >
-            <li
-              v-for="(a, idx) in serviceAccounts"
-              :key="a.sid"
-              class="account-list__row"
-              :class="{
-                'account-list__row--selected': isSelected(a),
-                'account-list__row--banned': !a.is_enable,
-              }"
-              :data-test="`account-row-${a.sid}`"
-              @click="selectRow(a)"
-            >
-              <span
-                class="account-list__row-grip"
-                :title="t('accountList.dragHandle')"
-                aria-hidden="true"
-                >⋮⋮</span
+            <ul v-else ref="rowsRef" class="account-list__rows" data-test="account-list-rows">
+              <li
+                v-for="(a, idx) in serviceAccounts"
+                :key="a.sid"
+                class="account-list__row"
+                :class="{
+                  'account-list__row--selected': isSelected(a),
+                  'account-list__row--banned': !a.is_enable,
+                }"
+                :data-test="`account-row-${a.sid}`"
+                @click="selectRow(a)"
               >
-              <span class="account-list__row-num">{{ idx + 1 }}</span>
-              <div class="account-list__row-info">
-                <p class="account-list__row-name">{{ a.sname }}</p>
-                <p class="account-list__row-sub">
-                  <template v-if="a.is_enable">ID: {{ a.sid }}</template>
-                  <template v-else>{{ t('accountList.statusBanned') }}</template>
-                </p>
-              </div>
-              <el-dropdown
-                trigger="click"
-                placement="bottom-end"
-                :hide-on-click="true"
-                popper-class="account-list__row-menu-popper"
-                @click.stop
-              >
-                <button
-                  type="button"
-                  class="account-list__row-more"
-                  :title="t('accountList.moreActions')"
-                  :data-test="`account-row-more-${a.sid}`"
+                <span
+                  class="account-list__row-grip"
+                  :title="t('accountList.dragHandle')"
+                  aria-hidden="true"
+                  >⋮⋮</span
+                >
+                <span class="account-list__row-num">{{ idx + 1 }}</span>
+                <div class="account-list__row-info">
+                  <p class="account-list__row-name">{{ a.sname }}</p>
+                  <p class="account-list__row-sub">
+                    <template v-if="a.is_enable">ID: {{ a.sid }}</template>
+                    <template v-else>{{ t('accountList.statusBanned') }}</template>
+                  </p>
+                </div>
+                <el-dropdown
+                  trigger="click"
+                  placement="bottom-end"
+                  :hide-on-click="true"
+                  popper-class="account-list__row-menu-popper"
                   @click.stop
                 >
-                  <el-icon><MoreFilled /></el-icon>
-                </button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item
-                      :data-test="`account-row-change-alias-${a.sid}`"
-                      @click="handleChangeAlias(a)"
-                    >
-                      <el-icon><EditPen /></el-icon>
-                      <span>{{ t('ChangeAccountName') }}</span>
-                    </el-dropdown-item>
-                    <el-dropdown-item
-                      :data-test="`account-row-info-${a.sid}`"
-                      @click="handleAccountInfo(a)"
-                    >
-                      <el-icon><InfoFilled /></el-icon>
-                      <span>{{ t('GameAccountInfo') }}</span>
-                    </el-dropdown-item>
-                    <el-dropdown-item
-                      :data-test="`account-row-get-email-${a.sid}`"
-                      @click="handleGetEmail"
-                    >
-                      <el-icon><Message /></el-icon>
-                      <span>{{ t('CheckEmail') }}</span>
-                    </el-dropdown-item>
-                    <!--
+                  <button
+                    type="button"
+                    class="account-list__row-more"
+                    :title="t('accountList.moreActions')"
+                    :data-test="`account-row-more-${a.sid}`"
+                    @click.stop
+                  >
+                    <el-icon><MoreFilled /></el-icon>
+                  </button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item
+                        :data-test="`account-row-change-alias-${a.sid}`"
+                        @click="handleChangeAlias(a)"
+                      >
+                        <el-icon><EditPen /></el-icon>
+                        <span>{{ t('ChangeAccountName') }}</span>
+                      </el-dropdown-item>
+                      <el-dropdown-item
+                        :data-test="`account-row-info-${a.sid}`"
+                        @click="handleAccountInfo(a)"
+                      >
+                        <el-icon><InfoFilled /></el-icon>
+                        <span>{{ t('GameAccountInfo') }}</span>
+                      </el-dropdown-item>
+                      <el-dropdown-item
+                        :data-test="`account-row-get-email-${a.sid}`"
+                        @click="handleGetEmail"
+                      >
+                        <el-icon><Message /></el-icon>
+                        <span>{{ t('CheckEmail') }}</span>
+                      </el-dropdown-item>
+                      <!--
                       D8h: Change Password menu item only appears for
                       unconnected games (mirrors WPF
                       `m_ChangePassword.Visibility` toggled by
@@ -2163,68 +2158,68 @@ onBeforeUnmount(destroySortable)
                       opened from the page-level chrome — no
                       per-row affordance is needed there.
                     -->
-                    <el-dropdown-item
-                      v-if="game.isUnconnectedGame"
-                      :data-test="`account-row-change-password-${a.sid}`"
-                      @click="handleChangePassword(a)"
-                    >
-                      <el-icon><Key /></el-icon>
-                      <span>{{ t('ChangePassword') }}</span>
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </li>
-          </ul>
-        </div>
+                      <el-dropdown-item
+                        v-if="game.isUnconnectedGame"
+                        :data-test="`account-row-change-password-${a.sid}`"
+                        @click="handleChangePassword(a)"
+                      >
+                        <el-icon><Key /></el-icon>
+                        <span>{{ t('ChangePassword') }}</span>
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </li>
+            </ul>
+          </div>
 
-        <footer class="account-list__list-footer">
-          <p
-            v-if="limitNoticeText"
-            class="account-list__limit-notice"
-            data-test="account-list-limit-notice"
-          >
-            {{ limitNoticeText }}
-          </p>
-          <button
-            type="button"
-            class="account-list__add-btn"
-            :class="{ 'account-list__add-btn--disabled': isAddAccountDisabled }"
-            :disabled="isAddAccountDisabled"
-            data-test="account-list-add"
-            @click="handleAddAccount"
-          >
-            <el-icon><Plus /></el-icon>
-            <span>{{ t('AddServiceAccount') }}</span>
-          </button>
-        </footer>
-      </section>
+          <footer class="account-list__list-footer">
+            <p
+              v-if="limitNoticeText"
+              class="account-list__limit-notice"
+              data-test="account-list-limit-notice"
+            >
+              {{ limitNoticeText }}
+            </p>
+            <button
+              type="button"
+              class="account-list__add-btn"
+              :class="{ 'account-list__add-btn--disabled': isAddAccountDisabled }"
+              :disabled="isAddAccountDisabled"
+              data-test="account-list-add"
+              @click="handleAddAccount"
+            >
+              <el-icon><Plus /></el-icon>
+              <span>{{ t('AddServiceAccount') }}</span>
+            </button>
+          </footer>
+        </section>
 
-      <!-- Add Service Account modal (D3) — mounted unconditionally so its
+        <!-- Add Service Account modal (D3) — mounted unconditionally so its
            transitions can play; visibility is driven by `addAccountVisible`. -->
-      <AddServiceAccount v-model:visible="addAccountVisible" />
+        <AddServiceAccount v-model:visible="addAccountVisible" />
 
-      <!-- Change Service Account display-name modal (D4) — same mount-always
+        <!-- Change Service Account display-name modal (D4) — same mount-always
            pattern as D3. `changeAliasTarget` is cleared by the watcher above
            so stale account refs don't leak between sessions. -->
-      <ChangeServiceAccountDisplayName
-        v-model:visible="changeAliasVisible"
-        :account="changeAliasTarget"
-      />
+        <ChangeServiceAccountDisplayName
+          v-model:visible="changeAliasVisible"
+          :account="changeAliasTarget"
+        />
 
-      <!-- Service Account read-only info modal (D6) — same mount-always
+        <!-- Service Account read-only info modal (D6) — same mount-always
            pattern as D3 / D4. `accountInfoTarget` is cleared by the
            watcher above so stale account refs don't leak between sessions. -->
-      <ServiceAccountInfo v-model:visible="accountInfoVisible" :account="accountInfoTarget" />
+        <ServiceAccountInfo v-model:visible="accountInfoVisible" :account="accountInfoTarget" />
 
-      <!-- Generic copy-box dialog (D10.1) — currently driven by Get Email
+        <!-- Generic copy-box dialog (D10.1) — currently driven by Get Email
            (D10.5); future per-row context-menu items that need a similar
            "show + copy" affordance can reuse the same single mount by
            writing into `copyBoxTitle` / `copyBoxValue` before flipping
            `copyBoxVisible`. -->
-      <CopyBox v-model:visible="copyBoxVisible" :title="copyBoxTitle" :value="copyBoxValue" />
+        <CopyBox v-model:visible="copyBoxVisible" :title="copyBoxTitle" :value="copyBoxValue" />
 
-      <!-- D8c: Game picker dialog. Driven by either the Change Game
+        <!-- D8c: Game picker dialog. Driven by either the Change Game
            button on the game info bar or the mount-time auto-open
            inside `setupGameOnMount` (when no valid `loginGame`
            resolves against the loaded catalogue). The dialog
@@ -2240,36 +2235,36 @@ onBeforeUnmount(destroySortable)
            fallback (see `gameImageUrl` for the same defensive
            pattern); the gate is the cleaner option here because
            the dialog can't usefully open without a region anyway. -->
-      <GameList
-        v-if="auth.session"
-        v-model:visible="gameListVisible"
-        :region="auth.session.region"
-        @select="handleGameSelected"
-      />
+        <GameList
+          v-if="auth.session"
+          v-model:visible="gameListVisible"
+          :region="auth.session.region"
+          @select="handleGameSelected"
+        />
 
-      <!-- D8g: Unconnected-game Add Account dialog. Mounted alongside
+        <!-- D8g: Unconnected-game Add Account dialog. Mounted alongside
            the regular `<AddServiceAccount />` above; `handleAddAccount`
            dispatches between the two on `game.isUnconnectedGame`.
            The `created` event refreshes the row list so the new
            account appears immediately. -->
-      <UnconnectedGameAddAccount
-        v-model:visible="unconnectedAddVisible"
-        @created="handleUnconnectedAccountCreated"
-      />
+        <UnconnectedGameAddAccount
+          v-model:visible="unconnectedAddVisible"
+          @created="handleUnconnectedAccountCreated"
+        />
 
-      <!-- D8h: Unconnected-game Change Password dialog. Driven by the
+        <!-- D8h: Unconnected-game Change Password dialog. Driven by the
            per-row Change Password menu item (which is itself
            `v-if`-gated on `game.isUnconnectedGame`). The `accountIndex`
            prop is the row's 0-based index in `account.serviceAccounts`,
            captured at menu-trigger time so a downstream selection /
            reorder can't misroute the change-password POST. -->
-      <UnconnectedGameChangePassword
-        v-model:visible="changePasswordVisible"
-        :account-index="changePasswordAccountIndex"
-        @verify-code-sent="handleChangePasswordSent"
-      />
+        <UnconnectedGameChangePassword
+          v-model:visible="changePasswordVisible"
+          :account-index="changePasswordAccountIndex"
+          @verify-code-sent="handleChangePasswordSent"
+        />
 
-      <!-- P12.5 D7: Tools dialog stack — single mount that hosts
+        <!-- P12.5 D7: Tools dialog stack — single mount that hosts
            MapleTools / KartTools / EquipCalculator /
            CoreCalculator (in-app browser routed via composable;
            see followup-B B7). Opened imperatively by `handleTools` via
@@ -2279,59 +2274,59 @@ onBeforeUnmount(destroySortable)
            internal dialog mounts can play their open transitions
            on first open; per-dialog visibility is owned inside
            the wrapper. -->
-      <ToolsDialogStack ref="toolsDialogRef" />
+        <ToolsDialogStack ref="toolsDialogRef" />
 
-      <!-- OTP section (D5: REAL Get OTP / clipboard / auto-paste flow) -->
-      <section class="account-list__otp bf-glass-panel">
-        <header class="account-list__otp-header">
-          <h2 class="account-list__otp-title">{{ t('accountList.otpHeading') }}</h2>
-          <!--
+        <!-- OTP section (D5: REAL Get OTP / clipboard / auto-paste flow) -->
+        <section class="account-list__otp bf-glass-panel">
+          <header class="account-list__otp-header">
+            <h2 class="account-list__otp-title">{{ t('accountList.otpHeading') }}</h2>
+            <!--
             D5: bind via :model-value + @change (not v-model) so the
             persistence + first-time-AutoPasteTip side effects only run
             on the user's gesture, not on the setup-time hydration of
             the local ref from configStore.
           -->
-          <el-checkbox
-            :model-value="autoPaste"
-            size="small"
-            data-test="account-list-auto-paste"
-            @change="handleAutoPasteToggle"
-          >
-            {{ t('accountList.autoPaste') }}
-          </el-checkbox>
-        </header>
-        <div class="account-list__otp-row">
-          <div class="account-list__otp-input">
-            <input
-              type="text"
-              readonly
-              :value="otpValue"
-              :placeholder="t('accountList.otpPlaceholder')"
-              class="account-list__otp-field"
-              data-test="account-list-otp-field"
-            />
+            <el-checkbox
+              :model-value="autoPaste"
+              size="small"
+              data-test="account-list-auto-paste"
+              @change="handleAutoPasteToggle"
+            >
+              {{ t('accountList.autoPaste') }}
+            </el-checkbox>
+          </header>
+          <div class="account-list__otp-row">
+            <div class="account-list__otp-input">
+              <input
+                type="text"
+                readonly
+                :value="otpValue"
+                :placeholder="t('accountList.otpPlaceholder')"
+                class="account-list__otp-field"
+                data-test="account-list-otp-field"
+              />
+              <button
+                type="button"
+                class="account-list__otp-copy"
+                :title="t('accountList.copyOtp')"
+                :disabled="!otpValue"
+                data-test="account-list-otp-copy"
+                @click="handleCopyOtp"
+              >
+                <el-icon><DocumentCopy /></el-icon>
+              </button>
+            </div>
             <button
               type="button"
-              class="account-list__otp-copy"
-              :title="t('accountList.copyOtp')"
-              :disabled="!otpValue"
-              data-test="account-list-otp-copy"
-              @click="handleCopyOtp"
+              class="bf-btn-gradient account-list__otp-get"
+              :disabled="gettingOtp"
+              data-test="account-list-otp-get"
+              @click="handleGetOtp"
             >
-              <el-icon><DocumentCopy /></el-icon>
+              {{ gettingOtp ? t('GettingOtp') : t('GetOtp') }}
             </button>
           </div>
-          <button
-            type="button"
-            class="bf-btn-gradient account-list__otp-get"
-            :disabled="gettingOtp"
-            data-test="account-list-otp-get"
-            @click="handleGetOtp"
-          >
-            {{ gettingOtp ? t('GettingOtp') : t('GetOtp') }}
-          </button>
-        </div>
-      </section>
+        </section>
       </div>
     </div>
   </main>
@@ -2393,7 +2388,6 @@ onBeforeUnmount(destroySortable)
   flex: 1;
   min-width: 0;
 }
-
 
 .account-list__title {
   margin: 0;
