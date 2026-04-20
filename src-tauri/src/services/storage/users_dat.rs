@@ -146,6 +146,11 @@ pub struct Account {
     pub method: i32,
     /// Auto-login flag — `autoLoginList[i]` in WPF; defaults to false.
     pub auto_login: bool,
+    /// ISO 8601 timestamp of the last successful login. Not present
+    /// in the WPF schema — new field, defaults to `None` so existing
+    /// Users.dat files deserialize without error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_login_at: Option<String>,
 }
 
 impl Default for Account {
@@ -158,6 +163,7 @@ impl Default for Account {
             verify: String::new(),
             method: 0,
             auto_login: false,
+            last_login_at: None,
         }
     }
 }
@@ -210,6 +216,8 @@ pub(crate) struct WireRecords {
     method_list: Option<Vec<i32>>,
     #[serde(rename = "autoLoginList", default)]
     auto_login_list: Option<Vec<bool>>,
+    #[serde(rename = "lastLoginAtList", default)]
+    last_login_at_list: Option<Vec<String>>,
 }
 
 impl WireRecords {
@@ -258,6 +266,11 @@ impl WireRecords {
         pad(self.auto_login_list.get_or_insert_with(Vec::new), n, || {
             false
         });
+        pad(
+            self.last_login_at_list.get_or_insert_with(Vec::new),
+            n,
+            String::new,
+        );
 
         self
     }
@@ -283,6 +296,7 @@ impl From<&Records> for WireRecords {
         let mut verify_list = Vec::with_capacity(n);
         let mut method_list = Vec::with_capacity(n);
         let mut auto_login_list = Vec::with_capacity(n);
+        let mut last_login_at_list = Vec::with_capacity(n);
 
         for acc in &records.0 {
             region_list.push(acc.region.clone());
@@ -292,6 +306,7 @@ impl From<&Records> for WireRecords {
             verify_list.push(acc.verify.clone());
             method_list.push(acc.method);
             auto_login_list.push(acc.auto_login);
+            last_login_at_list.push(acc.last_login_at.clone().unwrap_or_default());
         }
 
         WireRecords {
@@ -302,6 +317,7 @@ impl From<&Records> for WireRecords {
             verify_list: Some(verify_list),
             method_list: Some(method_list),
             auto_login_list: Some(auto_login_list),
+            last_login_at_list: Some(last_login_at_list),
         }
     }
 }
@@ -326,10 +342,12 @@ impl From<WireRecords> for Records {
         let verify_list = wire.verify_list.unwrap_or_default();
         let method_list = wire.method_list.unwrap_or_default();
         let auto_login_list = wire.auto_login_list.unwrap_or_default();
+        let last_login_at_list = wire.last_login_at_list.unwrap_or_default();
 
         let n = account_list.len();
         let mut accounts = Vec::with_capacity(n);
         for i in 0..n {
+            let login_at = last_login_at_list.get(i).cloned().unwrap_or_default();
             accounts.push(Account {
                 region: region_list[i].clone(),
                 account_id: account_list[i].clone(),
@@ -338,6 +356,11 @@ impl From<WireRecords> for Records {
                 verify: verify_list[i].clone(),
                 method: method_list[i],
                 auto_login: auto_login_list[i],
+                last_login_at: if login_at.is_empty() {
+                    None
+                } else {
+                    Some(login_at)
+                },
             });
         }
 
@@ -387,6 +410,7 @@ pub(crate) fn records_from_wire_lists(
         verify_list: Some(verify_list),
         method_list: Some(method_list),
         auto_login_list: Some(auto_login_list),
+        last_login_at_list: None,
     };
     Records::from(wire)
 }
@@ -684,6 +708,7 @@ mod tests {
             verify: format!("{id}-vrf"),
             method: 1,
             auto_login: true,
+            last_login_at: None,
         }
     }
 
@@ -742,6 +767,7 @@ mod tests {
             verify_list: Some(vec![]),
             method_list: Some(vec![5]),
             auto_login_list: None,
+            last_login_at_list: None,
         };
 
         let n = wire.normalize();
@@ -774,6 +800,7 @@ mod tests {
             verify_list: None,
             method_list: None,
             auto_login_list: None,
+            last_login_at_list: None,
         };
         let n = wire.normalize();
         assert_eq!(n.region_list.as_ref().unwrap().len(), 3);
@@ -805,6 +832,7 @@ mod tests {
             verify_list: Some(vec!["v".into()]),
             method_list: Some(vec![3]),
             auto_login_list: Some(vec![true]),
+            last_login_at_list: None,
         };
         let once = wire.normalize();
         let twice = once.clone().normalize();

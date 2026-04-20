@@ -9,9 +9,7 @@
  * - Vertical stack of `Button`s in a `StackPanel Margin="20"`,
  *   each with `Margin="5"`. Original WPF order:
  *   Recycling → PlayerReport → VideoReport →
- *   EquipStarForceCalculator → PerfectCoreCalculator. SPA order
- *   matches but with VideoReport removed (see "WPF deviation:
- *   VideoReport removed" below).
+ *   EquipStarForceCalculator → PerfectCoreCalculator.
  * - Window title `{DynamicResource ToolBox}` ("工具箱" / "Toolbox").
  * - **Recycling** (`btn_Recycling_Click` L51-112): YesNo confirm
  *   `MsgRecycling` → backend filesystem sweep → `MsgRecyclingDone`
@@ -33,20 +31,11 @@
  *
  * # WPF deviations (intentional)
  *
- * - **VideoReport removed (P12.4-followup-B-fix F2, Q12)**: WPF
- *   `btn_VideoReport_Click` L34-39 navigates to
- *   `event.beanfun.com/MapleStory/eventad/EventAD.aspx?EventADID=3453`,
- *   which redirects to a `tw.hicdn.beanfun.com/.../404.html` page
- *   — the upstream EventAD record was retired, the button has
- *   been dead-link for an indeterminate amount of time. WPF still
- *   ships the button (it just opens 404). User instruction during
- *   the followup-B smoke test was to drop the button rather than
- *   leave a confusing affordance; this is the only intentional
- *   deviation from strict WPF parity in MapleTools. If beanfun
- *   ever restores the EventAD page, revert this commit's
- *   MapleTools changes (the button itself is mechanical to add
- *   back; the i18n key `VideoReport` stays in the WPF locale
- *   tree even now).
+ * - **VideoReport URL updated**: WPF's original URL
+ *   `event.beanfun.com/MapleStory/eventad/EventAD.aspx?EventADID=3453`
+ *   now 404s — beanfun migrated the page to
+ *   `beanfun-event.beanfun.com/EventAD_Mobile/EventAD?eventAdId=3453`.
+ *   The SPA uses the new URL directly.
  * - **Modal vs new Window**: same rationale as the rest of
  *   `windows/*.vue` — the SPA renders dialogs in-page via
  *   `el-dialog`. The MapleTools dialog stays open while a child
@@ -96,26 +85,24 @@
 
 import { useI18n } from 'vue-i18n'
 import { ElButton, ElDialog, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
-import { CircleClose, Delete, Document, Pointer, Setting } from '@element-plus/icons-vue'
+import {
+  CircleClose,
+  Delete,
+  Document,
+  Pointer,
+  Setting,
+  VideoCamera,
+} from '@element-plus/icons-vue'
 
 import { commands, type LoginRegion } from '../types/bindings'
 import { safeInvoke } from '../services/invoke'
 
 defineOptions({ name: 'MapleToolsDialog' })
 
-/**
- * PlayerReport URL ported verbatim from `MapleTools.xaml.cs` L31
- * so the Tauri build hits the exact same Beanfun event-portal
- * endpoint WPF does. Kept as a module-level const (not prop /
- * config) because it is part of the WPF surface — every Beanfun
- * build (TW / HK) historically navigates to this same URL.
- *
- * `VIDEO_REPORT_URL` was removed in P12.4-followup-B-fix F2 (see
- * the file docblock "WPF deviations" section for the audit
- * trail).
- */
 const PLAYER_REPORT_URL =
   'https://event.beanfun.com/customerservice/PluginReporting/PlayerReport.aspx'
+
+const VIDEO_REPORT_URL = 'https://beanfun-event.beanfun.com/EventAD_Mobile/EventAD?eventAdId=3453'
 
 const props = withDefaults(
   defineProps<{
@@ -156,15 +143,9 @@ const emit = defineEmits<{
   (event: 'update:visible', next: boolean): void
   /**
    * Ask the parent to open the in-app browser at `url`. Used for
-   * PlayerReport — the URL lands on `event.beanfun.com`, which
-   * sits inside the backend `web_browser::is_allowed_host` suffix
-   * policy (`*.beanfun.com`) since P12.4-followup-B-fix F1, so
-   * `useInAppBrowser` opens the URL in a fresh `WebviewWindow`
-   * with the BeanfunClient session cookies pre-seeded — full WPF
-   * `new WebBrowser(uri).Show()` parity. The system-browser
-   * fallback inside `useInAppBrowser` only fires for URLs outside
-   * `*.beanfun.com`, which is no longer reachable from this
-   * component after the F2 VideoReport removal.
+   * PlayerReport and VideoReport — both URLs land on
+   * `*.beanfun.com`, which sits inside the backend
+   * `web_browser::is_allowed_host` suffix policy.
    */
   (event: 'open-web-browser', url: string): void
   /** Ask the parent to open the EquipCalculator dialog (P12.5 D5). */
@@ -270,6 +251,10 @@ async function handlePlayerReport(): Promise<void> {
   emit('open-web-browser', PLAYER_REPORT_URL)
 }
 
+function handleVideoReport(): void {
+  emit('open-web-browser', VIDEO_REPORT_URL)
+}
+
 function handleEquipCalculator(): void {
   emit('open-equip-calculator')
 }
@@ -340,6 +325,14 @@ function handleVisibleChange(value: boolean): void {
       >
         <el-icon><Document /></el-icon>
         <span>{{ t('PlayerReport') }}</span>
+      </el-button>
+      <el-button
+        class="maple-tools__button bf-btn-secondary"
+        data-test="maple-tools-video-report"
+        @click="handleVideoReport"
+      >
+        <el-icon><VideoCamera /></el-icon>
+        <span>{{ t('VideoReport') }}</span>
       </el-button>
       <el-button
         class="maple-tools__button bf-btn-secondary"

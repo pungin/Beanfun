@@ -24,14 +24,15 @@
     "element-plus": "^2.13.7",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
+    "sortablejs": "^1.15.7",
     "vue": "^3.5.13",
     "vue-i18n": "^11.3.2",
-    "vue-router": "^4.6.4",
-    "vuedraggable": "^4.1.0"
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@types/node": "^25.6.0",
+    "@types/sortablejs": "^1.15.9",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/eslint-config-prettier": "^10.2.0",
     "@vue/eslint-config-typescript": "^14.7.0",

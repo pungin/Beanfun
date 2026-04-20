@@ -16,7 +16,7 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
-use super::{truncate_chars, BODY_LOG_PREVIEW_CHARS};
+use super::truncate_chars;
 use crate::services::beanfun::{BeanfunClient, LoginError, LoginRegion};
 
 /// Region-aware session-key retrieval. Delegates to the TW or HK helper
@@ -64,27 +64,31 @@ async fn get_session_key_tw(client: &BeanfunClient) -> Result<String, LoginError
 async fn get_session_key_hk(client: &BeanfunClient) -> Result<String, LoginError> {
     let url = portal_default_url(client)?;
     let resp = client.http().get(url).send().await?;
+    let final_url = resp.url().clone();
     let body = client.bounded_text(resp).await?;
 
     if body.is_empty() {
         return Err(LoginError::EmptyResponse);
     }
 
-    session_key_from_hk_body(&body).ok_or_else(|| {
-        // Diagnostic: when the HK OTP1 span regex doesn't match we log
-        // a bounded body preview so the operator can tell apart
-        // (a) an anti-bot / rate-limit interstitial, (b) an error
-        // page, and (c) a new markup shape where the span id changed.
-        // Preview is bounded to the shared `BODY_LOG_PREVIEW_CHARS`
-        // limit and cut at a UTF-8 boundary by `truncate_chars`.
-        tracing::warn!(
-            step = "GetSessionKey",
-            region = ?LoginRegion::HK,
-            body_preview = %truncate_chars(&body, BODY_LOG_PREVIEW_CHARS),
-            "OTP1 span regex did not match the response body"
-        );
-        LoginError::MissingSessionKey
-    })
+    // Strategy 1: extract from the redirect URL's `otp1=` parameter.
+    if let Some(key) = session_key_from_hk_url(final_url.as_str()) {
+        return Ok(key);
+    }
+
+    // Strategy 2 (legacy): extract from the body's OTP1 span.
+    if let Some(key) = session_key_from_hk_body(&body) {
+        return Ok(key);
+    }
+
+    tracing::warn!(
+        step = "GetSessionKey",
+        region = ?LoginRegion::HK,
+        body_len = body.len(),
+        body_preview = %truncate_chars(&body, 2000),
+        "OTP1 span regex did not match the response body"
+    );
+    Err(LoginError::MissingSessionKey)
 }
 
 // -----------------------------------------------------------------------------
@@ -117,17 +121,41 @@ fn session_key_from_url(url: &str) -> Option<String> {
         .map(|m| m.as_str().to_owned())
 }
 
+/// Extract the session key from an HK redirect URL's `otp1` query parameter.
+///
+/// The HK portal now redirects `default.aspx?service=999999_T0` to
+/// `loginform_newBF.aspx?otp1={skey}&pageFlag=0` on `login.hk.beanfun.com`.
+fn session_key_from_hk_url(url: &str) -> Option<String> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re =
+        RE.get_or_init(|| Regex::new(r"[?&]otp1=([^&]+)").expect("HK otp1 URL regex must compile"));
+    re.captures(url)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().to_owned())
+}
+
 /// Extract the session key value from an HK portal response body.
 ///
-/// Identical to the WPF pattern
-/// `<span id="ctl00_ContentPlaceHolder1_lblOtp1">(.*)</span>`.
+/// Tries the WPF-era pattern first (`ctl00_ContentPlaceHolder1_lblOtp1`),
+/// then falls back to a broader `lblOtp1` match in case the ASP.NET
+/// control hierarchy changed.
 fn session_key_from_hk_body(body: &str) -> Option<String> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| {
-        Regex::new(r#"<span id="ctl00_ContentPlaceHolder1_lblOtp1">(.*)</span>"#)
+        Regex::new(r#"<span id="ctl00_ContentPlaceHolder1_lblOtp1">(.*?)</span>"#)
             .expect("HK OTP1 span regex must compile")
     });
-    re.captures(body)
+    if let Some(caps) = re.captures(body) {
+        return caps.get(1).map(|m| m.as_str().to_owned());
+    }
+
+    // Fallback: broader match for any span containing lblOtp1
+    static RE_FALLBACK: OnceLock<Regex> = OnceLock::new();
+    let re2 = RE_FALLBACK.get_or_init(|| {
+        Regex::new(r#"<span[^>]+id="[^"]*lblOtp1[^"]*"[^>]*>(.*?)</span>"#)
+            .expect("HK OTP1 fallback regex must compile")
+    });
+    re2.captures(body)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_owned())
 }
@@ -199,5 +227,28 @@ mod tests {
     fn hk_regex_returns_none_when_span_absent() {
         let body = "<html><body>no otp1 span here</body></html>";
         assert_eq!(session_key_from_hk_body(body), None);
+    }
+
+    #[test]
+    fn hk_fallback_regex_matches_different_control_hierarchy() {
+        // If ASP.NET changes the control hierarchy, the span id prefix
+        // may differ but still contain "lblOtp1".
+        let body = r#"<span id="MainContent_lblOtp1" class="otp">FALLBACK_VAL</span>"#;
+        assert_eq!(
+            session_key_from_hk_body(body).as_deref(),
+            Some("FALLBACK_VAL")
+        );
+    }
+
+    #[test]
+    fn hk_url_extracts_otp1_from_redirect() {
+        let url = "https://login.hk.beanfun.com/loginform_newBF.aspx?otp1=ABC123&pageFlag=0";
+        assert_eq!(session_key_from_hk_url(url).as_deref(), Some("ABC123"));
+    }
+
+    #[test]
+    fn hk_url_returns_none_when_no_otp1() {
+        let url = "https://login.hk.beanfun.com/loginform_newBF.aspx?pageFlag=0";
+        assert_eq!(session_key_from_hk_url(url), None);
     }
 }

@@ -54,6 +54,37 @@
 }
 
 /* =========================================================================
+ * Glass window root — card IS the window (decorations: false)
+ *
+ * Composites the bf-mica-bg gradient with a white overlay so the
+ * window root is opaque (no desktop bleed-through), then applies the
+ * glass-panel border / shadow / radius. Every top-level page uses
+ * this class instead of the old bf-mica-bg + bf-glass-panel two-layer
+ * pattern when running in the custom-titlebar shell.
+ * ========================================================================= */
+
+.bf-glass-window {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.45) 100%),
+    radial-gradient(
+      1200px 800px at 10% -10%,
+      color-mix(in srgb, var(--bf-primary-container) 30%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 700px at 110% 110%,
+      color-mix(in srgb, var(--bf-primary) 22%, transparent) 0%,
+      transparent 55%
+    ),
+    linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%);
+  border: 1px solid var(--bf-glass-border);
+  border-radius: var(--bf-radius-panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    var(--bf-shadow-panel);
+}
+
+/* =========================================================================
  * Glass panels — primary container surface
  * ========================================================================= */
 

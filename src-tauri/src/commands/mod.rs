@@ -133,6 +133,8 @@
 pub mod account;
 pub mod auth;
 pub mod config;
+#[cfg(target_os = "windows")]
+pub mod cookie_native;
 pub mod dto;
 pub mod error;
 pub mod game;
@@ -255,6 +257,13 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         otp::get_otp,
         // system (P10.3 — D1 open_url)
         system::open_url,
+        // system (TitleBar minimize-to-tray bridge)
+        //
+        // Generic over `R: tauri::Runtime` because it takes an
+        // `AppHandle<R>` (to drive the window + tray side effects);
+        // see the `auth::login_gamepass_start` comment for the full
+        // E0401 / runtime-agnostic bindings rationale.
+        system::minimize_main_window::<tauri::Wry>,
         // config (P10.3 — D2)
         config::get_config_value,
         config::get_all_config,
@@ -303,6 +312,7 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         // sentinel test) never crosses IPC. Same `tauri::Wry`
         // turbofish rationale applies.
         web_browser::open_member_center_browser::<tauri::Wry>,
+        web_browser::open_gash_recharge_browser::<tauri::Wry>,
     ])
 }
 
@@ -443,6 +453,8 @@ mod bindings_file_tests {
         "getOtp",
         // --- P10.3 — D1 system ---------------------------------------
         "openUrl",
+        // --- TitleBar minimize-to-tray bridge ------------------------
+        "minimizeMainWindow",
         // --- P10.3 — D2 config ---------------------------------------
         "getConfigValue",
         "getAllConfig",
@@ -481,6 +493,8 @@ mod bindings_file_tests {
         "openInAppBrowser",
         // --- P12.4-followup-B-fix F9 — Member Center ----------------
         "openMemberCenterBrowser",
+        // --- Gash recharge (WPF bfb_Gash_Click parity) ---------------
+        "openGashRechargeBrowser",
     ];
 
     /// DTO type names the frontend imports from `bindings.ts`.

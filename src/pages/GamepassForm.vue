@@ -271,7 +271,7 @@ onMounted(async () => {
   if (region !== 'TW') {
     ElMessage.info(t('loginGamepass.unsupportedHK'))
     disposed = true
-    await router.push('/login')
+    await router.push({ path: '/login', query: { pick: '1' } })
     return
   }
   // Event listeners MUST register before `doStart` invokes
@@ -312,7 +312,7 @@ async function refresh(): Promise<void> {
 
 async function goBack(): Promise<void> {
   disposed = true
-  await router.push('/login')
+  await router.push({ path: '/login', query: { pick: '1' } })
 }
 </script>
 

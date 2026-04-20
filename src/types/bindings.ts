@@ -1170,6 +1170,42 @@ async openUrl(url: string) : Promise<Result<null, CommandError>> {
 }
 },
 /**
+ * Minimize the main window, honouring the `minimize_to_tray`
+ * config setting.
+ * 
+ * Driven by the custom `TitleBar` minimize button in the
+ * frontend. Replaces the legacy `appWindow.minimize()` direct call
+ * because the post-PR-228 borderless + transparent + non-resizable
+ * window no longer reliably produces the `WindowEvent::Resized(0, 0)`
+ * signal Windows used to fire on minimize, which broke the
+ * fallback path in [`crate::tray::handle_minimize_to_tray`].
+ * 
+ * Behaviour:
+ * 
+ * - If `minimize_to_tray = true` in `Config.xml` **and** the tray
+ * icon was created successfully at boot — hide the window and
+ * reveal the tray icon (delegated to [`tray::hide_to_tray`] so
+ * the side effect stays single-sourced with the window-event
+ * fallback path).
+ * - Otherwise — fall through to a normal `window.minimize()`.
+ * 
+ * # Errors
+ * 
+ * - `system.window_not_found` — the `main` webview window is not
+ * currently registered with the app handle. Should never happen
+ * in steady state (the window is created at boot).
+ * - `system.minimize_failed` — Tauri's `window.minimize()` returned
+ * an error from the underlying OS call.
+ */
+async minimizeMainWindow() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("minimize_main_window") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Read a single config value by `key`, falling back to `""` when
  * the file is missing / unreadable / the key is absent.
  * 
@@ -1947,6 +1983,30 @@ async openMemberCenterBrowser() : Promise<Result<null, CommandError>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Open the Beanfun **Gash recharge** page in a dedicated in-app
+ * webview window. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::bfb_Gash_Click`.
+ * 
+ * Same security rationale as [`open_member_center_browser`] — the
+ * URL embeds `web_token`, so it must be built backend-side to keep
+ * the secret confined to Rust.
+ * 
+ * # Errors
+ * 
+ * - `auth.session_required` — no active session.
+ * - [`INVALID_URL_CODE`] — `build_gash_recharge_url` produced a
+ * URL outside the allowlist (defensive — should be unreachable).
+ * - `ui.window_create_failed` — see [`open_url_in_webview`].
+ */
+async openGashRechargeBrowser() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_gash_recharge_browser") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -2011,7 +2071,13 @@ method: number;
 /**
  * Auto-login flag — `autoLoginList[i]` in WPF; defaults to false.
  */
-auto_login: boolean }
+auto_login: boolean; 
+/**
+ * ISO 8601 timestamp of the last successful login. Not present
+ * in the WPF schema — new field, defaults to `None` so existing
+ * Users.dat files deserialize without error.
+ */
+last_login_at?: string | null }
 /**
  * Result of [`get_accounts`]: the sorted account list plus the optional
  * quota notice.

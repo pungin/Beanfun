@@ -303,23 +303,53 @@ pub fn run() {
         std::process::exit(1);
     });
 
+    // Read `disableHardwareAcceleration` from Config.xml before the
+    // WebView2 runtime initialises. WPF does the same in
+    // `WebBrowser.xaml.cs` / `GamePassBrowser.xaml.cs` via
+    // `CoreWebView2EnvironmentOptions.AdditionalBrowserArguments`.
+    // Tauri/wry reads `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` at
+    // WebView2 environment creation time — setting it here (before
+    // `tauri::Builder::default()`) is the equivalent.
+    #[cfg(target_os = "windows")]
+    {
+        let config_path = storage_root.join("Config.xml");
+        let disable_hw_accel =
+            services::config::get_value_sync(&config_path, "disableHardwareAcceleration")
+                .unwrap_or_default()
+                .eq_ignore_ascii_case("true");
+        if disable_hw_accel {
+            std::env::set_var(
+                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+                "--disable-gpu --disable-gpu-compositing",
+            );
+            tracing::info!("hardware acceleration disabled via Config.xml");
+        }
+    }
+
     let app_state = AppState::new(storage_root);
     let specta_builder = commands::build_specta_builder::<tauri::Wry>();
     export_specta_bindings(&specta_builder);
     let invoke_handler = specta_builder.invoke_handler();
 
     let storage_root_for_tray = app_state.storage_root.clone();
-    let tray_state = std::sync::Arc::new(std::sync::Mutex::new(None::<tauri::tray::TrayIconId>));
-    let tray_state_for_event = tray_state.clone();
+    let tray_state_arc =
+        std::sync::Arc::new(std::sync::Mutex::new(None::<tauri::tray::TrayIconId>));
+    let tray_state_for_setup = tray_state_arc.clone();
+    let tray_state_for_event = tray_state_arc.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
+        // Tauri-managed handle to the tray ID so commands (e.g.
+        // `system::minimize_main_window`) can drive the tray without
+        // re-discovering the ID. Same `Arc` the setup / window-event
+        // closures hold — single source of truth.
+        .manage(tray::TrayState(tray_state_arc))
         .invoke_handler(invoke_handler)
         .setup(move |app| {
             if let Some(tray_id) = tray::build_tray(app) {
-                *tray_state.lock().unwrap() = Some(tray_id);
+                *tray_state_for_setup.lock().unwrap() = Some(tray_id);
             }
             Ok(())
         })

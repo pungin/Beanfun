@@ -163,6 +163,7 @@ describe('useAccountStore — saveLoginCredentials (WPF SaveLoginCredentials par
       verify: '',
       method: 0,
       auto_login: false,
+      last_login_at: expect.any(String),
     })
   })
 
@@ -297,7 +298,7 @@ describe('useAccountStore — service accounts', () => {
  * Exercises the two ordering actions added in P12.2 D7:
  *
  * - {@link useAccountStore.setServiceAccountOrder} — explicit
- *   sid-list reorder; the page calls this after a vuedraggable
+ *   sid-list reorder; the page calls this after a SortableJS
  *   `@end` event.
  * - {@link useAccountStore.applyServiceAccountOrderFromSavedCsv} —
  *   convenience wrapper that parses the CSV WPF persists under

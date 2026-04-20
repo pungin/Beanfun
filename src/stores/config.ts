@@ -30,7 +30,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { commands } from '../types/bindings'
-import { wrapCommand } from '../services/invoke'
+import { safeInvoke, wrapCommand } from '../services/invoke'
 
 export const useConfigStore = defineStore('config', () => {
   /**
@@ -89,11 +89,24 @@ export const useConfigStore = defineStore('config', () => {
   /**
    * Persist a key to backend Config.xml and update the local cache.
    *
+   * If the file is read-only (user locked their settings on purpose),
+   * the backend write fails silently and only the in-memory cache is
+   * updated — matching WPF's silent `catch{}` at
+   * `ConfigAppSettings.cs` L60. The current session keeps working;
+   * the on-disk file stays untouched so the locked values survive
+   * across restarts.
+   *
    * @param key — config key (matches WPF naming verbatim)
    * @param value — string to set, or `null` to delete the key
    */
   async function set(key: string, value: string | null): Promise<void> {
-    await wrapCommand(commands.setConfig(key, value))
+    const result = await safeInvoke(commands.setConfig(key, value))
+    if (!result.ok) {
+      console.warn(
+        `[config] set "${key}" failed (file may be read-only), using in-memory value`,
+        result.error,
+      )
+    }
     if (value === null) {
       delete entries.value[key]
     } else {

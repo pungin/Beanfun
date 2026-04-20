@@ -65,6 +65,7 @@ import { useUiStore } from '../stores/ui'
 import { commands } from '../types/bindings'
 import { safeInvoke } from '../services/invoke'
 import iconUrl from '../assets/icon.png'
+import TitleBar from '../components/TitleBar.vue'
 
 defineOptions({ name: 'AboutPage' })
 
@@ -254,102 +255,109 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="about bf-mica-bg">
-    <div class="about__container">
-      <!-- Header: app icon + name + author -->
-      <header class="about__header bf-glass-panel">
-        <img
-          :src="iconUrl"
-          alt="Beanfun"
-          class="about__icon"
-          width="56"
-          height="56"
-          data-test="about-icon"
-        />
-        <div class="about__header-text">
-          <div class="about__title-row">
-            <h1 class="about__title bf-text-gradient">{{ t('AppName') }}</h1>
-            <span class="about__author">By Pungin and YCC3741</span>
+  <main class="about bf-glass-window" data-window-root>
+    <TitleBar />
+    <div class="about__scroll">
+      <div class="about__container">
+        <!-- Header: app icon + name + author -->
+        <header class="about__header bf-glass-panel">
+          <img
+            :src="iconUrl"
+            alt="Beanfun"
+            class="about__icon"
+            width="56"
+            height="56"
+            data-test="about-icon"
+          />
+          <div class="about__header-text">
+            <div class="about__title-row">
+              <h1 class="about__title bf-text-gradient">{{ t('AppName') }}</h1>
+              <span class="about__author">By Pungin and YCC3741</span>
+            </div>
+            <p class="about__version-row" data-test="about-version-row">
+              <span>{{ t('Version') }}</span>
+              <span class="about__version-value" data-test="about-version-value">
+                {{ versionString }}
+              </span>
+              <a
+                href="#"
+                class="about__check-update"
+                :class="{ 'about__check-update--disabled': checkingUpdate }"
+                data-test="about-check-update"
+                @click.prevent="handleCheckUpdate"
+              >
+                {{ t('CheckUpdate') }}
+              </a>
+            </p>
           </div>
-          <p class="about__version-row" data-test="about-version-row">
-            <span>{{ t('Version') }}</span>
-            <span class="about__version-value" data-test="about-version-value">
-              {{ versionString }}
-            </span>
-            <a
-              href="#"
-              class="about__check-update"
-              :class="{ 'about__check-update--disabled': checkingUpdate }"
-              data-test="about-check-update"
-              @click.prevent="handleCheckUpdate"
-            >
-              {{ t('CheckUpdate') }}
-            </a>
-          </p>
-        </div>
-      </header>
+        </header>
 
-      <!-- Body: about text + contact + footer -->
-      <section class="about__body bf-glass-panel">
-        <p class="about__text" data-test="about-text">{{ aboutTextPlain }}</p>
+        <!-- Body: about text + contact + footer -->
+        <section class="about__body bf-glass-panel">
+          <p class="about__text" data-test="about-text">{{ aboutTextPlain }}</p>
 
-        <div class="about__separator" />
+          <div class="about__separator" />
 
-        <div class="about__contact" data-test="about-contact">
-          <span class="about__contact-label">{{ t('Contact') }}</span>
-          <div class="about__contact-col">
-            <a
-              href="#"
-              class="about__contact-link"
-              data-test="about-email-pungin"
-              @click.prevent="handleEmail('pungin@msn.com')"
-            >
-              <el-icon><Message /></el-icon>
-              <span>Pungin</span>
-            </a>
-            <a
-              href="#"
-              class="about__contact-link"
-              data-test="about-email-ycc3741"
-              @click.prevent="handleEmail('mo0307b1006@gmail.com')"
-            >
-              <el-icon><Message /></el-icon>
-              <span>YCC3741</span>
-            </a>
-            <a
-              href="#"
-              class="about__contact-link"
-              data-test="about-github"
-              @click.prevent="handleGithub"
-            >
-              <el-icon><InfoFilled /></el-icon>
-              <span>Github</span>
-            </a>
+          <div class="about__contact" data-test="about-contact">
+            <span class="about__contact-label">{{ t('Contact') }}</span>
+            <div class="about__contact-col">
+              <a
+                href="#"
+                class="about__contact-link"
+                data-test="about-email-pungin"
+                @click.prevent="handleEmail('pungin@msn.com')"
+              >
+                <el-icon><Message /></el-icon>
+                <span>Pungin</span>
+              </a>
+              <a
+                href="#"
+                class="about__contact-link"
+                data-test="about-email-ycc3741"
+                @click.prevent="handleEmail('mo0307b1006@gmail.com')"
+              >
+                <el-icon><Message /></el-icon>
+                <span>YCC3741</span>
+              </a>
+              <a
+                href="#"
+                class="about__contact-link"
+                data-test="about-github"
+                @click.prevent="handleGithub"
+              >
+                <el-icon><InfoFilled /></el-icon>
+                <span>Github</span>
+              </a>
+            </div>
           </div>
-        </div>
 
-        <footer class="about__footer">
-          <el-button
-            class="bf-btn-secondary about__back-btn"
-            data-test="about-back"
-            @click="handleBack"
-          >
-            <el-icon><ArrowLeft /></el-icon>
-            <span>{{ t('Back') }}</span>
-          </el-button>
-        </footer>
-      </section>
+          <footer class="about__footer">
+            <el-button
+              class="bf-btn-secondary about__back-btn"
+              data-test="about-back"
+              @click="handleBack"
+            >
+              <el-icon><ArrowLeft /></el-icon>
+              <span>{{ t('Back') }}</span>
+            </el-button>
+          </footer>
+        </section>
+      </div>
     </div>
   </main>
 </template>
 
 <style scoped>
 .about {
-  box-sizing: border-box;
-  min-height: 100vh;
-  padding: 2.5rem 1.5rem;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.about__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
 }
 
 .about__container {

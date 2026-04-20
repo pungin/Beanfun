@@ -50,9 +50,12 @@
 
 use serde::Serialize;
 use specta::Type;
+use tauri::{AppHandle, Manager, State};
 
 use crate::commands::error::CommandError;
+use crate::commands::state::AppState;
 use crate::services::system;
+use crate::tray;
 
 /// Compile-time build metadata returned by [`version`].
 ///
@@ -138,6 +141,74 @@ pub async fn ping(message: String) -> Result<String, CommandError> {
 #[specta::specta]
 pub async fn open_url(url: String) -> Result<(), CommandError> {
     system::open_url(&url).await?;
+    Ok(())
+}
+
+/// Minimize the main window, honouring the `minimize_to_tray`
+/// config setting.
+///
+/// Driven by the custom `TitleBar` minimize button in the
+/// frontend. Replaces the legacy `appWindow.minimize()` direct call
+/// because the post-PR-228 borderless + transparent + non-resizable
+/// window no longer reliably produces the `WindowEvent::Resized(0, 0)`
+/// signal Windows used to fire on minimize, which broke the
+/// fallback path in [`crate::tray::handle_minimize_to_tray`].
+///
+/// Behaviour:
+///
+/// - If `minimize_to_tray = true` in `Config.xml` **and** the tray
+///   icon was created successfully at boot — hide the window and
+///   reveal the tray icon (delegated to [`tray::hide_to_tray`] so
+///   the side effect stays single-sourced with the window-event
+///   fallback path).
+/// - Otherwise — fall through to a normal `window.minimize()`.
+///
+/// # Errors
+///
+/// - `system.window_not_found` — the `main` webview window is not
+///   currently registered with the app handle. Should never happen
+///   in steady state (the window is created at boot).
+/// - `system.minimize_failed` — Tauri's `window.minimize()` returned
+///   an error from the underlying OS call.
+#[tauri::command]
+#[specta::specta]
+pub async fn minimize_main_window<R: tauri::Runtime>(
+    app_handle: AppHandle<R>,
+    state: State<'_, AppState>,
+    tray_state: State<'_, tray::TrayState>,
+) -> Result<(), CommandError> {
+    let storage_root = state.storage_root.clone();
+    let should_tray = tray::is_minimize_to_tray_enabled(&storage_root).await;
+
+    if should_tray {
+        // Snapshot the ID under the lock then drop the guard before
+        // any further work — keeps the critical section to a memcpy.
+        let tray_id = tray_state.0.lock().unwrap().clone();
+        if let Some(tray_id) = tray_id {
+            tray::hide_to_tray(&app_handle, &tray_id);
+            return Ok(());
+        }
+        // Tray creation failed at boot (logged there). Fall through
+        // to a normal minimize so the button still does *something*
+        // useful instead of becoming a silent no-op.
+        tracing::warn!(
+            step = "Tray.MinimizeFallthrough",
+            "minimize_to_tray=true but tray icon unavailable; minimizing normally"
+        );
+    }
+
+    let win = app_handle.get_webview_window("main").ok_or_else(|| {
+        CommandError::new(
+            "system.window_not_found",
+            "main webview window is not currently registered",
+        )
+    })?;
+    win.minimize().map_err(|err| {
+        CommandError::new(
+            "system.minimize_failed",
+            format!("failed to minimize main window: {err}"),
+        )
+    })?;
     Ok(())
 }
 

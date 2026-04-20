@@ -112,8 +112,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ElButton, ElCheckbox, ElForm, ElFormItem, ElIcon, ElInput, ElMessage } from 'element-plus'
-import { ArrowLeft, Lock, User } from '@element-plus/icons-vue'
+import { ElButton, ElCheckbox, ElForm, ElIcon, ElInput, ElMessage } from 'element-plus'
+import { Lock } from '@element-plus/icons-vue'
 
 import { useAccountStore } from '../stores/account'
 import { useAuthStore, AUTH_ACTIONS, type LoginIntent } from '../stores/auth'
@@ -133,7 +133,14 @@ defineOptions({ name: 'IdPassForm' })
  * `loginMethodInit` flow (re-implemented across the account store
  * + this prefill).
  */
-const CONFIG_KEY_LAST_ACCOUNT_ID = 'AccountID'
+/**
+ * Per-region config key for the last-used account ID.
+ * WPF uses a single `AccountID` key; we split by region so
+ * switching TW↔HK remembers each region's last account.
+ */
+function lastAccountIdKey(region: LoginRegion): string {
+  return `AccountID_${region}`
+}
 
 const { t } = useI18n()
 const router = useRouter()
@@ -191,6 +198,42 @@ watch(remember, (next) => {
   if (!next) autoLogin.value = false
 })
 
+/** Saved accounts for the current region — used for the account dropdown. */
+const savedAccountsForRegion = computed(() => {
+  const region = readRegion()
+  return accountStore.accounts.filter((a) => a.region === region)
+})
+
+const showAccountDropdown = ref(false)
+
+/** Reactive current region for template bindings. */
+const currentRegion = computed(() => readRegion())
+
+/** Re-prefill when accounts finish loading (async boot). */
+watch(
+  () => accountStore.accounts.length,
+  () => {
+    if (!account.value) prefillFromStoredRecord()
+  },
+)
+
+/** When user selects a saved account from dropdown, prefill password too. */
+function selectAccount(accountId: string): void {
+  account.value = accountId
+  showAccountDropdown.value = false
+  const region = readRegion()
+  const stored = accountStore.findStoredAccount(region, accountId)
+  if (stored && stored.password) {
+    password.value = stored.password
+    remember.value = true
+    autoLogin.value = stored.auto_login
+  } else {
+    password.value = ''
+    remember.value = false
+    autoLogin.value = false
+  }
+}
+
 const submitting = computed(() => auth.pendingAction === AUTH_ACTIONS.LoginRegular)
 
 /**
@@ -225,35 +268,23 @@ onMounted(() => {
 
 function prefillFromStoredRecord(): void {
   const region = readRegion()
-  const lastAccountId = config.get(CONFIG_KEY_LAST_ACCOUNT_ID)
-  if (!lastAccountId) return
-  const stored = accountStore.findStoredAccount(region, lastAccountId)
+
+  // Try per-region key first, then legacy global key
+  const lastAccountId = config.get(lastAccountIdKey(region)) ?? config.get('AccountID')
+
+  // Find the account: exact region+id match, or any account for this region
+  let stored = lastAccountId ? accountStore.findStoredAccount(region, lastAccountId) : undefined
+  if (!stored) {
+    stored = accountStore.accounts.find((a) => a.region === region)
+  }
   if (!stored) return
 
   account.value = stored.account_id
-  /*
-   * Only prefill password / remember / autoLogin when a non-empty
-   * password was saved. WPF L1067 short-circuits on `pwd != "" &&
-   * pwd != null`; matching keeps the form clean for users who
-   * deliberately unchecked Remember last time (the empty
-   * password row is still in `Users.dat` for `account_id`
-   * round-trip but should not auto-fill anything).
-   */
   if (stored.password) {
     password.value = stored.password
     remember.value = true
     autoLogin.value = stored.auto_login
   }
-}
-
-function goBack(): void {
-  /*
-   * Use explicit `push('/login')` instead of `router.back()` — browser
-   * history may contain `/login/qr` or other siblings if the user
-   * landed here via forward-nav, and "back" in the WPF sense always
-   * means the region picker.
-   */
-  void router.push('/login')
 }
 
 function switchToQr(): void {
@@ -423,7 +454,7 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
       method: LOGIN_METHOD.Regular,
       autoLogin: intent.autoLogin,
     })
-    await config.set(CONFIG_KEY_LAST_ACCOUNT_ID, intent.accountId)
+    await config.set(lastAccountIdKey(intent.region), intent.accountId)
   } catch (err) {
     /*
      * `wrapCommand` inside the store already toasted; just log so
@@ -440,36 +471,42 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
 
 <template>
   <el-form class="id-pass-form" label-position="top" @submit.prevent="submit">
-    <button
-      type="button"
-      class="id-pass-form__back"
-      :aria-label="t('Back')"
-      data-test="id-pass-back"
-      @click="goBack"
-    >
-      <el-icon><ArrowLeft /></el-icon>
-      <span>{{ t('Back') }}</span>
-    </button>
+    <div class="id-pass-form__field">
+      <label class="id-pass-form__label">{{ t('AcountOrEmail') }}</label>
+      <div class="id-pass-form__account-wrap">
+        <el-input
+          v-model="account"
+          size="default"
+          autocomplete="username"
+          :placeholder="t('AcountOrEmail')"
+        />
+        <button
+          v-if="savedAccountsForRegion.length > 0"
+          type="button"
+          class="id-pass-form__dropdown-btn"
+          @click="showAccountDropdown = !showAccountDropdown"
+        >
+          <span class="material-symbols-outlined">expand_more</span>
+        </button>
+        <ul v-if="showAccountDropdown" class="id-pass-form__dropdown">
+          <li
+            v-for="sa in savedAccountsForRegion"
+            :key="sa.account_id"
+            class="id-pass-form__dropdown-item"
+            @mousedown.prevent="selectAccount(sa.account_id)"
+          >
+            {{ sa.account_id }}
+          </li>
+        </ul>
+      </div>
+    </div>
 
-    <el-form-item :label="t('AcountOrEmail')" class="id-pass-form__item">
-      <el-input
-        v-model="account"
-        size="large"
-        autocomplete="username"
-        :placeholder="t('AcountOrEmail')"
-        clearable
-      >
-        <template #prefix>
-          <el-icon><User /></el-icon>
-        </template>
-      </el-input>
-    </el-form-item>
-
-    <el-form-item :label="t('Password_')" class="id-pass-form__item">
+    <div class="id-pass-form__field">
+      <label class="id-pass-form__label">{{ t('Password_') }}</label>
       <el-input
         v-model="password"
         type="password"
-        size="large"
+        size="default"
         autocomplete="current-password"
         :placeholder="t('Password_')"
         show-password
@@ -478,11 +515,13 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
           <el-icon><Lock /></el-icon>
         </template>
       </el-input>
-    </el-form-item>
+    </div>
 
     <div class="id-pass-form__options">
-      <el-checkbox v-model="remember" :label="t('RememberPassword')" />
-      <el-checkbox v-model="autoLogin" :label="t('AutoLogin')" />
+      <div class="id-pass-form__checkboxes">
+        <el-checkbox v-model="remember" :label="t('RememberPassword')" />
+        <el-checkbox v-model="autoLogin" :label="t('AutoLogin')" />
+      </div>
       <div class="id-pass-form__inline-links">
         <button
           type="button"
@@ -503,10 +542,9 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
       </div>
     </div>
 
-    <div class="id-pass-form__primary-actions">
+    <div class="id-pass-form__actions">
       <el-button
         type="primary"
-        size="large"
         class="id-pass-form__submit"
         native-type="submit"
         :loading="submitting"
@@ -514,31 +552,31 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
         {{ t('Login') }}
       </el-button>
       <el-button
-        size="large"
         class="id-pass-form__game-start"
         data-test="id-pass-game-start"
         @click="handleGameStart"
       >
         {{ t('GameStart') }}
       </el-button>
-    </div>
-
-    <div class="id-pass-form__switches">
       <button
+        v-if="currentRegion === 'TW'"
         type="button"
-        class="id-pass-form__switch"
+        class="id-pass-form__icon-switch"
+        :title="t('QRCodeLogin')"
         data-test="id-pass-switch-qr"
         @click="switchToQr"
       >
-        {{ t('QRCodeLogin') }}
+        <span class="material-symbols-outlined">qr_code_2</span>
       </button>
       <button
+        v-if="currentRegion === 'TW'"
         type="button"
-        class="id-pass-form__switch"
+        class="id-pass-form__icon-switch"
+        :title="t('GamePassLogin')"
         data-test="id-pass-switch-gamepass"
         @click="switchToGamepass"
       >
-        {{ t('GamePassLogin') }}
+        <span class="material-symbols-outlined">passkey</span>
       </button>
     </div>
   </el-form>
@@ -548,46 +586,91 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
 .id-pass-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
-.id-pass-form__back {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
+.id-pass-form__field {
+  display: flex;
+  flex-direction: column;
   gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
-  margin: -0.25rem 0 0 -0.5rem;
-  border: 0;
+}
+
+.id-pass-form__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--bf-on-surface, #221a11);
+}
+
+.id-pass-form__account-wrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+}
+
+.id-pass-form__account-wrap .el-input {
+  flex: 1;
+}
+
+.id-pass-form__dropdown-btn {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 32px;
+  display: grid;
+  place-items: center;
   background: transparent;
-  color: #54443a;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  border: none;
   cursor: pointer;
-  border-radius: 0.25rem;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
+  color: var(--bf-on-surface-variant, #54443a);
+  border-radius: 0 6px 6px 0;
+  z-index: 1;
+}
+.id-pass-form__dropdown-btn .material-symbols-outlined {
+  font-size: 20px;
+}
+.id-pass-form__dropdown-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
 }
 
-.id-pass-form__back:hover,
-.id-pass-form__back:focus-visible {
-  background-color: rgba(84, 68, 58, 0.08);
-  color: #2c1d14;
-  outline: none;
+.id-pass-form__dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  margin: 4px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  max-height: 200px;
+  overflow-y: auto;
 }
 
-.id-pass-form__item :deep(.el-form-item__label) {
-  font-size: 0.8125rem;
-  color: #54443a;
-  font-weight: 600;
-  margin-bottom: 0.25rem;
+.id-pass-form__dropdown-item {
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.id-pass-form__dropdown-item:hover {
+  background: color-mix(in srgb, var(--bf-primary-container, #ff8201) 12%, transparent);
 }
 
 .id-pass-form__options {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
+
+.id-pass-form__checkboxes {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .id-pass-form__inline-links {
@@ -616,43 +699,40 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
   outline: none;
 }
 
-.id-pass-form__primary-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
+.id-pass-form__actions {
+  display: flex;
+  gap: 0.5rem;
   margin-top: 0.5rem;
+  align-items: stretch;
 }
 
-.id-pass-form__submit,
-.id-pass-form__game-start {
-  width: 100%;
+.id-pass-form__submit {
+  flex: 1;
   font-weight: 700;
 }
 
-.id-pass-form__switches {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 0.25rem;
+.id-pass-form__game-start {
+  flex: 1;
+  font-weight: 700;
 }
 
-.id-pass-form__switch {
-  padding: 0.25rem 0.5rem;
-  border: 0;
-  background: transparent;
-  color: #a06a3a;
-  font-size: 0.8125rem;
-  font-weight: 600;
+.id-pass-form__icon-switch {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  width: 40px;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 0.15rem;
-  transition: color 0.15s ease;
+  color: var(--bf-primary, #954a00);
+  transition: background 150ms ease;
+  flex-shrink: 0;
 }
-
-.id-pass-form__switch:hover,
-.id-pass-form__switch:focus-visible {
-  color: #7a4a20;
-  outline: none;
+.id-pass-form__icon-switch .material-symbols-outlined {
+  font-size: 22px;
+}
+.id-pass-form__icon-switch:hover {
+  background: color-mix(in srgb, var(--bf-primary-container, #ff8201) 15%, transparent);
 }
 </style>

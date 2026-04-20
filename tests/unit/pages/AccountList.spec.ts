@@ -194,8 +194,9 @@ vi.mock('@element-plus/icons-vue', () => {
     Plus: stub('PlusStub'),
     Refresh: stub('RefreshStub'),
     Service: stub('ServiceStub'),
-    Setting: stub('SettingStub'),
+    Iphone: stub('IphoneStub'),
     SwitchButton: stub('SwitchButtonStub'),
+    Wallet: stub('WalletStub'),
     User: stub('UserStub'),
     VideoPlay: stub('VideoPlayStub'),
     /*
@@ -213,44 +214,31 @@ vi.mock('@element-plus/icons-vue', () => {
 })
 
 /**
- * D7: stub `vuedraggable` to a thin reactive wrapper that:
- *
- * 1. Renders the `#item` slot once per `:list` element (in
- *    bound order), exposing the same `{ element, index }` slot
- *    shape vuedraggable@4 ships, so the existing row template
- *    inside AccountList renders unchanged.
- * 2. Forwards extra attrs (e.g. `data-test`, `class`) onto the
- *    rendered tag so the `[data-test="account-list-rows"]`
- *    selector in pre-D7 tests keeps resolving.
- * 3. Lets tests fire `@end` directly via
- *    `wrapper.findComponent(DraggableStub).vm.$emit('end')` after
- *    mutating `:list` (mutating Pinia state has the same effect
- *    as Sortable.js' real splice — both flow through Vue
- *    reactivity to the bound prop).
+ * D7: mock `sortablejs`. The page uses `Sortable.create()` directly
+ * on a native `<ul>` ref. We capture the `onEnd` callback passed to
+ * `Sortable.create` so tests can invoke it with a synthetic
+ * `{ oldIndex, newIndex }` event to exercise the drag-end handler.
  *
  * Real Sortable.js DOM behaviour (mouse-down on handle, ghost
  * element, animation timing) is intentionally out of scope for
  * unit tests — those would belong in an E2E suite.
  */
-vi.mock('vuedraggable', () => ({
-  default: defineComponent({
-    name: 'DraggableStub',
-    props: {
-      list: { type: Array, default: () => [] },
-      itemKey: { type: [String, Function], default: '' },
-    },
-    emits: ['end', 'change'],
-    setup(props, { slots, attrs }) {
-      return () =>
-        h(
-          'ul',
-          { ...attrs, class: ['draggable-stub', attrs.class] },
-          (props.list as Array<Record<string, unknown>>).map((element, index) =>
-            slots.item ? slots.item({ element, index }) : null,
-          ),
-        )
-    },
-  }),
+let capturedOnEnd:
+  | ((event: {
+      oldIndex?: number
+      newIndex?: number
+      item: HTMLElement
+      from: HTMLElement
+    }) => void)
+  | null = null
+
+vi.mock('sortablejs', () => ({
+  default: {
+    create: vi.fn((_el: HTMLElement, options: { onEnd?: typeof capturedOnEnd }) => {
+      capturedOnEnd = options?.onEnd ?? null
+      return { destroy: vi.fn() }
+    }),
+  },
 }))
 
 vi.mock('../../../src/types/bindings', () => ({
@@ -1562,10 +1550,9 @@ describe('AccountList page', () => {
    * Sortable.js DOM mechanics (mouse-down on handle, ghost element,
    * animation) are intentionally out of scope here — they belong in
    * an E2E suite. The unit boundary is the page's @end handler:
-   * after Vuedraggable has already mutated the bound `:list` in
-   * place (we simulate that by writing to `account.serviceAccounts`
-   * directly — same Pinia reactivity flow), the @end handler runs
-   * its (a) canonical store-action funnel and (b) silent persist.
+   * the @end handler receives `{ oldIndex, newIndex }` from the
+   * event, splices the Pinia array in place, then runs its
+   * (a) canonical store-action funnel and (b) silent persist.
    */
 
   it('D7: applies the saved per-game order to the server-sorted list on load', async () => {
@@ -1614,16 +1601,14 @@ describe('AccountList page', () => {
      * (L477-487): once the user releases the drag, the new sid CSV
      * gets persisted under `AccountOrder_<service_code>_<service_region>`.
      *
-     * The page's @end handler reads the (already-mutated) sids from
-     * `account.serviceAccounts.map(a => a.sid)`, so we simulate
-     * Sortable.js' splice by writing to that array directly and
-     * then firing the @end emit on the DraggableStub.
+     * The page's @end handler receives `{ oldIndex, newIndex }`
+     * and splices the Pinia array in place before persisting.
      */
-    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(structuredClone(POPULATED_LIST)))
 
     const ctx = buildHarness()
     useAuthStore().session = FAKE_SESSION
-    const wrapper = await ctx.mountIt()
+    await ctx.mountIt()
     await flushPromises()
 
     const account = useAccountStore()
@@ -1637,16 +1622,19 @@ describe('AccountList page', () => {
     const setOrderSpy = vi.spyOn(account, 'setServiceAccountOrder')
 
     /*
-     * Sortable.js' real onEnd flow first splices the bound array
-     * in place, then fires the event. Reproduce that order so the
-     * page's @end handler reads the post-drag order from the
-     * store, not the pre-drag order.
+     * Simulate dragging item at index 0 (SERVICE_ACCOUNT / sid-1)
+     * to index 2. The handler splices the Pinia array in place,
+     * producing [sid-2, sid-3, sid-1].
      */
-    account.serviceAccounts = [SECOND_SA, BANNED_SA, SERVICE_ACCOUNT]
-
-    const draggable = wrapper.findComponent({ name: 'DraggableStub' })
-    expect(draggable.exists()).toBe(true)
-    draggable.vm.$emit('end')
+    expect(capturedOnEnd).not.toBeNull()
+    const fakeFrom = document.createElement('ul')
+    for (let i = 0; i < 3; i++) fakeFrom.appendChild(document.createElement('li'))
+    capturedOnEnd!({
+      oldIndex: 0,
+      newIndex: 2,
+      item: fakeFrom.children[0] as HTMLElement,
+      from: fakeFrom,
+    })
     await flushPromises()
 
     /*
@@ -1684,21 +1672,29 @@ describe('AccountList page', () => {
      * (bypassing `configStore.set` → `wrapCommand` → toast) so
      * the user sees nothing.
      */
-    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(structuredClone(POPULATED_LIST)))
     vi.mocked(commands.setConfig).mockReturnValueOnce(
       err({ code: 'config.write_failed', message: 'disk full', details: null }),
     )
 
     const ctx = buildHarness()
     useAuthStore().session = FAKE_SESSION
-    const wrapper = await ctx.mountIt()
+    await ctx.mountIt()
     await flushPromises()
 
-    const account = useAccountStore()
-    account.serviceAccounts = [SECOND_SA, SERVICE_ACCOUNT, BANNED_SA]
-
-    const draggable = wrapper.findComponent({ name: 'DraggableStub' })
-    draggable.vm.$emit('end')
+    /*
+     * Simulate dragging item at index 1 (SECOND_SA / sid-2) to
+     * index 0. The handler splices the array to [sid-2, sid-1, sid-3].
+     */
+    expect(capturedOnEnd).not.toBeNull()
+    const fakeFrom = document.createElement('ul')
+    for (let i = 0; i < 3; i++) fakeFrom.appendChild(document.createElement('li'))
+    capturedOnEnd!({
+      oldIndex: 1,
+      newIndex: 0,
+      item: fakeFrom.children[1] as HTMLElement,
+      from: fakeFrom,
+    })
     await flushPromises()
 
     /* The IPC fired (we asked the backend to persist). */
@@ -1710,6 +1706,7 @@ describe('AccountList page', () => {
      * persist failure — the WPF behaviour is identical, the user
      * keeps the drag result and the next refresh reconciles).
      */
+    const account = useAccountStore()
     expect(account.serviceAccounts.map((a) => a.sid)).toEqual(['sid-2', 'sid-1', 'sid-3'])
     /*
      * Cache was NOT mutated since the IPC failed — mirrors the

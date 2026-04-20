@@ -259,9 +259,18 @@ type KeysMatch<T, U> = keyof T extends keyof U ? (keyof U extends keyof T ? unkn
 /* -------- zh-TW (canonical / authoritative source) -------- */
 
 const zhTW = {
-  loginShell: {
-    heading: '繽放',
-    subline: '歡迎登入',
+  titleBar: {
+    minimize: '最小化',
+    close: '關閉',
+    regionSelection: '選擇登入地區',
+    login: '登入',
+    totp: '雙重驗證',
+    loginWait: '登入中',
+    verify: '進階驗證',
+    accounts: '遊戲帳號',
+    settings: '設定',
+    about: '關於 beanfun! Next',
+    manageAccount: '管理帳號',
   },
   loginRegion: {
     subline: '請選擇您要登入的 Beanfun 服務地區。',
@@ -274,6 +283,9 @@ const zhTW = {
     subtitle: '開啟 Beanfun 行動版 App 掃描下方 QR Code 即可登入。',
     unsupportedHK: 'QR 登入僅支援台灣區，已返回登入入口。',
     connectionLost: '無法取得登入狀態，請點選重新整理重試。',
+    enlarge: '放大',
+    copyQr: '複製 QR',
+    copyQrSuccess: 'QR Code 已複製到剪貼簿。',
   },
   loginTotp: {
     title: '雙重驗證',
@@ -300,8 +312,8 @@ const zhTW = {
     refresh: '重新整理',
   },
   accountList: {
-    title: '帳號清單',
-    subtitle: '選擇遊戲帳號以開始遊戲，或新增、管理帳號。',
+    title: '帳號管理',
+    subtitle: '管理您的遊戲帳號',
     serviceAccountsHeading: '遊戲帳號',
     accountCount: '{count} 個帳號',
     loading: '載入中…',
@@ -459,9 +471,18 @@ const zhTW = {
 /* -------- zh-CN (Simplified) -------- */
 
 const zhCN = {
-  loginShell: {
-    heading: '缤放',
-    subline: '欢迎登录',
+  titleBar: {
+    minimize: '最小化',
+    close: '关闭',
+    regionSelection: '选择登录地区',
+    login: '登录',
+    totp: '双重验证',
+    loginWait: '登录中',
+    verify: '进阶验证',
+    accounts: '游戏帐号',
+    settings: '设置',
+    about: '关于 beanfun! Next',
+    manageAccount: '管理帐号',
   },
   loginRegion: {
     subline: '请选择您要登录的 Beanfun 服务地区。',
@@ -474,6 +495,9 @@ const zhCN = {
     subtitle: '打开 Beanfun 移动版 App 扫描下方 QR Code 即可登录。',
     unsupportedHK: 'QR 登录仅支持台湾区，已返回登录入口。',
     connectionLost: '无法获取登录状态，请点选重新加载重试。',
+    enlarge: '放大',
+    copyQr: '复制 QR',
+    copyQrSuccess: 'QR Code 已复制到剪贴板。',
   },
   loginTotp: {
     title: '双重验证',
@@ -500,8 +524,8 @@ const zhCN = {
     refresh: '重新加载',
   },
   accountList: {
-    title: '账号列表',
-    subtitle: '选择游戏账号以开始游戏，或新增、管理账号。',
+    title: '账号管理',
+    subtitle: '管理您的游戏账号',
     serviceAccountsHeading: '游戏账号',
     accountCount: '{count} 个账号',
     loading: '加载中…',
@@ -659,9 +683,18 @@ const zhCN = {
 /* -------- en-US -------- */
 
 const enUS = {
-  loginShell: {
-    heading: 'Beanfun',
-    subline: 'Welcome — please sign in',
+  titleBar: {
+    minimize: 'Minimize',
+    close: 'Close',
+    regionSelection: 'Select Region',
+    login: 'Sign In',
+    totp: 'Two-Factor Auth',
+    loginWait: 'Signing In',
+    verify: 'Verification',
+    accounts: 'Game Accounts',
+    settings: 'Settings',
+    about: 'About beanfun! Next',
+    manageAccount: 'Manage Accounts',
   },
   loginRegion: {
     subline: 'Pick the beanfun! region you want to sign in to.',
@@ -674,6 +707,9 @@ const enUS = {
     subtitle: 'Open the beanfun! mobile app and scan the QR code below to sign in.',
     unsupportedHK: 'QR login is only available in Taiwan; redirected back to the login entry.',
     connectionLost: 'Unable to reach the login service. Please tap Reload and try again.',
+    enlarge: 'Enlarge',
+    copyQr: 'Copy QR',
+    copyQrSuccess: 'QR code copied to clipboard.',
   },
   loginTotp: {
     title: 'Two-factor authentication',
@@ -702,8 +738,8 @@ const enUS = {
     refresh: 'Reload',
   },
   accountList: {
-    title: 'Accounts',
-    subtitle: 'Pick a game account to start playing, or add and manage accounts.',
+    title: 'Account Management',
+    subtitle: 'Manage your game accounts',
     serviceAccountsHeading: 'Game Accounts',
     accountCount: '{count} accounts',
     loading: 'Loading…',

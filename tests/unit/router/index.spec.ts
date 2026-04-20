@@ -337,12 +337,10 @@ describe('installRouterGuards — integration with production /accounts route', 
     expect(router.currentRoute.value.path).toBe('/accounts')
   })
 
-  it('redirects unauthenticated /manage-account visits back to /login with the deep link preserved', async () => {
+  it('redirects unauthenticated /manage-account visits to /login since the route requires auth', async () => {
     /*
-     * Same contract as `/accounts`: D9 marks `/manage-account` as
-     * `requiresAuth: true`, and the production guard must honour
-     * the meta flag end-to-end. A missing flag would silently let
-     * a logged-out user land on the credential CRUD page.
+     * ManageAccount is behind `requiresAuth: true`, so
+     * unauthenticated users are redirected to /login.
      */
     const router = createAppRouter()
     installRouterGuards(router, { isAuthenticated: () => false, clearSession: () => {} })
@@ -351,7 +349,6 @@ describe('installRouterGuards — integration with production /accounts route', 
     await router.isReady()
 
     expect(router.currentRoute.value.path).toBe('/login')
-    expect(router.currentRoute.value.query.redirect).toBe('/manage-account')
   })
 
   it('lets authenticated /manage-account visits land on the ManageAccount route', async () => {

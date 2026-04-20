@@ -330,7 +330,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "beanfun"
-version = "6.0.0"
+version = "5.9.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -370,7 +370,10 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "webview2-com",
+ "webview2-com-sys",
  "windows 0.58.0",
+ "windows-core 0.61.2",
  "winreg 0.52.0",
  "wiremock",
  "wmi",

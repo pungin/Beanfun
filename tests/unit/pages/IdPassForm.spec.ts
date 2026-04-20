@@ -443,17 +443,6 @@ describe('IdPassForm', () => {
     expect(elMessageError).not.toHaveBeenCalled()
   })
 
-  it('back button navigates to /login (region picker) without calling loginRegular', async () => {
-    const ctx = mountForm()
-    const wrapper = await ctx.mountIt()
-
-    await wrapper.get('[data-test="id-pass-back"]').trigger('click')
-    await flushPromises()
-
-    expect(ctx.router.currentRoute.value.path).toBe('/login')
-    expect(mockLoginRegular).not.toHaveBeenCalled()
-  })
-
   it('QR-switch link navigates to /login/qr (WPF btn_QRCode parity)', async () => {
     const ctx = mountForm()
     const wrapper = await ctx.mountIt()
@@ -546,14 +535,14 @@ describe('IdPassForm — P12.2 D2 credential persistence', () => {
     expect((checkboxes[1].element as HTMLInputElement).checked).toBe(true)
   })
 
-  it('mount with no Config.AccountID leaves form blank', async () => {
+  it('mount with no Config.AccountID falls back to first stored account for the region', async () => {
     const ctx = mountForm()
     const account = useAccountStore()
     account.accounts = [STORED_ALICE]
     const wrapper = await ctx.mountIt()
+    // Falls back to first TW account even without AccountID config
     const inputs = wrapper.findAll('.el-input-stub')
-    expect((inputs[0].element as HTMLInputElement).value).toBe('')
-    expect((inputs[1].element as HTMLInputElement).value).toBe('')
+    expect((inputs[0].element as HTMLInputElement).value).toBe('alice')
   })
 
   it('mount with stored record but empty password prefills account only (WPF L1067 short-circuit parity)', async () => {
@@ -598,8 +587,9 @@ describe('IdPassForm — P12.2 D2 credential persistence', () => {
       verify: '',
       method: 0,
       auto_login: false,
+      last_login_at: expect.any(String),
     })
-    expect(mockSetConfig).toHaveBeenCalledWith('AccountID', 'alice')
+    expect(mockSetConfig).toHaveBeenCalledWith('AccountID_TW', 'alice')
     expect(ctx.router.currentRoute.value.path).toBe('/accounts')
   })
 

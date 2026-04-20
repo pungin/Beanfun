@@ -144,7 +144,6 @@ use url::Url;
 use crate::commands::{error::CommandError, session::require_auth, state::AppState};
 use crate::services::beanfun::{
     client::{BeanfunClient, LoginRegion},
-    login::seed_webview_cookies_from_client,
     session::Session,
 };
 
@@ -319,11 +318,13 @@ async fn open_url_in_webview<R: tauri::Runtime>(
     let host_label = target_url.host_str().unwrap_or("").to_string();
     let label = make_window_label();
 
+    // Cookie seeding + navigation strategy:
+    // 1. Build window on `about:blank` (hidden)
+    // 2. Seed cookies via native WebView2 COM API (bypasses Tauri's
+    //    broken `set_cookie` wrapper)
+    // 3. Navigate to the real target URL
     let about_blank: Url = "about:blank".parse().expect("about:blank is a valid URL");
-    let about_blank_str = about_blank.to_string();
 
-    // Q12 race gate — see [`open_url_in_webview`] docblock for the
-    // page-load-callback vs. safety-timer ownership model.
     let already_shown = Arc::new(AtomicBool::new(false));
     let already_shown_for_callback = already_shown.clone();
 
@@ -336,14 +337,11 @@ async fn open_url_in_webview<R: tauri::Runtime>(
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
-            // Filter out the `about:blank` Finished edge that fires
-            // before our `navigate(target_url)` call — we want to
-            // wait until the real target has painted, otherwise
-            // the user briefly sees a blank page and the whole
-            // point of `visible(false)` is defeated.
-            if payload.url().as_str() == about_blank_str {
+            let url = payload.url().as_str();
+            if url == "about:blank" {
                 return;
             }
+
             // Idempotent: only the first page-load callback wins
             // the race against the safety timer. Subsequent
             // navigations within the same window (in-page link
@@ -378,32 +376,30 @@ async fn open_url_in_webview<R: tauri::Runtime>(
             )
         })?;
 
-    if let Some(client) = client_opt.as_ref() {
-        let mut seed_failures = 0usize;
-        let seeded = seed_webview_cookies_from_client(client, |cookie| {
-            if let Err(err) = window.set_cookie(cookie.clone()) {
-                seed_failures += 1;
-                tracing::warn!(
-                    step = "InAppBrowser.SeedCookieError",
-                    cookie_name = %cookie.name(),
-                    cookie_domain = ?cookie.domain(),
-                    error = ?err,
-                    "failed to seed cookie into in-app browser; continuing"
-                );
-            }
-            Ok::<(), std::convert::Infallible>(())
-        })
-        .expect("seed closure is infallible");
+    // No separate cookie seeding or navigate() needed — the window
+    // was built with the target URL directly. Cookie seeding + reload
+    // happens inside the on_page_load callback above.
+    let _ = &client_opt; // consumed by the closure
 
-        tracing::info!(
-            step = "InAppBrowser.SeedSummary",
-            label = %label,
-            host = %host_label,
-            seeded = seeded - seed_failures,
-            failed = seed_failures,
-            "cookie seed summary from BeanfunClient jar before navigation"
-        );
+    // Seed cookies via native WebView2 COM API, then navigate.
+    #[cfg(target_os = "windows")]
+    {
+        // Register NewWindowRequested handler — redirect popups to
+        // navigate within the same window (WPF parity).
+        super::cookie_native::register_new_window_handler(&window);
+
+        if let Some(ref client) = client_opt {
+            let seeded = super::cookie_native::seed_cookies_native(&window, client);
+            tracing::info!(
+                step = "InAppBrowser.NativeSeed",
+                seeded = seeded,
+                "native cookie seeding complete; navigating to target"
+            );
+        }
     }
+
+    // Brief yield to let the cookie manager flush.
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     if let Err(err) = window.navigate(target_url.clone()) {
         let _ = window.close();
@@ -588,6 +584,59 @@ pub async fn open_member_center_browser<R: tauri::Runtime>(
 ) -> Result<(), CommandError> {
     let (client, session) = require_auth(state.inner()).await?;
     let url_str = build_member_center_url(&session);
+    let target_url = parse_and_validate(&url_str)?;
+    open_url_in_webview(&app, target_url, Some(client)).await
+}
+
+/// Build the WPF-equivalent Gash recharge URL for the given session.
+/// Mirrors WPF `Pages/AccountList.xaml.cs::bfb_Gash_Click`:
+///
+/// ```text
+/// TW: https://tw.beanfun.com/TW/auth.aspx?channel=gash
+///       &page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0
+///       &web_token={WebToken}
+/// HK: https://bfweb.hk.beanfun.com/HK/auth.aspx?channel=gash
+///       &page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0
+///       &web_token={WebToken}
+/// ```
+///
+/// Both regions share the same `page_and_query` (unlike Member Center
+/// where TW uses `index_new.aspx`). The only difference is the base
+/// host (`tw.beanfun.com` vs `bfweb.hk.beanfun.com`).
+/// Follow the `auth.aspx` redirect chain using the reqwest client
+fn build_gash_recharge_url(session: &Session) -> String {
+    let base = match session.region {
+        LoginRegion::TW => "https://tw.beanfun.com/TW/",
+        LoginRegion::HK => "https://bfweb.hk.beanfun.com/HK/",
+    };
+    format!(
+        "{base}auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={}",
+        session.web_token
+    )
+}
+
+/// Open the Beanfun **Gash recharge** page in a dedicated in-app
+/// webview window. Mirrors WPF
+/// `Pages/AccountList.xaml.cs::bfb_Gash_Click`.
+///
+/// Same security rationale as [`open_member_center_browser`] — the
+/// URL embeds `web_token`, so it must be built backend-side to keep
+/// the secret confined to Rust.
+///
+/// # Errors
+///
+/// - `auth.session_required` — no active session.
+/// - [`INVALID_URL_CODE`] — `build_gash_recharge_url` produced a
+///   URL outside the allowlist (defensive — should be unreachable).
+/// - `ui.window_create_failed` — see [`open_url_in_webview`].
+#[tauri::command]
+#[specta::specta]
+pub async fn open_gash_recharge_browser<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<(), CommandError> {
+    let (client, session) = require_auth(state.inner()).await?;
+    let url_str = build_gash_recharge_url(&session);
     let target_url = parse_and_validate(&url_str)?;
     open_url_in_webview(&app, target_url, Some(client)).await
 }
@@ -809,6 +858,50 @@ mod tests {
     }
 
     #[test]
+    fn build_gash_recharge_url_tw_mirrors_wpf_byte_for_byte() {
+        let session = sample_session(LoginRegion::TW, "WTOKEN_TW_GASH");
+        let url = build_gash_recharge_url(&session);
+        assert_eq!(
+            url,
+            "https://tw.beanfun.com/TW/auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token=WTOKEN_TW_GASH"
+        );
+    }
+
+    #[test]
+    fn build_gash_recharge_url_hk_mirrors_wpf_byte_for_byte() {
+        let session = sample_session(LoginRegion::HK, "WTOKEN_HK_GASH");
+        let url = build_gash_recharge_url(&session);
+        assert_eq!(
+            url,
+            "https://bfweb.hk.beanfun.com/HK/auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token=WTOKEN_HK_GASH"
+        );
+    }
+
+    #[test]
+    fn build_gash_recharge_url_passes_allowlist_for_both_regions() {
+        for region in [LoginRegion::TW, LoginRegion::HK] {
+            let session = sample_session(region, "WTOKEN_GASH_PARSE_OK");
+            let url = build_gash_recharge_url(&session);
+            parse_and_validate(&url)
+                .unwrap_or_else(|e| panic!("region {region:?} URL must validate: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn build_gash_recharge_url_embeds_web_token_verbatim() {
+        let session = sample_session(LoginRegion::TW, "DISTINCT_GASH_TOKEN_99");
+        let url = build_gash_recharge_url(&session);
+        assert!(
+            url.contains("web_token=DISTINCT_GASH_TOKEN_99"),
+            "URL must embed the session's actual web_token; got: {url}"
+        );
+        assert!(
+            !url.contains("web_token=&") && !url.ends_with("web_token="),
+            "URL must not contain an empty web_token query value; got: {url}"
+        );
+    }
+
+    #[test]
     fn make_window_label_starts_with_prefix() {
         let label = make_window_label();
         assert!(label.starts_with("web-browser-"));
@@ -832,7 +925,7 @@ mod tests {
         // must pass `is_allowed_host`. Sourced from:
         // - `src/constants/login.ts::LOGIN_EXTERNAL_URLS`
         //   (RegisterAccount / ForgotPassword in IdPassForm)
-        // - `src/windows/MapleTools.vue` (PLAYER_REPORT_URL)
+        // - `src/windows/MapleTools.vue` (PLAYER_REPORT_URL, VIDEO_REPORT_URL)
         // - `src/windows/KartTools.vue` (KART_TOOLS_ACTIONS)
         for url in [
             "https://tw.beanfun.com/TW/signup/Join_beanfun_signup.aspx",
@@ -840,6 +933,7 @@ mod tests {
             "https://tw.beanfun.com/member/forgot_pwd.aspx",
             "https://hk.beanfun.com/member/forgot_pwd.aspx",
             "https://event.beanfun.com/customerservice/PluginReporting/PlayerReport.aspx",
+            "https://beanfun-event.beanfun.com/EventAD_Mobile/EventAD?eventAdId=3453",
             "https://tw.beanfun.com/KartRider/guild/maneger_data.aspx",
             "https://tw.beanfun.com/kartrider/guild/rank.aspx",
             "https://tw.beanfun.com/KartRider/guild/rank_team_in.aspx",

@@ -32,13 +32,23 @@ use beanfun_lib::services::storage::{
 use tempfile::TempDir;
 
 /// Parent registry path under which every test sub-key is created.
-/// Best-effort cleaned up in `RegistryScope::drop` once its last
-/// child has been removed.
+///
+/// Intentionally **not** deleted in `RegistryScope::drop`: doing so
+/// races with concurrent tests (cargo test runs test fns in parallel
+/// by default), producing
+/// `ERROR_KEY_DELETED (1018, "Illegal operation attempted on a registry
+/// key that has been marked for deletion.")` when test B opens a
+/// child under PARENT while test A's Drop is in the middle of
+/// deleting the (empty) PARENT. An orphaned empty parent key in
+/// `HKCU\SOFTWARE\BEANFUN_NEXT_TEST` is harmless — it's sandboxed
+/// under a test-only prefix and every future test run recreates its
+/// own unique sub-key under it (which is recursively cleaned on
+/// drop).
 const TEST_REGISTRY_PARENT: &str = "SOFTWARE\\BEANFUN_NEXT_TEST";
 
 /// Per-test registry isolation guard. Allocates a unique sub-key
-/// under `SOFTWARE\BEANFUN_NEXT_TEST\users_<name>_<pid>` and best-
-/// effort deletes it (and the empty parent) on drop.
+/// under `SOFTWARE\BEANFUN_NEXT_TEST\users_<name>_<pid>` and
+/// recursively deletes that sub-key on drop.
 struct RegistryScope {
     subkey: String,
 }
@@ -57,7 +67,6 @@ impl RegistryScope {
 impl Drop for RegistryScope {
     fn drop(&mut self) {
         let _ = delete_subkey(&self.subkey);
-        let _ = delete_subkey_non_recursive(TEST_REGISTRY_PARENT);
     }
 }
 
@@ -66,13 +75,6 @@ fn delete_subkey(path: &str) -> std::io::Result<()> {
     use winreg::RegKey;
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     hkcu.delete_subkey_all(path)
-}
-
-fn delete_subkey_non_recursive(path: &str) -> std::io::Result<()> {
-    use winreg::enums::HKEY_CURRENT_USER;
-    use winreg::RegKey;
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    hkcu.delete_subkey(path)
 }
 
 fn sample_records() -> Records {
@@ -85,6 +87,7 @@ fn sample_records() -> Records {
             verify: String::new(),
             method: 1,
             auto_login: true,
+            last_login_at: None,
         },
         Account {
             region: "HK".to_string(),
@@ -94,6 +97,7 @@ fn sample_records() -> Records {
             verify: "vrf-bob".to_string(),
             method: 2,
             auto_login: false,
+            last_login_at: None,
         },
     ])
 }

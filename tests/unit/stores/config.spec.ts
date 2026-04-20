@@ -95,7 +95,7 @@ describe('useConfigStore', () => {
     expect('ToBeDeleted' in store.entries).toBe(false)
   })
 
-  it('set leaves the cache untouched when the backend errors', async () => {
+  it('set updates the in-memory cache even when the backend write fails (read-only file)', async () => {
     mockGetAllConfig.mockReturnValueOnce(ok({ Locale: 'zh-TW' }))
     mockSetConfig.mockReturnValueOnce(
       err({ code: 'config.io_error', message: 'disk full', details: null }),
@@ -104,8 +104,8 @@ describe('useConfigStore', () => {
     const store = useConfigStore()
     await store.loadAll()
 
-    await expect(store.set('Locale', 'en-US')).rejects.toThrow()
-    expect(store.get('Locale')).toBe('zh-TW')
+    await store.set('Locale', 'en-US')
+    expect(store.get('Locale')).toBe('en-US')
   })
 
   it('loadAll surfaces backend errors via wrapCommand', async () => {

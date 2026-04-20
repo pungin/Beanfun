@@ -78,7 +78,20 @@
 import type { RouteRecordRaw, Router } from 'vue-router'
 import { createRouter, createWebHashHistory } from 'vue-router'
 
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { LogicalSize } from '@tauri-apps/api/dpi'
+
 import { registerSessionExpiredHandler } from '../services/invoke'
+
+/**
+ * Resize the Tauri window to the given logical dimensions.
+ * Exported so individual pages can call it on mount when their
+ * content height differs from the route meta default (e.g.
+ * Settings page without the Game section when unauthenticated).
+ */
+export function resizeWindow(width: number, height: number): void {
+  void getCurrentWindow().setSize(new LogicalSize(width, height))
+}
 
 import LoginPage from '../pages/LoginPage.vue'
 import LoginRegionSelection from '../pages/LoginRegionSelection.vue'
@@ -144,36 +157,73 @@ const loginChildren: RouteRecordRaw[] = [
     path: '',
     name: ROUTE_NAMES.LoginRegion,
     component: LoginRegionSelection,
+    meta: {
+      titleKey: 'titleBar.regionSelection',
+      titleIcon: 'public',
+      windowWidth: 560,
+      windowHeight: 480,
+    },
   },
   {
     path: 'id-pass',
     name: ROUTE_NAMES.LoginIdPass,
     component: IdPassForm,
+    meta: { titleKey: 'titleBar.login', titleIcon: 'login', windowWidth: 560, windowHeight: 520 },
   },
   {
     path: 'qr',
     name: ROUTE_NAMES.LoginQr,
     component: QrForm,
+    meta: {
+      titleKey: 'titleBar.login',
+      titleIcon: 'qr_code_2',
+      windowWidth: 560,
+      windowHeight: 680,
+    },
   },
   {
     path: 'gamepass',
     name: ROUTE_NAMES.LoginGamepass,
     component: GamepassForm,
+    meta: {
+      titleKey: 'titleBar.login',
+      titleIcon: 'verified_user',
+      windowWidth: 560,
+      windowHeight: 460,
+    },
   },
   {
     path: 'totp',
     name: ROUTE_NAMES.LoginTotp,
     component: LoginTotp,
+    meta: {
+      titleKey: 'titleBar.totp',
+      titleIcon: 'encrypted',
+      windowWidth: 520,
+      windowHeight: 380,
+    },
   },
   {
     path: 'wait',
     name: ROUTE_NAMES.LoginWait,
     component: LoginWait,
+    meta: {
+      titleKey: 'titleBar.loginWait',
+      titleIcon: 'login',
+      windowWidth: 480,
+      windowHeight: 360,
+    },
   },
   {
     path: 'verify',
     name: ROUTE_NAMES.LoginVerify,
     component: VerifyPage,
+    meta: {
+      titleKey: 'titleBar.verify',
+      titleIcon: 'shield_lock',
+      windowWidth: 560,
+      windowHeight: 480,
+    },
   },
 ]
 
@@ -198,12 +248,24 @@ export const routes: RouteRecordRaw[] = [
      * (P12.2 D-step) can land the user back on the page they
      * originally targeted.
      */
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      titleKey: 'titleBar.accounts',
+      titleIcon: 'sports_esports',
+      windowWidth: 560,
+      windowHeight: 640,
+    },
   },
   {
     path: '/settings',
     name: ROUTE_NAMES.Settings,
     component: SettingsPage,
+    meta: {
+      titleKey: 'titleBar.settings',
+      titleIcon: 'settings',
+      windowWidth: 880,
+      windowHeight: 680,
+    },
     /*
      * P12.4 D6: Settings page is reachable from both the
      * post-login `AccountList` top-bar icon and (per WPF parity
@@ -222,6 +284,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/about',
     name: ROUTE_NAMES.About,
     component: AboutPage,
+    meta: { titleKey: 'titleBar.about', titleIcon: 'info', windowWidth: 560, windowHeight: 680 },
     /*
      * P12.4 D7: same public-route rationale as `/settings` —
      * WPF allowed the About page from both pre-login and
@@ -245,7 +308,13 @@ export const routes: RouteRecordRaw[] = [
      * accounts are session-scoped UX (the page only makes sense for
      * a logged-in user managing the credentials they just used).
      */
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      titleKey: 'titleBar.manageAccount',
+      titleIcon: 'manage_accounts',
+      windowWidth: 880,
+      windowHeight: 640,
+    },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -291,6 +360,26 @@ declare module 'vue-router' {
      * `/login` → redirect to `/login` → ...).
      */
     requiresAuth?: boolean
+    /**
+     * i18n key for the custom title bar text. When unset, the
+     * title bar falls back to `t('AppName')`.
+     */
+    titleKey?: string
+    /**
+     * Material Symbols icon name for the custom title bar.
+     * When unset, falls back to `'coffee'`.
+     */
+    titleIcon?: string
+    /**
+     * Desired window width in logical pixels for this route.
+     * The router afterEach hook calls `appWindow.setSize()` when
+     * the value differs from the current route.
+     */
+    windowWidth?: number
+    /**
+     * Desired window height in logical pixels for this route.
+     */
+    windowHeight?: number
   }
 }
 
@@ -388,5 +477,43 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
       path: '/login',
       query: { sessionExpired: '1' },
     })
+  })
+
+  /*
+   * Auto-fit window size to content. Uses a ResizeObserver on the
+   * `[data-window-root]` element so the window tracks content
+   * height changes (e.g. sections appearing/disappearing, async
+   * data loading). Width comes from route meta.
+   */
+  const appWindow = getCurrentWindow()
+  let currentWidth = 560
+  let observer: ResizeObserver | null = null
+
+  function fitWindow(): void {
+    const root = document.querySelector('[data-window-root]') as HTMLElement | null
+    if (!root) return
+    // Remove height lock to measure natural content height
+    root.style.height = 'auto'
+    const h = Math.max(300, Math.min(Math.ceil(root.scrollHeight), 900))
+    void appWindow.setSize(new LogicalSize(currentWidth, h)).then(() => {
+      // Lock height to viewport so flex scroll areas work
+      root.style.height = '100vh'
+    })
+  }
+
+  function setupObserver(): void {
+    if (observer) observer.disconnect()
+    const root = document.querySelector('[data-window-root]') as HTMLElement | null
+    if (!root) return
+    observer = new ResizeObserver(() => fitWindow())
+    observer.observe(root)
+    fitWindow()
+  }
+
+  router.afterEach((to) => {
+    const w = to.meta.windowWidth as number | undefined
+    if (w) currentWidth = w
+    // Give Vue time to mount the new route component
+    setTimeout(setupObserver, 80)
   })
 }

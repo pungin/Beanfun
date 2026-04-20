@@ -21,8 +21,12 @@
 
 ### 使用方法 (Usage)
 
-1. 前往 **[最新發行版 (Releases)](https://github.com/pungin/Beanfun/releases/latest)** 下載最新的 `Beanfun.exe`。
-2. 下載後放至任意全英文路徑的資料夾，直接執行即可。
+前往 **[最新發行版 (Releases)](https://github.com/pungin/Beanfun/releases/latest)** 下載：
+
+| 版本         | 檔案                          | 說明                                                                                 |
+| ------------ | ----------------------------- | ------------------------------------------------------------------------------------ |
+| **免安裝版** | `Beanfun.exe`                 | 放至任意全英文路徑的資料夾，直接執行即可。需系統已安裝 WebView2 Runtime。            |
+| **安裝版**   | `Beanfun_x.x.x_x64-setup.exe` | 適用於精簡版 Windows 等未預裝 WebView2 的環境，安裝過程會自動安裝 WebView2 Runtime。 |
 
 > **⚠ 注意事項說明：**
 >

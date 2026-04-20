@@ -42,10 +42,12 @@ use url::Url;
 
 use super::error::LoginError;
 
-/// User-Agent string that the WPF `BeanfunClient` sends.
-/// Beanfun servers have been observed to reject requests with bot-like
-/// User-Agents, so we stick to this exact string for maximum compatibility.
-pub const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+/// User-Agent string matching a real Chrome browser on Windows.
+/// The HK portal (`bfweb.hk.beanfun.com`) performs a browser check and
+/// redirects to a "browser not supported" page if the UA doesn't look
+/// like a modern browser. The WPF client used a truncated UA that
+/// happened to work, but the HK server has since tightened its check.
+pub const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 /// Default per-request timeout. 30 s matches what a human expects before
 /// they give up and hit the button again; long enough for the occasional

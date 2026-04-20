@@ -167,18 +167,14 @@ export function gameCodeOf(serviceCode: string, serviceRegion: string): string {
  *   sites stable if Beanfun ever resplits hosts in the future.
  */
 export function imageUrl(name: string, region: LoginRegion): string {
+  if (!name) return ''
   if (name.startsWith('http://') || name.startsWith('https://')) {
     return name
   }
-  /*
-   * Region is currently homogeneous (`images.beanfun.com` serves
-   * both TW and HK in 2026) but the parameter is preserved so a
-   * future Beanfun-side host re-split lands as a one-line change
-   * here without forcing every call site to drop / re-add the
-   * argument.
-   */
-  void region
-  const base = 'https://images.beanfun.com/GameZone/'
+  const base =
+    region === 'TW'
+      ? 'https://images.beanfun.com/GameZone/'
+      : 'http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/'
   return `${base}${name}`
 }
 

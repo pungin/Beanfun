@@ -547,6 +547,27 @@ export const useAuthStore = defineStore('auth', () => {
     verifyIntent.value = null
   }
 
+  /**
+   * Patch the active `(service_code, service_region)` pair on the
+   * in-memory session so the frontend's `sameAsSession` guard in
+   * `AccountList.vue::selectActiveGame` stays in sync with the
+   * backend after a successful `commands.setActiveService` call.
+   *
+   * Without this, switching to Game A then back to the original
+   * login game skips the backend `setActiveService` (the stale
+   * frontend session still matches the original pair) while the
+   * backend session still points at Game A — the subsequent
+   * `getAccounts` returns the wrong game's account list.
+   */
+  function updateSessionService(serviceCode: string, serviceRegion: string): void {
+    if (session.value === null) return
+    session.value = {
+      ...session.value,
+      service_code: serviceCode,
+      service_region: serviceRegion,
+    }
+  }
+
   async function logout(): Promise<void> {
     return withGuard(AUTH_ACTIONS.Logout, async () => {
       await wrapCommand(commands.logout())
@@ -575,6 +596,7 @@ export const useAuthStore = defineStore('auth', () => {
     getVerifyCaptcha,
     submitVerify,
     clearSession,
+    updateSessionService,
     logout,
     setLoginIntent,
     clearLoginIntent,

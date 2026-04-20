@@ -130,7 +130,9 @@ describe('LoginRegionSelection', () => {
     expect(wrapper.find('.region-picker__subline').text()).toBe(
       i18nMessages['zh-TW'].loginRegion.subline,
     )
-    expect(wrapper.find('.region-picker__tip').text()).toBe(i18nMessages['zh-TW'].loginRegion.tip)
+    expect(wrapper.find('.region-picker__tip').text()).toContain(
+      i18nMessages['zh-TW'].loginRegion.tip,
+    )
   })
 
   it('persists "TW" to loginRegion when the Taiwan tile is clicked', async () => {

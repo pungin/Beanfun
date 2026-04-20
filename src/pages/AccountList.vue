@@ -50,7 +50,7 @@
  * | Auto-paste preference                               | **REAL since P12.2 D5** (`useConfigStore` `autoPaste` key, lazy-write + AutoPasteTip on first toggle) |
  * | OTP value + Get OTP + Copy                          | **REAL since P12.2 D5** (`account.getOtp` + `commands.autoPaste` + clipboard fallback) |
  * | Add Service Account button                          | **REAL since P12.2 D3** (`windows/AddServiceAccount.vue`) |
- * | Drag handle (reorder)                               | **REAL since P12.2 D7** (vuedraggable + `Config.xml` `AccountOrder_<gameCode>` persistence) |
+ * | Drag handle (reorder)                               | **REAL since P12.2 D7** (SortableJS + `Config.xml` `AccountOrder_<gameCode>` persistence) |
  * | Per-row context menu (more_vert)                    | **REAL since P12.2 D4** (`Change Alias` + `Account Info` + `Check Email` items wired; other items land in their own D-steps) |
  *
  * Stubs render the mockup affordance verbatim so visual QA on D1
@@ -86,7 +86,7 @@
  *   Game CTA, so the bottom dock has no UX purpose.
  */
 
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
@@ -103,6 +103,7 @@ import {
   DocumentCopy,
   EditPen,
   InfoFilled,
+  Iphone,
   Key,
   Message,
   MoreFilled,
@@ -110,12 +111,12 @@ import {
   Plus,
   Refresh,
   Service,
-  Setting as SettingIcon,
   SwitchButton,
   User,
   VideoPlay,
+  Wallet,
 } from '@element-plus/icons-vue'
-import draggable from 'vuedraggable'
+import Sortable from 'sortablejs'
 
 import { useAuthStore } from '../stores/auth'
 import { useAccountStore } from '../stores/account'
@@ -138,6 +139,7 @@ import ToolsDialogStack from '../windows/ToolsDialogStack.vue'
 import UnconnectedGameAddAccount from '../windows/UnconnectedGame_AddAccount.vue'
 import UnconnectedGameChangePassword from '../windows/UnconnectedGame_ChangePassword.vue'
 import { TOOLS_GAME_CODES } from '../constants/tools'
+import TitleBar from '../components/TitleBar.vue'
 import { useGameLauncher } from '../composables/useGameLauncher'
 
 defineOptions({ name: 'AccountList' })
@@ -318,6 +320,7 @@ async function handleLogout(): Promise<void> {
      */
   }
   account.clearSessionData()
+  game.clearGameData()
   await router.push('/login')
 }
 
@@ -436,6 +439,35 @@ async function handleCustomerService(): Promise<void> {
     return
   }
   await inAppBrowser.open(CUSTOMER_SERVICE_URLS[region])
+}
+
+/* --- Gash Recharge / App Gash Recharge (WPF bfb_Gash_Click + btn_Deposite_Click parity) --- */
+
+/**
+ * Open the Beanfun **Gash recharge** page. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::bfb_Gash_Click`.
+ *
+ * Same pattern as {@link handleMemberCenter} — the URL embeds
+ * `web_token`, so a dedicated backend command keeps the secret
+ * confined to Rust.
+ */
+async function handleGashRecharge(): Promise<void> {
+  const result = await safeInvoke(commands.openGashRechargeBrowser())
+  if (!result.ok) {
+    ElMessage.error(result.error.message || t('inAppBrowser.openFailed'))
+  }
+}
+
+/**
+ * Open the **beanfun! App Gash deposit** page. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::btn_Deposite_Click`.
+ *
+ * No `web_token` needed — the URL is a static `m.beanfun.com`
+ * endpoint. Dispatched through {@link inAppBrowser} (same pattern
+ * as {@link handleCustomerService}).
+ */
+async function handleAppGashRecharge(): Promise<void> {
+  await inAppBrowser.open('https://m.beanfun.com/Deposite')
 }
 
 /* --------------- P12.5 D7 — Tools button real handler --------------- */
@@ -701,6 +733,7 @@ async function selectActiveGame(
        */
       return
     }
+    auth.updateSessionService(serviceCode, serviceRegion)
   }
 
   /*
@@ -881,6 +914,47 @@ const formattedRemainPoint = computed(() => {
 })
 
 /* --------------- add service account (D3 + D8g unconnected branch) --------------- */
+
+/**
+ * Extract the numeric limit from the server notice text
+ * (e.g. "此遊戲最多允許新增帳號數:2" → 2). Returns `null` when
+ * no number is found or the notice is not the `other` variant.
+ */
+const accountLimit = computed<number | null>(() => {
+  const notice = account.amountLimitNotice
+  if (notice.kind !== 'other') return null
+  const match = notice.data.match(/\d+/)
+  return match ? parseInt(match[0], 10) : null
+})
+
+/**
+ * Whether the add-account button should be disabled.
+ * - `auth_re_login_required` → always disabled (need verification)
+ * - `other` with parseable limit → disabled only when current
+ *   account count >= the limit
+ * - `none` / unparseable → enabled (let server reject if needed)
+ */
+const isAddAccountDisabled = computed(() => {
+  const notice = account.amountLimitNotice
+  if (notice.kind === 'auth_re_login_required') return true
+  if (accountLimit.value !== null) {
+    return account.serviceAccounts.length >= accountLimit.value
+  }
+  return false
+})
+
+/**
+ * Human-readable limit notice text for the UI.
+ * - `auth_re_login_required` → localised `AuthReLogin` string
+ * - `other` → server's verbatim text (e.g. "此遊戲最多允許新增帳號數:2")
+ * - `none` → null (nothing to show)
+ */
+const limitNoticeText = computed<string | null>(() => {
+  const notice = account.amountLimitNotice
+  if (notice.kind === 'auth_re_login_required') return t('AuthReLogin')
+  if (notice.kind === 'other') return notice.data
+  return null
+})
 
 /**
  * `<AddServiceAccount />` modal visibility. Driven by the Plus
@@ -1629,11 +1703,9 @@ function handleCopyOtp(): void {
  * L137-139 call site that runs ApplyAccountOrder immediately
  * after the server-side `OrderBy(ssn)`.
  *
- * # Why vuedraggable (and not native HTML5 drag-drop)
+ * # Why SortableJS (and not native HTML5 drag-drop)
  *
- * `vuedraggable@4.1.0` is already in `package.json` (Vue 3 peer)
- * but had no consumers — using it here turns a dead dependency
- * into a load-bearing one and gives us:
+ * SortableJS gives us:
  *
  * - The `handle` selector that mirrors WPF's `_isHandlePressed`
  *   gate (`MouseLeftButtonDown` only on the grip, never the row)
@@ -1642,25 +1714,15 @@ function handleCopyOtp(): void {
  * - Sortable.js' built-in animation, ghost element, and same-list
  *   reorder semantics — re-implementing those over native dnd is
  *   ~200 lines of fiddly DOM measurement code.
- * - In-place mutation of the bound array via `:list`, which keeps
- *   Pinia reactivity end-to-end without needing a v-model
- *   computed setter just to satisfy the bind contract.
  *
- * D7.3 sanity check (Vue 3.5 + Vite 6 + Vitest 4) confirmed the
- * UMD bundle imports and mounts cleanly under our toolchain.
+ * # Why the @end handler manually splices the array
  *
- * # Why we still call `setServiceAccountOrder` after the @end event
- *
- * `<draggable :list>` mutates `account.serviceAccounts` in place,
- * so by the time `@end` fires the visible order is already
- * correct. The follow-up `account.setServiceAccountOrder` call
- * is **idempotent** in that case but earns its keep as the single
- * canonical reorder funnel: the spy in the page-level test (D7.5
- * case 2) asserts the store action receives the expected sid
- * order, which gives us a stable seam against future refactors
- * (e.g. adding analytics, deduplication, or a derived state
- * mirror — all would belong inside the action, not next to every
- * call site).
+ * SortableJS manipulates the DOM during drag — the
+ * backing data must be updated manually via `oldIndex` /
+ * `newIndex` from the event. The handler splices the Pinia
+ * array in place, then funnels through `setServiceAccountOrder`
+ * as the canonical reorder action (keeps the spy seam for tests
+ * and any future invariants like analytics or dedup).
  *
  * # Why persist failures are silent (Q8)
  *
@@ -1726,10 +1788,8 @@ async function persistAccountOrder(key: string, csv: string): Promise<void> {
 }
 
 /**
- * Vuedraggable `@end` handler. Vuedraggable's `:list` binding has
- * already mutated `account.serviceAccounts` in place by the time
- * this fires (Sortable.js' `onEnd` runs after the splice), so the
- * visible UI is already correct.
+ * SortableJS `@end` handler. Receives `oldIndex` / `newIndex`
+ * from the event, splices the Pinia array in place, then persists.
  *
  * Two follow-up writes:
  *
@@ -1742,60 +1802,100 @@ async function persistAccountOrder(key: string, csv: string): Promise<void> {
  *    under the per-game key. Skipped when no session is active;
  *    silent on failure (mirrors WPF).
  */
-function handleDragEnd(): void {
+function handleDragEnd(event: Sortable.SortableEvent): void {
   const key = accountOrderConfigKey.value
   if (!key) return
 
-  const orderedSids = account.serviceAccounts.map((a) => a.sid)
-  account.setServiceAccountOrder(orderedSids)
-  void persistAccountOrder(key, orderedSids.join(','))
+  const { oldIndex, newIndex, item, from } = event
+  if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+
+  /*
+   * SortableJS physically moved the DOM element during drag.
+   * Revert that manipulation so Vue's reactivity system is the
+   * sole owner of the DOM — otherwise the subsequent array
+   * splice triggers a Vue re-render that conflicts with the
+   * already-moved element, producing incorrect final positions.
+   */
+  from.removeChild(item)
+  from.insertBefore(item, from.children[oldIndex] ?? null)
+
+  const list = account.serviceAccounts
+  const [moved] = list.splice(oldIndex, 1)
+  list.splice(newIndex, 0, moved)
+
+  account.setServiceAccountOrder(list.map((a) => a.sid))
+  void persistAccountOrder(key, list.map((a) => a.sid).join(','))
 }
+
+/* SortableJS instance lifecycle */
+
+const rowsRef = ref<HTMLElement | null>(null)
+let sortableInstance: Sortable | null = null
+
+function initSortable(): void {
+  destroySortable()
+  if (!rowsRef.value) return
+  sortableInstance = Sortable.create(rowsRef.value, {
+    handle: '.account-list__row-grip',
+    animation: 150,
+    ghostClass: 'account-list__row--ghost',
+    forceFallback: true,
+    onEnd: handleDragEnd,
+  })
+}
+
+function destroySortable(): void {
+  if (sortableInstance) {
+    sortableInstance.destroy()
+    sortableInstance = null
+  }
+}
+
+watch(rowsRef, (el) => {
+  if (el) initSortable()
+  else destroySortable()
+})
+
+onBeforeUnmount(destroySortable)
 </script>
 
 <template>
-  <main class="account-list bf-mica-bg">
-    <div class="account-list__container">
-      <header class="account-list__header">
-        <div class="account-list__header-text">
-          <h1 class="account-list__title bf-text-gradient">{{ t('accountList.title') }}</h1>
-          <p class="account-list__subline">{{ t('accountList.subtitle') }}</p>
-        </div>
-        <!--
-          P12.4 D6: Settings + About entry buttons. Mirrors WPF
-          `MainWindow.xaml` titlebar L112-139 — both icons sit in the
-          window chrome alongside Logout / Min / Close. We reuse the
-          existing `bf-btn-ghost-icon` styling that the in-row Tools
-          + Logout buttons already use so the chrome stays visually
-          consistent across the page.
-        -->
-        <div class="account-list__header-actions">
-          <button
-            type="button"
-            class="bf-btn-ghost-icon account-list__icon-btn"
-            :title="t('Settings')"
-            data-test="account-list-settings"
-            @click="handleOpenSettings"
-          >
-            <el-icon><SettingIcon /></el-icon>
-          </button>
-          <button
-            type="button"
-            class="bf-btn-ghost-icon account-list__icon-btn"
-            :title="t('settings.aboutLink')"
-            data-test="account-list-about"
-            @click="handleOpenAbout"
-          >
-            <el-icon><InfoFilled /></el-icon>
-          </button>
-        </div>
-      </header>
+  <main class="account-list bf-glass-window" data-window-root>
+    <TitleBar>
+      <button
+        type="button"
+        class="account-list__titlebar-btn"
+        :title="t('Settings')"
+        data-test="account-list-settings"
+        @click="handleOpenSettings"
+      >
+        <span class="material-symbols-outlined">settings</span>
+      </button>
+      <button
+        type="button"
+        class="account-list__titlebar-btn"
+        :title="t('settings.aboutLink')"
+        data-test="account-list-about"
+        @click="handleOpenAbout"
+      >
+        <span class="material-symbols-outlined">info</span>
+      </button>
+    </TitleBar>
+    <div class="account-list__scroll">
+      <div class="account-list__container">
+        <header class="account-list__header">
+          <div class="account-list__header-text">
+            <h1 class="account-list__title bf-text-gradient">{{ t('accountList.title') }}</h1>
+            <p class="account-list__subline">{{ t('accountList.subtitle') }}</p>
+          </div>
+        </header>
 
-      <!-- Game info bar (D8d) — real game name + image + change-game button. -->
-      <section class="account-list__game bf-glass-panel">
-        <div class="account-list__game-row">
-          <div class="account-list__game-meta">
-            <div class="account-list__game-icon" aria-hidden="true">
-              <!--
+        <!-- Game info bar (D8d) — real game name + image + change-game button. -->
+        <section class="account-list__game bf-glass-panel">
+          <div class="account-list__game-row">
+            <div class="account-list__game-meta">
+              <div class="account-list__game-icon" aria-hidden="true">
+                <!--
                 D8d: prefer the per-game banner image when the catalogue
                 has hydrated; fall back to the generic VideoPlay glyph
                 so the layout doesn't collapse during the brief setup
@@ -1803,33 +1903,33 @@ function handleDragEnd(): void {
                 container size is fixed regardless so the row height
                 stays stable across the swap.
               -->
-              <img
-                v-if="gameImageUrl"
-                :src="gameImageUrl"
-                :alt="gameNameDisplay"
-                class="account-list__game-icon-img"
-                data-test="account-list-game-image"
-              />
-              <el-icon v-else :size="24"><VideoPlay /></el-icon>
+                <img
+                  v-if="gameImageUrl"
+                  :src="gameImageUrl"
+                  :alt="gameNameDisplay"
+                  class="account-list__game-icon-img"
+                  data-test="account-list-game-image"
+                />
+                <el-icon v-else :size="24"><VideoPlay /></el-icon>
+              </div>
+              <button
+                type="button"
+                class="account-list__game-info"
+                :title="t('accountList.changeGame')"
+                data-test="account-list-change-game"
+                @click="handleChangeGame"
+              >
+                <span class="account-list__game-name" data-test="account-list-game-name">
+                  {{ gameNameDisplay }}
+                </span>
+                <span class="account-list__game-status">
+                  <span class="account-list__game-status-dot" />
+                  {{ t('accountList.statusOnline') }}
+                </span>
+              </button>
             </div>
-            <button
-              type="button"
-              class="account-list__game-info"
-              :title="t('accountList.changeGame')"
-              data-test="account-list-change-game"
-              @click="handleChangeGame"
-            >
-              <span class="account-list__game-name" data-test="account-list-game-name">
-                {{ gameNameDisplay }}
-              </span>
-              <span class="account-list__game-status">
-                <span class="account-list__game-status-dot" />
-                {{ t('accountList.statusOnline') }}
-              </span>
-            </button>
-          </div>
-          <div class="account-list__game-actions">
-            <!--
+            <div class="account-list__game-actions">
+              <!--
               D8e: Tools button is only rendered for the three game
               codes WPF whitelisted (`610074_T9` / `610075_T9` /
               `610096_TE`). Hidden via `v-if` rather than `display:
@@ -1837,152 +1937,158 @@ function handleDragEnd(): void {
               that isn't reachable, and so the surrounding flex row
               tightens up cleanly when the button is absent.
             -->
-            <button
-              v-if="showToolsButton"
-              type="button"
-              class="bf-btn-ghost-icon account-list__icon-btn"
-              :title="t('accountList.toolsButton')"
-              data-test="account-list-tools"
-              @click="handleTools"
-            >
-              <el-icon><Operation /></el-icon>
-            </button>
-            <button
-              type="button"
-              class="bf-btn-ghost-icon account-list__icon-btn account-list__icon-btn--danger"
-              :title="t('Logout')"
-              data-test="account-list-logout"
-              @click="handleLogout"
-            >
-              <el-icon><SwitchButton /></el-icon>
-            </button>
-          </div>
-        </div>
-        <button
-          type="button"
-          class="bf-btn-gradient account-list__start-btn"
-          :disabled="startGameDisabled"
-          data-test="account-list-start"
-          @click="handleStartGame"
-        >
-          <el-icon><VideoPlay /></el-icon>
-          <span>{{ t('GameStart') }}</span>
-        </button>
-      </section>
-
-      <!-- Quick actions row: balance + member center + support (all stubs) -->
-      <section class="account-list__quick">
-        <div class="account-list__balance bf-glass-card bf-ghost-border">
-          <div class="account-list__balance-text">
-            <span class="account-list__balance-label">
-              {{ t('accountList.gashBalance') }}
-            </span>
-            <span class="account-list__balance-value" data-test="account-list-balance-value">
-              {{ formattedRemainPoint }}
-            </span>
+              <button
+                v-if="showToolsButton"
+                type="button"
+                class="bf-btn-ghost-icon account-list__icon-btn"
+                :title="t('accountList.toolsButton')"
+                data-test="account-list-tools"
+                @click="handleTools"
+              >
+                <el-icon><Operation /></el-icon>
+              </button>
+              <button
+                type="button"
+                class="bf-btn-ghost-icon account-list__icon-btn account-list__icon-btn--danger"
+                :title="t('Logout')"
+                data-test="account-list-logout"
+                @click="handleLogout"
+              >
+                <el-icon><SwitchButton /></el-icon>
+              </button>
+            </div>
           </div>
           <button
             type="button"
-            class="account-list__balance-refresh"
-            :class="{ 'account-list__balance-refresh--spinning': refreshing }"
-            :title="t('accountList.refreshBalance')"
-            :disabled="refreshing"
-            data-test="account-list-refresh-balance"
-            @click="handleRefreshBalance"
+            class="bf-btn-gradient account-list__start-btn"
+            :disabled="startGameDisabled"
+            data-test="account-list-start"
+            @click="handleStartGame"
           >
-            <el-icon><Refresh /></el-icon>
+            <el-icon><VideoPlay /></el-icon>
+            <span>{{ t('GameStart') }}</span>
           </button>
-        </div>
-        <button
-          type="button"
-          class="account-list__quick-link bf-glass-card bf-ghost-border"
-          data-test="account-list-member-center"
-          @click="handleMemberCenter"
-        >
-          <el-icon><User /></el-icon>
-          <span>{{ t('accountList.memberCenter') }}</span>
-        </button>
-        <button
-          type="button"
-          class="account-list__quick-link bf-glass-card bf-ghost-border"
-          data-test="account-list-customer-service"
-          @click="handleCustomerService"
-        >
-          <el-icon><Service /></el-icon>
-          <span>{{ t('accountList.customerService') }}</span>
-        </button>
-      </section>
+        </section>
 
-      <!-- Service accounts list — 4 rendered states (REAL) -->
-      <section class="account-list__list bf-glass-panel">
-        <header class="account-list__list-header">
-          <h2 class="account-list__list-title">
-            {{ t('accountList.serviceAccountsHeading') }}
-          </h2>
-          <span class="account-list__list-count" data-test="account-list-count">
-            {{ t('accountList.accountCount', { count: accountCount }) }}
-          </span>
-        </header>
-
-        <div class="account-list__list-body bf-custom-scrollbar">
-          <p
-            v-if="loadState === 'loading'"
-            class="account-list__list-state"
-            data-test="account-list-loading"
-          >
-            {{ t('accountList.loading') }}
-          </p>
-
-          <div
-            v-else-if="loadState === 'error'"
-            class="account-list__list-state account-list__list-state--error"
-            data-test="account-list-error"
-          >
-            <p>{{ loadError ?? t('accountList.loadFailed') }}</p>
-            <el-button
-              type="primary"
-              plain
-              size="small"
-              data-test="account-list-retry"
-              @click="loadList"
+        <!-- Quick actions row: balance + member center + support (all stubs) -->
+        <section class="account-list__quick">
+          <div class="account-list__balance bf-glass-card bf-ghost-border">
+            <div class="account-list__balance-text">
+              <span class="account-list__balance-label">
+                {{ t('accountList.gashBalance') }}
+              </span>
+              <span class="account-list__balance-value" data-test="account-list-balance-value">
+                {{ formattedRemainPoint }}
+              </span>
+            </div>
+            <button
+              type="button"
+              class="account-list__balance-refresh"
+              :class="{ 'account-list__balance-refresh--spinning': refreshing }"
+              :title="t('accountList.refreshBalance')"
+              :disabled="refreshing"
+              data-test="account-list-refresh-balance"
+              @click="handleRefreshBalance"
             >
-              {{ t('accountList.retry') }}
-            </el-button>
+              <el-icon><Refresh /></el-icon>
+            </button>
           </div>
-
-          <p
-            v-else-if="serviceAccounts.length === 0"
-            class="account-list__list-state"
-            data-test="account-list-empty"
+          <button
+            type="button"
+            class="account-list__quick-link bf-glass-card bf-ghost-border"
+            data-test="account-list-gash-recharge"
+            @click="handleGashRecharge"
           >
-            {{ t('accountList.empty') }}
-          </p>
+            <el-icon><Wallet /></el-icon>
+            <span>{{ t('GashRecharge') }}</span>
+          </button>
+          <button
+            v-if="auth.session?.region === 'TW'"
+            type="button"
+            class="account-list__quick-link bf-glass-card bf-ghost-border"
+            data-test="account-list-app-gash-recharge"
+            @click="handleAppGashRecharge"
+          >
+            <el-icon><Iphone /></el-icon>
+            <span>{{ t('AppGashRecharge') }}</span>
+          </button>
+          <button
+            type="button"
+            class="account-list__quick-link bf-glass-card bf-ghost-border"
+            data-test="account-list-member-center"
+            @click="handleMemberCenter"
+          >
+            <el-icon><User /></el-icon>
+            <span>{{ t('accountList.memberCenter') }}</span>
+          </button>
+          <button
+            type="button"
+            class="account-list__quick-link bf-glass-card bf-ghost-border"
+            data-test="account-list-customer-service"
+            @click="handleCustomerService"
+          >
+            <el-icon><Service /></el-icon>
+            <span>{{ t('accountList.customerService') }}</span>
+          </button>
+        </section>
 
-          <!--
-            D7: vuedraggable wraps the row list. `:list` binds the
-            actual mutable Pinia state array (not the read-only
-            `serviceAccounts` computed) so Sortable.js' in-place
-            splice flows through Pinia reactivity. The `handle`
-            selector mirrors WPF's `_isHandlePressed` gate — only
-            mouse-down on the grip starts a drag; any other click
-            on the row falls through to `selectRow`. `ghost-class`
-            styles the placeholder slot during drag (defined at the
-            bottom of <style scoped>).
+        <!-- Service accounts list — 4 rendered states (REAL) -->
+        <section class="account-list__list bf-glass-panel">
+          <header class="account-list__list-header">
+            <h2 class="account-list__list-title">
+              {{ t('accountList.serviceAccountsHeading') }}
+            </h2>
+            <span class="account-list__list-count" data-test="account-list-count">
+              {{ t('accountList.accountCount', { count: accountCount }) }}
+            </span>
+          </header>
+
+          <div class="account-list__list-body bf-custom-scrollbar">
+            <p
+              v-if="loadState === 'loading'"
+              class="account-list__list-state"
+              data-test="account-list-loading"
+            >
+              {{ t('accountList.loading') }}
+            </p>
+
+            <div
+              v-else-if="loadState === 'error'"
+              class="account-list__list-state account-list__list-state--error"
+              data-test="account-list-error"
+            >
+              <p>{{ loadError ?? t('accountList.loadFailed') }}</p>
+              <el-button
+                type="primary"
+                plain
+                size="small"
+                data-test="account-list-retry"
+                @click="loadList"
+              >
+                {{ t('accountList.retry') }}
+              </el-button>
+            </div>
+
+            <p
+              v-else-if="serviceAccounts.length === 0"
+              class="account-list__list-state"
+              data-test="account-list-empty"
+            >
+              {{ t('accountList.empty') }}
+            </p>
+
+            <!--
+            D7: SortableJS (via `rowsRef` + `watch`) makes the row
+            list drag-sortable. The `handle` option mirrors WPF's
+            `_isHandlePressed` gate — only mouse-down on the grip
+            starts a drag; any other click on the row falls through
+            to `selectRow`. `ghostClass` styles the placeholder
+            slot during drag (defined at bottom of <style scoped>).
           -->
-          <draggable
-            v-else
-            :list="account.serviceAccounts"
-            tag="ul"
-            item-key="sid"
-            handle=".account-list__row-grip"
-            :animation="150"
-            ghost-class="account-list__row--ghost"
-            class="account-list__rows"
-            data-test="account-list-rows"
-            @end="handleDragEnd"
-          >
-            <template #item="{ element: a, index: idx }">
+            <ul v-else ref="rowsRef" class="account-list__rows" data-test="account-list-rows">
               <li
+                v-for="(a, idx) in serviceAccounts"
+                :key="a.sid"
                 class="account-list__row"
                 :class="{
                   'account-list__row--selected': isSelected(a),
@@ -2045,15 +2151,15 @@ function handleDragEnd(): void {
                         <span>{{ t('CheckEmail') }}</span>
                       </el-dropdown-item>
                       <!--
-                        D8h: Change Password menu item only appears for
-                        unconnected games (mirrors WPF
-                        `m_ChangePassword.Visibility` toggled by
-                        `selectedGameChanged()` on the same predicate).
-                        Connected games delegate password changes to
-                        the Beanfun member centre web flow, which is
-                        opened from the page-level chrome — no
-                        per-row affordance is needed there.
-                      -->
+                      D8h: Change Password menu item only appears for
+                      unconnected games (mirrors WPF
+                      `m_ChangePassword.Visibility` toggled by
+                      `selectedGameChanged()` on the same predicate).
+                      Connected games delegate password changes to
+                      the Beanfun member centre web flow, which is
+                      opened from the page-level chrome — no
+                      per-row affordance is needed there.
+                    -->
                       <el-dropdown-item
                         v-if="game.isUnconnectedGame"
                         :data-test="`account-row-change-password-${a.sid}`"
@@ -2066,48 +2172,56 @@ function handleDragEnd(): void {
                   </template>
                 </el-dropdown>
               </li>
-            </template>
-          </draggable>
-        </div>
+            </ul>
+          </div>
 
-        <footer class="account-list__list-footer">
-          <button
-            type="button"
-            class="account-list__add-btn"
-            data-test="account-list-add"
-            @click="handleAddAccount"
-          >
-            <el-icon><Plus /></el-icon>
-            <span>{{ t('AddServiceAccount') }}</span>
-          </button>
-        </footer>
-      </section>
+          <footer class="account-list__list-footer">
+            <p
+              v-if="limitNoticeText"
+              class="account-list__limit-notice"
+              data-test="account-list-limit-notice"
+            >
+              {{ limitNoticeText }}
+            </p>
+            <button
+              type="button"
+              class="account-list__add-btn"
+              :class="{ 'account-list__add-btn--disabled': isAddAccountDisabled }"
+              :disabled="isAddAccountDisabled"
+              data-test="account-list-add"
+              @click="handleAddAccount"
+            >
+              <el-icon><Plus /></el-icon>
+              <span>{{ t('AddServiceAccount') }}</span>
+            </button>
+          </footer>
+        </section>
 
-      <!-- Add Service Account modal (D3) — mounted unconditionally so its
+        <!-- Add Service Account modal (D3) — mounted unconditionally so its
            transitions can play; visibility is driven by `addAccountVisible`. -->
-      <AddServiceAccount v-model:visible="addAccountVisible" />
+        <AddServiceAccount v-model:visible="addAccountVisible" />
 
-      <!-- Change Service Account display-name modal (D4) — same mount-always
+        <!-- Change Service Account display-name modal (D4) — same mount-always
            pattern as D3. `changeAliasTarget` is cleared by the watcher above
            so stale account refs don't leak between sessions. -->
-      <ChangeServiceAccountDisplayName
-        v-model:visible="changeAliasVisible"
-        :account="changeAliasTarget"
-      />
+        <ChangeServiceAccountDisplayName
+          v-model:visible="changeAliasVisible"
+          :account="changeAliasTarget"
+        />
 
-      <!-- Service Account read-only info modal (D6) — same mount-always
+        <!-- Service Account read-only info modal (D6) — same mount-always
            pattern as D3 / D4. `accountInfoTarget` is cleared by the
            watcher above so stale account refs don't leak between sessions. -->
-      <ServiceAccountInfo v-model:visible="accountInfoVisible" :account="accountInfoTarget" />
+        <ServiceAccountInfo v-model:visible="accountInfoVisible" :account="accountInfoTarget" />
 
-      <!-- Generic copy-box dialog (D10.1) — currently driven by Get Email
+        <!-- Generic copy-box dialog (D10.1) — currently driven by Get Email
            (D10.5); future per-row context-menu items that need a similar
            "show + copy" affordance can reuse the same single mount by
            writing into `copyBoxTitle` / `copyBoxValue` before flipping
            `copyBoxVisible`. -->
-      <CopyBox v-model:visible="copyBoxVisible" :title="copyBoxTitle" :value="copyBoxValue" />
+        <CopyBox v-model:visible="copyBoxVisible" :title="copyBoxTitle" :value="copyBoxValue" />
 
-      <!-- D8c: Game picker dialog. Driven by either the Change Game
+        <!-- D8c: Game picker dialog. Driven by either the Change Game
            button on the game info bar or the mount-time auto-open
            inside `setupGameOnMount` (when no valid `loginGame`
            resolves against the loaded catalogue). The dialog
@@ -2123,36 +2237,36 @@ function handleDragEnd(): void {
            fallback (see `gameImageUrl` for the same defensive
            pattern); the gate is the cleaner option here because
            the dialog can't usefully open without a region anyway. -->
-      <GameList
-        v-if="auth.session"
-        v-model:visible="gameListVisible"
-        :region="auth.session.region"
-        @select="handleGameSelected"
-      />
+        <GameList
+          v-if="auth.session"
+          v-model:visible="gameListVisible"
+          :region="auth.session.region"
+          @select="handleGameSelected"
+        />
 
-      <!-- D8g: Unconnected-game Add Account dialog. Mounted alongside
+        <!-- D8g: Unconnected-game Add Account dialog. Mounted alongside
            the regular `<AddServiceAccount />` above; `handleAddAccount`
            dispatches between the two on `game.isUnconnectedGame`.
            The `created` event refreshes the row list so the new
            account appears immediately. -->
-      <UnconnectedGameAddAccount
-        v-model:visible="unconnectedAddVisible"
-        @created="handleUnconnectedAccountCreated"
-      />
+        <UnconnectedGameAddAccount
+          v-model:visible="unconnectedAddVisible"
+          @created="handleUnconnectedAccountCreated"
+        />
 
-      <!-- D8h: Unconnected-game Change Password dialog. Driven by the
+        <!-- D8h: Unconnected-game Change Password dialog. Driven by the
            per-row Change Password menu item (which is itself
            `v-if`-gated on `game.isUnconnectedGame`). The `accountIndex`
            prop is the row's 0-based index in `account.serviceAccounts`,
            captured at menu-trigger time so a downstream selection /
            reorder can't misroute the change-password POST. -->
-      <UnconnectedGameChangePassword
-        v-model:visible="changePasswordVisible"
-        :account-index="changePasswordAccountIndex"
-        @verify-code-sent="handleChangePasswordSent"
-      />
+        <UnconnectedGameChangePassword
+          v-model:visible="changePasswordVisible"
+          :account-index="changePasswordAccountIndex"
+          @verify-code-sent="handleChangePasswordSent"
+        />
 
-      <!-- P12.5 D7: Tools dialog stack — single mount that hosts
+        <!-- P12.5 D7: Tools dialog stack — single mount that hosts
            MapleTools / KartTools / EquipCalculator /
            CoreCalculator (in-app browser routed via composable;
            see followup-B B7). Opened imperatively by `handleTools` via
@@ -2162,75 +2276,100 @@ function handleDragEnd(): void {
            internal dialog mounts can play their open transitions
            on first open; per-dialog visibility is owned inside
            the wrapper. -->
-      <ToolsDialogStack ref="toolsDialogRef" />
+        <ToolsDialogStack ref="toolsDialogRef" />
 
-      <!-- OTP section (D5: REAL Get OTP / clipboard / auto-paste flow) -->
-      <section class="account-list__otp bf-glass-panel">
-        <header class="account-list__otp-header">
-          <h2 class="account-list__otp-title">{{ t('accountList.otpHeading') }}</h2>
-          <!--
+        <!-- OTP section (D5: REAL Get OTP / clipboard / auto-paste flow) -->
+        <section class="account-list__otp bf-glass-panel">
+          <header class="account-list__otp-header">
+            <h2 class="account-list__otp-title">{{ t('accountList.otpHeading') }}</h2>
+            <!--
             D5: bind via :model-value + @change (not v-model) so the
             persistence + first-time-AutoPasteTip side effects only run
             on the user's gesture, not on the setup-time hydration of
             the local ref from configStore.
           -->
-          <el-checkbox
-            :model-value="autoPaste"
-            size="small"
-            data-test="account-list-auto-paste"
-            @change="handleAutoPasteToggle"
-          >
-            {{ t('accountList.autoPaste') }}
-          </el-checkbox>
-        </header>
-        <div class="account-list__otp-row">
-          <div class="account-list__otp-input">
-            <input
-              type="text"
-              readonly
-              :value="otpValue"
-              :placeholder="t('accountList.otpPlaceholder')"
-              class="account-list__otp-field"
-              data-test="account-list-otp-field"
-            />
+            <el-checkbox
+              :model-value="autoPaste"
+              size="small"
+              data-test="account-list-auto-paste"
+              @change="handleAutoPasteToggle"
+            >
+              {{ t('accountList.autoPaste') }}
+            </el-checkbox>
+          </header>
+          <div class="account-list__otp-row">
+            <div class="account-list__otp-input">
+              <input
+                type="text"
+                readonly
+                :value="otpValue"
+                :placeholder="t('accountList.otpPlaceholder')"
+                class="account-list__otp-field"
+                data-test="account-list-otp-field"
+              />
+              <button
+                type="button"
+                class="account-list__otp-copy"
+                :title="t('accountList.copyOtp')"
+                :disabled="!otpValue"
+                data-test="account-list-otp-copy"
+                @click="handleCopyOtp"
+              >
+                <el-icon><DocumentCopy /></el-icon>
+              </button>
+            </div>
             <button
               type="button"
-              class="account-list__otp-copy"
-              :title="t('accountList.copyOtp')"
-              :disabled="!otpValue"
-              data-test="account-list-otp-copy"
-              @click="handleCopyOtp"
+              class="bf-btn-gradient account-list__otp-get"
+              :disabled="gettingOtp"
+              data-test="account-list-otp-get"
+              @click="handleGetOtp"
             >
-              <el-icon><DocumentCopy /></el-icon>
+              {{ gettingOtp ? t('GettingOtp') : t('GetOtp') }}
             </button>
           </div>
-          <button
-            type="button"
-            class="bf-btn-gradient account-list__otp-get"
-            :disabled="gettingOtp"
-            data-test="account-list-otp-get"
-            @click="handleGetOtp"
-          >
-            {{ gettingOtp ? t('GettingOtp') : t('GetOtp') }}
-          </button>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   </main>
 </template>
 
 <style scoped>
 .account-list {
-  box-sizing: border-box;
-  min-height: 100vh;
-  padding: 2.5rem 1.5rem;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.account-list__titlebar-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--bf-on-surface-variant, #54443a);
+  transition: background 150ms ease;
+  padding: 0;
+}
+.account-list__titlebar-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+.account-list__titlebar-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.account-list__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
 }
 
 .account-list__container {
   width: 100%;
-  max-width: 560px;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -2249,13 +2388,6 @@ function handleDragEnd(): void {
 .account-list__header-text {
   flex: 1;
   min-width: 0;
-}
-
-.account-list__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-shrink: 0;
 }
 
 .account-list__title {
@@ -2593,7 +2725,7 @@ function handleDragEnd(): void {
  */
 
 /*
- * Vuedraggable ghost-class — applied to the placeholder element
+ * SortableJS ghost-class — applied to the placeholder element
  * Sortable.js inserts at the projected drop location during drag.
  * Subdued styling so the ghost reads as "destination" rather
  * than competing with the live row being dragged.
@@ -2709,9 +2841,22 @@ function handleDragEnd(): void {
     background var(--bf-motion-fast);
 }
 
-.account-list__add-btn:hover {
+.account-list__add-btn:hover:not(:disabled) {
   border-color: var(--bf-primary);
   background: color-mix(in srgb, var(--bf-primary) 6%, transparent);
+}
+
+.account-list__add-btn--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.account-list__limit-notice {
+  margin: 0 0 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--el-color-warning, #e6a23c);
+  text-align: center;
 }
 
 /* --------------- OTP section --------------- */

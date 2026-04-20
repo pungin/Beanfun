@@ -129,9 +129,9 @@ describe('locale assets', () => {
 
   it('merges WPF flat keys with frontend-only nested keys', () => {
     expect(i18nMessages['zh-TW']).toHaveProperty('AppName', '繽放')
-    expect(i18nMessages['zh-TW'].loginShell).toHaveProperty('heading')
+    expect(i18nMessages['zh-TW'].titleBar).toHaveProperty('minimize')
     expect(i18nMessages['en-US']).toHaveProperty('AppName')
-    expect(i18nMessages['en-US'].loginShell).toHaveProperty('heading')
+    expect(i18nMessages['en-US'].titleBar).toHaveProperty('minimize')
   })
 })
 
@@ -139,13 +139,13 @@ describe('createAppI18n', () => {
   it('boots with zh-TW as the default locale and zh-TW messages applied', () => {
     const i18n = createAppI18n()
     expect(i18n.global.locale.value).toBe('zh-TW')
-    expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['zh-TW'].loginShell.heading)
+    expect(i18n.global.t('titleBar.minimize')).toBe(i18nMessages['zh-TW'].titleBar.minimize)
   })
 
   it('renders zh-CN messages when locale switches', () => {
     const i18n = createAppI18n()
     setLocale(i18n, 'zh-CN')
-    expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['zh-CN'].loginShell.heading)
+    expect(i18n.global.t('titleBar.minimize')).toBe(i18nMessages['zh-CN'].titleBar.minimize)
   })
 
   it('substitutes positional placeholders ({0}) in WPF-style messages', () => {
@@ -163,9 +163,9 @@ describe('createAppI18n', () => {
 
   it('setLocale switches the rendered language end-to-end', () => {
     const i18n = createAppI18n()
-    expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['zh-TW'].loginShell.heading)
+    expect(i18n.global.t('titleBar.minimize')).toBe(i18nMessages['zh-TW'].titleBar.minimize)
     setLocale(i18n, 'en-US')
-    expect(i18n.global.t('loginShell.heading')).toBe(i18nMessages['en-US'].loginShell.heading)
+    expect(i18n.global.t('titleBar.minimize')).toBe(i18nMessages['en-US'].titleBar.minimize)
   })
 
   it('zh-CN falls back to zh-TW (NOT en-US) for keys missing in zh-Hans.xaml (WPF parity)', () => {

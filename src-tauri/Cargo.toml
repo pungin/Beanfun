@@ -136,6 +136,14 @@ windows = { version = "0.58", features = [
 ] }
 winreg = "0.52"
 wmi = "0.14"
+# Direct dep on webview2-com-sys for native WebView2 CookieManager access.
+# wry already depends on this; we pin the same version to avoid duplication.
+webview2-com-sys = "0.38"
+webview2-com = "0.38"
+# Same windows-core version as webview2-com-sys for PCWSTR / Interface types.
+[target.'cfg(windows)'.dependencies.wv2-windows-core]
+package = "windows-core"
+version = "0.61"
 
 [dev-dependencies]
 wiremock = "0.6"
