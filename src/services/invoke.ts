@@ -133,7 +133,7 @@ export function registerSessionExpiredHandler(handler: SessionExpiredHandler | n
  * the translator lookup.
  */
 export function surfaceCommandError(error: CommandError, opts: WrapOptions = {}): void {
-  console.error(`[invoke] ${error.code}: ${error.message}`, error.details)
+  console.error(`[invoke] ${error.code}: ${error.message}`)
 
   if (error.code === 'auth.session_required' && sessionExpiredHandler) {
     try {

@@ -65,7 +65,7 @@
 //! | `QrJsonParseFailed`                         | `auth.qr_json_parse_failed`                        | —                                             |
 //! | `QrUnsupportedRegion`                       | `auth.qr_unsupported_region`                       | —                                             |
 //! | `GamepassUnsupportedRegion`                 | `auth.gamepass_unsupported_region`                 | —                                             |
-//! | `DeviceRegistrationRequired { .. }`         | `auth.device_registration_required`                | `login_token` / `poll_url` / `param`          |
+//! | `DeviceRegistrationRequired { .. }`         | `auth.device_registration_required`                | `poll_url` / `param`                          |
 //! | `DeviceLoginTimeout`                        | `auth.device_login_timeout`                        | —                                             |
 //! | `DeviceLoginRejected`                       | `auth.device_login_rejected`                       | —                                             |
 //! | `OtpMissingLongPollingKey { snippet }`      | `auth.otp_missing_long_polling_key`                | `snippet`                                     |
@@ -197,6 +197,7 @@
 //! | `Probe(..)`                 | `update.probe_failed`        | `is_timeout` / `is_connect` / `status`    |
 //! | `Fetch(..)`                 | `update.fetch_failed`        | `is_timeout` / `is_connect` / `status`    |
 //! | `JsonDecode(..)`            | `update.json_decode_failed`  | `line` / `column`                         |
+//! | `BodyTooLarge { limit, .. }`| `update.body_too_large`      | `limit` / `actual`                        |
 //! | `UnsupportedTag(tag)`       | `update.unsupported_tag`     | `tag`                                     |
 //!
 //! ## `SystemError` — `system.*`
@@ -451,12 +452,11 @@ impl From<LoginError> for CommandError {
                 CommandError::new("auth.gamepass_unsupported_region", message)
             }
             LoginError::DeviceRegistrationRequired {
-                login_token,
                 poll_url,
                 param,
+                ..
             } => CommandError::new("auth.device_registration_required", message).with_details(
                 json!({
-                    "login_token": login_token,
                     "poll_url": poll_url,
                     "param": param,
                 }),
@@ -795,6 +795,10 @@ impl From<UpdaterError> for CommandError {
                 let details = serde_json_details(&err);
                 CommandError::new("update.json_decode_failed", message).with_details(details)
             }
+            UpdaterError::BodyTooLarge { limit, actual } => {
+                CommandError::new("update.body_too_large", message)
+                    .with_details(json!({ "limit": limit, "actual": actual }))
+            }
             UpdaterError::UnsupportedTag(tag) => {
                 CommandError::new("update.unsupported_tag", message)
                     .with_details(json!({ "tag": tag }))
@@ -1074,6 +1078,24 @@ mod from_impls_tests {
         );
     }
 
+    #[test]
+    fn device_registration_required_does_not_leak_login_token() {
+        let err: CommandError = LoginError::DeviceRegistrationRequired {
+            login_token: "SENSITIVE_TOKEN_VALUE".into(),
+            poll_url: "https://beanfun.com/poll".into(),
+            param: "some_param".into(),
+        }
+        .into();
+        assert_eq!(err.code, "auth.device_registration_required");
+        let details = err.details.expect("details present");
+        assert!(
+            details.get("login_token").is_none(),
+            "login_token must not leak to frontend: {details}",
+        );
+        assert_eq!(details.get("poll_url"), Some(&json!("https://beanfun.com/poll")));
+        assert_eq!(details.get("param"), Some(&json!("some_param")));
+    }
+
     // ----- StorageError ----------------------------------------------
 
     #[test]
@@ -1305,6 +1327,19 @@ mod from_impls_tests {
     }
 
     // ----- UpdaterError ----------------------------------------------
+
+    #[test]
+    fn updater_body_too_large_carries_limit_and_actual() {
+        let err: CommandError = UpdaterError::BodyTooLarge {
+            limit: 5_242_880,
+            actual: 10_000_000,
+        }
+        .into();
+        assert_eq!(err.code, "update.body_too_large");
+        let details = err.details.expect("details present");
+        assert_eq!(details.get("limit"), Some(&json!(5_242_880)));
+        assert_eq!(details.get("actual"), Some(&json!(10_000_000)));
+    }
 
     #[test]
     fn updater_unsupported_tag_carries_tag() {

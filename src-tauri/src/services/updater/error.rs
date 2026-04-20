@@ -45,6 +45,11 @@ pub enum UpdaterError {
     #[error("GitHub release JSON decode failed: {0}")]
     JsonDecode(#[source] serde_json::Error),
 
+    /// Response body exceeded the hard ceiling. Defensive guard
+    /// against an unexpectedly large payload exhausting memory.
+    #[error("response body too large: {actual} bytes exceeds {limit} byte limit")]
+    BodyTooLarge { limit: usize, actual: usize },
+
     /// Tag name did not match the `^v(\d+)\.(\d+)\.(\d+)\.(\d+)$`
     /// shape the updater understands (e.g. a very old
     /// pre-`5.8.X.timestamp` release, or a manually-pushed tag with

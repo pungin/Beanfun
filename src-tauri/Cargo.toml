@@ -81,7 +81,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 reqwest_cookie_store = "0.8"
 
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "fs", "macros"] }
 
 # Crypto
 des = "0.8"

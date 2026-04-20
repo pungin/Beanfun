@@ -200,6 +200,11 @@ pub const GITHUB_ACCEPT_HEADER: &str = "application/vnd.github.v3+json";
 /// error. Returns [`UpdaterError::JsonDecode`] if the body came back
 /// 2xx but `serde_json` rejected it — that separation lets tests tell
 /// a transport failure apart from a malformed payload.
+/// Hard ceiling on the release-list response body (5 MiB).
+/// GitHub's releases endpoint for a typical repo returns ~50–200 KB;
+/// anything above this limit is almost certainly a bug or abuse.
+const MAX_RELEASES_BODY_BYTES: usize = 5 * 1024 * 1024;
+
 pub async fn fetch_releases_at(
     base_url: &str,
     user_agent: &str,
@@ -218,7 +223,24 @@ pub async fn fetch_releases_at(
         .error_for_status()
         .map_err(UpdaterError::Fetch)?;
 
+    if let Some(len) = response.content_length() {
+        if len as usize > MAX_RELEASES_BODY_BYTES {
+            return Err(UpdaterError::BodyTooLarge {
+                limit: MAX_RELEASES_BODY_BYTES,
+                actual: len as usize,
+            });
+        }
+    }
+
     let bytes = response.bytes().await.map_err(UpdaterError::Fetch)?;
+
+    if bytes.len() > MAX_RELEASES_BODY_BYTES {
+        return Err(UpdaterError::BodyTooLarge {
+            limit: MAX_RELEASES_BODY_BYTES,
+            actual: bytes.len(),
+        });
+    }
+
     serde_json::from_slice(&bytes).map_err(UpdaterError::JsonDecode)
 }
 

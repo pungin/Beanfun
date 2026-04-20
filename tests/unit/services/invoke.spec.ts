@@ -60,7 +60,7 @@ describe('wrapCommand', () => {
     })
   })
 
-  it('console.errors the structured payload (code, message, details)', async () => {
+  it('console.errors code and message only (details omitted to prevent leakage)', async () => {
     const cause: CommandError = {
       code: 'config.io_error',
       message: 'failed to write Config.xml',
@@ -70,7 +70,6 @@ describe('wrapCommand', () => {
     await expect(wrapCommand(err(cause))).rejects.toThrow()
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       '[invoke] config.io_error: failed to write Config.xml',
-      cause.details,
     )
   })
 

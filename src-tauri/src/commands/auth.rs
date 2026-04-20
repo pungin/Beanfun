@@ -663,6 +663,18 @@ const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
   }
 })();"#;
 
+/// Strip query parameters from a URL for safe logging.
+/// Prevents session tokens (e.g. `pSKey`) from leaking into traces.
+fn redact_url_query(url: &Url) -> String {
+    let mut redacted = url.clone();
+    redacted.set_query(None);
+    if url.query().is_some() {
+        format!("{}?[REDACTED]", redacted)
+    } else {
+        redacted.to_string()
+    }
+}
+
 /// Check whether `url` is a landing page WPF's
 /// `GamePassBrowser.OnNavigationCompleted` would have triggered
 /// completion for.
@@ -859,7 +871,7 @@ async fn handle_gamepass_page_load<R: tauri::Runtime>(
     // `step = "..."` tag so operators can grep for
     // `step=GamepassPageLoad` and follow the per-page lifecycle
     // without reconstructing causality from interleaved WARN lines.
-    tracing::info!(step = "GamepassPageLoad.Finished", url = %url, "page load finished; evaluating completion");
+    tracing::info!(step = "GamepassPageLoad.Finished", url = %redact_url_query(&url), "page load finished; evaluating completion");
 
     let (client, skey) = {
         let guard = state.pending_gamepass.read().await;
@@ -868,7 +880,7 @@ async fn handle_gamepass_page_load<R: tauri::Runtime>(
             None => {
                 tracing::info!(
                     step = "GamepassPageLoad.NoPending",
-                    url = %url,
+                    url = %redact_url_query(&url),
                     "pending_gamepass cleared (cancelled or completed on prior tick); skipping"
                 );
                 return;
@@ -879,7 +891,7 @@ async fn handle_gamepass_page_load<R: tauri::Runtime>(
     if !should_try_gamepass_completion(&url) {
         tracing::info!(
             step = "GamepassPageLoad.SkipUrl",
-            url = %url,
+            url = %redact_url_query(&url),
             "URL does not match completion markers; waiting for next navigation"
         );
         return;
@@ -933,7 +945,7 @@ async fn handle_gamepass_page_load<R: tauri::Runtime>(
     ) else {
         tracing::info!(
             step = "GamepassCompletion.PendingToken",
-            url = %url,
+            url = %redact_url_query(&url),
             "bfWebToken not yet in jar; leaving pending_gamepass in place for next tick"
         );
         return;
@@ -1393,7 +1405,7 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
     // when multiple attempts interleave in one operator log.
     tracing::info!(
         step = "GamepassWebViewNavigate",
-        url = %login_url,
+        url = %redact_url_query(&login_url),
         "navigating GamePass WebView to login URL after cookie seed"
     );
     if let Err(err) = window.navigate(login_url.clone()) {
@@ -2237,6 +2249,33 @@ mod tests {
             GAMEPASS_AUTOCLICK_JS.contains("DOMContentLoaded"),
             "must await DOM before clicking, got:\n{GAMEPASS_AUTOCLICK_JS}",
         );
+    }
+
+    // ── redact_url_query ────────────────────────────────────────
+
+    #[test]
+    fn redact_url_query_strips_query_string() {
+        let url = Url::parse("https://login.beanfun.com/Login/Index?pSKey=SECRET123").unwrap();
+        let redacted = redact_url_query(&url);
+        assert!(
+            !redacted.contains("SECRET123"),
+            "pSKey value must be redacted, got: {redacted}",
+        );
+        assert!(
+            redacted.contains("[REDACTED]"),
+            "must indicate redaction, got: {redacted}",
+        );
+        assert!(
+            redacted.contains("login.beanfun.com/Login/Index"),
+            "host and path must be preserved, got: {redacted}",
+        );
+    }
+
+    #[test]
+    fn redact_url_query_preserves_url_without_query() {
+        let url = Url::parse("https://tw.beanfun.com/index.aspx").unwrap();
+        let redacted = redact_url_query(&url);
+        assert_eq!(redacted, "https://tw.beanfun.com/index.aspx");
     }
 
     // ── Event name wire-strings ───────────────────────────────────
