@@ -1603,7 +1603,7 @@ describe('AccountList page', () => {
 
     const ctx = buildHarness()
     useAuthStore().session = FAKE_SESSION
-    const wrapper = await ctx.mountIt()
+    await ctx.mountIt()
     await flushPromises()
 
     const account = useAccountStore()
@@ -1674,7 +1674,7 @@ describe('AccountList page', () => {
 
     const ctx = buildHarness()
     useAuthStore().session = FAKE_SESSION
-    const wrapper = await ctx.mountIt()
+    await ctx.mountIt()
     await flushPromises()
 
     /*
