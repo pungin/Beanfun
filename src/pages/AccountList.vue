@@ -111,7 +111,6 @@ import {
   Plus,
   Refresh,
   Service,
-  Setting as SettingIcon,
   SwitchButton,
   User,
   VideoPlay,
@@ -140,6 +139,7 @@ import ToolsDialogStack from '../windows/ToolsDialogStack.vue'
 import UnconnectedGameAddAccount from '../windows/UnconnectedGame_AddAccount.vue'
 import UnconnectedGameChangePassword from '../windows/UnconnectedGame_ChangePassword.vue'
 import { TOOLS_GAME_CODES } from '../constants/tools'
+import TitleBar from '../components/TitleBar.vue'
 import { useGameLauncher } from '../composables/useGameLauncher'
 
 defineOptions({ name: 'AccountList' })
@@ -1859,42 +1859,35 @@ onBeforeUnmount(destroySortable)
 </script>
 
 <template>
-  <main class="account-list bf-mica-bg">
-    <div class="account-list__container">
-      <header class="account-list__header">
-        <div class="account-list__header-text">
-          <h1 class="account-list__title bf-text-gradient">{{ t('accountList.title') }}</h1>
-          <p class="account-list__subline">{{ t('accountList.subtitle') }}</p>
-        </div>
-        <!--
-          P12.4 D6: Settings + About entry buttons. Mirrors WPF
-          `MainWindow.xaml` titlebar L112-139 — both icons sit in the
-          window chrome alongside Logout / Min / Close. We reuse the
-          existing `bf-btn-ghost-icon` styling that the in-row Tools
-          + Logout buttons already use so the chrome stays visually
-          consistent across the page.
-        -->
-        <div class="account-list__header-actions">
-          <button
-            type="button"
-            class="bf-btn-ghost-icon account-list__icon-btn"
-            :title="t('Settings')"
-            data-test="account-list-settings"
-            @click="handleOpenSettings"
-          >
-            <el-icon><SettingIcon /></el-icon>
-          </button>
-          <button
-            type="button"
-            class="bf-btn-ghost-icon account-list__icon-btn"
-            :title="t('settings.aboutLink')"
-            data-test="account-list-about"
-            @click="handleOpenAbout"
-          >
-            <el-icon><InfoFilled /></el-icon>
-          </button>
-        </div>
-      </header>
+  <main class="account-list bf-glass-window" data-window-root>
+    <TitleBar>
+      <button
+        type="button"
+        class="account-list__titlebar-btn"
+        :title="t('Settings')"
+        data-test="account-list-settings"
+        @click="handleOpenSettings"
+      >
+        <span class="material-symbols-outlined">settings</span>
+      </button>
+      <button
+        type="button"
+        class="account-list__titlebar-btn"
+        :title="t('settings.aboutLink')"
+        data-test="account-list-about"
+        @click="handleOpenAbout"
+      >
+        <span class="material-symbols-outlined">info</span>
+      </button>
+    </TitleBar>
+    <div class="account-list__scroll">
+      <div class="account-list__container">
+        <header class="account-list__header">
+          <div class="account-list__header-text">
+            <h1 class="account-list__title bf-text-gradient">{{ t('accountList.title') }}</h1>
+            <p class="account-list__subline">{{ t('accountList.subtitle') }}</p>
+          </div>
+        </header>
 
       <!-- Game info bar (D8d) — real game name + image + change-game button. -->
       <section class="account-list__game bf-glass-panel">
@@ -2339,17 +2332,43 @@ onBeforeUnmount(destroySortable)
           </button>
         </div>
       </section>
+      </div>
     </div>
   </main>
 </template>
 
 <style scoped>
 .account-list {
-  box-sizing: border-box;
-  min-height: 100vh;
-  padding: 2.5rem 1.5rem;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.account-list__titlebar-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--bf-on-surface-variant, #54443a);
+  transition: background 150ms ease;
+  padding: 0;
+}
+.account-list__titlebar-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+.account-list__titlebar-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.account-list__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
 }
 
 .account-list__container {
@@ -2375,12 +2394,6 @@ onBeforeUnmount(destroySortable)
   min-width: 0;
 }
 
-.account-list__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
 
 .account-list__title {
   margin: 0;
