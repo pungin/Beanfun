@@ -195,6 +195,13 @@ pub fn serialize_app_settings(map: &IndexMap<String, String>) -> Result<String, 
 /// `Beanfun/Helper/ConfigAppSettings.cs` L64-67. Any failure in the
 /// read/parse pipeline (file missing, IO error, malformed XML,
 /// non-UTF-8 bytes, key missing) yields `""`. Errors are logged at
+/// Synchronous single-key read — for use in non-async contexts
+/// (e.g. `lib::run()` before the Tokio runtime is available).
+/// Returns `Ok(value)` or `Err` on IO/parse failure.
+pub fn get_value_sync(path: &Path, key: &str) -> Result<String, ConfigError> {
+    read_value_blocking(path, key).map(|opt| opt.unwrap_or_default())
+}
+
 /// `WARN` level via [`tracing`].
 pub async fn get_value(path: &Path, key: &str) -> String {
     get_value_or(path, key, "").await
@@ -315,15 +322,38 @@ pub async fn set_value(path: &Path, key: &str, value: Option<&str>) -> Result<()
 }
 
 fn set_value_blocking(path: &Path, key: &str, value: Option<String>) -> Result<(), ConfigError> {
+    // Respect read-only files — if the user deliberately locked
+    // Config.xml (e.g. to preserve region / update settings across
+    // reinstalls), we must not overwrite or delete it. WPF's
+    // ConfigurationManager silently skips writes to read-only files;
+    // we surface a clear error so the frontend can show a toast.
+    if path.exists() {
+        if let Ok(meta) = std::fs::metadata(path) {
+            if meta.permissions().readonly() {
+                tracing::info!(
+                    path = %path.display(),
+                    key = %key,
+                    "Config.xml is read-only; skipping write"
+                );
+                return Err(ConfigError::Io(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Config.xml is read-only",
+                )));
+            }
+        }
+    }
+
     let mut map = match read_map_blocking(path) {
         Ok(m) => m,
         Err(e) => {
             tracing::warn!(
                 error = ?e,
                 path = %path.display(),
-                "config read/parse failed during set_value; deleting and starting from empty map"
+                "config read/parse failed during set_value; starting from empty map"
             );
-            let _ = std::fs::remove_file(path);
+            // Don't delete the file — it may be read-only or contain
+            // settings the user wants to preserve. Start from empty
+            // and let the write below create a fresh file if needed.
             IndexMap::new()
         }
     };

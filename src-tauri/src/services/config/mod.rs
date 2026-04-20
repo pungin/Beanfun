@@ -56,7 +56,8 @@ pub mod xml;
 
 pub use error::ConfigError;
 pub use xml::{
-    get_all_values, get_value, get_value_or, parse_app_settings, serialize_app_settings, set_value,
+    get_all_values, get_value, get_value_or, get_value_sync, parse_app_settings,
+    serialize_app_settings, set_value,
 };
 
 #[cfg(target_os = "windows")]
