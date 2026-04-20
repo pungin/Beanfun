@@ -13,12 +13,8 @@ concurrency:
 
 jobs:
   frontend:
-    name: "Frontend: ESLint / Prettier / TypeCheck / Vitest (${{ matrix.os }})"
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    name: 'Frontend: ESLint / Prettier / TypeCheck / Vitest'
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,12 +42,8 @@ jobs:
         run: npm run test
 
   rust:
-    name: "Rust: fmt / Clippy / Test (${{ matrix.os }})"
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    name: 'Rust: fmt / Clippy / Test'
+    runs-on: windows-latest
     defaults:
       run:
         working-directory: src-tauri

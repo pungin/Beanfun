@@ -13,7 +13,7 @@
  *   productive.
  * - Dependabot ("Bump X from A to B") and merge commits are ignored.
  */
-module.exports = {
+export default {
   extends: ['@commitlint/config-conventional'],
   rules: {
     'header-max-length': [2, 'always', 120],

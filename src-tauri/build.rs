@@ -15,13 +15,12 @@ const LR_ASSETS: &[&str] = &[
 ];
 
 fn main() {
-    let mut attributes = tauri_build::Attributes::new();
+    let attributes = tauri_build::Attributes::new();
     #[cfg(windows)]
-    {
-        attributes = attributes
-            .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
+    let attributes = {
         embed_app_manifest_for_all_binaries();
-    }
+        attributes.windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest())
+    };
     tauri_build::try_build(attributes).expect("tauri_build::try_build failed");
 
     emit_lr_sha256();
