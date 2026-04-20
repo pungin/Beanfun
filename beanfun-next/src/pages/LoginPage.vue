@@ -33,6 +33,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import iconUrl from '../assets/icon-outline.png'
+
 defineOptions({ name: 'LoginPage' })
 
 const { t } = useI18n()
@@ -45,7 +47,10 @@ const subline = computed(() => t('loginShell.subline'))
   <main class="login-shell bf-mica-bg">
     <section class="login-shell__panel bf-glass-panel">
       <header class="login-shell__header">
-        <h1 class="login-shell__title">{{ heading }}</h1>
+        <div class="login-shell__brand">
+          <img :src="iconUrl" alt="Beanfun" class="login-shell__icon" />
+          <h1 class="login-shell__title">{{ heading }}</h1>
+        </div>
         <p class="login-shell__subline">{{ subline }}</p>
       </header>
       <div class="login-shell__body">
@@ -82,6 +87,19 @@ const subline = computed(() => t('loginShell.subline'))
   padding: 2rem 2rem 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.4);
   text-align: center;
+}
+
+.login-shell__brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.login-shell__icon {
+  height: 36px;
+  width: auto;
+  flex-shrink: 0;
 }
 
 .login-shell__title {

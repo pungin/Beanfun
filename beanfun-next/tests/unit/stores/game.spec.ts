@@ -92,16 +92,39 @@ describe('useGameStore — pure helpers (no Pinia)', () => {
     expect(gameCodeOf('610153', 'TN')).toBe('610153_TN')
   })
 
-  it('imageUrl uses the TW base for region TW (matches WPF + Rust image_base_url)', () => {
-    expect(imageUrl('610074.jpg', 'TW')).toBe(
-      'https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/610074.jpg',
-    )
+  it('imageUrl falls back to the unified images.beanfun.com base for a TW bare filename', () => {
+    // Bare-filename branch — mirrors WPF L494 else-branch.
+    // Live upstream rows ship full URLs (covered below); this
+    // case only fires if Beanfun ever regresses to the legacy
+    // bare-name shape. Base must match Rust `image_base_url`.
+    expect(imageUrl('610074.jpg', 'TW')).toBe('https://images.beanfun.com/GameZone/610074.jpg')
   })
 
-  it('imageUrl uses the HK base + http:// scheme for region HK (WPF parity)', () => {
-    expect(imageUrl('610074.jpg', 'HK')).toBe(
-      'http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/610074.jpg',
-    )
+  it('imageUrl falls back to the unified images.beanfun.com base for an HK bare filename', () => {
+    // Same single-host base as TW (TW/HK currently share
+    // `images.beanfun.com`); the HK arm exists to lock
+    // behaviour parity in case of a future host re-split.
+    expect(imageUrl('610074.jpg', 'HK')).toBe('https://images.beanfun.com/GameZone/610074.jpg')
+  })
+
+  it('imageUrl passes a https:// full URL through unchanged (WPF L494 mirror)', () => {
+    // 2026-04 audit: every live `Service*ImageName` ships as a
+    // full URL like this. The passthrough branch must NOT wrap
+    // it with the base prefix (the F3 first-attempt regression
+    // produced `…/game_zone/https://…` and the lenient server
+    // returned 200 + 0 byte; this test guards that).
+    const full = 'https://images.beanfun.com/GameZone/20170110120804222.jpg'
+    expect(imageUrl(full, 'TW')).toBe(full)
+    expect(imageUrl(full, 'HK')).toBe(full)
+  })
+
+  it('imageUrl passes a http:// full URL through unchanged', () => {
+    // Defensive coverage for the http:// branch of the WPF L494
+    // condition. The launcher must not silently upgrade the
+    // scheme — that's a server-side concern (and the WebView's
+    // mixed-content policy is permissive for `<img>`).
+    const full = 'http://images.beanfun.com/GameZone/legacy.jpg'
+    expect(imageUrl(full, 'TW')).toBe(full)
   })
 
   it('UNCONNECTED_GAME_CODES contains exactly the WPF-listed pair', () => {

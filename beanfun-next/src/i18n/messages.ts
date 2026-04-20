@@ -260,7 +260,7 @@ type KeysMatch<T, U> = keyof T extends keyof U ? (keyof U extends keyof T ? unkn
 
 const zhTW = {
   loginShell: {
-    heading: '繽放 Next',
+    heading: '繽放',
     subline: '歡迎登入',
   },
   loginRegion: {
@@ -460,7 +460,7 @@ const zhTW = {
 
 const zhCN = {
   loginShell: {
-    heading: '缤放 Next',
+    heading: '缤放',
     subline: '欢迎登录',
   },
   loginRegion: {
@@ -660,7 +660,7 @@ const zhCN = {
 
 const enUS = {
   loginShell: {
-    heading: 'beanfun! Next',
+    heading: 'Beanfun',
     subline: 'Welcome — please sign in',
   },
   loginRegion: {

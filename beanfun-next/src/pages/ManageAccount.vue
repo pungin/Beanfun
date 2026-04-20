@@ -30,6 +30,7 @@
  * | Q10 | **Register `/manage-account` route**, defer entry button to P12.4 Settings page | WPF entered from `Setting.xaml`; aligning the entry surface to its WPF parent keeps `AccountList.vue` stable and avoids D9 churn there |
  * | Q11 | **`ElMessageBox.confirm` for delete**, reusing WPF `MsgDeleteAccountMng` / `MsgDeleteAccountSingle` keys | 1:1 with WPF's `MessageBox.Show + YesNo` UX, just rendered as a Vue dialog instead of a Win32 modal |
  * | Q12 | **`ElMessageBox.confirm` for import overwrite** with new `manageAccount.importOverwriteConfirm` key | The backend `import_records` is a full-file overwrite (parses JSON and replaces every entry, not a merge); destructive-action guard is essential UX. WPF used the AES-password prompt as the implicit gate; the plaintext path needs its own explicit dialog |
+ * | Q13 | **Back button in footer** (P12.4-followup-B-fix F6) — fallback `router.push('/settings')` (not `/login` like `Settings.vue` / `About.vue`) | The page had no back affordance at all in the original D9 ship — a regression caught during P12.4 smoke testing. ManageAccount has exactly one production entry point (`Settings.vue::handleManageAccount`), so the fallback target is `/settings` (mirrors that single relationship). Settings/About fall back to `/login` because they're reachable from the login funnel too — that branch does not apply here. Implementation mirrors `Settings.vue::handleBack` byte-for-byte (`window.history.length > 1` proxy + `router.back()` primary path); see `handleBack` docblock for the per-line rationale |
  *
  * # State machine — 4 list states
  *
@@ -81,8 +82,10 @@
 
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { ElButton, ElIcon, ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import {
+  ArrowLeft,
   Delete,
   DocumentCopy,
   Download,
@@ -106,6 +109,7 @@ import type { Account } from '../types/bindings'
 defineOptions({ name: 'ManageAccount' })
 
 const { t } = useI18n()
+const router = useRouter()
 const account = useAccountStore()
 
 /* --------------- list-state machine --------------- */
@@ -452,6 +456,45 @@ function regionLabel(region: string): string {
   if (region === 'HK') return t('HongKong')
   return region
 }
+
+/* --------------- back navigation --------------- */
+
+/**
+ * Returns the user to the previous route, mirroring the same
+ * `router.back()` idiom that `Settings.vue::handleBack` and
+ * `About.vue::handleBack` use. Originally missing — without this
+ * the page was a dead-end (P12.4-followup-B-fix F6 audit trail).
+ *
+ * # Why fallback to `/settings`, not `/login`
+ *
+ * Settings and About are both reachable from **two** parents
+ * (the login funnel and `AccountList`), so they fall back to
+ * `/login` when history is empty. ManageAccount has exactly one
+ * production entry point: `Settings.vue` (`router.push('/manage-account')`).
+ * The route is also `requiresAuth: true`, so falling back to
+ * `/login` would either kick the user out of their session UX
+ * unnecessarily (if still authenticated) or trigger the auth
+ * guard's `?redirect=/login` self-loop (if expired). `/settings`
+ * is the canonical re-entry surface in both cases — and in the
+ * unlikely event of an expired session, the auth guard on
+ * `/settings` … wait, `/settings` is `requiresAuth: undefined`,
+ * so it's public; the user lands there cleanly either way.
+ *
+ * # Edge case: direct hash entry
+ *
+ * `window.history.length === 1` means the page was opened
+ * directly via `#/manage-account` (devtools / external link).
+ * Vue-router does not expose a "can go back" predicate, so we
+ * use the `window.history.length` proxy — same heuristic
+ * `Settings.vue::handleBack` uses. The check is best-effort.
+ */
+function handleBack(): void {
+  if (window.history.length > 1) {
+    router.back()
+    return
+  }
+  void router.push('/settings')
+}
 </script>
 
 <template>
@@ -656,10 +699,28 @@ function regionLabel(region: string): string {
         </div>
       </section>
 
-      <!-- Footer hint -->
+      <!--
+        Footer: encryption hint (left) + Back button (right).
+        Hint and back button share the same flex row so the
+        layout collapses gracefully on narrow widths (the back
+        button hugs the right edge while the hint wraps left).
+        Back action mirrors `Settings.vue` / `About.vue`
+        (P12.4-followup-B-fix F6 — without this the page had no
+        navigation affordance back to Settings).
+      -->
       <footer class="manage__footer">
-        <el-icon><InfoFilled /></el-icon>
-        <span>{{ t('manageAccount.footerHint') }}</span>
+        <div class="manage__footer-hint">
+          <el-icon><InfoFilled /></el-icon>
+          <span>{{ t('manageAccount.footerHint') }}</span>
+        </div>
+        <el-button
+          class="bf-btn-secondary manage__back-btn"
+          data-test="manage-account-back"
+          @click="handleBack"
+        >
+          <el-icon><ArrowLeft /></el-icon>
+          <span>{{ t('Back') }}</span>
+        </el-button>
       </footer>
 
       <!-- Add / Edit / Recovery dialogs — mounted unconditionally for transitions. -->
@@ -972,14 +1033,31 @@ function regionLabel(region: string): string {
 
 .manage__footer {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 0.25rem;
+  flex-wrap: wrap;
+}
+
+.manage__footer-hint {
+  display: flex;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.75rem;
   color: var(--bf-on-surface-variant);
-  padding: 0 0.25rem;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.manage__footer .el-icon {
+.manage__footer-hint .el-icon {
+  flex-shrink: 0;
+}
+
+.manage__back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
   flex-shrink: 0;
 }
 </style>

@@ -119,6 +119,7 @@ pub fn is_newer_version(local: &str, remote: &ParsedVersion) -> bool {
         Regex::new(r"(\d+)\.(\d+)\.?(\d+)?\.?\((\d+)\)").expect("static regex compiles")
     });
 
+    // Path A: WPF display form — e.g. "5.8.3(2604011114)"
     if let Some(caps) = display_re.captures(local) {
         let local_timestamp = &caps[4];
         if local_timestamp == remote.timestamp {
@@ -150,22 +151,48 @@ pub fn is_newer_version(local: &str, remote: &ParsedVersion) -> bool {
             return false;
         };
 
-        remote_num > local_num
-    } else {
-        let Some(remote_num) =
-            pack_version(remote.major, remote.minor, remote.patch, &remote.timestamp)
-        else {
-            return false;
-        };
-
-        let digits: String = local.chars().filter(|c| c.is_ascii_digit()).collect();
-        let padded = left_pad_to(&digits, 19, '0');
-        let Ok(local_num) = padded.parse::<u128>() else {
-            return false;
-        };
-
-        remote_num > local_num
+        return remote_num > local_num;
     }
+
+    // Path C (new): pure semver without timestamp — e.g. "6.0.0"
+    // Our Cargo-based version is X.Y.Z with no build timestamp.
+    // Compare (major, minor, patch) tuples directly.
+    static SEMVER_RE: OnceLock<Regex> = OnceLock::new();
+    let semver_re = SEMVER_RE.get_or_init(|| {
+        Regex::new(r"^(\d+)\.(\d+)\.(\d+)$").expect("static regex compiles")
+    });
+
+    if let Some(caps) = semver_re.captures(local) {
+        let l_major: u32 = match caps[1].parse() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let l_minor: u32 = match caps[2].parse() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let l_patch: u32 = match caps[3].parse() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+
+        return (remote.major, remote.minor, remote.patch) > (l_major, l_minor, l_patch);
+    }
+
+    // Path B (WPF fallback): strip non-digits, pad to 19 chars, numeric compare.
+    let Some(remote_num) =
+        pack_version(remote.major, remote.minor, remote.patch, &remote.timestamp)
+    else {
+        return false;
+    };
+
+    let digits: String = local.chars().filter(|c| c.is_ascii_digit()).collect();
+    let padded = left_pad_to(&digits, 19, '0');
+    let Ok(local_num) = padded.parse::<u128>() else {
+        return false;
+    };
+
+    remote_num > local_num
 }
 
 /// Pack `major` / `minor` / `patch` (each zero-padded to 3 digits) and
@@ -322,6 +349,39 @@ mod tests {
             timestamp: "2604020000".to_owned(),
         };
         assert!(!is_newer_version("5.8.10(2604011115)", &remote_older));
+    }
+
+    #[test]
+    fn is_newer_version_semver_local_newer_major_returns_false() {
+        let remote = ParsedVersion {
+            major: 5,
+            minor: 9,
+            patch: 1,
+            timestamp: "2604180731".to_owned(),
+        };
+        assert!(!is_newer_version("6.0.0", &remote));
+    }
+
+    #[test]
+    fn is_newer_version_semver_remote_newer_returns_true() {
+        let remote = ParsedVersion {
+            major: 7,
+            minor: 0,
+            patch: 0,
+            timestamp: "2700010000".to_owned(),
+        };
+        assert!(is_newer_version("6.0.0", &remote));
+    }
+
+    #[test]
+    fn is_newer_version_semver_equal_returns_false() {
+        let remote = ParsedVersion {
+            major: 6,
+            minor: 0,
+            patch: 0,
+            timestamp: "2604180731".to_owned(),
+        };
+        assert!(!is_newer_version("6.0.0", &remote));
     }
 
     #[test]

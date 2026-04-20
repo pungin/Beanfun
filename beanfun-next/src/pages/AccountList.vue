@@ -121,13 +121,14 @@ import { useAuthStore } from '../stores/auth'
 import { useAccountStore } from '../stores/account'
 import { useConfigStore } from '../stores/config'
 import { useGameStore, gameCodeOf, imageUrl } from '../stores/game'
-import { commands, type ServiceAccount } from '../types/bindings'
+import { commands, type LoginRegion, type ServiceAccount } from '../types/bindings'
 import {
   CommandInvocationError,
   safeInvoke,
   surfaceCommandError,
   wrapCommand,
 } from '../services/invoke'
+import { useInAppBrowser } from '../composables/useInAppBrowser'
 import AddServiceAccount from '../windows/AddServiceAccount.vue'
 import ChangeServiceAccountDisplayName from '../windows/ChangeServiceAccountDisplayName.vue'
 import CopyBox from '../windows/CopyBox.vue'
@@ -320,19 +321,7 @@ async function handleLogout(): Promise<void> {
   await router.push('/login')
 }
 
-/* --------------- stubs (each owned by a future D-step) --------------- */
-
-/**
- * Build a no-op handler that logs a stable `TODO` marker. Centralised
- * so QA can grep `[AccountList]` in the dev console to spot every
- * un-wired affordance, and so future contributors don't reinvent
- * three different stub conventions across this file.
- */
-function makeStub(label: string): () => void {
-  return () => {
-    console.warn(`[AccountList] ${label} — handler pending real D-step.`)
-  }
-}
+/* --------------- real handler wire-ups --------------- */
 
 /*
  * P12.3 D8: `handleStartGame`, `handleChangeGame`, `handleAddAccount`,
@@ -340,9 +329,114 @@ function makeStub(label: string): () => void {
  * switcher + start-game + add-account + change-password flows
  * (defined further down in the file). `handleTools` is REAL since
  * P12.5 D7 — see {@link handleTools} below for the wiring.
+ *
+ * `handleMemberCenter` / `handleCustomerService` are REAL since
+ * P12.4-followup-B-fix F8/F9 — see the
+ * {@link handleMemberCenter} / {@link handleCustomerService}
+ * docblocks below for the WPF parity wiring. F8/F9 also retired
+ * the previous `makeStub` helper that only those two handlers
+ * used; the file no longer contains any placeholder handlers.
  */
-const handleMemberCenter = makeStub('Member Center link')
-const handleCustomerService = makeStub('Customer Service link')
+
+/* --- P12.4-followup-B-fix F8/F9 — Member Center / Customer Service --- */
+
+/**
+ * Per-region landing URL for the Customer Service portal. Mirrors
+ * WPF `Pages/AccountList.xaml.cs::btn_Customerservice_Click`
+ * L190-202 byte-for-byte:
+ *
+ * - **TW** → `https://tw.beanfun.com/customerservice/www/main.aspx`
+ * - **HK** → `https://bfweb.hk.beanfun.com/newfaq/service_newBF.aspx`
+ *
+ * Frozen at module scope so the test surface can grep the
+ * literal URL strings without re-mounting; both targets are
+ * inside the `*.beanfun.com` allowlist (see
+ * `src-tauri/src/commands/web_browser.rs::is_allowed_host`) so
+ * the in-app webview path always wins — no system-browser
+ * fallback expected in production.
+ *
+ * # Why frontend-built (vs. backend command like Member Center)
+ *
+ * No `web_token` interpolation is needed (WPF passes a static URL
+ * with no session secret in either region), so we keep the URL
+ * shape co-located with the click handler and dispatch through
+ * the shared `useInAppBrowser` composable. This preserves SRP:
+ * the new `openMemberCenterBrowser` backend command exists
+ * specifically because of the secret-confinement constraint;
+ * Customer Service has no equivalent reason to grow a dedicated
+ * IPC command just to interpolate a region into a static string.
+ */
+const CUSTOMER_SERVICE_URLS: Readonly<Record<LoginRegion, string>> = Object.freeze({
+  TW: 'https://tw.beanfun.com/customerservice/www/main.aspx',
+  HK: 'https://bfweb.hk.beanfun.com/newfaq/service_newBF.aspx',
+})
+
+/**
+ * Shared in-app-browser dispatch. Single instance per component
+ * setup matches the composable's stateless contract — see
+ * `composables/useInAppBrowser.ts`.
+ */
+const inAppBrowser = useInAppBrowser()
+
+/**
+ * Open the Beanfun **Member Center** in a dedicated in-app webview
+ * window. Mirrors WPF `Pages/AccountList.xaml.cs::BF_btnMember_Click`.
+ *
+ * The URL is built **backend-side** (see
+ * `commands::web_browser::open_member_center_browser`) because it
+ * embeds the session's `web_token` — a server-side secret that
+ * must never cross IPC (`commands::dto`'s sentinel test enforces
+ * this invariant). The frontend therefore invokes the dedicated
+ * command with no arguments instead of going through
+ * `useInAppBrowser` (which expects a frontend-supplied URL).
+ *
+ * Errors:
+ *
+ * - `auth.session_required` — backend reports no active session.
+ *   Defence-in-depth: the AccountList page is behind the auth
+ *   route guard, so this branch should be unreachable unless the
+ *   guard itself regresses.
+ * - `ui.window_create_failed` — Tauri builder failure (rare).
+ *
+ * Both surface a generic toast via the shared error message;
+ * the standard `wrapCommand` toast pipeline is bypassed because
+ * the caller is a fire-and-forget click handler that returns
+ * `Promise<void>` and would swallow a thrown
+ * `CommandInvocationError`.
+ */
+async function handleMemberCenter(): Promise<void> {
+  const result = await safeInvoke(commands.openMemberCenterBrowser())
+  if (!result.ok) {
+    ElMessage.error(result.error.message || t('inAppBrowser.openFailed'))
+  }
+}
+
+/**
+ * Open the Beanfun **Customer Service** portal in a dedicated
+ * in-app webview window. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::btn_Customerservice_Click`
+ * L190-202.
+ *
+ * URL is selected from {@link CUSTOMER_SERVICE_URLS} by the active
+ * session's `region`. If no session is active (defence in depth —
+ * the route guard makes this unreachable), surfaces the generic
+ * `inAppBrowser.openFailed` toast and skips the IPC round-trip.
+ *
+ * Dispatched through {@link inAppBrowser}.open which handles the
+ * cookie-seeded in-app window + the system-browser fallback. The
+ * fallback path is theoretically unreachable here because both
+ * URLs are inside the backend allowlist; left wired so a future
+ * accidental URL drift surfaces as a system-browser open rather
+ * than a silent failure.
+ */
+async function handleCustomerService(): Promise<void> {
+  const region = auth.session?.region
+  if (!region) {
+    ElMessage.error(t('inAppBrowser.openFailed'))
+    return
+  }
+  await inAppBrowser.open(CUSTOMER_SERVICE_URLS[region])
+}
 
 /* --------------- P12.5 D7 — Tools button real handler --------------- */
 

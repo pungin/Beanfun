@@ -295,6 +295,17 @@ vi.mock('../../../src/types/bindings', () => ({
     killGameProcesses: vi.fn(),
     launchGame: vi.fn(),
     openUrl: vi.fn(),
+    /*
+     * P12.4-followup-B-fix F8/F9 added the in-app browser entry
+     * points used by the Customer Service / Member Center
+     * buttons. `openInAppBrowser` is invoked through the
+     * `useInAppBrowser` composable (Customer Service path);
+     * `openMemberCenterBrowser` is invoked directly by the
+     * page (Member Center path — the URL embeds the session's
+     * server-side `web_token` and is built backend-side).
+     */
+    openInAppBrowser: vi.fn(),
+    openMemberCenterBrowser: vi.fn(),
   },
 }))
 
@@ -2143,9 +2154,7 @@ describe('AccountList page', () => {
      * surfaces here as a red test rather than silently 404'ing in
      * the WebView.
      */
-    expect(img.attributes('src')).toBe(
-      'https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/610074_small.jpg',
-    )
+    expect(img.attributes('src')).toBe('https://images.beanfun.com/GameZone/610074_small.jpg')
     expect(img.attributes('alt')).toBe('MapleStory TW')
   })
 
@@ -2467,5 +2476,167 @@ describe('AccountList page', () => {
     expect(stub.attributes('data-visible')).toBe('true')
     /* sid-2 is index 1 in POPULATED_LIST. */
     expect(stub.attributes('data-account-index')).toBe('1')
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  P12.4-followup-B-fix F8 — Customer Service quick link            */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Mirrors WPF `Pages/AccountList.xaml.cs::btn_Customerservice_Click`
+   * (L190-202) — the per-region static URL is dispatched through
+   * the in-app webview window (no `web_token` needed on either
+   * side). Region is read from `auth.session.region`; if the
+   * route guard ever leaks through with no session, the click
+   * surfaces a generic toast instead of a runtime crash.
+   *
+   * The assertions hit the IPC mock directly rather than the
+   * composable internals — same observable contract as a real
+   * smoke test (the composable is itself unit-tested in
+   * `tests/unit/composables/useInAppBrowser.spec.ts`).
+   */
+  describe('P12.4-followup-B-fix F8 — Customer Service link', () => {
+    it('TW session → openInAppBrowser called with tw.beanfun.com URL', async () => {
+      vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+      vi.mocked(commands.openInAppBrowser).mockReturnValueOnce(ok(null))
+
+      const ctx = buildHarness()
+      useAuthStore().session = FAKE_SESSION
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      await wrapper.get('[data-test="account-list-customer-service"]').trigger('click')
+      await flushPromises()
+
+      expect(commands.openInAppBrowser).toHaveBeenCalledTimes(1)
+      expect(commands.openInAppBrowser).toHaveBeenCalledWith(
+        'https://tw.beanfun.com/customerservice/www/main.aspx',
+      )
+    })
+
+    it('HK session → openInAppBrowser called with bfweb.hk.beanfun.com URL', async () => {
+      vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+      vi.mocked(commands.openInAppBrowser).mockReturnValueOnce(ok(null))
+
+      const ctx = buildHarness()
+      useAuthStore().session = { ...FAKE_SESSION, region: 'HK' }
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      await wrapper.get('[data-test="account-list-customer-service"]').trigger('click')
+      await flushPromises()
+
+      expect(commands.openInAppBrowser).toHaveBeenCalledTimes(1)
+      expect(commands.openInAppBrowser).toHaveBeenCalledWith(
+        'https://bfweb.hk.beanfun.com/newfaq/service_newBF.aspx',
+      )
+    })
+
+    it('no session → generic error toast, IPC never invoked', async () => {
+      /*
+       * Defence in depth — the AccountList page lives behind the
+       * auth route guard so this branch should be unreachable in
+       * production. Locking the behaviour anyway so a future
+       * route-guard regression surfaces a toast (visible failure)
+       * rather than a silent no-op or a TypeError on
+       * `undefined.region`.
+       */
+      vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+
+      const ctx = buildHarness()
+      useAuthStore().session = FAKE_SESSION
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      /* Strip the session AFTER mount so the route guard's normal
+       * pre-mount check is bypassed and we hit the in-handler
+       * defensive branch. */
+      useAuthStore().session = null
+
+      await wrapper.get('[data-test="account-list-customer-service"]').trigger('click')
+      await flushPromises()
+
+      expect(commands.openInAppBrowser).not.toHaveBeenCalled()
+      expect(ElMessage.error).toHaveBeenCalledWith(i18nMessages['zh-TW'].inAppBrowser.openFailed)
+    })
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  P12.4-followup-B-fix F9 — Member Center quick link               */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Mirrors WPF `Pages/AccountList.xaml.cs::BF_btnMember_Click`
+   * (L167-188). The URL is built backend-side because it embeds
+   * the session's `web_token` (server-side secret per
+   * `commands::dto`'s sentinel test). The frontend therefore
+   * dispatches the dedicated `openMemberCenterBrowser` IPC
+   * command with no arguments — no `web_token` ever crosses the
+   * IPC boundary.
+   *
+   * The URL-shape contract for both regions is locked down by
+   * Rust unit tests in
+   * `commands::web_browser::build_member_center_url_*` (TW and
+   * HK byte-for-byte WPF mirrors); these tests just lock the
+   * dispatch + error-path contract.
+   */
+  describe('P12.4-followup-B-fix F9 — Member Center link', () => {
+    it('click → openMemberCenterBrowser invoked with no arguments', async () => {
+      vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+      vi.mocked(commands.openMemberCenterBrowser).mockReturnValueOnce(ok(null))
+
+      const ctx = buildHarness()
+      useAuthStore().session = FAKE_SESSION
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      await wrapper.get('[data-test="account-list-member-center"]').trigger('click')
+      await flushPromises()
+
+      expect(commands.openMemberCenterBrowser).toHaveBeenCalledTimes(1)
+      expect(commands.openMemberCenterBrowser).toHaveBeenCalledWith()
+      /*
+       * Crucially, the legacy frontend in-app browser command must
+       * NOT be invoked — a regression that routes Member Center
+       * through `openInAppBrowser` would smuggle the URL (and
+       * therefore the `web_token` query parameter) across IPC.
+       */
+      expect(commands.openInAppBrowser).not.toHaveBeenCalled()
+    })
+
+    it('backend error → toast surfaces error message, no second invoke', async () => {
+      vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+      vi.mocked(commands.openMemberCenterBrowser).mockReturnValueOnce(
+        err({ code: 'ui.window_create_failed', message: 'WebView2 unavailable', details: null }),
+      )
+
+      const ctx = buildHarness()
+      useAuthStore().session = FAKE_SESSION
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      await wrapper.get('[data-test="account-list-member-center"]').trigger('click')
+      await flushPromises()
+
+      expect(commands.openMemberCenterBrowser).toHaveBeenCalledTimes(1)
+      expect(ElMessage.error).toHaveBeenCalledWith('WebView2 unavailable')
+    })
+
+    it('backend error with empty message → fallback to inAppBrowser.openFailed toast', async () => {
+      vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+      vi.mocked(commands.openMemberCenterBrowser).mockReturnValueOnce(
+        err({ code: 'auth.session_required', message: '', details: null }),
+      )
+
+      const ctx = buildHarness()
+      useAuthStore().session = FAKE_SESSION
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      await wrapper.get('[data-test="account-list-member-center"]').trigger('click')
+      await flushPromises()
+
+      expect(ElMessage.error).toHaveBeenCalledWith(i18nMessages['zh-TW'].inAppBrowser.openFailed)
+    })
   })
 })

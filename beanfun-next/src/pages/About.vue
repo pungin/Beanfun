@@ -10,13 +10,13 @@
  * |---------------------------------------------|-------------------------------------------------------|
  * | App icon (`Resources/icon.ico`)             | `<img src="/icon.png">` from public/                  |
  * | `t_AppName` `Label`                         | `<h1>{{ t('AppName') }}</h1>`                         |
- * | `t_Author` `Label` ("By Pungin")            | `<span>By Pungin</span>` (literal verbatim — WPF L38) |
+ * | `t_Author` `Label` ("By Pungin")            | `<span>By Pungin and YCC3741</span>` (co-maintainer credit) |
  * | `t_Version` + `version` `TextBlock`         | `<p>{{ t('Version') }} {{ versionString }}</p>`       |
  * | `UpdateCheck_Click` `Hyperlink`             | `<a @click="handleCheckUpdate">{{ t('CheckUpdate') }}</a>` |
  * | `AboutText` formatted `TextBlock`           | `<RichText :value="t('AboutText')">` (WPF mini-markup parser) |
  * | `Contact` `Run`                             | `<p>{{ t('Contact') }}</p>`                           |
- * | `MailContact_Click` `Hyperlink`             | `<a @click="handleEmail">{{ t('Email') }}</a>`        |
- * | `Github_Click` `Hyperlink` ("Github")       | `<a @click="handleGithub">Github</a>` (literal — WPF L77) |
+ * | `MailContact_Click` `Hyperlink`             | Two `<a @click>` links (Pungin + YCC3741), vertically stacked |
+ * | `Github_Click` `Hyperlink` ("Github")       | `<a @click="handleGithub">Github</a>` → links to repo root |
  * | `Button_Click` Back button                  | `<el-button @click="handleBack">{{ t('Back') }}</el-button>` |
  *
  * # Update-check flow (D7 wiring)
@@ -192,17 +192,11 @@ async function handleCheckUpdate(): Promise<void> {
  * equivalent; it routes `mailto:` URLs through the OS handler
  * (Windows `ShellExecuteW` on the backend).
  */
-async function handleEmail(): Promise<void> {
+async function handleEmail(to: string): Promise<void> {
   const subject = encodeURIComponent(t('Feedback'))
-  /*
-   * WPF `FeedbackText` uses `%0d` as a literal carriage-return
-   * placeholder (L57 — note the `%0d` is the URL-encoded form of
-   * `\r`, intentionally). Pass through verbatim — the email
-   * client decodes it as a newline.
-   */
   const bodyTemplate = t('FeedbackText', [versionString.value])
   const body = encodeURIComponent(bodyTemplate)
-  const mailtoUrl = `mailto:pungin@msn.com?subject=${subject}&body=${body}`
+  const mailtoUrl = `mailto:${to}?subject=${subject}&body=${body}`
   await safeInvoke(commands.openUrl(mailtoUrl))
 }
 
@@ -212,7 +206,7 @@ async function handleEmail(): Promise<void> {
  * URL literal verbatim.
  */
 async function handleGithub(): Promise<void> {
-  await safeInvoke(commands.openUrl('https://github.com/pungin/Beanfun/issues/new'))
+  await safeInvoke(commands.openUrl('https://github.com/pungin/Beanfun'))
 }
 
 /**
@@ -275,7 +269,7 @@ onMounted(() => {
         <div class="about__header-text">
           <div class="about__title-row">
             <h1 class="about__title bf-text-gradient">{{ t('AppName') }}</h1>
-            <span class="about__author">By Pungin</span>
+            <span class="about__author">By Pungin and YCC3741</span>
           </div>
           <p class="about__version-row" data-test="about-version-row">
             <span>{{ t('Version') }}</span>
@@ -303,15 +297,24 @@ onMounted(() => {
 
         <div class="about__contact" data-test="about-contact">
           <span class="about__contact-label">{{ t('Contact') }}</span>
-          <div class="about__contact-row">
+          <div class="about__contact-col">
             <a
               href="#"
               class="about__contact-link"
-              data-test="about-email"
-              @click.prevent="handleEmail"
+              data-test="about-email-pungin"
+              @click.prevent="handleEmail('pungin@msn.com')"
             >
               <el-icon><Message /></el-icon>
-              <span>{{ t('Email') }}</span>
+              <span>Pungin</span>
+            </a>
+            <a
+              href="#"
+              class="about__contact-link"
+              data-test="about-email-ycc3741"
+              @click.prevent="handleEmail('mo0307b1006@gmail.com')"
+            >
+              <el-icon><Message /></el-icon>
+              <span>YCC3741</span>
             </a>
             <a
               href="#"
@@ -461,10 +464,10 @@ onMounted(() => {
   color: var(--bf-on-surface);
 }
 
-.about__contact-row {
+.about__contact-col {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.875rem;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .about__contact-link {

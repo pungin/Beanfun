@@ -28,11 +28,13 @@
 pub mod commands;
 pub mod core;
 pub mod services;
+pub mod tray;
 
 use std::path::{Path, PathBuf};
 
 use commands::error::CommandError;
 use commands::state::AppState;
+use tauri::Manager;
 use tracing_subscriber::{fmt, EnvFilter};
 
 /// Canonical location of the auto-generated `bindings.ts` the
@@ -306,11 +308,35 @@ pub fn run() {
     export_specta_bindings(&specta_builder);
     let invoke_handler = specta_builder.invoke_handler();
 
+    let storage_root_for_tray = app_state.storage_root.clone();
+    let tray_state = std::sync::Arc::new(std::sync::Mutex::new(None::<tauri::tray::TrayIconId>));
+    let tray_state_for_event = tray_state.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
         .invoke_handler(invoke_handler)
+        .setup(move |app| {
+            if let Some(tray_id) = tray::build_tray(app) {
+                *tray_state.lock().unwrap() = Some(tray_id);
+            }
+            Ok(())
+        })
+        .on_window_event(move |window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            let tray_id = tray_state_for_event.lock().unwrap().clone();
+            if let Some(tray_id) = tray_id {
+                tray::handle_minimize_to_tray(
+                    window.app_handle().clone(),
+                    tray_id,
+                    storage_root_for_tray.clone(),
+                    event,
+                );
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

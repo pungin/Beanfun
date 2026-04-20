@@ -64,6 +64,23 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   save: dialogSave,
 }))
 
+/*
+ * `useRouter` mock — the SUT calls `router.back()` / `router.push()`
+ * inside `handleBack` (P12.4-followup-B-fix F6). Going through a
+ * real `createMemoryHistory` router would force every existing test
+ * (which never navigates) to also juggle router setup/teardown;
+ * mocking the composable keeps the existing harness untouched and
+ * lets the new back-navigation cases assert exact call shapes
+ * directly on the spies.
+ */
+const { routerBack, routerPush } = vi.hoisted(() => ({
+  routerBack: vi.fn(),
+  routerPush: vi.fn(),
+}))
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ back: routerBack, push: routerPush }),
+}))
+
 vi.mock('element-plus', async () => {
   const { defineComponent: dc, h: hh } = await import('vue')
 
@@ -133,6 +150,7 @@ vi.mock('@element-plus/icons-vue', () => {
   const stub = (name: string): Component => defineComponent({ name, render: () => h('svg') })
   return {
     /* SUT template icons */
+    ArrowLeft: stub('ArrowLeftStub'),
     Delete: stub('DeleteStub'),
     DocumentCopy: stub('DocumentCopyStub'),
     Download: stub('DownloadStub'),
@@ -335,6 +353,8 @@ describe('ManageAccount page', () => {
     elMessageBoxConfirm.mockReset()
     dialogOpen.mockReset()
     dialogSave.mockReset()
+    routerBack.mockReset()
+    routerPush.mockReset()
   })
 
   afterEach(() => {
@@ -689,5 +709,62 @@ describe('ManageAccount page', () => {
 
     expect(wrapper.find('[data-test="manage-account-error"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="manage-account-row-TW-alice_tw"]').exists()).toBe(true)
+  })
+
+  /* --------------- back navigation (P12.4-followup-B-fix F6) --------------- */
+
+  /**
+   * Original D9 ship had no back affordance — the page was a
+   * dead-end once entered from Settings. F6 wires `handleBack`
+   * mirroring `Settings.vue` / `About.vue`.
+   *
+   * The handler reads `window.history.length` as the "can-go-back"
+   * proxy (vue-router exposes no such predicate). We patch it via
+   * `Object.defineProperty` rather than `Object.assign` because the
+   * `length` getter on `window.history` is non-writable in jsdom.
+   */
+  function setHistoryLength(value: number): void {
+    Object.defineProperty(window.history, 'length', {
+      value,
+      configurable: true,
+      writable: true,
+    })
+  }
+
+  it('back button calls router.back() when there is prior history (history.length > 1)', async () => {
+    vi.mocked(commands.loadAccounts).mockReturnValueOnce(ok(POPULATED))
+    setHistoryLength(2)
+
+    const wrapper = mountIt()
+    await flushPromises()
+
+    await wrapper.get('[data-test="manage-account-back"]').trigger('click')
+
+    expect(routerBack).toHaveBeenCalledTimes(1)
+    expect(routerPush).not.toHaveBeenCalled()
+  })
+
+  it('back button falls back to router.push("/settings") when entered via direct hash (history.length === 1)', async () => {
+    /*
+     * F6 deliberately diverges from `Settings.vue` / `About.vue`
+     * (which fall back to `/login`): ManageAccount has exactly one
+     * production entry point — `Settings.vue::handleManageAccount`
+     * — so the canonical re-entry target is `/settings`. The
+     * route is `requiresAuth: true`; falling back to `/login`
+     * would either kick the user out unnecessarily or trigger the
+     * auth guard's self-loop. Locking the literal here guards
+     * against a future copy-paste that drops back to `/login`.
+     */
+    vi.mocked(commands.loadAccounts).mockReturnValueOnce(ok(POPULATED))
+    setHistoryLength(1)
+
+    const wrapper = mountIt()
+    await flushPromises()
+
+    await wrapper.get('[data-test="manage-account-back"]').trigger('click')
+
+    expect(routerBack).not.toHaveBeenCalled()
+    expect(routerPush).toHaveBeenCalledTimes(1)
+    expect(routerPush).toHaveBeenCalledWith('/settings')
   })
 })

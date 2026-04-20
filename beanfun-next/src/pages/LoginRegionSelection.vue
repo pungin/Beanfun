@@ -35,9 +35,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ElIcon } from 'element-plus'
-import { Flag } from '@element-plus/icons-vue'
-
 import { useConfigStore } from '../stores/config'
 import type { LoginRegion } from '../types/bindings'
 
@@ -113,7 +110,7 @@ async function selectRegion(region: LoginRegion): Promise<void> {
         @click="selectRegion(tile.region)"
       >
         <div class="region-tile__icon">
-          <el-icon :size="32"><Flag /></el-icon>
+          <span class="region-tile__region-code">{{ tile.region }}</span>
         </div>
         <div class="region-tile__label">{{ t(tile.labelKey) }}</div>
         <div class="region-tile__host">{{ tile.hostHint }}</div>
@@ -200,6 +197,14 @@ async function selectRegion(region: LoginRegion): Promise<void> {
   display: grid;
   place-items: center;
   box-shadow: 0 8px 18px color-mix(in srgb, var(--el-color-primary, #ff8201) 32%, transparent);
+}
+
+.region-tile__region-code {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.05em;
+  line-height: 1;
 }
 
 .region-tile__label {

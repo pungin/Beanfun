@@ -1871,34 +1871,78 @@ async cleanMapleGameCache(gamePath: string) : Promise<Result<CleanCacheReport, C
  * 
  * # Successful flow
  * 
- * 1. Validate `url` against the [`ALLOWED_HOSTS`] allowlist
+ * 1. Validate `url` against the [`is_allowed_host`] suffix policy
  * ([`parse_and_validate`]).
  * 2. Snapshot [`crate::commands::state::AuthContext::client`] from
  * [`AppState::auth`] under a read-lock (`None` when no login is
  * active — see the Q5 docblock note).
- * 3. Build the window pointing at `about:blank` so the first real
- * network request fires *after* the cookie seed.
- * 4. Best-effort seed every unexpired cookie via
- * [`seed_webview_cookies_from_client`] +
- * [`tauri::WebviewWindow::set_cookie`]. Per-cookie failures
- * log a warning and continue (matches WPF's no-try/catch
- * `AddOrUpdateCookie` loop).
- * 5. Navigate to `url`. The seeded cookies travel with the request.
+ * 3. Delegate to [`open_url_in_webview`] for the build / seed /
+ * navigate / show-on-load chain (shared with
+ * [`open_member_center_browser`]).
  * 
  * # Errors
  * 
  * - [`INVALID_URL_CODE`] — URL malformed / wrong scheme / host
- * outside [`ALLOWED_HOSTS`]. Frontend (`useInAppBrowser`)
+ * outside [`is_allowed_host`]. Frontend (`useInAppBrowser`)
  * intercepts this code and falls back to the system browser via
  * `commands.openUrl`.
- * - `ui.window_create_failed` — [`WebviewWindowBuilder::build`] or
- * the post-seed [`tauri::WebviewWindow::navigate`] call failed
- * (rare; usually a label collision or WebView2 runtime
- * regression). The window — if any — is closed before returning.
+ * - `ui.window_create_failed` — see [`open_url_in_webview`].
  */
 async openInAppBrowser(url: string) : Promise<Result<null, CommandError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_in_app_browser", { url }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Open the Beanfun **Member Center** in a dedicated in-app webview
+ * window. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::BF_btnMember_Click`.
+ * 
+ * # Why a dedicated command (not just a `commands.openInAppBrowser` call)
+ * 
+ * The member-center URL embeds the session's `web_token` as a
+ * query parameter (WPF's design — the `auth.aspx` endpoint
+ * consumes it server-side to issue a session-bearing redirect to
+ * the actual member portal). `web_token` is a server-side secret
+ * (`commands::dto` enforces the `web_token must not leak through
+ * IPC` invariant via the sentinel-value test in
+ * `commands/dto.rs::session_dto_redacts_*`); shipping it across
+ * IPC just to interpolate it back into a URL would violate that
+ * invariant. The dedicated command keeps the secret confined to
+ * the backend: the frontend invokes `openMemberCenterBrowser()`
+ * with no arguments, and the URL is built + dispatched entirely
+ * in Rust.
+ * 
+ * # Successful flow
+ * 
+ * 1. [`require_auth`] resolves `(client, session)`. If no session
+ * is active, returns `auth.session_required` — frontend toasts
+ * via the standard error pipeline. (This branch should be
+ * unreachable in practice because the AccountList page is
+ * behind the auth route guard, but the guard is defence in
+ * depth.)
+ * 2. [`build_member_center_url`] interpolates the WPF URL shape
+ * for the session's region.
+ * 3. [`parse_and_validate`] re-checks the URL against the host
+ * allowlist as defence in depth (catches any future drift
+ * where the URL builder yields a non-`*.beanfun.com` host).
+ * 4. [`open_url_in_webview`] runs the shared build / seed /
+ * navigate / show-on-load chain.
+ * 
+ * # Errors
+ * 
+ * - `auth.session_required` — no active session.
+ * - [`INVALID_URL_CODE`] — `build_member_center_url` produced a
+ * URL outside the allowlist (defensive — should be unreachable
+ * for valid `LoginRegion` variants).
+ * - `ui.window_create_failed` — see [`open_url_in_webview`].
+ */
+async openMemberCenterBrowser() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_member_center_browser") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

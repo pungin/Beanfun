@@ -299,7 +299,7 @@ describe('GameList dialog', () => {
      * helper (no hard-coded base in the template).
      */
     const img = wrapper.get('[data-test="game-list-image-610074_T9"]').attributes('src') ?? ''
-    expect(img).toContain('tw.images.beanfun.com')
+    expect(img).toContain('images.beanfun.com')
     expect(img.endsWith(MAPLE.large_image_name)).toBe(true)
   })
 

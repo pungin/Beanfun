@@ -103,35 +103,82 @@ export function gameCodeOf(serviceCode: string, serviceRegion: string): string {
 }
 
 /**
- * Build the per-region `<img src>` URL for a game banner image
- * file name.
+ * Build the `<img src>` URL for a game banner image, mirroring
+ * WPF `MainWindow.xaml.cs::GameService.loadImage` (L494-510)
+ * branch:
  *
- * Mirrors `services::beanfun::games::image_base_url` byte-for-byte
- * (the backend exposes the helper alongside the DTOs but does **not**
- * proxy the bytes — the WebView fetches each banner directly, see
- * the backend module docblock for "why no proxy" rationale).
+ * ```csharp
+ * if (!url.StartsWith("http://", ...) && !url.StartsWith("https://", ...))
+ *     url = $"{imageBaseUrl}{url}";
+ * byte[] buffer = new WebClient().DownloadData(url);
+ * ```
  *
- * # WPF deviation: HK uses `http://` by upstream design
+ * `name` is whatever string came back as
+ * `Service{XLarge,Large,Small}ImageName` from the upstream
+ * `Services.ServiceList` JSON literal. Two historical shapes
+ * coexist in the wild:
  *
- * WPF `MainWindow.AddGameServiceFromJson` (L772-785) builds the HK
- * URLs as `http://hk.images...` — that's not a typo, it's the URL
- * shape Beanfun's HK CDN actually serves at. Tauri's WebView2
- * tolerates mixed content for `<img>` tags by default, so the
- * banner renders without CSP gymnastics. If a future CSP tightens
- * `img-src` to `https:` only, this helper is the one place to
- * coerce the protocol; today it preserves WPF parity verbatim.
+ * - **Full URL** — `https://images.beanfun.com/GameZone/<id>.jpg`
+ *   etc. As of the P12.4-followup-B-fix F3-redo audit (2026-04),
+ *   every one of the 12 services in the live TW
+ *   `Services.ServiceList` returns this shape.
+ * - **Bare filename** — historical (`<service_code>_l.jpg` /
+ *   `<timestamp>.jpg`). Not observed in production today; WPF
+ *   carried the `imageBaseUrl` prefix branch as a defensive
+ *   fallback that beanfun-next mirrors here.
  *
- * `name === ''` returns the bare base URL — the resulting `<img>`
- * will 404, but the caller (template `:src` binding) typically
- * gates the render on `name.length > 0` already. Surfacing the
- * empty path rather than `null` keeps the return type a plain
- * `string` so templates don't have to handle two shapes.
+ * The branch order matters: passthrough first so a future
+ * upstream that mixes the two shapes per row still works
+ * without tripping the prefix wrap.
+ *
+ * # Why the WebView can fetch directly (no IPC proxy)
+ *
+ * Unlike WPF (which used `WebClient.DownloadData` from the C#
+ * side then fed the bytes into a `BitmapImage` memory stream),
+ * the Tauri WebView issues `<img>` requests directly. The new
+ * `images.beanfun.com` host accepts cross-origin `<img>` fetches
+ * with the `tauri://localhost` referer (probed during the
+ * F3-redo investigation: `200 OK` with the real JPEG body, no
+ * hotlink rejection). Pushing the load to the WebView keeps the
+ * backend pure-data and avoids a `Vec<u8>` round-trip per tile.
+ *
+ * # F3-redo audit trail (P12.4-followup-B-fix)
+ *
+ * Earlier F3 attempts switched the base host between
+ * `tw.images.beanfun.com` (the WPF original — since retired by
+ * Beanfun, returns `ERR_CONNECTION_TIMED_OUT`) and
+ * `tw.beanfun.com/uploaded_images/.../game_zone/`. Both were
+ * wrong: every live `Service*ImageName` is already a full URL,
+ * so the prefix wrap produced nonsense like
+ * `https://tw.beanfun.com/uploaded_images/.../https://images.beanfun.com/...`,
+ * which the lenient server returned as `200 + 0 byte`.
+ * Replicating WPF's L494 branch is the actual fix.
+ *
+ * # Edge cases
+ *
+ * - `name === ''` returns the bare base URL — the resulting
+ *   `<img>` would 404, but the caller (template `:src` binding)
+ *   typically gates the render on `name.length > 0` already.
+ *   Surfacing the empty path rather than `null` keeps the
+ *   return type a plain `string` so templates don't have to
+ *   handle two shapes.
+ * - The `region` parameter is preserved on the API even though
+ *   today's base is the same for TW and HK — keeps the call
+ *   sites stable if Beanfun ever resplits hosts in the future.
  */
 export function imageUrl(name: string, region: LoginRegion): string {
-  const base =
-    region === 'TW'
-      ? 'https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/'
-      : 'http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/'
+  if (name.startsWith('http://') || name.startsWith('https://')) {
+    return name
+  }
+  /*
+   * Region is currently homogeneous (`images.beanfun.com` serves
+   * both TW and HK in 2026) but the parameter is preserved so a
+   * future Beanfun-side host re-split lands as a one-line change
+   * here without forcing every call site to drop / re-add the
+   * argument.
+   */
+  void region
+  const base = 'https://images.beanfun.com/GameZone/'
   return `${base}${name}`
 }
 

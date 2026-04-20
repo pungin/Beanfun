@@ -6,9 +6,12 @@
  *
  * Mirrors `Beanfun/Windows/MapleTools.xaml(.cs)` exactly:
  *
- * - Vertical stack of five `Button`s in a `StackPanel Margin="20"`,
- *   each with `Margin="5"`. Order: Recycling → PlayerReport →
- *   VideoReport → EquipStarForceCalculator → PerfectCoreCalculator.
+ * - Vertical stack of `Button`s in a `StackPanel Margin="20"`,
+ *   each with `Margin="5"`. Original WPF order:
+ *   Recycling → PlayerReport → VideoReport →
+ *   EquipStarForceCalculator → PerfectCoreCalculator. SPA order
+ *   matches but with VideoReport removed (see "WPF deviation:
+ *   VideoReport removed" below).
  * - Window title `{DynamicResource ToolBox}` ("工具箱" / "Toolbox").
  * - **Recycling** (`btn_Recycling_Click` L51-112): YesNo confirm
  *   `MsgRecycling` → backend filesystem sweep → `MsgRecyclingDone`
@@ -21,8 +24,6 @@
  *   regardless. WPF's behaviour is to inform-and-still-open so
  *   the user can read the page even if reporting itself won't
  *   succeed; we replicate that exactly.
- * - **VideoReport** (`btn_VideoReport_Click` L34-39): open the
- *   EventAD page; no region branch.
  * - **EquipCalc / CoreCalc** (`btn_EquipCalculator_Click` L41-44 /
  *   `btn_CoreCaculator_Click` L46-49): open the matching child
  *   dialog. WPF spawns a new `Window`; we emit upward and let the
@@ -32,6 +33,20 @@
  *
  * # WPF deviations (intentional)
  *
+ * - **VideoReport removed (P12.4-followup-B-fix F2, Q12)**: WPF
+ *   `btn_VideoReport_Click` L34-39 navigates to
+ *   `event.beanfun.com/MapleStory/eventad/EventAD.aspx?EventADID=3453`,
+ *   which redirects to a `tw.hicdn.beanfun.com/.../404.html` page
+ *   — the upstream EventAD record was retired, the button has
+ *   been dead-link for an indeterminate amount of time. WPF still
+ *   ships the button (it just opens 404). User instruction during
+ *   the followup-B smoke test was to drop the button rather than
+ *   leave a confusing affordance; this is the only intentional
+ *   deviation from strict WPF parity in MapleTools. If beanfun
+ *   ever restores the EventAD page, revert this commit's
+ *   MapleTools changes (the button itself is mechanical to add
+ *   back; the i18n key `VideoReport` stays in the WPF locale
+ *   tree even now).
  * - **Modal vs new Window**: same rationale as the rest of
  *   `windows/*.vue` — the SPA renders dialogs in-page via
  *   `el-dialog`. The MapleTools dialog stays open while a child
@@ -81,14 +96,7 @@
 
 import { useI18n } from 'vue-i18n'
 import { ElButton, ElDialog, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
-import {
-  CircleClose,
-  Delete,
-  Document,
-  Pointer,
-  Setting,
-  VideoCamera,
-} from '@element-plus/icons-vue'
+import { CircleClose, Delete, Document, Pointer, Setting } from '@element-plus/icons-vue'
 
 import { commands, type LoginRegion } from '../types/bindings'
 import { safeInvoke } from '../services/invoke'
@@ -96,15 +104,18 @@ import { safeInvoke } from '../services/invoke'
 defineOptions({ name: 'MapleToolsDialog' })
 
 /**
- * URLs ported verbatim from `MapleTools.xaml.cs` so the Tauri
- * build hits the exact same Beanfun event-portal endpoints WPF
- * does. Kept as module-level consts (not props / config) because
- * they are part of the WPF surface — every Beanfun build (TW /
- * HK) historically navigates to these same URLs.
+ * PlayerReport URL ported verbatim from `MapleTools.xaml.cs` L31
+ * so the Tauri build hits the exact same Beanfun event-portal
+ * endpoint WPF does. Kept as a module-level const (not prop /
+ * config) because it is part of the WPF surface — every Beanfun
+ * build (TW / HK) historically navigates to this same URL.
+ *
+ * `VIDEO_REPORT_URL` was removed in P12.4-followup-B-fix F2 (see
+ * the file docblock "WPF deviations" section for the audit
+ * trail).
  */
 const PLAYER_REPORT_URL =
   'https://event.beanfun.com/customerservice/PluginReporting/PlayerReport.aspx'
-const VIDEO_REPORT_URL = 'https://event.beanfun.com/MapleStory/eventad/EventAD.aspx?EventADID=3453'
 
 const props = withDefaults(
   defineProps<{
@@ -145,14 +156,15 @@ const emit = defineEmits<{
   (event: 'update:visible', next: boolean): void
   /**
    * Ask the parent to open the in-app browser at `url`. Used for
-   * PlayerReport / VideoReport — both URLs land on
-   * `event.beanfun.com`, which is **outside** the backend
-   * `web_browser::ALLOWED_HOSTS` allowlist, so `useInAppBrowser`
-   * will detect the `system.invalid_url` reject and fall back to
-   * `commands.openUrl` (system browser). Same outcome WPF gives
-   * for these URLs in practice (the `event.beanfun.com` cookies
-   * live in the user's default browser, not in WebView2's
-   * partitioned jar).
+   * PlayerReport — the URL lands on `event.beanfun.com`, which
+   * sits inside the backend `web_browser::is_allowed_host` suffix
+   * policy (`*.beanfun.com`) since P12.4-followup-B-fix F1, so
+   * `useInAppBrowser` opens the URL in a fresh `WebviewWindow`
+   * with the BeanfunClient session cookies pre-seeded — full WPF
+   * `new WebBrowser(uri).Show()` parity. The system-browser
+   * fallback inside `useInAppBrowser` only fires for URLs outside
+   * `*.beanfun.com`, which is no longer reachable from this
+   * component after the F2 VideoReport removal.
    */
   (event: 'open-web-browser', url: string): void
   /** Ask the parent to open the EquipCalculator dialog (P12.5 D5). */
@@ -258,10 +270,6 @@ async function handlePlayerReport(): Promise<void> {
   emit('open-web-browser', PLAYER_REPORT_URL)
 }
 
-function handleVideoReport(): void {
-  emit('open-web-browser', VIDEO_REPORT_URL)
-}
-
 function handleEquipCalculator(): void {
   emit('open-equip-calculator')
 }
@@ -332,14 +340,6 @@ function handleVisibleChange(value: boolean): void {
       >
         <el-icon><Document /></el-icon>
         <span>{{ t('PlayerReport') }}</span>
-      </el-button>
-      <el-button
-        class="maple-tools__button bf-btn-secondary"
-        data-test="maple-tools-video-report"
-        @click="handleVideoReport"
-      >
-        <el-icon><VideoCamera /></el-icon>
-        <span>{{ t('VideoReport') }}</span>
       </el-button>
       <el-button
         class="maple-tools__button bf-btn-secondary"

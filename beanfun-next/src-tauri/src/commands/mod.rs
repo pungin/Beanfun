@@ -295,6 +295,14 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         // comment above for the full E0401 / runtime-agnostic
         // bindings rationale.
         web_browser::open_in_app_browser::<tauri::Wry>,
+        // web_browser (P12.4-followup-B-fix F9 — Member Center)
+        //
+        // Sibling of `open_in_app_browser` that builds the
+        // member-center URL backend-side so the session's
+        // `web_token` (a server-side secret per `commands::dto`'s
+        // sentinel test) never crosses IPC. Same `tauri::Wry`
+        // turbofish rationale applies.
+        web_browser::open_member_center_browser::<tauri::Wry>,
     ])
 }
 
@@ -471,6 +479,8 @@ mod bindings_file_tests {
         "cleanMapleGameCache",
         // --- P12.4-followup-B — in-app browser window ---------------
         "openInAppBrowser",
+        // --- P12.4-followup-B-fix F9 — Member Center ----------------
+        "openMemberCenterBrowser",
     ];
 
     /// DTO type names the frontend imports from `bindings.ts`.

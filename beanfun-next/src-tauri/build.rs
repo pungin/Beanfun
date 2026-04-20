@@ -92,6 +92,12 @@ fn embed_app_manifest_for_all_binaries() {
 
     println!("cargo:rerun-if-changed={}", manifest.display());
     println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+
+    let profile = std::env::var("PROFILE").unwrap_or_default();
+    if profile == "release" {
+        println!("cargo:rustc-link-arg=/MANIFESTUAC:level='highestAvailable' uiAccess='false'");
+    }
+
     println!(
         "cargo:rustc-link-arg=/MANIFESTINPUT:{}",
         manifest

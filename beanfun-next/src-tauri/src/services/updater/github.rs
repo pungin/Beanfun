@@ -51,9 +51,13 @@
 //! channel strings early at parse time instead of silently defaulting
 //! deep inside `select_release`.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use super::error::UpdaterError;
+
+fn null_as_empty<'de, D: Deserializer<'de>>(de: D) -> Result<String, D::Error> {
+    Option::<String>::deserialize(de).map(|o| o.unwrap_or_default())
+}
 
 /// One GitHub release as returned by
 /// `https://api.github.com/repos/{owner}/{repo}/releases`.
@@ -69,11 +73,12 @@ pub struct GitHubRelease {
     /// (e.g. "5.8.3 — critical login fix"). Not currently shown in
     /// the legacy UI but we keep it for parity and for future rich
     /// release-note rendering in the Vue shell.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub name: String,
 
     /// The git tag the release is attached to (e.g. `v5.8.3.2604011114`).
     /// This is what [`super::parse_tag`] regex-matches on.
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub tag_name: String,
 
     /// `true` if the maintainer ticked "This is a pre-release" on the
@@ -85,7 +90,7 @@ pub struct GitHubRelease {
     /// Markdown body the maintainer wrote in the release description.
     /// WPF feeds this straight into the MessageBox; the Vue shell will
     /// render it as Markdown once P11 lands.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub body: String,
 
     /// Binary assets attached to the release (e.g. the setup EXE).
@@ -103,6 +108,7 @@ pub struct GitHubAsset {
     /// Public HTTPS URL that serves the asset bytes. Clients prepend
     /// the proxy prefix (if any) before calling `Process.Start` on it —
     /// see WPF L169-172.
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub browser_download_url: String,
 }
 

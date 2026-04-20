@@ -1,6 +1,6 @@
 [package]
 name = "beanfun-next"
-version = "0.1.0"
+version = "6.0.0"
 description = "beanfun! Next — Rust/Tauri reimplementation of Beanfun launcher"
 authors = ["Beanfun Next contributors"]
 edition = "2021"
@@ -27,7 +27,7 @@ sha2 = "0.10"
 # Tauri core — `specta` feature wires Tauri's State / Window types into
 # the specta type-graph so `tauri-specta` can derive them. Required by
 # `tauri-specta` 2.0.0-rc.x (P10 chunk 10.1).
-tauri = { version = "2", features = ["specta"] }
+tauri = { version = "2", features = ["specta", "tray-icon"] }
 tauri-plugin-opener = "2"
 # Native file picker (open / save dialogs) — used by `pages/ManageAccount.vue`
 # (P12.2 D9) for plaintext Users.dat import / export, mirroring the WPF

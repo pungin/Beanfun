@@ -42,13 +42,11 @@
 //!   `XLarge_image` / `Large_image` / `Small_image` via
 //!   `WebClient.DownloadData(imageBaseUrl + name)`. The Tauri
 //!   webview can render `<img src="https://…">` directly with no
-//!   CSP friction (TW image host is HTTPS; HK uses HTTP, which
-//!   matches WPF's [`HK image base URL`] verbatim and still
-//!   loads in a permissive WebView2). Pushing image loads to the
-//!   frontend keeps this module pure-data and avoids a Vec<u8>
-//!   round-trip across IPC for every tile. The frontend
-//!   constructs URLs via the [`image_base_url`] helper so the
-//!   region branch lives in exactly one place.
+//!   CSP friction. Pushing image loads to the frontend keeps
+//!   this module pure-data and avoids a Vec<u8> round-trip
+//!   across IPC for every tile. The frontend constructs URLs via
+//!   the [`image_base_url`] helper so the region branch lives in
+//!   exactly one place.
 //!
 //! - **`I18n.ToSimplified(name)` skipped here**: WPF normalises
 //!   service names to Simplified Chinese inside the constructor
@@ -77,9 +75,23 @@
 //!   improvement; behaviourally WPF and beanfun-next both refuse
 //!   to advance past this point with no service list.
 //!
-//! [`HK image base URL`]:
-//!   `MainWindow.xaml.cs` L436 hardcodes `http://hk.images.beanfun.com/...`
-//!   — the launcher does not upgrade to HTTPS for HK assets.
+//! - **Image URL passthrough mirrors WPF L494** (P12.4-followup-B-fix
+//!   F3-redo): WPF `MainWindow.xaml.cs::loadImage` L494-510 has
+//!   always carried a branch — if `Service*ImageName` already
+//!   starts with `http://` / `https://` it's used as-is, only
+//!   bare filenames get the `imageBaseUrl` prefix. Frontend's
+//!   [`super::super::super::stores::game::imageUrl`] (TS side)
+//!   replicates that branch so live upstream rows (which 100%
+//!   ship full URLs against `https://images.beanfun.com/GameZone/`
+//!   as of 2026-04) render directly without our base prefix
+//!   corrupting the URL. This module's [`image_base_url`] becomes
+//!   the bare-filename fallback only — see its docblock. The
+//!   original WPF `tw.images.beanfun.com` / `hk.images.beanfun.com`
+//!   hosts have been retired by Beanfun (TW returns
+//!   `ERR_CONNECTION_TIMED_OUT`, HK returns `403`) so the legacy
+//!   CDN path is dead code anyway; the new
+//!   `images.beanfun.com/GameZone/` host is what real data points
+//!   at. Audit trail: Todo.md `P12.4-followup-B-fix` F3-redo log.
 
 use std::collections::HashMap;
 
@@ -218,20 +230,35 @@ pub struct GameInfoBundle {
 // Image base URL (region-aware)
 // -----------------------------------------------------------------------------
 
-/// Region-scoped image base URL — concat with one of the
-/// `*_image_name` fields on [`GameService`] to get a fully
-/// resolved `<img src>` URL.
+/// Region-scoped fallback image base URL — concat with the bare
+/// `*_image_name` field on [`GameService`] **only if** the field
+/// is not already a full `http(s)://` URL.
 ///
-/// Mirrors `MainWindow.xaml.cs::GameService.imageBaseUrl` (L430-437)
-/// **including** the HK `http://` scheme — WPF does not upgrade HK
-/// asset traffic to HTTPS. Tauri's WebView2 will load mixed
-/// content from `tauri://localhost` (the app origin) without
-/// blocking, so the HTTP scheme works at runtime; we preserve it
-/// for byte-for-byte URL parity with the legacy launcher.
+/// # Why this is fallback, not default
+///
+/// Live upstream `Services.ServiceList` rows (audited
+/// 2026-04 across all 12 TW services) deliver
+/// `Service{XLarge,Large,Small}ImageName` as full URLs against
+/// `https://images.beanfun.com/GameZone/<id>.{jpg,png}`. The
+/// frontend [`stores::game::imageUrl`] passes those through
+/// directly — mirroring WPF `MainWindow.xaml.cs::loadImage`
+/// (L494-510) which has always done the same. This base only
+/// kicks in when a row carries a bare filename, which we have
+/// not observed in the wild but which WPF's defensive branch
+/// continues to support; we mirror that for byte-for-byte
+/// fallback parity.
+///
+/// # Why a single host for both regions
+///
+/// The 2026 `images.beanfun.com` host serves both TW and HK
+/// content (the live JSON has no region-keyed split — both pull
+/// from `/GameZone/` under the same hostname). The
+/// [`LoginRegion`] parameter is preserved so the callable
+/// signature survives a hypothetical future re-split without
+/// downstream churn.
 pub fn image_base_url(region: LoginRegion) -> &'static str {
     match region {
-        LoginRegion::TW => "https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/",
-        LoginRegion::HK => "http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/",
+        LoginRegion::TW | LoginRegion::HK => "https://images.beanfun.com/GameZone/",
     }
 }
 
@@ -673,20 +700,31 @@ exe=Maple.exe
     // -------------------------------------------------------------------------
 
     #[test]
-    fn image_base_url_tw_uses_https() {
+    fn image_base_url_tw_returns_unified_images_host_fallback() {
+        // P12.4-followup-B-fix F3-redo: legacy WPF
+        // `tw.images.beanfun.com` is dead; live upstream rows
+        // ship full URLs against `images.beanfun.com/GameZone/`.
+        // This base is only exercised by bare-filename fallback
+        // (mirrors WPF L494's else-branch) — we point it at the
+        // same host so the fallback path resolves to a host that
+        // actually serves data.
         assert_eq!(
             image_base_url(LoginRegion::TW),
-            "https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/"
+            "https://images.beanfun.com/GameZone/"
         );
     }
 
     #[test]
-    fn image_base_url_hk_uses_http_matches_wpf() {
-        // WPF MainWindow.xaml.cs L436 hardcodes http:// for HK assets;
-        // strict parity required.
+    fn image_base_url_hk_returns_unified_images_host_fallback() {
+        // P12.4-followup-B-fix F3-redo: same single-host
+        // rationale as TW (the 2026 `images.beanfun.com` host
+        // serves HK content from the same `/GameZone/` path
+        // tree). The `LoginRegion::HK` arm exists to preserve
+        // the public signature for a future re-split, even
+        // though both arms currently return the same string.
         assert_eq!(
             image_base_url(LoginRegion::HK),
-            "http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/"
+            "https://images.beanfun.com/GameZone/"
         );
     }
 }

@@ -72,7 +72,7 @@
   "ThemeColor": "主题颜色",
   "AutoCheckUpdate": "有新版本时提示更新",
   "RunAfterLogin": "登录完成后运行游戏",
-  "MinimizeToTaskbar": "最小化到任务栏",
+  "MinimizeToTaskbar": "最小化到通知中心",
   "DisableHardwareAcceleration": "关闭硬件加速（降低 GPU 使用）",
   "MsgRestartForHardwareAccelTitle": "需要重新启动",
   "MsgRestartForHardwareAccel": "已变更硬件加速相关设置。请完全关闭 Beanfun 后再打开，主窗口才会套用 WPF 软件渲染。",
