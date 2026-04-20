@@ -423,6 +423,7 @@ describe('LoginTotp — P12.2 D2 credential persistence', () => {
       verify: '',
       method: 0,
       auto_login: false,
+      last_login_at: expect.any(String),
     })
     expect(mockSetConfig).toHaveBeenCalledWith('AccountID', 'alice')
     expect(ctx.router.currentRoute.value.path).toBe('/accounts')

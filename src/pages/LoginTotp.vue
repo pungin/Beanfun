@@ -59,8 +59,7 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ElButton, ElForm, ElIcon, ElInput } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ElButton, ElForm, ElInput } from 'element-plus'
 
 import { useAccountStore } from '../stores/account'
 import { AUTH_ACTIONS, useAuthStore } from '../stores/auth'
@@ -215,16 +214,9 @@ function goBack(): void {
 
 <template>
   <el-form class="login-totp" label-position="top" @submit.prevent="submit()">
-    <button
-      type="button"
-      class="login-totp__back"
-      :aria-label="t('Back')"
-      data-test="totp-back"
-      @click="goBack"
-    >
-      <el-icon><ArrowLeft /></el-icon>
-      <span>{{ t('Back') }}</span>
-    </button>
+    <div class="login-totp__icon-wrap">
+      <span class="material-symbols-outlined login-totp__icon">security</span>
+    </div>
 
     <header class="login-totp__header">
       <h3 class="login-totp__title">{{ t('loginTotp.title') }}</h3>
@@ -250,16 +242,20 @@ function goBack(): void {
       />
     </div>
 
-    <el-button
-      type="primary"
-      size="large"
-      class="login-totp__submit"
-      native-type="submit"
-      data-test="totp-submit"
-      :loading="submitting"
-    >
-      {{ t('Login') }}
-    </el-button>
+    <div class="login-totp__actions">
+      <button type="button" class="login-totp__back-btn" data-test="totp-back" @click="goBack">
+        {{ t('Back') }}
+      </button>
+      <el-button
+        type="primary"
+        class="login-totp__submit"
+        native-type="submit"
+        data-test="totp-submit"
+        :loading="submitting"
+      >
+        {{ t('Login') }}
+      </el-button>
+    </div>
   </el-form>
 </template>
 
@@ -268,32 +264,26 @@ function goBack(): void {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-}
-
-.login-totp__back {
-  align-self: flex-start;
-  display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
-  margin: -0.25rem 0 0 -0.5rem;
-  border: 0;
-  background: transparent;
-  color: #54443a;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 0.25rem;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
 }
 
-.login-totp__back:hover,
-.login-totp__back:focus-visible {
-  background-color: rgba(84, 68, 58, 0.08);
-  color: #2c1d14;
-  outline: none;
+.login-totp__icon-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: linear-gradient(
+    135deg,
+    var(--bf-primary-container, #ff8201),
+    var(--bf-primary, #954a00)
+  );
+  display: grid;
+  place-items: center;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--bf-primary, #954a00) 35%, transparent);
+}
+
+.login-totp__icon {
+  font-size: 32px;
+  color: var(--bf-on-primary, #fff);
 }
 
 .login-totp__header {
@@ -302,37 +292,78 @@ function goBack(): void {
 
 .login-totp__title {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: #1f1a16;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--bf-on-surface, #1f1a16);
 }
 
 .login-totp__subtitle {
   margin: 0.375rem 0 0;
   font-size: 0.8125rem;
-  color: #54443a;
+  color: var(--bf-on-surface-variant, #54443a);
 }
 
 .login-totp__cells {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, 52px);
   gap: 0.5rem;
-  justify-items: stretch;
-  margin: 0.25rem 0;
+  justify-content: center;
+  margin: 0.5rem 0;
+}
+
+.login-totp__cell :deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.6);
+  border-bottom: 2px solid var(--bf-outline, #85736a);
+  border-radius: 8px;
+  box-shadow: none;
+  height: 62px;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.login-totp__cell :deep(.el-input__wrapper:focus-within) {
+  border-bottom-color: var(--bf-primary-container, #ff8201);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bf-primary-container, #ff8201) 25%, transparent);
 }
 
 .login-totp__cell :deep(.el-input__inner) {
   text-align: center;
-  font-size: 1.25rem;
+  font-size: 1.75rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
   padding: 0;
+  height: 100%;
+}
+
+.login-totp__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.login-totp__back-btn {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font: inherit;
+  font-weight: 500;
+  color: var(--bf-on-surface, #221a11);
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.login-totp__back-btn:hover {
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .login-totp__submit {
   width: 100%;
-  margin-top: 0.5rem;
   font-weight: 700;
 }
 </style>
