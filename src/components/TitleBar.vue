@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { commands } from '../types/bindings'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -24,8 +25,18 @@ function handleDrag(e: MouseEvent): void {
   }
 }
 
-function handleMinimize(): void {
-  appWindow.minimize()
+async function handleMinimize(): Promise<void> {
+  // Delegate to backend so the `minimize_to_tray` config is honoured.
+  // The legacy `appWindow.minimize()` direct call no longer works for
+  // the post-PR-228 borderless+transparent window because Windows
+  // stops emitting the `Resized(0, 0)` signal `tray::handle_minimize_to_tray`
+  // listens for. The new command checks the config and either
+  // hides+shows-tray or falls through to a plain minimize.
+  const result = await commands.minimizeMainWindow()
+  if (result.status === 'error') {
+    console.error('[TitleBar] minimize_main_window failed:', result.error)
+    appWindow.minimize()
+  }
 }
 
 function handleClose(): void {

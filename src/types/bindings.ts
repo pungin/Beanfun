@@ -1170,6 +1170,42 @@ async openUrl(url: string) : Promise<Result<null, CommandError>> {
 }
 },
 /**
+ * Minimize the main window, honouring the `minimize_to_tray`
+ * config setting.
+ * 
+ * Driven by the custom `TitleBar` minimize button in the
+ * frontend. Replaces the legacy `appWindow.minimize()` direct call
+ * because the post-PR-228 borderless + transparent + non-resizable
+ * window no longer reliably produces the `WindowEvent::Resized(0, 0)`
+ * signal Windows used to fire on minimize, which broke the
+ * fallback path in [`crate::tray::handle_minimize_to_tray`].
+ * 
+ * Behaviour:
+ * 
+ * - If `minimize_to_tray = true` in `Config.xml` **and** the tray
+ * icon was created successfully at boot — hide the window and
+ * reveal the tray icon (delegated to [`tray::hide_to_tray`] so
+ * the side effect stays single-sourced with the window-event
+ * fallback path).
+ * - Otherwise — fall through to a normal `window.minimize()`.
+ * 
+ * # Errors
+ * 
+ * - `system.window_not_found` — the `main` webview window is not
+ * currently registered with the app handle. Should never happen
+ * in steady state (the window is created at boot).
+ * - `system.minimize_failed` — Tauri's `window.minimize()` returned
+ * an error from the underlying OS call.
+ */
+async minimizeMainWindow() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("minimize_main_window") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Read a single config value by `key`, falling back to `""` when
  * the file is missing / unreadable / the key is absent.
  * 

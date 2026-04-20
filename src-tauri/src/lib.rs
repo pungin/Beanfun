@@ -309,17 +309,24 @@ pub fn run() {
     let invoke_handler = specta_builder.invoke_handler();
 
     let storage_root_for_tray = app_state.storage_root.clone();
-    let tray_state = std::sync::Arc::new(std::sync::Mutex::new(None::<tauri::tray::TrayIconId>));
-    let tray_state_for_event = tray_state.clone();
+    let tray_state_arc =
+        std::sync::Arc::new(std::sync::Mutex::new(None::<tauri::tray::TrayIconId>));
+    let tray_state_for_setup = tray_state_arc.clone();
+    let tray_state_for_event = tray_state_arc.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
+        // Tauri-managed handle to the tray ID so commands (e.g.
+        // `system::minimize_main_window`) can drive the tray without
+        // re-discovering the ID. Same `Arc` the setup / window-event
+        // closures hold — single source of truth.
+        .manage(tray::TrayState(tray_state_arc))
         .invoke_handler(invoke_handler)
         .setup(move |app| {
             if let Some(tray_id) = tray::build_tray(app) {
-                *tray_state.lock().unwrap() = Some(tray_id);
+                *tray_state_for_setup.lock().unwrap() = Some(tray_id);
             }
             Ok(())
         })
