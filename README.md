@@ -42,6 +42,41 @@
 
 ---
 
+## 架構 (Architecture)
+
+```
+Beanfun/
+├── src/                     # Vue 3 前端
+│   ├── pages/               #   頁面元件 (Login, GameList, Settings…)
+│   ├── composables/         #   組合式函式 (useAuth, useGameLauncher…)
+│   ├── stores/              #   Pinia 狀態管理
+│   ├── services/            #   Tauri IPC 呼叫封裝
+│   ├── i18n / locales/      #   vue-i18n 多語系
+│   ├── styles/              #   全域樣式
+│   └── windows/             #   多視窗進入點 (In-App Browser)
+├── src-tauri/               # Rust 後端 (Tauri v2)
+│   ├── src/
+│   │   ├── commands/        #     IPC command handlers
+│   │   ├── core/            #     核心邏輯 (parser, crypto, version)
+│   │   └── services/        #     服務層
+│   │       ├── beanfun/     #       登入 / 帳號 / session
+│   │       ├── config/      #       XML 設定檔讀寫
+│   │       ├── game/        #       遊戲啟動 + LocaleRemulator
+│   │       ├── process/     #       視窗操作 / PostMessage
+│   │       ├── storage/     #       Users.dat 加解密 (DPAPI)
+│   │       ├── registry/    #       Windows Registry
+│   │       ├── updater/     #       自動更新檢查
+│   │       └── system/      #       系統工具 (open URL…)
+│   ├── LocaleRemulator/     #     LR 預編譯二進位檔
+│   └── tests/               #     整合測試
+├── tests/                   # 前端單元測試 (Vitest)
+├── scripts/                 # 建置 / 轉換腳本
+├── Lang/                    # WPF 時代 XAML 語系檔 → i18n 來源
+└── .github/workflows/       # CI (lint, format, test, build)
+```
+
+---
+
 ## 開發 (Development)
 
 ### 環境需求
@@ -80,9 +115,8 @@ cargo test
 ## 貢獻 (Contributing)
 
 1. 從 `code` 分支出新 feature branch。
-2. Commit 遵循 [Conventional Commits](https://www.conventionalcommits.org/)。
-3. PR 到 `code` 時會跑 CI（lint / format / typecheck / test）+ commitlint。
-4. 送 PR 前請先跑 `npm run format` + `cargo fmt`。
+2. PR 到 `code` 時會跑 CI（lint / format / typecheck / test）。
+3. 送 PR 前請先跑 `npm run format` + `cargo fmt`。
 
 ---
 
