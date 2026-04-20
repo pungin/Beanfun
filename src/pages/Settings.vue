@@ -132,6 +132,7 @@ import { useGameStore } from '../stores/game'
 import { useUiStore, type AppLocale, type LoginMethodValue, type UpdateChannel } from '../stores/ui'
 import { TOOLS_GAME_CODES } from '../constants/tools'
 import ToolsDialogStack from '../windows/ToolsDialogStack.vue'
+import TitleBar from '../components/TitleBar.vue'
 
 defineOptions({ name: 'SettingsPage' })
 
@@ -614,229 +615,234 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="settings bf-mica-bg">
-    <div class="settings__container">
-      <!-- Header -->
-      <header class="settings__header">
-        <div class="settings__header-icon" aria-hidden="true">
-          <el-icon :size="24"><SettingIcon /></el-icon>
-        </div>
-        <div class="settings__header-text">
-          <h1 class="settings__title bf-text-gradient">{{ t('Settings') }}</h1>
-          <p class="settings__subline">{{ t('settings.subtitle') }}</p>
-        </div>
-      </header>
-
-      <!-- App section -->
-      <section class="settings__section bf-glass-panel" data-test="settings-app-section">
-        <header class="settings__section-header">
-          <el-icon><User /></el-icon>
-          <span>{{ t('AppName') }}</span>
+  <main class="settings bf-glass-panel" data-window-root>
+    <TitleBar />
+    <div class="settings__scroll">
+      <div class="settings__container">
+        <!-- Header -->
+        <header class="settings__header">
+          <div class="settings__header-icon" aria-hidden="true">
+            <el-icon :size="24"><SettingIcon /></el-icon>
+          </div>
+          <div class="settings__header-text">
+            <h1 class="settings__title bf-text-gradient">{{ t('Settings') }}</h1>
+            <p class="settings__subline">{{ t('settings.subtitle') }}</p>
+          </div>
         </header>
 
-        <div class="settings__grid settings__grid--two-col">
-          <!-- Left column: Manage account + 3 selects -->
-          <div class="settings__col">
-            <div class="settings__row">
-              <el-button
-                class="bf-btn-secondary settings__inline-btn"
-                data-test="settings-manage-account"
-                @click="handleManageAccount"
-              >
-                {{ t('ManageAccount') }}
-              </el-button>
-            </div>
-
-            <div class="settings__row">
-              <label class="settings__label">{{ t('UpdateChannel') }}</label>
-              <el-select
-                :model-value="ui.updateChannel"
-                class="settings__select"
-                data-test="settings-update-channel"
-                @change="handleUpdateChannelChange"
-              >
-                <el-option
-                  v-for="opt in UPDATE_CHANNEL_OPTIONS"
-                  :key="opt.value"
-                  :value="opt.value"
-                  :label="t(opt.labelKey)"
-                />
-              </el-select>
-            </div>
-
-            <div class="settings__row">
-              <label class="settings__label">{{ t('Language') }}</label>
-              <el-select
-                :model-value="ui.language"
-                class="settings__select"
-                data-test="settings-language"
-                @change="handleLanguageChange"
-              >
-                <el-option
-                  v-for="opt in LANGUAGE_OPTIONS"
-                  :key="opt.value"
-                  :value="opt.value"
-                  :label="opt.label"
-                />
-              </el-select>
-            </div>
-
-            <div class="settings__row">
-              <label class="settings__label">{{ t('ThemeColor') }}</label>
-              <div class="settings__theme-row">
-                <el-input
-                  :model-value="ui.themeColor"
-                  class="settings__theme-input"
-                  data-test="settings-theme-input"
-                  @change="handleThemeColorChange"
-                />
-                <el-color-picker
-                  :model-value="ui.themeColor"
-                  data-test="settings-theme-picker"
-                  @change="handleThemeColorChange"
-                />
-              </div>
-            </div>
-
-            <div
-              v-if="showLoginModePanel"
-              class="settings__row"
-              data-test="settings-login-mode-row"
-            >
-              <label class="settings__label">{{ t('LoginMode') }}</label>
-              <el-select
-                :model-value="ui.loginMethod"
-                class="settings__select"
-                data-test="settings-login-mode"
-                @change="handleLoginMethodChange"
-              >
-                <el-option
-                  v-for="opt in LOGIN_METHOD_OPTIONS"
-                  :key="opt.value"
-                  :value="opt.value"
-                  :label="t(opt.labelKey)"
-                />
-              </el-select>
-            </div>
-          </div>
-
-          <!-- Right column: 4 boolean checkboxes (D4) -->
-          <div class="settings__col">
-            <div class="settings__row settings__row--checkbox">
-              <el-checkbox
-                :model-value="ui.askUpdate"
-                data-test="settings-ask-update"
-                @change="(value) => ui.setAskUpdate(Boolean(value))"
-              >
-                {{ t('AutoCheckUpdate') }}
-              </el-checkbox>
-            </div>
-
-            <div class="settings__row settings__row--checkbox">
-              <el-checkbox
-                :model-value="ui.autoStartGame"
-                data-test="settings-auto-start-game"
-                @change="(value) => ui.setAutoStartGame(Boolean(value))"
-              >
-                {{ t('RunAfterLogin') }}
-              </el-checkbox>
-            </div>
-
-            <div class="settings__row settings__row--checkbox">
-              <el-checkbox
-                :model-value="ui.minimizeToTray"
-                data-test="settings-minimize-to-tray"
-                @change="(value) => ui.setMinimizeToTray(Boolean(value))"
-              >
-                {{ t('MinimizeToTaskbar') }}
-              </el-checkbox>
-            </div>
-
-            <div class="settings__row settings__row--checkbox">
-              <el-tooltip placement="right" :content="t('settings.disableHardwareAccelerationTip')">
-                <el-checkbox
-                  :model-value="ui.disableHwAccel"
-                  data-test="settings-disable-hw-accel"
-                  @change="(value) => handleDisableHwAccelChange(Boolean(value))"
-                >
-                  {{ t('DisableHardwareAcceleration') }}
-                </el-checkbox>
-              </el-tooltip>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Game section (D5) — only when a game is selected (WPF parity: if no game, t_GamePath is empty + the section is uninteractive). -->
-      <section
-        v-if="game.selectedGame"
-        class="settings__section bf-glass-panel"
-        data-test="settings-game-section"
-      >
-        <header class="settings__section-header">
-          <el-icon><Operation /></el-icon>
-          <span>{{ t('Game') }}</span>
-        </header>
-
-        <div class="settings__grid">
-          <div class="settings__row">
-            <label class="settings__label">{{ t('GamePath') }}</label>
-            <el-input
-              :model-value="gamePath"
-              readonly
-              :placeholder="t('settings.gamePathPlaceholder')"
-              class="settings__game-path-input"
-              data-test="settings-game-path"
-              @click="pickGamePath"
-            >
-              <template #suffix>
-                <el-icon class="settings__game-path-icon"><FolderOpened /></el-icon>
-              </template>
-            </el-input>
-          </div>
+        <!-- App section -->
+        <section class="settings__section bf-glass-panel" data-test="settings-app-section">
+          <header class="settings__section-header">
+            <el-icon><User /></el-icon>
+            <span>{{ t('AppName') }}</span>
+          </header>
 
           <div class="settings__grid settings__grid--two-col">
+            <!-- Left column: Manage account + 3 selects -->
+            <div class="settings__col">
+              <div class="settings__row">
+                <el-button
+                  class="bf-btn-secondary settings__inline-btn"
+                  data-test="settings-manage-account"
+                  @click="handleManageAccount"
+                >
+                  {{ t('ManageAccount') }}
+                </el-button>
+              </div>
+
+              <div class="settings__row">
+                <label class="settings__label">{{ t('UpdateChannel') }}</label>
+                <el-select
+                  :model-value="ui.updateChannel"
+                  class="settings__select"
+                  data-test="settings-update-channel"
+                  @change="handleUpdateChannelChange"
+                >
+                  <el-option
+                    v-for="opt in UPDATE_CHANNEL_OPTIONS"
+                    :key="opt.value"
+                    :value="opt.value"
+                    :label="t(opt.labelKey)"
+                  />
+                </el-select>
+              </div>
+
+              <div class="settings__row">
+                <label class="settings__label">{{ t('Language') }}</label>
+                <el-select
+                  :model-value="ui.language"
+                  class="settings__select"
+                  data-test="settings-language"
+                  @change="handleLanguageChange"
+                >
+                  <el-option
+                    v-for="opt in LANGUAGE_OPTIONS"
+                    :key="opt.value"
+                    :value="opt.value"
+                    :label="opt.label"
+                  />
+                </el-select>
+              </div>
+
+              <div class="settings__row">
+                <label class="settings__label">{{ t('ThemeColor') }}</label>
+                <div class="settings__theme-row">
+                  <el-input
+                    :model-value="ui.themeColor"
+                    class="settings__theme-input"
+                    data-test="settings-theme-input"
+                    @change="handleThemeColorChange"
+                  />
+                  <el-color-picker
+                    :model-value="ui.themeColor"
+                    data-test="settings-theme-picker"
+                    @change="handleThemeColorChange"
+                  />
+                </div>
+              </div>
+
+              <div
+                v-if="showLoginModePanel"
+                class="settings__row"
+                data-test="settings-login-mode-row"
+              >
+                <label class="settings__label">{{ t('LoginMode') }}</label>
+                <el-select
+                  :model-value="ui.loginMethod"
+                  class="settings__select"
+                  data-test="settings-login-mode"
+                  @change="handleLoginMethodChange"
+                >
+                  <el-option
+                    v-for="opt in LOGIN_METHOD_OPTIONS"
+                    :key="opt.value"
+                    :value="opt.value"
+                    :label="t(opt.labelKey)"
+                  />
+                </el-select>
+              </div>
+            </div>
+
+            <!-- Right column: 4 boolean checkboxes (D4) -->
             <div class="settings__col">
               <div class="settings__row settings__row--checkbox">
-                <el-tooltip placement="right" :content="t('settings.tradLoginTip')">
-                  <el-checkbox
-                    :model-value="ui.tradLogin"
-                    data-test="settings-trad-login"
-                    @change="(value) => ui.setTradLogin(Boolean(value))"
-                  >
-                    {{ t('TraditionalLoginMode') }}
-                  </el-checkbox>
-                </el-tooltip>
+                <el-checkbox
+                  :model-value="ui.askUpdate"
+                  data-test="settings-ask-update"
+                  @change="(value) => ui.setAskUpdate(Boolean(value))"
+                >
+                  {{ t('AutoCheckUpdate') }}
+                </el-checkbox>
               </div>
 
               <div class="settings__row settings__row--checkbox">
-                <el-tooltip placement="right" :content="t('settings.killPatcherTip')">
+                <el-checkbox
+                  :model-value="ui.autoStartGame"
+                  data-test="settings-auto-start-game"
+                  @change="(value) => ui.setAutoStartGame(Boolean(value))"
+                >
+                  {{ t('RunAfterLogin') }}
+                </el-checkbox>
+              </div>
+
+              <div class="settings__row settings__row--checkbox">
+                <el-checkbox
+                  :model-value="ui.minimizeToTray"
+                  data-test="settings-minimize-to-tray"
+                  @change="(value) => ui.setMinimizeToTray(Boolean(value))"
+                >
+                  {{ t('MinimizeToTaskbar') }}
+                </el-checkbox>
+              </div>
+
+              <div class="settings__row settings__row--checkbox">
+                <el-tooltip
+                  placement="right"
+                  :content="t('settings.disableHardwareAccelerationTip')"
+                >
                   <el-checkbox
-                    :model-value="ui.autoKillPatcher"
-                    data-test="settings-auto-kill-patcher"
-                    @change="(value) => ui.setAutoKillPatcher(Boolean(value))"
+                    :model-value="ui.disableHwAccel"
+                    data-test="settings-disable-hw-accel"
+                    @change="(value) => handleDisableHwAccelChange(Boolean(value))"
                   >
-                    {{ t('KillPatcher') }}
+                    {{ t('DisableHardwareAcceleration') }}
                   </el-checkbox>
                 </el-tooltip>
               </div>
             </div>
+          </div>
+        </section>
 
-            <div class="settings__col">
-              <div class="settings__row settings__row--checkbox">
-                <el-tooltip placement="right" :content="t('settings.skipPlayWindowTip')">
-                  <el-checkbox
-                    :model-value="ui.skipPlayWnd"
-                    data-test="settings-skip-play-wnd"
-                    @change="(value) => ui.setSkipPlayWnd(Boolean(value))"
-                  >
-                    {{ t('SkipPlayWindow') }}
-                  </el-checkbox>
-                </el-tooltip>
+        <!-- Game section (D5) — only when a game is selected (WPF parity: if no game, t_GamePath is empty + the section is uninteractive). -->
+        <section
+          v-if="game.selectedGame"
+          class="settings__section bf-glass-panel"
+          data-test="settings-game-section"
+        >
+          <header class="settings__section-header">
+            <el-icon><Operation /></el-icon>
+            <span>{{ t('Game') }}</span>
+          </header>
+
+          <div class="settings__grid">
+            <div class="settings__row">
+              <label class="settings__label">{{ t('GamePath') }}</label>
+              <el-input
+                :model-value="gamePath"
+                readonly
+                :placeholder="t('settings.gamePathPlaceholder')"
+                class="settings__game-path-input"
+                data-test="settings-game-path"
+                @click="pickGamePath"
+              >
+                <template #suffix>
+                  <el-icon class="settings__game-path-icon"><FolderOpened /></el-icon>
+                </template>
+              </el-input>
+            </div>
+
+            <div class="settings__grid settings__grid--two-col">
+              <div class="settings__col">
+                <div class="settings__row settings__row--checkbox">
+                  <el-tooltip placement="right" :content="t('settings.tradLoginTip')">
+                    <el-checkbox
+                      :model-value="ui.tradLogin"
+                      data-test="settings-trad-login"
+                      @change="(value) => ui.setTradLogin(Boolean(value))"
+                    >
+                      {{ t('TraditionalLoginMode') }}
+                    </el-checkbox>
+                  </el-tooltip>
+                </div>
+
+                <div class="settings__row settings__row--checkbox">
+                  <el-tooltip placement="right" :content="t('settings.killPatcherTip')">
+                    <el-checkbox
+                      :model-value="ui.autoKillPatcher"
+                      data-test="settings-auto-kill-patcher"
+                      @change="(value) => ui.setAutoKillPatcher(Boolean(value))"
+                    >
+                      {{ t('KillPatcher') }}
+                    </el-checkbox>
+                  </el-tooltip>
+                </div>
               </div>
 
-              <div v-if="showToolsButton" class="settings__row" data-test="settings-tools-row">
-                <!--
+              <div class="settings__col">
+                <div class="settings__row settings__row--checkbox">
+                  <el-tooltip placement="right" :content="t('settings.skipPlayWindowTip')">
+                    <el-checkbox
+                      :model-value="ui.skipPlayWnd"
+                      data-test="settings-skip-play-wnd"
+                      @change="(value) => ui.setSkipPlayWnd(Boolean(value))"
+                    >
+                      {{ t('SkipPlayWindow') }}
+                    </el-checkbox>
+                  </el-tooltip>
+                </div>
+
+                <div v-if="showToolsButton" class="settings__row" data-test="settings-tools-row">
+                  <!--
                   P12.5 D7: WPF parity gate — the Tools button is only
                   rendered for the three tools-bearing game codes
                   (`MainWindow.xaml.cs` L621 / L630-633 hides it for
@@ -845,65 +851,82 @@ onMounted(() => {
                   cleanly when the button is absent (mirrors WPF
                   `Visibility.Collapsed` semantics, not `Hidden`).
                 -->
-                <el-button
-                  class="bf-btn-secondary settings__inline-btn"
-                  data-test="settings-tools"
-                  @click="handleTools"
-                >
-                  {{ t('Tools') }}
-                </el-button>
+                  <el-button
+                    class="bf-btn-secondary settings__inline-btn"
+                    data-test="settings-tools"
+                    @click="handleTools"
+                  >
+                    {{ t('Tools') }}
+                  </el-button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Game section empty banner (no selected game) — informational, mirrors WPF's empty t_GamePath fallback semantically. -->
-      <section
-        v-else
-        class="settings__section bf-glass-panel settings__section--empty"
-        data-test="settings-game-section-empty"
-      >
-        <el-icon class="settings__empty-icon" :size="20"><InfoFilled /></el-icon>
-        <p class="settings__empty-text">{{ t('settings.gameSectionEmpty') }}</p>
-      </section>
-
-      <!-- Footer: Back button -->
-      <footer class="settings__footer">
-        <el-button
-          class="bf-btn-secondary settings__back-btn"
-          data-test="settings-back"
-          @click="handleBack"
+        <!-- Game section empty banner (no selected game) — informational, mirrors WPF's empty t_GamePath fallback semantically. -->
+        <section
+          v-else
+          class="settings__section bf-glass-panel settings__section--empty"
+          data-test="settings-game-section-empty"
         >
-          <el-icon><ArrowLeft /></el-icon>
-          <span>{{ t('Back') }}</span>
-        </el-button>
-      </footer>
+          <el-icon class="settings__empty-icon" :size="20"><InfoFilled /></el-icon>
+          <p class="settings__empty-text">{{ t('settings.gameSectionEmpty') }}</p>
+        </section>
 
-      <!-- P12.5 D7: Tools dialog stack — same wrapper component the
+        <!-- Footer: Back button -->
+        <footer class="settings__footer">
+          <el-button
+            class="bf-btn-secondary settings__back-btn"
+            data-test="settings-back"
+            @click="handleBack"
+          >
+            <el-icon><ArrowLeft /></el-icon>
+            <span>{{ t('Back') }}</span>
+          </el-button>
+        </footer>
+
+        <!-- P12.5 D7: Tools dialog stack — same wrapper component the
            AccountList page mounts. See `pages/AccountList.vue`'s
            ToolsDialogStack mount comment + `windows/ToolsDialogStack.vue`
            top docblock for the full design discussion. The wrapper
            mounts unconditionally so its internal dialog mounts can
            play their open transitions on first open; per-dialog
            visibility is owned inside the wrapper. -->
-      <ToolsDialogStack ref="toolsDialogRef" />
+        <ToolsDialogStack ref="toolsDialogRef" />
+      </div>
     </div>
   </main>
 </template>
 
 <style scoped>
 .settings {
-  box-sizing: border-box;
-  min-height: 100vh;
-  padding: 2.5rem 1.5rem;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.45) 100%),
+    radial-gradient(
+      1200px 800px at 10% -10%,
+      color-mix(in srgb, var(--bf-primary-container) 30%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 700px at 110% 110%,
+      color-mix(in srgb, var(--bf-primary) 22%, transparent) 0%,
+      transparent 55%
+    ),
+    linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%);
+}
+
+.settings__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
 }
 
 .settings__container {
   width: 100%;
-  max-width: 880px;
   display: flex;
   flex-direction: column;
   gap: 1rem;
