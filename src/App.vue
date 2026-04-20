@@ -116,7 +116,7 @@ onMounted(async () => {
   font-size: 14px;
   line-height: 1.5;
   color: #1f2329;
-  background-color: #f5f6f8;
+  background-color: transparent;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -132,5 +132,82 @@ body,
   padding: 0;
   height: 100%;
   width: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* ---- Native app feel: no text selection, no right-click menu ---- */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow selection inside actual input / textarea elements */
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ---- Scrollbar — thin, rounded, matches mockup design system ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* ---- Element Plus MessageBox — glass-style override ---- */
+.el-overlay {
+  background: rgba(0, 0, 0, 0.35) !important;
+  backdrop-filter: blur(4px);
+}
+
+.el-message-box {
+  border-radius: var(--bf-radius-panel, 12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.18),
+    0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  padding: 1.25rem !important;
+}
+
+.el-message-box__header {
+  padding: 0 0 0.75rem !important;
+}
+
+.el-message-box__title {
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+}
+
+.el-message-box__content {
+  padding: 0 !important;
+  font-size: 0.875rem !important;
+}
+
+.el-message-box__btns {
+  padding: 1rem 0 0 !important;
+}
+
+.el-message-box__btns .el-button--primary {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--bf-primary-container, #ff8201) 85%, white 15%),
+    color-mix(in srgb, var(--bf-primary, #954a00) 92%, black 8%)
+  ) !important;
+  border-color: color-mix(in srgb, var(--bf-primary, #954a00) 50%, transparent) !important;
+  color: var(--bf-on-primary, #fff) !important;
+  border-radius: var(--bf-radius-button, 8px) !important;
+  font-weight: 600 !important;
 }
 </style>
