@@ -106,17 +106,17 @@ jobs:
         run: |
           $semVer = "${{ steps.prep_version.outputs.semantic_version }}"
 
-          $cargo = Get-Content src-tauri/Cargo.toml -Raw
+          $cargo = Get-Content src-tauri/Cargo.toml -Raw -Encoding UTF8
           $cargo = $cargo -replace '(?m)^version\s*=\s*"[\d.]+"', "version = `"$semVer`""
-          Set-Content src-tauri/Cargo.toml $cargo -NoNewline
+          [System.IO.File]::WriteAllText("src-tauri/Cargo.toml", $cargo)
 
-          $tauri = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
-          $tauri.version = $semVer
-          $tauri | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
+          $tauri = Get-Content src-tauri/tauri.conf.json -Raw -Encoding UTF8
+          $tauri = $tauri -replace '"version"\s*:\s*"[\d.]+"', "`"version`": `"$semVer`""
+          [System.IO.File]::WriteAllText("src-tauri/tauri.conf.json", $tauri)
 
-          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
-          $pkg.version = $semVer
-          $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
+          $pkg = Get-Content package.json -Raw -Encoding UTF8
+          $pkg = $pkg -replace '"version"\s*:\s*"[\d.]+"', "`"version`": `"$semVer`""
+          [System.IO.File]::WriteAllText("package.json", $pkg)
 
       - name: Build Tauri application (standalone exe)
         run: npm run tauri build -- --no-bundle
@@ -145,9 +145,15 @@ jobs:
           $repoUrl = "${{ github.server_url }}/${{ github.repository }}"
 
           $lastRelease = gh api repos/${{ github.repository }}/releases --paginate 2>$null | ConvertFrom-Json | Sort-Object created_at -Descending | Select-Object -First 1
-          $range = if ($lastRelease) { "$($lastRelease.tag_name)..HEAD" } else { "-n 30" }
 
-          $commits = git log $range --pretty=format:"- [%h]($repoUrl/commit/%H) %s - %an (%ad)" --date=short --no-merges
+          $logArgs = @('log', '--pretty=format:"- [%h](' + $repoUrl + '/commit/%H) %s - %an (%ad)"', '--date=short', '--no-merges')
+          if ($lastRelease) {
+              $logArgs += "$($lastRelease.tag_name)..HEAD"
+          } else {
+              $logArgs += '-n'
+              $logArgs += '30'
+          }
+          $commits = & git @logArgs
 
           $commitCount = if ($commits) { ($commits -split "`n").Count } else { 0 }
           $commitsText = if ($commits) { $commits -join "`n" } else { "No commits found" }
