@@ -452,9 +452,7 @@ impl From<LoginError> for CommandError {
                 CommandError::new("auth.gamepass_unsupported_region", message)
             }
             LoginError::DeviceRegistrationRequired {
-                poll_url,
-                param,
-                ..
+                poll_url, param, ..
             } => CommandError::new("auth.device_registration_required", message).with_details(
                 json!({
                     "poll_url": poll_url,
@@ -1092,7 +1090,10 @@ mod from_impls_tests {
             details.get("login_token").is_none(),
             "login_token must not leak to frontend: {details}",
         );
-        assert_eq!(details.get("poll_url"), Some(&json!("https://beanfun.com/poll")));
+        assert_eq!(
+            details.get("poll_url"),
+            Some(&json!("https://beanfun.com/poll"))
+        );
         assert_eq!(details.get("param"), Some(&json!("some_param")));
     }
 
