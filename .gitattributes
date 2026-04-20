@@ -1,0 +1,10 @@
+# Force LF line endings for all text files, regardless of OS.
+# Prevents CRLF issues in CI (rustfmt, prettier) on Windows runners.
+* text=auto eol=lf
+
+# Ensure these are always treated as binary (no line-ending conversion).
+*.png binary
+*.ico binary
+*.dll binary
+*.exe binary
+*.xml binary
