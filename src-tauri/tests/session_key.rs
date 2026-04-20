@@ -9,7 +9,7 @@ use beanfun_lib::services::beanfun::{
     login::get_session_key, BeanfunClient, ClientConfig, Endpoints, LoginError, LoginRegion,
 };
 use url::Url;
-use wiremock::matchers::{header, method, path, query_param};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Build a [`BeanfunClient`] whose three endpoint bases all point at
