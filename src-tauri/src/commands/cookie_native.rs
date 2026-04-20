@@ -122,3 +122,46 @@ pub fn seed_cookies_native<R: tauri::Runtime>(
 
     total
 }
+
+/// Register a `NewWindowRequested` handler on the WebView2 instance
+/// that redirects popup requests to navigate within the same window.
+pub fn register_new_window_handler<R: tauri::Runtime>(window: &WebviewWindow<R>) {
+    let result = window.with_webview(|webview| unsafe {
+        use webview2_com::NewWindowRequestedEventHandler;
+
+        let core = webview.controller().CoreWebView2().expect("CoreWebView2");
+
+        let core_clone = core.clone();
+        let handler = NewWindowRequestedEventHandler::create(Box::new(move |_sender, args| {
+            if let Some(args) = args {
+                let mut uri = wv2_windows_core::PWSTR::null();
+                args.Uri(&mut uri)?;
+                if let Ok(uri_str) = uri.to_string() {
+                    if !uri_str.is_empty() {
+                        let wide: Vec<u16> =
+                            uri_str.encode_utf16().chain(std::iter::once(0)).collect();
+                        core_clone.Navigate(PCWSTR(wide.as_ptr()))?;
+                    }
+                }
+                args.SetHandled(true)?;
+            }
+            Ok(())
+        }));
+
+        let mut token: i64 = 0;
+        let _ = core.add_NewWindowRequested(&handler, &mut token);
+
+        tracing::info!(
+            step = "NativeHandler.NewWindowRequested",
+            "registered NewWindowRequested handler"
+        );
+    });
+
+    if let Err(e) = result {
+        tracing::warn!(
+            step = "NativeHandler.Failed",
+            error = ?e,
+            "failed to register NewWindowRequested handler"
+        );
+    }
+}

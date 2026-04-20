@@ -341,6 +341,7 @@ async fn open_url_in_webview<R: tauri::Runtime>(
             if url == "about:blank" {
                 return;
             }
+
             // Idempotent: only the first page-load callback wins
             // the race against the safety timer. Subsequent
             // navigations within the same window (in-page link
@@ -382,13 +383,19 @@ async fn open_url_in_webview<R: tauri::Runtime>(
 
     // Seed cookies via native WebView2 COM API, then navigate.
     #[cfg(target_os = "windows")]
-    if let Some(ref client) = client_opt {
-        let seeded = super::cookie_native::seed_cookies_native(&window, client);
-        tracing::info!(
-            step = "InAppBrowser.NativeSeed",
-            seeded = seeded,
-            "native cookie seeding complete; navigating to target"
-        );
+    {
+        // Register NewWindowRequested handler — redirect popups to
+        // navigate within the same window (WPF parity).
+        super::cookie_native::register_new_window_handler(&window);
+
+        if let Some(ref client) = client_opt {
+            let seeded = super::cookie_native::seed_cookies_native(&window, client);
+            tracing::info!(
+                step = "InAppBrowser.NativeSeed",
+                seeded = seeded,
+                "native cookie seeding complete; navigating to target"
+            );
+        }
     }
 
     // Brief yield to let the cookie manager flush.
