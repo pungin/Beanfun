@@ -9,6 +9,7 @@
 
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import TitleBar from '../components/TitleBar.vue'
 import { useConfigStore } from '../stores/config'
 import type { LoginRegion } from '../types/bindings'
@@ -27,6 +28,15 @@ const isRegionPage = computed(() => route.name === 'login-region')
 async function toggleRegion(): Promise<void> {
   const next: LoginRegion = currentRegion.value === 'TW' ? 'HK' : 'TW'
   await config.set('loginRegion', next)
+
+  // Close any open GamePass window
+  try {
+    const gpWin = await WebviewWindow.getByLabel('gamepass-login')
+    if (gpWin) await gpWin.close()
+  } catch {
+    /* Window may not exist — safe to ignore */
+  }
+
   // Navigate back to id-pass so any active QR/GamePass session is abandoned
   if (route.path !== '/login/id-pass') {
     await router.replace('/login/id-pass')
@@ -63,7 +73,7 @@ function handleOpenAbout(): void {
       </button>
     </TitleBar>
     <div class="login-shell__body">
-      <RouterView />
+      <RouterView :key="currentRegion" />
     </div>
   </section>
 </template>
