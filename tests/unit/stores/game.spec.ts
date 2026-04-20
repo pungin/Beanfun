@@ -97,9 +97,7 @@ describe('useGameStore — pure helpers (no Pinia)', () => {
     // Live upstream rows ship full URLs (covered below); this
     // case only fires if Beanfun ever regresses to the legacy
     // bare-name shape. Base must match Rust `image_base_url`.
-    expect(imageUrl('610074.jpg', 'TW')).toBe(
-      'https://images.beanfun.com/GameZone/610074.jpg',
-    )
+    expect(imageUrl('610074.jpg', 'TW')).toBe('https://images.beanfun.com/GameZone/610074.jpg')
   })
 
   it('imageUrl falls back to the unified images.beanfun.com base for an HK bare filename', () => {

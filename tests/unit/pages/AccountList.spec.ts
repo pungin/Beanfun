@@ -2151,9 +2151,7 @@ describe('AccountList page', () => {
      * surfaces here as a red test rather than silently 404'ing in
      * the WebView.
      */
-    expect(img.attributes('src')).toBe(
-      'https://images.beanfun.com/GameZone/610074_small.jpg',
-    )
+    expect(img.attributes('src')).toBe('https://images.beanfun.com/GameZone/610074_small.jpg')
     expect(img.attributes('alt')).toBe('MapleStory TW')
   })
 
