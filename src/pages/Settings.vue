@@ -533,19 +533,12 @@ function handleTools(): void {
 
 /**
  * `disableHardwareAcceleration` toggle handler. WPF L213-222 shows
- * a `MessageBox.Show(MsgRestartForHardwareAccel,
- * MsgRestartForHardwareAccelTitle, OK, Information)` after writing
- * the new value to Config — the user has to fully restart the app
- * for the WPF software-rendering switch to take effect.
+ * a restart prompt after writing the new value to Config.
  *
- * The SPA's WebView does not directly honour the same software
- * rendering flag (Tauri uses WebView2 / WebKit which manage their
- * own GPU usage), but we still preserve the toast so the WPF
- * Config value semantics carry over for any user who shares
- * `Config.xml` between both clients (the WPF process re-reads the
- * value on next boot and applies it). Future SPA work could route
- * the flag into Tauri's CLI flags (e.g. `--disable-gpu`) — out of
- * scope for P12.4.
+ * The SPA now honours this flag at startup via
+ * `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--disable-gpu` (set in
+ * `lib.rs::run()` before the WebView2 runtime initialises).
+ * A full restart is still required for the change to take effect.
  */
 async function handleDisableHwAccelChange(value: boolean): Promise<void> {
   await ui.setDisableHwAccel(value)
@@ -553,15 +546,6 @@ async function handleDisableHwAccelChange(value: boolean): Promise<void> {
     await ElMessageBox.alert(
       t('MsgRestartForHardwareAccel'),
       t('MsgRestartForHardwareAccelTitle'),
-      /*
-       * `confirmButtonText` deliberately defaults to Element
-       * Plus's built-in label ("確定" / "OK" depending on the
-       * element-plus locale registered in `i18n/index.ts`).
-       * The WPF MessageBox uses the OS-level default button text
-       * which is locale-aware in the same way; reusing the ELP
-       * default keeps both clients aligned without us having to
-       * add a one-off `OK` resource key WPF doesn't have.
-       */
       { type: 'info' },
     )
   } catch {

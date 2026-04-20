@@ -303,6 +303,29 @@ pub fn run() {
         std::process::exit(1);
     });
 
+    // Read `disableHardwareAcceleration` from Config.xml before the
+    // WebView2 runtime initialises. WPF does the same in
+    // `WebBrowser.xaml.cs` / `GamePassBrowser.xaml.cs` via
+    // `CoreWebView2EnvironmentOptions.AdditionalBrowserArguments`.
+    // Tauri/wry reads `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` at
+    // WebView2 environment creation time — setting it here (before
+    // `tauri::Builder::default()`) is the equivalent.
+    #[cfg(target_os = "windows")]
+    {
+        let config_path = storage_root.join("Config.xml");
+        let disable_hw_accel =
+            services::config::get_value_sync(&config_path, "disableHardwareAcceleration")
+                .unwrap_or_default()
+                .eq_ignore_ascii_case("true");
+        if disable_hw_accel {
+            std::env::set_var(
+                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+                "--disable-gpu --disable-gpu-compositing",
+            );
+            tracing::info!("hardware acceleration disabled via Config.xml");
+        }
+    }
+
     let app_state = AppState::new(storage_root);
     let specta_builder = commands::build_specta_builder::<tauri::Wry>();
     export_specta_bindings(&specta_builder);
