@@ -31,7 +31,7 @@
  * picker without triggering the redirect again.
  */
 
-import { computed, onMounted, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useConfigStore } from '../stores/config'
@@ -43,16 +43,6 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const config = useConfigStore()
-
-/**
- * Skip the region picker if a region is already saved — go
- * straight to the login form. First-launch users see the picker.
- */
-onMounted(() => {
-  if (config.get('loginRegion')) {
-    void router.replace('/login/id-pass')
-  }
-})
 
 /**
  * Tile descriptors. Kept declarative so the template stays a flat
