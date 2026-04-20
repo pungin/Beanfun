@@ -298,6 +298,7 @@ mod imp {
                 verify: String::new(),
                 method: 0,
                 auto_login: false,
+                last_login_at: None,
             }
         }
 
@@ -625,6 +626,7 @@ mod tests {
             verify: "vtoken".into(),
             method: 2,
             auto_login: true,
+            last_login_at: None,
         };
         let json = serde_json::to_string(&original).expect("serialize");
         assert!(json.contains("plaintext_pw"), "password must pass through");

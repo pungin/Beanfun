@@ -163,6 +163,7 @@ describe('useAccountStore — saveLoginCredentials (WPF SaveLoginCredentials par
       verify: '',
       method: 0,
       auto_login: false,
+      last_login_at: expect.any(String),
     })
   })
 

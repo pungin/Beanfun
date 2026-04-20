@@ -2071,7 +2071,13 @@ method: number;
 /**
  * Auto-login flag — `autoLoginList[i]` in WPF; defaults to false.
  */
-auto_login: boolean }
+auto_login: boolean; 
+/**
+ * ISO 8601 timestamp of the last successful login. Not present
+ * in the WPF schema — new field, defaults to `None` so existing
+ * Users.dat files deserialize without error.
+ */
+last_login_at?: string | null }
 /**
  * Result of [`get_accounts`]: the sorted account list plus the optional
  * quota notice.

@@ -87,6 +87,7 @@ fn sample_records() -> Records {
             verify: String::new(),
             method: 1,
             auto_login: true,
+            last_login_at: None,
         },
         Account {
             region: "HK".to_string(),
@@ -96,6 +97,7 @@ fn sample_records() -> Records {
             verify: "vrf-bob".to_string(),
             method: 2,
             auto_login: false,
+            last_login_at: None,
         },
     ])
 }

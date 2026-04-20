@@ -458,6 +458,24 @@ function regionLabel(region: string): string {
   return region
 }
 
+/**
+ * Format an ISO 8601 timestamp to a short local date-time string.
+ */
+function formatLoginTime(iso: string): string {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
+
 /* --------------- back navigation --------------- */
 
 /**
@@ -670,7 +688,11 @@ function handleBack(): void {
                 </span>
               </div>
               <div class="manage__cell-last">
-                {{ t('manageAccount.lastLoginUnknown') }}
+                {{
+                  row.last_login_at
+                    ? formatLoginTime(row.last_login_at)
+                    : t('manageAccount.lastLoginUnknown')
+                }}
               </div>
               <div class="manage__cell-actions">
                 <button

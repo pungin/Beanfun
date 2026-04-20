@@ -218,6 +218,7 @@ export const useAccountStore = defineStore('account', () => {
       verify,
       method: input.method,
       auto_login: input.autoLogin,
+      last_login_at: new Date().toISOString(),
     }
     return saveAccount(account)
   }
