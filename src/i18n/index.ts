@@ -105,6 +105,7 @@ export function createAppI18n() {
     messages: i18nMessages,
     missingWarn: isDev,
     fallbackWarn: isDev,
+    warnHtmlMessage: false,
   })
 }
 
