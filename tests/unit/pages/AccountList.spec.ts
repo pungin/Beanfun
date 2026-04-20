@@ -194,8 +194,9 @@ vi.mock('@element-plus/icons-vue', () => {
     Plus: stub('PlusStub'),
     Refresh: stub('RefreshStub'),
     Service: stub('ServiceStub'),
-    Setting: stub('SettingStub'),
+    Iphone: stub('IphoneStub'),
     SwitchButton: stub('SwitchButtonStub'),
+    Wallet: stub('WalletStub'),
     User: stub('UserStub'),
     VideoPlay: stub('VideoPlayStub'),
     /*
@@ -222,7 +223,9 @@ vi.mock('@element-plus/icons-vue', () => {
  * element, animation timing) is intentionally out of scope for
  * unit tests — those would belong in an E2E suite.
  */
-let capturedOnEnd: ((event: { oldIndex?: number; newIndex?: number }) => void) | null = null
+let capturedOnEnd:
+  | ((event: { oldIndex?: number; newIndex?: number; item: HTMLElement; from: HTMLElement }) => void)
+  | null = null
 
 vi.mock('sortablejs', () => ({
   default: {
@@ -1596,7 +1599,7 @@ describe('AccountList page', () => {
      * The page's @end handler receives `{ oldIndex, newIndex }`
      * and splices the Pinia array in place before persisting.
      */
-    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(structuredClone(POPULATED_LIST)))
 
     const ctx = buildHarness()
     useAuthStore().session = FAKE_SESSION
@@ -1619,7 +1622,14 @@ describe('AccountList page', () => {
      * producing [sid-2, sid-3, sid-1].
      */
     expect(capturedOnEnd).not.toBeNull()
-    capturedOnEnd!({ oldIndex: 0, newIndex: 2 })
+    const fakeFrom = document.createElement('ul')
+    for (let i = 0; i < 3; i++) fakeFrom.appendChild(document.createElement('li'))
+    capturedOnEnd!({
+      oldIndex: 0,
+      newIndex: 2,
+      item: fakeFrom.children[0] as HTMLElement,
+      from: fakeFrom,
+    })
     await flushPromises()
 
     /*
@@ -1657,7 +1667,7 @@ describe('AccountList page', () => {
      * (bypassing `configStore.set` → `wrapCommand` → toast) so
      * the user sees nothing.
      */
-    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(structuredClone(POPULATED_LIST)))
     vi.mocked(commands.setConfig).mockReturnValueOnce(
       err({ code: 'config.write_failed', message: 'disk full', details: null }),
     )
@@ -1672,7 +1682,14 @@ describe('AccountList page', () => {
      * index 0. The handler splices the array to [sid-2, sid-1, sid-3].
      */
     expect(capturedOnEnd).not.toBeNull()
-    capturedOnEnd!({ oldIndex: 1, newIndex: 0 })
+    const fakeFrom = document.createElement('ul')
+    for (let i = 0; i < 3; i++) fakeFrom.appendChild(document.createElement('li'))
+    capturedOnEnd!({
+      oldIndex: 1,
+      newIndex: 0,
+      item: fakeFrom.children[1] as HTMLElement,
+      from: fakeFrom,
+    })
     await flushPromises()
 
     /* The IPC fired (we asked the backend to persist). */
@@ -1684,6 +1701,7 @@ describe('AccountList page', () => {
      * persist failure — the WPF behaviour is identical, the user
      * keeps the drag result and the next refresh reconciles).
      */
+    const account = useAccountStore()
     expect(account.serviceAccounts.map((a) => a.sid)).toEqual(['sid-2', 'sid-1', 'sid-3'])
     /*
      * Cache was NOT mutated since the IPC failed — mirrors the

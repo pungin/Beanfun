@@ -217,6 +217,13 @@ const DYNAMIC_KEY_CONSUMERS: readonly DynamicConsumer[] = [
     reason: 'Region tile hint key is read dynamically from TILES[i].hintKey.',
     usedBy: 'src/pages/LoginRegionSelection.vue::TILES',
   },
+  {
+    kind: 'prefix',
+    prefix: 'titleBar.',
+    reason:
+      'Resolved at runtime from route.meta.titleKey in TitleBar.vue (e.g. route meta sets titleKey to "titleBar.regionSelection").',
+    usedBy: 'src/components/TitleBar.vue::titleText computed',
+  },
 ]
 
 function isCoveredByDynamicConsumer(path: string): boolean {
