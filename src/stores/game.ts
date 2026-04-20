@@ -170,10 +170,11 @@ export function imageUrl(name: string, region: LoginRegion): string {
   if (name.startsWith('http://') || name.startsWith('https://')) {
     return name
   }
-  const base =
-    region === 'TW'
-      ? 'https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/'
-      : 'http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/'
+  // Unified host — both TW and HK images are served from
+  // images.beanfun.com/GameZone/ as of 2026. The `region` param
+  // is kept so a future host re-split is a one-line change.
+  void region
+  const base = 'https://images.beanfun.com/GameZone/'
   return `${base}${name}`
 }
 

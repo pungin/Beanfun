@@ -98,7 +98,7 @@ describe('useGameStore — pure helpers (no Pinia)', () => {
     // case only fires if Beanfun ever regresses to the legacy
     // bare-name shape. Base must match Rust `image_base_url`.
     expect(imageUrl('610074.jpg', 'TW')).toBe(
-      'https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/610074.jpg',
+      'https://images.beanfun.com/GameZone/610074.jpg',
     )
   })
 
@@ -107,7 +107,7 @@ describe('useGameStore — pure helpers (no Pinia)', () => {
     // `images.beanfun.com`); the HK arm exists to lock
     // behaviour parity in case of a future host re-split.
     expect(imageUrl('610074.jpg', 'HK')).toBe(
-      'http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/610074.jpg',
+      'https://images.beanfun.com/GameZone/610074.jpg',
     )
   })
 
