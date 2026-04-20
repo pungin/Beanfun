@@ -13,8 +13,11 @@
     "windows": [
       {
         "title": "Beanfun",
-        "width": 720,
-        "height": 720
+        "width": 560,
+        "height": 480,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false
       }
     ],
     "security": {
