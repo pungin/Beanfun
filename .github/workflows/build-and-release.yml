@@ -107,7 +107,14 @@ jobs:
           $semVer = "${{ steps.prep_version.outputs.semantic_version }}"
 
           $cargo = Get-Content src-tauri/Cargo.toml -Raw -Encoding UTF8
-          $cargo = $cargo -replace '(?m)^version\s*=\s*"[\d.]+"', "version = `"$semVer`""
+          # Only replace the `version = "..."` line inside the [package] section.
+          # The previous `(?m)^version\s*=\s*"[\d.]+"` pattern also matched the
+          # top-level `version` key of explicit-table dependencies such as
+          # `[target.'cfg(windows)'.dependencies.wv2-windows-core]`, which broke
+          # the build by rewriting them to the package version. The non-greedy
+          # `(?:(?!\r?\n\[).)*?` group stops at the next section header, so the
+          # match is safely scoped to [package] regardless of CRLF/LF endings.
+          $cargo = $cargo -replace '(?sm)(\[package\](?:(?!\r?\n\[).)*?^version\s*=\s*")[\d.]+(")', "`${1}$semVer`${2}"
           [System.IO.File]::WriteAllText("src-tauri/Cargo.toml", $cargo)
 
           $tauri = Get-Content src-tauri/tauri.conf.json -Raw -Encoding UTF8
