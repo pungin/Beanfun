@@ -109,3 +109,10 @@ installRouterGuards(router, {
 })
 
 app.mount('#app')
+
+/*
+ * Disable the browser right-click context menu so the app feels
+ * native. Input elements are excluded via CSS `user-select: text`
+ * so copy/paste still works in form fields.
+ */
+document.addEventListener('contextmenu', (e) => e.preventDefault())
