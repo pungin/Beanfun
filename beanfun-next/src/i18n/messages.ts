@@ -398,11 +398,10 @@ const zhTW = {
     killPatcherTip: '阻止 beanfun! 啟動的更新程式 (Patcher.aspx) 自動執行。',
     skipPlayWindowTip: '直接啟動遊戲，跳過 Play 視窗確認步驟。',
   },
-  webBrowser: {
-    title: '瀏覽器',
-    empty: '尚未指定要開啟的網址。',
-    cookieRequired: '此頁面需要 Beanfun 登入 Cookie 才能完整顯示，將改以系統預設瀏覽器開啟。',
-    openExternally: '在外部瀏覽器開啟',
+  inAppBrowser: {
+    fallbackToSystem: '此網址不在 Beanfun 內建瀏覽器允許清單，將改以系統預設瀏覽器開啟。',
+    openFailed: '無法開啟瀏覽器視窗。',
+    invalidUrl: '網址格式錯誤。',
   },
   mapleTools: {
     subtitle: '楓之谷專用工具集合。',
@@ -599,11 +598,10 @@ const zhCN = {
     killPatcherTip: '阻止 beanfun! 启动的更新程序 (Patcher.aspx) 自动执行。',
     skipPlayWindowTip: '直接启动游戏，跳过 Play 窗口确认步骤。',
   },
-  webBrowser: {
-    title: '浏览器',
-    empty: '尚未指定要开启的网址。',
-    cookieRequired: '此页面需要 Beanfun 登录 Cookie 才能完整显示，将改以系统默认浏览器开启。',
-    openExternally: '在外部浏览器开启',
+  inAppBrowser: {
+    fallbackToSystem: '此网址不在 Beanfun 内建浏览器允许列表，将改以系统默认浏览器开启。',
+    openFailed: '无法开启浏览器窗口。',
+    invalidUrl: '网址格式错误。',
   },
   mapleTools: {
     subtitle: '枫之谷专用工具集合。',
@@ -809,12 +807,11 @@ const enUS = {
     killPatcherTip: 'Prevent the beanfun! launcher (Patcher.aspx) from auto-running.',
     skipPlayWindowTip: 'Launch the game directly, skipping the Play window confirmation step.',
   },
-  webBrowser: {
-    title: 'Browser',
-    empty: 'No URL specified.',
-    cookieRequired:
-      'This page requires the beanfun! login cookie to render fully; opening it in your default browser instead.',
-    openExternally: 'Open in external browser',
+  inAppBrowser: {
+    fallbackToSystem:
+      'This URL is not in the in-app browser allowlist; opening it in your default browser instead.',
+    openFailed: 'Could not open the browser window.',
+    invalidUrl: 'Malformed URL.',
   },
   mapleTools: {
     subtitle: 'MapleStory-specific helpers.',

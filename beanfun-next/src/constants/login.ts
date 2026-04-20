@@ -77,11 +77,12 @@ export type LoginMethod = (typeof LOGIN_METHOD)[keyof typeof LOGIN_METHOD]
  * `Beanfun/Pages/id-pass_form.xaml.cs`:
  *
  * - `RegAcc_Click` (L39-52) — RegisterAccount button (XAML L73)
- *   opens a new in-app `WebBrowser(url)` window pointed at the
- *   region-appropriate signup page.
+ *   opens a new in-app browser window (Tauri equivalent =
+ *   `commands.openInAppBrowser` via [`useInAppBrowser`]) pointed
+ *   at the region-appropriate signup page.
  * - `FindPwd_Click` (L54-66) — ForgotPassword button (XAML L627)
- *   opens the region-appropriate `forgot_pwd.aspx` page in a
- *   new in-app `WebBrowser(url)` window.
+ *   opens the region-appropriate `forgot_pwd.aspx` page in the
+ *   same in-app browser window.
  *
  * Both handlers share the exact same TW/HK URL fork shape, so we
  * factor the constants into a single 2D map `kind × region → url`
@@ -100,11 +101,13 @@ export type LoginMethod = (typeof LOGIN_METHOD)[keyof typeof LOGIN_METHOD]
  *
  * Both handlers in WPF call `new WebBrowser(url).Show()` — i.e. the
  * URL is consumed by the in-app `WebBrowser` window. The SPA
- * equivalent is `windows/WebBrowser.vue` (P12.4 D8); `tw.beanfun.com`
- * + `bfweb.hk.beanfun.com` both sit inside its
- * `URL_NEEDS_COOKIE_HOSTS` set so the dialog will immediately
- * fall back to `commands.openUrl` (system browser, where the
- * Beanfun login cookie likely already lives) — same UX path as
+ * equivalent is `commands.openInAppBrowser` (followup-B B2)
+ * which builds a fresh `tauri::WebviewWindow` per call with the
+ * logged-in `BeanfunClient` cookies pre-seeded. Both
+ * `tw.beanfun.com` + `bfweb.hk.beanfun.com` sit inside the
+ * backend `web_browser::ALLOWED_HOSTS` allowlist so the page
+ * renders embedded — same UX as WPF — instead of falling back
+ * to the system browser. The same composable also services
  * P12.5 KartTools' six convoy/rider URLs.
  *
  * URLs ported verbatim from `id-pass_form.xaml.cs` L42-50 / L57-64.

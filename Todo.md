@@ -1734,6 +1734,35 @@ P12 共用驗收 Phase A Step 2 視覺檢查發現 `pages/IdPassForm.vue` 缺 WP
 - [x] D10 quality gates 全綠 — `vue-tsc --noEmit` / `eslint .` / `prettier --check .` / `vitest run` 全 0（572 tests pass）；`cargo fmt --check` / `cargo clippy --all-targets -- -D warnings` 全 0；`cargo test` 因本 followup 0 backend 改動，預期狀態同前一綠 commit
 - [x] D11 single commit `feat(next): add P12.4-followup-A login form parity buttons + useGameLauncher composable` — feat + Todo backfill 同 commit（小 followup 不分兩 commit），不偷塞 co-authored-by（commit `df1ebdc`）
 
+##### P12.4-followup-B — In-app browser WPF parity（取代 iframe + cookie-required toast 的 placeholder）
+
+P12.4-followup-A 完成後驗收發現點 RegisterAccount / ForgotPassword 跳出 `WebBrowser.vue` dialog，內部 host allowlist 命中 `tw.beanfun.com` / `bfweb.hk.beanfun.com` 走 `cookieRequired` 分支即時 fallback `commands.openUrl`（系統瀏覽器）+ toast，與 WPF `WebBrowser.xaml.cs` 直接 `new WebBrowser(uri).Show()` 在 in-app WebView2 視窗呈現 + 注 `bfClient` cookie 的行為不一致（WPF parity 落差）。原 P12.4 D8 蓋 `WebBrowser.vue` 時 docblock 已自承是 `<iframe>` placeholder，full WebviewWindow 推遲到 P13；followup-B 把這支提前到 P12.4 完成度的一部分（KartTools / MapleTools 真正需要 session cookie 的 P12.5 consumer 也沾光）。
+
+**Q matrix 決議**（pre-flight 與使用者敲定）：
+- Q1 多開策略 = (a) **每次新 label window**（`web-browser-{nano}`），WPF parity (`new WebBrowser(uri).Show()`)
+- Q2 chrome = (a) **OS 原生**（標題列 + min/max/close），P13 才考慮 frameless `DragMove`
+- Q3 cookie 注入 = (a) **`eval("document.cookie=...")`**（規避 Windows `WebviewWindow::set_cookie` silent-fail bug，與 gamepass.rs L194-208 同 stance）
+- Q4 cookie 來源 = backend `BeanfunClient` 的 reqwest CookieJar（`AppState::auth.client.cookie_store`，已 login 才有；未 login → 空 list → 注入 no-op，等同 LoginPage RegAcc/FindPwd 的「公開頁不需要 cookie」場景）
+- Q5 未登入時 = LoginPage 點 RegAcc/FindPwd → `auth = None` → 空 cookie list → 純開頁（不 error、不 fallback）
+- Q6 URL allowlist = (b) **只收 `tw.beanfun.com` / `hk.beanfun.com` / `bfweb.hk.beanfun.com`**，其它 host fallback `commands.openUrl`（縮 attack surface；WPF 實務上也只開 beanfun host）
+- Q7 caller API = (a) **全砍 `WebBrowser.vue`**，新 `useInAppBrowser()` composable 暴露 `open(url)`，IdPassForm + ToolsDialogStack 改 call helper（dialog wrapper 已無存在意義 → SRP/DRY）
+- Q8 後端命名 = `open_in_app_browser(url: String) -> Result<(), CommandError>`
+- Q9 NewWindowRequested（target=\_blank）= (a) **同 window navigate**（WPF `CoreWebView2_NewWindowRequested` L78-85；Tauri 預設行為已是 navigate，無需額外 hook）
+- Q10 測試 = unit (mock `commands.openInAppBrowser`) + 後端 Rust unit (URL allowlist + cookie shaping)；不做 webdriver E2E
+
+- [x] B0 Todo.md 加 P12.4-followup-B 區塊（本段，含 Q matrix）
+- [x] B1 verify capabilities/permissions — gamepass-login window 已不在 `windows: ["main"]` 仍正常運作（webview 創建是 backend-only API、不需 capability 授權；新 in-app browser window 同理 → **不改 capabilities/default.json**）
+- [x] B2 `src-tauri/src/commands/web_browser.rs` 新檔 — (1) `URL_NEEDS_COOKIE_HOSTS: &[&str]` 對齊 `WebBrowser.vue` L134 既有列表 (`tw.beanfun.com` / `hk.beanfun.com` / `bfweb.hk.beanfun.com`)；(2) 私有 helper `is_allowed_host(url) -> bool` (Q6 allowlist + reject 非 https)；(3) 私有 helper `cookie_eval_script(cookies: &[RawCookie]) -> String` 把 cookie list 轉成連續 `document.cookie="..."` script（**注：Tauri `eval` 走 webview ExecuteScript，每行 cookie 一條 set；mirrors WPF L58-66 的 `AddOrUpdateCookie` 語意**）；(4) `pub async fn open_in_app_browser<R: tauri::Runtime>(app, state, url) -> Result<(), CommandError>` — 解 URL、走 allowlist gate（不通過 → 回 `system.invalid_url` 留前端 fallback `openUrl`）、build `WebviewWindowBuilder` (label `web-browser-{ts_nanos}` 唯一不衝突、`inner_size(850, 550)` mirror WPF L11-13、`title("Beanfun")`)、`on_page_load` Finished hook 用 `seed_webview_cookies_from_client` 取 cookies 後 `window.eval(script)` 注入（best-effort、log 不 abort）+ `window.set_title(payload.url().host_str())` 對齊 WPF NavigationCompleted 更新標題的精神；deadlock guard 同 gamepass `WebviewWindowBuilder::build` 已是 `async fn`；錯誤碼 `system.invalid_url` / `ui.window_create_failed`（reuse 既有）
+- [x] B3 `src-tauri/src/commands/mod.rs` 註冊 `web_browser::open_in_app_browser::<tauri::Wry>` + `bindings_file_tests::REQUIRED_COMMANDS` 加 `"openInAppBrowser"`；`cargo run --example export_bindings` 重生 `bindings.ts`
+- [x] B4 i18n — Q4 重新評估：window title 由 backend hardcode `"Beanfun"`、navigation 後改為 host name（無需 i18n）；fallback toast (Q6 非 allowlist host → 走系統瀏覽器) reuse 既有 `webBrowser.openInBrowser` / 新 key `inAppBrowser.fallbackToSystem`？決定 = **新 key `inAppBrowser.fallbackToSystem`**（避免 reuse 既有 cookie-required toast 的歧義）+ 補三 locale；**移除** 舊 `webBrowser.*` keys（dialog 整支砍 → 死 key）
+- [x] B5 `src/composables/useInAppBrowser.ts` 新檔 — `open(url: string): Promise<void>`：(1) URL 驗證（empty / 非 http(s) → toast `system.invalid_url`）；(2) `commands.openInAppBrowser(url)` → 若 ok return；若 err code === `system.invalid_url`（host 不在 backend allowlist）→ fallback `commands.openUrl(url)` + info toast `inAppBrowser.fallbackToSystem`；其它 err → error toast；docblock 寫 SRP（IPC routing only、不知道 host allowlist 的細節，由 backend 為唯一 source of truth）
+- [x] B6 `pages/IdPassForm.vue` refactor — 移除 `WebBrowser.vue` import、`webBrowserVisible` / `webBrowserUrl` 兩個 ref、`<WebBrowser v-model:visible :url>` template mount；`openExternalUrl` 改 `await useInAppBrowser().open(url)`；docstring 對應段落從 "self-mounted dialog" 改成 "delegates to useInAppBrowser composable"
+- [x] B7 `windows/ToolsDialogStack.vue` refactor — 移除 `WebBrowser.vue` import、`webBrowserVisible` / `webBrowserUrl` 兩個 ref、`<WebBrowser>` template mount、`handleOpenWebBrowser` body 改 `useInAppBrowser().open(url)`（function 名 + emit listener 不變、parent API contract 不變）
+- [x] B8 `rm src/windows/WebBrowser.vue`（單一文件刪除；無 standalone spec）；`src/locales/{zh-TW,zh-CN,en-US}.json` 移除 `webBrowser.title` / `webBrowser.empty` / `webBrowser.cookieRequired` / `webBrowser.openExternally` 四 key（grep 確認無其它引用）
+- [x] B9 tests — (1) `tests/unit/composables/useInAppBrowser.spec.ts` 新檔 4 case：allowed host → call openInAppBrowser ok / disallowed host → openInAppBrowser err invalid_url → fallback openUrl + info toast / openInAppBrowser err 其它 code → error toast / empty URL → error toast；(2) `tests/unit/pages/IdPassForm.spec.ts` 改 5 case (Forgot TW/HK + Register TW/HK) — 不再 assert WebBrowser stub 的 `data-visible` / `data-url`、改 mock `useInAppBrowser` 的 `open` spy 並 assert 該 spy 被以正確 URL 呼叫；(3) `tests/unit/windows/ToolsDialogStack.spec.ts` 改 2 case (MapleTools open-web-browser / KartTools open-web-browser) — 同上 mock `useInAppBrowser`；(4) `src-tauri/src/commands/web_browser.rs` `#[cfg(test)]` 4 case：is_allowed_host (TW/HK/disallowed/non-https) / cookie_eval_script (空 list → 空 string、單一 cookie → 正確 escape、多 cookies 連續) — open_in_app_browser 主體 IPC 因要 build WebviewWindow 跳過（同 `open_gamepass_window` 的 test stance：integration 等 P13 webdriver）
+- [x] B10 quality gates — `vue-tsc --noEmit` / `eslint .` / `prettier --check .` / `vitest run` / `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings` / `cargo test --workspace` 全綠
+- [x] B11 single commit `feat(next): replace iframe placeholder with in-app browser window (P12.4-followup-B)` — 不偷塞 co-authored-by；feat + Todo backfill 同 commit
+
 #### 共用驗收
 
 - [ ] WPF XAML → Vue template 對應（結構 + 互動，視覺保留 mockup glassmorphism）

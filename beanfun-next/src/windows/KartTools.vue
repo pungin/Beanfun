@@ -18,37 +18,28 @@
  *     - **Column 3** — `CreateConvoy` / `LeaveConvoy`
  * - Each hyperlink opens the corresponding KartRider guild
  *   `.aspx` page on `tw.beanfun.com` via a new `WebBrowser`
- *   window. The SPA emits `open-web-browser` upward instead and
- *   lets the parent host the `WebBrowser.vue` dialog as a
- *   sibling — same rationale as `MapleTools.vue` D2 (avoids
- *   nested-modal z-index gymnastics; matches the existing
- *   AccountList host-all-dialogs pattern).
+ *   window. The SPA emits `open-web-browser` upward and lets
+ *   the parent dispatch through `useInAppBrowser` (followup-B
+ *   B7), which spawns a native `tauri::WebviewWindow` per click
+ *   with the logged-in `BeanfunClient` cookies pre-seeded.
  *
- * # All six URLs land on a cookie-required host
+ * # All six URLs land on the `tw.beanfun.com` allowlist host
  *
  * Every URL is on `tw.beanfun.com`, which sits inside the
- * `URL_NEEDS_COOKIE_HOSTS` set of `WebBrowser.vue` (P12.4 D8).
- * That means the WebBrowser dialog will:
- *
- * 1. Render its placeholder body explaining the cookie
- *    requirement.
- * 2. Immediately route `commands.openUrl(url)` so the user's
- *    default browser (where the beanfun login cookie likely
- *    already lives) actually loads the guild page.
- *
- * No new fallback logic is needed — the path is already
- * exercised by the existing `WebBrowser` consumer wiring. P13
- * is the milestone where the embedded `WebviewWindow` + cookie
- * sync ports the actual in-app rendering.
+ * backend `web_browser::ALLOWED_HOSTS` allowlist (followup-B
+ * B2). The in-app browser window therefore renders the page
+ * embedded with the user's session cookies — WPF parity for
+ * `new WebBrowser(uri).Show()`. No system-browser fallback is
+ * triggered for these six URLs.
  *
  * # WPF deviations (intentional)
  *
  * - **Modal vs new Window**: same rationale as the rest of
- *   `windows/*.vue` — the SPA renders dialogs in-page via
- *   `el-dialog`. The KartTools dialog stays open while the
- *   spawned WebBrowser dialog is shown alongside (parent
- *   decides z-order); WPF preserves the same multi-window
- *   coexistence by virtue of being a desktop app.
+ *   `windows/*.vue` — the SPA renders the KartTools dialog
+ *   in-page via `el-dialog`. The spawned in-app browser is a
+ *   real OS-level `tauri::WebviewWindow` (followup-B B2) so it
+ *   coexists alongside the modal exactly as WPF's two
+ *   independent `Window` instances did.
  * - **No drag-to-move** (`MouseLeftButtonDown="DragMove"`):
  *   meaningless inside a modal; omitted, mirrors every other
  *   `windows/*.vue`.
@@ -157,12 +148,12 @@ defineProps<{
 const emit = defineEmits<{
   (event: 'update:visible', next: boolean): void
   /**
-   * Ask the parent to open the in-app web browser dialog at
-   * `url`. All six URLs are on `tw.beanfun.com` (a
-   * cookie-required host) so `WebBrowser.vue`'s
-   * `URL_NEEDS_COOKIE_HOSTS` branch will immediately route to
-   * the system browser via `commands.openUrl` — the embedded
-   * iframe path isn't exercised here.
+   * Ask the parent to open the in-app browser at `url`. All six
+   * URLs are on `tw.beanfun.com` (inside the backend
+   * `web_browser::ALLOWED_HOSTS` allowlist), so the parent's
+   * `useInAppBrowser` dispatch spawns a native
+   * `tauri::WebviewWindow` with the user's session cookies
+   * pre-seeded — full WPF parity, no system-browser fallback.
    */
   (event: 'open-web-browser', url: string): void
 }>()

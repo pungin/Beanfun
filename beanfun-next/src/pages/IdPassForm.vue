@@ -38,15 +38,15 @@
  * after the P12 acceptance gap surfaced them missing:
  *
  * - **RegisterAccount** (WPF `id-pass_form.xaml` L73 +
- *   `RegAcc_Click` L39-52) → opens region-aware signup URL in
- *   the in-app `WebBrowser` dialog. Both TW + HK URLs sit on
- *   `tw.beanfun.com` / `bfweb.hk.beanfun.com`, both inside
- *   `WebBrowser.URL_NEEDS_COOKIE_HOSTS` → the dialog
- *   immediately falls back to `commands.openUrl` so the user's
- *   system browser handles the page (where Beanfun login
- *   cookies probably already live).
+ *   `RegAcc_Click` L39-52) → opens region-aware signup URL via
+ *   {@link useInAppBrowser}, which calls the backend
+ *   `open_in_app_browser` IPC to spawn a fresh
+ *   [`tauri::WebviewWindow`] with the logged-in `BeanfunClient`
+ *   cookies pre-seeded — WPF parity for `new WebBrowser(uri)
+ *   .Show()`. URLs outside the backend host allowlist fall back
+ *   to `commands.openUrl` (system browser).
  * - **ForgotPassword** (WPF L627 + `FindPwd_Click` L54-66) →
- *   same pattern, region-aware `forgot_pwd.aspx`.
+ *   same composable, region-aware `forgot_pwd.aspx`.
  * - **GameStart** (WPF L655 + `btn_StartGame_Click` L297-300) →
  *   delegates to `useGameLauncher().runGame()`, which calls
  *   `game.restoreLastSelected()` to re-hydrate the launch
@@ -57,12 +57,10 @@
  *
  * URLs centralised in `src/constants/login.ts`
  * (`LOGIN_EXTERNAL_URLS`) so a Beanfun URL move tomorrow is a
- * one-line change. The WebBrowser dialog is self-mounted here
- * (not promoted to LoginPage shell) because the dialog is a
- * private detail of the form's external-URL handlers — leaking
- * it to LoginPage would force every sibling form
- * (QrForm / GamepassForm / VerifyPage) to share state they
- * don't need.
+ * one-line change. The in-app browser window itself is built by
+ * the backend `web_browser::open_in_app_browser` command (no
+ * frontend dialog mount needed — followup-B replaced the old
+ * self-mounted `WebBrowser.vue` placeholder).
  *
  * # D3 → D4 hotfix: navigation affordances
  *
@@ -123,7 +121,7 @@ import { useConfigStore } from '../stores/config'
 import { LOGIN_EXTERNAL_URLS, LOGIN_METHOD, type LoginExternalUrlKind } from '../constants/login'
 import type { LoginRegion } from '../types/bindings'
 import { useGameLauncher } from '../composables/useGameLauncher'
-import WebBrowser from '../windows/WebBrowser.vue'
+import { useInAppBrowser } from '../composables/useInAppBrowser'
 
 defineOptions({ name: 'IdPassForm' })
 
@@ -152,6 +150,18 @@ const config = useConfigStore()
  * the WPF parity table.
  */
 const launcher = useGameLauncher()
+/*
+ * P12.4 followup-B B6 — in-app browser composable for the
+ * RegisterAccount / ForgotPassword buttons (WPF
+ * `id-pass_form.xaml.cs` `RegAcc_Click` / `FindPwd_Click` →
+ * `new WebBrowser(uri).Show()`). The composable funnels through
+ * the backend `open_in_app_browser` IPC which builds a fresh
+ * `WebviewWindow` per call and pre-seeds the logged-in
+ * `BeanfunClient` cookies; it falls back to `commands.openUrl`
+ * (system browser) when the URL is outside the backend host
+ * allowlist. See `useInAppBrowser` docblock for the full table.
+ */
+const inAppBrowser = useInAppBrowser()
 
 /**
  * Default the region from Config.xml so the picker → form handoff
@@ -257,19 +267,6 @@ function switchToGamepass(): void {
 /* --------------- P12.4 followup-A: external URLs + GameStart --------------- */
 
 /**
- * In-app `WebBrowser` dialog state. Self-mounted at the bottom
- * of the template (not lifted to LoginPage) — see file docblock
- * "Why a self-mount" for the SRP rationale.
- *
- * `webBrowserVisible` toggles via `v-model:visible`;
- * `webBrowserUrl` is the per-open target captured at click
- * time so a quick double-trigger can't race the dialog into a
- * stale URL.
- */
-const webBrowserVisible = ref(false)
-const webBrowserUrl = ref('')
-
-/**
  * Generic external-URL handler. Single dispatch site for
  * RegisterAccount + ForgotPassword keeps the per-button click
  * stub a one-liner and centralises the
@@ -277,11 +274,15 @@ const webBrowserUrl = ref('')
  * `kind` (e.g. "support" / "news") later touches only the
  * constants table + a new template button — no new handler
  * function needed.
+ *
+ * Delegates to {@link useInAppBrowser} for the open-with-fallback
+ * chain (replaces the old self-mounted `WebBrowser.vue` dialog
+ * that always degraded to system browser; followup-B reinstates
+ * the WPF `new WebBrowser(uri).Show()` in-app behaviour).
  */
 function openExternalUrl(kind: LoginExternalUrlKind): void {
   const region = readRegion()
-  webBrowserUrl.value = LOGIN_EXTERNAL_URLS[kind][region]
-  webBrowserVisible.value = true
+  void inAppBrowser.open(LOGIN_EXTERNAL_URLS[kind][region])
 }
 
 function handleRegisterAccount(): void {
@@ -541,8 +542,6 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
       </button>
     </div>
   </el-form>
-
-  <WebBrowser v-model:visible="webBrowserVisible" :url="webBrowserUrl" />
 </template>
 
 <style scoped>

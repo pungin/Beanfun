@@ -1864,6 +1864,45 @@ async cleanMapleGameCache(gamePath: string) : Promise<Result<CleanCacheReport, C
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Open `url` in a dedicated in-app webview window with the active
+ * [`BeanfunClient`] session cookies pre-seeded.
+ * 
+ * # Successful flow
+ * 
+ * 1. Validate `url` against the [`ALLOWED_HOSTS`] allowlist
+ * ([`parse_and_validate`]).
+ * 2. Snapshot [`crate::commands::state::AuthContext::client`] from
+ * [`AppState::auth`] under a read-lock (`None` when no login is
+ * active — see the Q5 docblock note).
+ * 3. Build the window pointing at `about:blank` so the first real
+ * network request fires *after* the cookie seed.
+ * 4. Best-effort seed every unexpired cookie via
+ * [`seed_webview_cookies_from_client`] +
+ * [`tauri::WebviewWindow::set_cookie`]. Per-cookie failures
+ * log a warning and continue (matches WPF's no-try/catch
+ * `AddOrUpdateCookie` loop).
+ * 5. Navigate to `url`. The seeded cookies travel with the request.
+ * 
+ * # Errors
+ * 
+ * - [`INVALID_URL_CODE`] — URL malformed / wrong scheme / host
+ * outside [`ALLOWED_HOSTS`]. Frontend (`useInAppBrowser`)
+ * intercepts this code and falls back to the system browser via
+ * `commands.openUrl`.
+ * - `ui.window_create_failed` — [`WebviewWindowBuilder::build`] or
+ * the post-seed [`tauri::WebviewWindow::navigate`] call failed
+ * (rare; usually a label collision or WebView2 runtime
+ * regression). The window — if any — is closed before returning.
+ */
+async openInAppBrowser(url: string) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_in_app_browser", { url }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 

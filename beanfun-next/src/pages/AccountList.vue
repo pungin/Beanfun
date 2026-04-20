@@ -348,10 +348,13 @@ const handleCustomerService = makeStub('Customer Service link')
 
 /**
  * Imperative handle to the {@link ToolsDialogStack} mounted at the
- * bottom of the template. The wrapper component owns all five
- * Tools-related dialog mounts (MapleTools / KartTools / WebBrowser
- * / EquipCalculator / CoreCalculator) and exposes a single
- * `openForGame(gameCode)` method we call from {@link handleTools}.
+ * bottom of the template. The wrapper component owns all four
+ * Tools-related dialog mounts (MapleTools / KartTools /
+ * EquipCalculator / CoreCalculator; the in-app browser is no
+ * longer a dialog — followup-B B7 routes it through
+ * `useInAppBrowser` → native `WebviewWindow`) and exposes a
+ * single `openForGame(gameCode)` method we call from
+ * {@link handleTools}.
  *
  * # Why a `ref` (and not e.g. emit-up + parent-owned visibility)
  *
@@ -2056,8 +2059,9 @@ function handleDragEnd(): void {
       />
 
       <!-- P12.5 D7: Tools dialog stack — single mount that hosts
-           MapleTools / KartTools / WebBrowser / EquipCalculator /
-           CoreCalculator. Opened imperatively by `handleTools` via
+           MapleTools / KartTools / EquipCalculator /
+           CoreCalculator (in-app browser routed via composable;
+           see followup-B B7). Opened imperatively by `handleTools` via
            the `toolsDialogRef` handle (see the `handleTools`
            docblock for why imperative + why a single-component
            wrapper). The wrapper mounts unconditionally so its

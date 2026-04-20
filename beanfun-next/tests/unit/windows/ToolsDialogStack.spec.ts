@@ -3,11 +3,14 @@
  *
  * The wrapper is the SPA-side mirror of WPF's
  * `AccountList.xaml.cs::btn_Tools_Click` (L237-250) dispatch
- * switch + the per-game Tools window mounting. It owns five
- * sibling dialogs (MapleTools / KartTools / WebBrowser /
- * EquipCalculator / CoreCalculator) and exposes one imperative
- * `openForGame(gameCode)` entry point both AccountList and
- * Settings call from their Tools button click handlers.
+ * switch + the per-game Tools window mounting. It owns four
+ * sibling dialogs (MapleTools / KartTools / EquipCalculator /
+ * CoreCalculator; in-app browser was removed in followup-B B7
+ * and is now serviced by the `useInAppBrowser` composable that
+ * spawns a native `WebviewWindow` per click) and exposes one
+ * imperative `openForGame(gameCode)` entry point both
+ * AccountList and Settings call from their Tools button click
+ * handlers.
  *
  * What this spec locks down:
  *
@@ -29,13 +32,13 @@
  *    Each empty-string path matches WPF's "open the dialog
  *    regardless; surface the error on Recycling click" pattern.
  * 5. Child dialog event chain:
- *    - MapleTools `open-web-browser` → WebBrowser visible + URL
- *      threaded through.
+ *    - MapleTools `open-web-browser` → `useInAppBrowser().open(url)`
+ *      called with the threaded URL.
  *    - MapleTools `open-equip-calculator` → EquipCalculator visible.
  *    - MapleTools `open-core-calculator` → CoreCalculator visible.
- *    - KartTools `open-web-browser` → WebBrowser visible + URL.
+ *    - KartTools `open-web-browser` → `useInAppBrowser().open(url)`.
  *
- * The internal behaviour of MapleTools / KartTools / WebBrowser /
+ * The internal behaviour of MapleTools / KartTools /
  * EquipCalculator / CoreCalculator is intentionally NOT asserted
  * here — each gets its own test surface in their respective
  * D-step (D2 / D3 / D4 / D5+D6 already written; component-level
@@ -44,7 +47,7 @@
  *
  * # Stub strategy
  *
- * The five child dialogs are stubbed via `vi.mock` factories that
+ * The four child dialogs are stubbed via `vi.mock` factories that
  * create inline `defineComponent` placeholders. The factories
  * cannot reference top-level constants (Vitest hoists `vi.mock`
  * above all imports — see the `vi.hoisted` docs), so each stub is
@@ -53,6 +56,10 @@
  * stub forwards its props into `data-*` attributes so the spec
  * can read the values the wrapper threaded through without
  * touching component internals.
+ *
+ * The `useInAppBrowser` composable is mocked at module scope
+ * (followup-B B9) so the spec can assert the URL the wrapper
+ * dispatched without booting the backend IPC.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -131,28 +138,18 @@ vi.mock('../../../src/windows/KartTools.vue', async () => {
   }
 })
 
-vi.mock('../../../src/windows/WebBrowser.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  return {
-    default: defineComponent({
-      name: 'WebBrowser',
-      props: {
-        visible: { type: Boolean, default: false },
-        url: { type: String, default: '' },
-      },
-      emits: ['update:visible'],
-      setup(props) {
-        return () =>
-          h('div', {
-            class: 'web-browser-stub',
-            'data-test': 'web-browser-stub',
-            'data-visible': String(props.visible),
-            'data-url': props.url,
-          })
-      },
-    }),
-  }
-})
+/*
+ * P12.4 followup-B B9 — mock the in-app browser composable so the
+ * wrapper's `open-web-browser` event chain can be asserted by
+ * inspecting the spy directly (no real `WebviewWindow` build / no
+ * backend IPC). Replaces the old `WebBrowser.vue` stub which is
+ * deleted in B8.
+ */
+const { openInAppBrowserSpy } = vi.hoisted(() => ({ openInAppBrowserSpy: vi.fn() }))
+
+vi.mock('../../../src/composables/useInAppBrowser', () => ({
+  useInAppBrowser: () => ({ open: openInAppBrowserSpy }),
+}))
 
 vi.mock('../../../src/windows/EquipCalculator.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -279,6 +276,7 @@ describe('ToolsDialogStack wrapper', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.mocked(commands.detectGamePath).mockReset()
     vi.mocked(commands.detectGamePath).mockReturnValue(ok('C:\\Beanfun\\MapleStory.exe'))
+    openInAppBrowserSpy.mockReset()
   })
 
   /* -------------------- openForGame dispatch -------------------- */
@@ -513,7 +511,7 @@ describe('ToolsDialogStack wrapper', () => {
 
   /* -------------------- child-dialog event chain ---------------- */
 
-  it('opens WebBrowser with the URL when MapleTools emits open-web-browser', async () => {
+  it('dispatches useInAppBrowser.open(url) when MapleTools emits open-web-browser', async () => {
     seedGame(MAPLE_TW, MAPLE_TW_INI)
     useAuthStore().session = FAKE_TW_SESSION
 
@@ -527,16 +525,18 @@ describe('ToolsDialogStack wrapper', () => {
     wrapper.findComponent({ name: 'MapleTools' }).vm.$emit('open-web-browser', url)
     await flushPromises()
 
-    const browserStub = wrapper.get('[data-test="web-browser-stub"]')
-    expect(browserStub.attributes('data-visible')).toBe('true')
-    expect(browserStub.attributes('data-url')).toBe(url)
+    expect(openInAppBrowserSpy).toHaveBeenCalledTimes(1)
+    expect(openInAppBrowserSpy).toHaveBeenCalledWith(url)
   })
 
-  it('opens WebBrowser with the URL when KartTools emits open-web-browser', async () => {
+  it('dispatches useInAppBrowser.open(url) when KartTools emits open-web-browser', async () => {
     /*
-     * Same shared WebBrowser mount handles both pipelines —
-     * locks down the "one mount, two parents" decision in the
-     * wrapper docblock.
+     * The wrapper funnels both MapleTools and KartTools
+     * `open-web-browser` events through the same
+     * `useInAppBrowser` composable — locks down the "one
+     * dispatch, two parents" decision in the wrapper docblock
+     * (followup-B B7 replaced the old shared WebBrowser dialog
+     * mount with a per-click native `WebviewWindow`).
      */
     seedGame(KART_TW, KART_TW_INI)
     useAuthStore().session = FAKE_TW_SESSION
@@ -550,9 +550,8 @@ describe('ToolsDialogStack wrapper', () => {
     wrapper.findComponent({ name: 'KartTools' }).vm.$emit('open-web-browser', url)
     await flushPromises()
 
-    const browserStub = wrapper.get('[data-test="web-browser-stub"]')
-    expect(browserStub.attributes('data-visible')).toBe('true')
-    expect(browserStub.attributes('data-url')).toBe(url)
+    expect(openInAppBrowserSpy).toHaveBeenCalledTimes(1)
+    expect(openInAppBrowserSpy).toHaveBeenCalledWith(url)
   })
 
   it('opens EquipCalculator when MapleTools emits open-equip-calculator', async () => {

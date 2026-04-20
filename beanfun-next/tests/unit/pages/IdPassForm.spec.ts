@@ -177,36 +177,17 @@ vi.mock('../../../src/types/bindings', () => ({
 }))
 
 /*
- * P12.4 followup-A D9 — stub the WebBrowser dialog so opening it
- * doesn't pull in the full Element Plus + iframe machinery. The
- * stub records the last `url` prop and `visible` state so tests
- * can assert region-aware URL routing.
+ * P12.4 followup-B B9 — stub the in-app browser composable so
+ * RegisterAccount / ForgotPassword tests can assert the URL the
+ * button dispatches without booting the backend IPC. The
+ * `openInAppBrowserSpy` records each call in order so the per-
+ * test assertions can compare against the region-aware URL
+ * tables verbatim.
  */
-const { lastWebBrowserUrl, lastWebBrowserVisible } = vi.hoisted(() => ({
-  lastWebBrowserUrl: { current: '' as string },
-  lastWebBrowserVisible: { current: false },
-}))
+const { openInAppBrowserSpy } = vi.hoisted(() => ({ openInAppBrowserSpy: vi.fn() }))
 
-vi.mock('../../../src/windows/WebBrowser.vue', () => ({
-  default: defineComponent({
-    name: 'WebBrowserStub',
-    props: {
-      visible: { type: Boolean, default: false },
-      url: { type: String, default: '' },
-    },
-    setup(props) {
-      return () => {
-        lastWebBrowserUrl.current = props.url
-        lastWebBrowserVisible.current = props.visible
-        return h('div', {
-          class: 'web-browser-stub',
-          'data-test': 'web-browser-stub',
-          'data-url': props.url,
-          'data-visible': props.visible ? 'true' : 'false',
-        })
-      }
-    },
-  }),
+vi.mock('../../../src/composables/useInAppBrowser', () => ({
+  useInAppBrowser: () => ({ open: openInAppBrowserSpy }),
 }))
 
 /*
@@ -720,15 +701,16 @@ describe('IdPassForm — P12.2 D2 credential persistence', () => {
 })
 
 /**
- * P12.4 followup-A D9 — RegisterAccount / ForgotPassword / GameStart.
+ * P12.4 followup-A D9 + followup-B B9 — RegisterAccount /
+ * ForgotPassword / GameStart.
  *
  * What this block locks down (matches WPF
  * `id-pass_form.xaml(.cs)` `RegAcc_Click` / `FindPwd_Click` /
- * `btn_StartGame_Click` parity decisions made in D7):
+ * `btn_StartGame_Click` parity decisions):
  *
- * 1. ForgotPassword button → opens `WebBrowser` dialog with the
- *    region-aware `LOGIN_EXTERNAL_URLS.forgotPwd[region]` URL.
- *    Default region (no Config.xml override) → TW URL.
+ * 1. ForgotPassword button → calls `useInAppBrowser().open(url)`
+ *    with the region-aware `LOGIN_EXTERNAL_URLS.forgotPwd[region]`
+ *    URL. Default region (no Config.xml override) → TW URL.
  * 2. ForgotPassword button respects HK from Config.xml → HK URL.
  * 3. RegisterAccount button → same dispatch, but with the
  *    `register` URL set, region-aware (TW default + HK override).
@@ -737,8 +719,14 @@ describe('IdPassForm — P12.2 D2 credential persistence', () => {
  *    call). The composable owns the `restoreLastSelected` hand-off
  *    and the empty-store toast, so this spec only asserts the
  *    delegation.
+ *
+ * followup-B replaced the self-mounted `WebBrowser.vue` dialog
+ * with the `useInAppBrowser` composable; the spec accordingly
+ * mocks the composable and asserts the spy was invoked with the
+ * exact URL instead of probing dialog `data-visible` / `data-url`
+ * attributes.
  */
-describe('IdPassForm — P12.4 followup-A (Register / Forgot / GameStart)', () => {
+describe('IdPassForm — P12.4 followup-A/B (Register / Forgot / GameStart)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockLoginRegular.mockReset()
@@ -746,20 +734,21 @@ describe('IdPassForm — P12.4 followup-A (Register / Forgot / GameStart)', () =
     mockSetConfig.mockReset()
     elMessageError.mockReset()
     runGameSpy.mockReset()
-    lastWebBrowserUrl.current = ''
-    lastWebBrowserVisible.current = false
+    openInAppBrowserSpy.mockReset()
   })
 
-  it('ForgotPassword opens WebBrowser dialog with TW forgot_pwd URL by default', async () => {
+  it('ForgotPassword dispatches in-app browser with TW forgot_pwd URL by default', async () => {
     const ctx = mountForm()
     const wrapper = await ctx.mountIt()
 
-    expect(lastWebBrowserVisible.current).toBe(false)
+    expect(openInAppBrowserSpy).not.toHaveBeenCalled()
     await wrapper.get('[data-test="id-pass-forgot-password"]').trigger('click')
     await flushPromises()
 
-    expect(lastWebBrowserVisible.current).toBe(true)
-    expect(lastWebBrowserUrl.current).toBe('https://tw.beanfun.com/member/forgot_pwd.aspx')
+    expect(openInAppBrowserSpy).toHaveBeenCalledTimes(1)
+    expect(openInAppBrowserSpy).toHaveBeenCalledWith(
+      'https://tw.beanfun.com/member/forgot_pwd.aspx',
+    )
     expect(runGameSpy).not.toHaveBeenCalled()
   })
 
@@ -770,19 +759,20 @@ describe('IdPassForm — P12.4 followup-A (Register / Forgot / GameStart)', () =
     await wrapper.get('[data-test="id-pass-forgot-password"]').trigger('click')
     await flushPromises()
 
-    expect(lastWebBrowserVisible.current).toBe(true)
-    expect(lastWebBrowserUrl.current).toBe('https://bfweb.hk.beanfun.com/member/forgot_pwd.aspx')
+    expect(openInAppBrowserSpy).toHaveBeenCalledWith(
+      'https://bfweb.hk.beanfun.com/member/forgot_pwd.aspx',
+    )
   })
 
-  it('RegisterAccount opens WebBrowser dialog with TW signup URL by default', async () => {
+  it('RegisterAccount dispatches in-app browser with TW signup URL by default', async () => {
     const ctx = mountForm()
     const wrapper = await ctx.mountIt()
 
     await wrapper.get('[data-test="id-pass-register"]').trigger('click')
     await flushPromises()
 
-    expect(lastWebBrowserVisible.current).toBe(true)
-    expect(lastWebBrowserUrl.current).toBe(
+    expect(openInAppBrowserSpy).toHaveBeenCalledTimes(1)
+    expect(openInAppBrowserSpy).toHaveBeenCalledWith(
       'https://tw.beanfun.com/TW/signup/Join_beanfun_signup.aspx?service=999999_T0',
     )
   })
@@ -794,7 +784,7 @@ describe('IdPassForm — P12.4 followup-A (Register / Forgot / GameStart)', () =
     await wrapper.get('[data-test="id-pass-register"]').trigger('click')
     await flushPromises()
 
-    expect(lastWebBrowserUrl.current).toBe(
+    expect(openInAppBrowserSpy).toHaveBeenCalledWith(
       'https://bfweb.hk.beanfun.com/beanfun_web_ap/signup/preregistration.aspx?service=999999_T0',
     )
   })

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 /**
  * Per-game Tools dialog stack — single-mount wrapper that hosts
- * MapleTools / KartTools and the three child dialogs they can
- * delegate to (WebBrowser / EquipCalculator / CoreCalculator).
+ * MapleTools / KartTools and the two child dialogs they can
+ * delegate to (EquipCalculator / CoreCalculator). The third
+ * historical delegate, `open-web-browser`, is now serviced by
+ * the `useInAppBrowser` composable (followup-B B7) which spawns
+ * a native `WebviewWindow` per click — no dialog mount needed.
  *
  * P12.5 D7. Replaces the `console.warn` stubs in
  * `pages/AccountList.vue::handleTools` and
@@ -33,11 +36,12 @@
  *
  * # Why a wrapper component (not a composable / store / global mount)
  *
- * The per-page Tools button has to host five dialogs — MapleTools,
- * KartTools, plus the three children (WebBrowser, EquipCalculator,
+ * The per-page Tools button has to host four dialogs — MapleTools,
+ * KartTools, plus the two children (EquipCalculator,
  * CoreCalculator) that MapleTools delegates to via
- * `open-web-browser` / `open-equip-calculator` /
- * `open-core-calculator` events. The children must sit as
+ * `open-equip-calculator` / `open-core-calculator` events
+ * (`open-web-browser` is no longer a dialog — see followup-B B7
+ * note in the file docblock above). The children must sit as
  * **siblings** (not nested children) of MapleTools/KartTools so
  * Element Plus's natural mount-order z-index stacks them on top
  * (a nested `<el-dialog>` inside another `<el-dialog>`
@@ -46,7 +50,7 @@
  *
  * Three options were considered:
  *
- * 1. **Inline in each parent page** — duplicates 5 dialog mounts
+ * 1. **Inline in each parent page** — duplicates 4 dialog mounts
  *    + the dispatch logic across `AccountList.vue` and
  *    `Settings.vue`. Bad DRY.
  *
@@ -115,7 +119,6 @@
 import { ref } from 'vue'
 import MapleTools from './MapleTools.vue'
 import KartTools from './KartTools.vue'
-import WebBrowser from './WebBrowser.vue'
 import CoreCalculator from './CoreCalculator.vue'
 import EquipCalculator from './EquipCalculator.vue'
 
@@ -124,12 +127,25 @@ import type { LoginRegion } from '../types/bindings'
 import { safeInvoke } from '../services/invoke'
 import { useAuthStore } from '../stores/auth'
 import { useGameStore } from '../stores/game'
+import { useInAppBrowser } from '../composables/useInAppBrowser'
 import { KART_TOOLS_CODE, MAPLE_TOOLS_CODES } from '../constants/tools'
 
 defineOptions({ name: 'ToolsDialogStack' })
 
 const auth = useAuthStore()
 const game = useGameStore()
+/*
+ * P12.4 followup-B B7 — in-app browser composable for the
+ * `open-web-browser` events emitted by both MapleTools
+ * (PlayerReport / VideoReport) and KartTools (six convoy /
+ * rider URLs). Replaces the old shared `WebBrowser.vue` dialog
+ * mount with a one-shot IPC dispatch that builds a fresh
+ * `WebviewWindow` per click (WPF parity for `new WebBrowser
+ * (uri).Show()`) and pre-seeds the logged-in `BeanfunClient`
+ * cookies so `tw.beanfun.com` aspx pages render with the user's
+ * session. See `useInAppBrowser` for the full fallback table.
+ */
+const inAppBrowser = useInAppBrowser()
 
 /* ------------------------------------------------------------------ */
 /* MapleTools state                                                    */
@@ -174,20 +190,8 @@ const mapleToolsLoginRegion = ref<LoginRegion | undefined>(undefined)
 const kartToolsVisible = ref(false)
 
 /* ------------------------------------------------------------------ */
-/* Shared child dialog state (WebBrowser / EquipCalc / CoreCalc)       */
+/* Shared child dialog state (EquipCalc / CoreCalc)                    */
 /* ------------------------------------------------------------------ */
-
-/**
- * `<WebBrowser v-model:visible>` ref — receives `open-web-browser`
- * events from both MapleTools (PlayerReport / VideoReport) and
- * KartTools (six convoy/rider URLs). One shared mount handles
- * both pipelines because only one parent dialog can be open at
- * a time (the `<el-dialog>` modal overlay blocks the other
- * parent's buttons), so the WebBrowser instance can never be
- * needed concurrently.
- */
-const webBrowserVisible = ref(false)
-const webBrowserUrl = ref('')
 
 /**
  * `<EquipCalculator v-model:visible>` — opened by MapleTools's
@@ -287,8 +291,14 @@ async function resolveGamePath(gameCode: string): Promise<string> {
 /* ------------------------------------------------------------------ */
 
 function handleOpenWebBrowser(url: string): void {
-  webBrowserUrl.value = url
-  webBrowserVisible.value = true
+  /*
+   * Fire-and-forget — `useInAppBrowser` toasts every failure
+   * path internally (system.invalid_url → fallback to system
+   * browser via `commands.openUrl`; other errors → error toast).
+   * The emit/listener contract with MapleTools / KartTools is
+   * unchanged so neither child dialog needs touching.
+   */
+  void inAppBrowser.open(url)
 }
 
 function handleOpenEquipCalculator(): void {
@@ -304,15 +314,20 @@ defineExpose({ openForGame })
 
 <template>
   <!--
-    MapleTools / KartTools / WebBrowser / EquipCalculator /
-    CoreCalculator are all `<el-dialog append-to-body>` so the
-    parent fragment here is essentially a render-list of dialog
-    mounts — they each teleport to `body` independently and the
-    actual DOM hierarchy is flat. Sibling order in this template
-    therefore controls neither layout nor stacking; it does
-    however control the source-order Vue uses for keyed
-    reconciliation, so we keep MapleTools first to mirror the
-    WPF switch order (`case "610074_T9"` is the first arm).
+    MapleTools / KartTools / EquipCalculator / CoreCalculator
+    are all `<el-dialog append-to-body>` so the parent fragment
+    here is essentially a render-list of dialog mounts — they
+    each teleport to `body` independently and the actual DOM
+    hierarchy is flat. Sibling order in this template therefore
+    controls neither layout nor stacking; it does however
+    control the source-order Vue uses for keyed reconciliation,
+    so we keep MapleTools first to mirror the WPF switch order
+    (`case "610074_T9"` is the first arm).
+
+    The `open-web-browser` events are now serviced by the
+    `useInAppBrowser` composable (followup-B B7) which spawns a
+    fresh native `WebviewWindow` per click, so no in-template
+    WebBrowser dialog mount is needed here anymore.
    -->
   <MapleTools
     v-model:visible="mapleToolsVisible"
@@ -323,7 +338,6 @@ defineExpose({ openForGame })
     @open-core-calculator="handleOpenCoreCalculator"
   />
   <KartTools v-model:visible="kartToolsVisible" @open-web-browser="handleOpenWebBrowser" />
-  <WebBrowser v-model:visible="webBrowserVisible" :url="webBrowserUrl" />
   <EquipCalculator v-model:visible="equipCalcVisible" />
   <CoreCalculator v-model:visible="coreCalcVisible" />
 </template>

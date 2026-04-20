@@ -53,14 +53,17 @@
  *
  * # Why the parent owns child-dialog hosting
  *
- * Three downstream dialogs (`WebBrowser`, `EquipCalculator`,
- * `CoreCalculator`) need to coexist with this one. Hosting them
- * here would require nested `el-dialog`s, which Element Plus
- * supports but trips on `append-to-body` / focus-trap stacking
- * in subtle ways. Emitting upward keeps every dialog at the same
- * DOM depth and matches the existing pattern (`AccountList.vue`
- * already hosts `GameList`, `AddAccount`, `WebBrowser` etc. as
- * sibling children — adding three more is mechanical).
+ * Two downstream dialogs (`EquipCalculator`, `CoreCalculator`)
+ * need to coexist with this one. Hosting them here would require
+ * nested `el-dialog`s, which Element Plus supports but trips on
+ * `append-to-body` / focus-trap stacking in subtle ways. Emitting
+ * upward keeps every dialog at the same DOM depth and matches
+ * the existing pattern (`AccountList.vue` already hosts
+ * `GameList`, `AddAccount` etc. as sibling children — adding
+ * two more is mechanical). The third historical delegate,
+ * `open-web-browser`, is no longer a sibling dialog: the parent
+ * forwards it to `useInAppBrowser` (followup-B B7) which spawns
+ * a native `WebviewWindow` per click instead.
  *
  * # Caller wiring
  *
@@ -141,12 +144,15 @@ const props = withDefaults(
 const emit = defineEmits<{
   (event: 'update:visible', next: boolean): void
   /**
-   * Ask the parent to open the in-app web browser dialog at
-   * `url`. Used for PlayerReport / VideoReport — both URLs land
-   * on `event.beanfun.com` (which doesn't require the
-   * authenticated cookie that `tw.beanfun.com` does, so the
-   * iframe path in `WebBrowser.vue` actually has a chance of
-   * rendering before the user falls back to "Open externally").
+   * Ask the parent to open the in-app browser at `url`. Used for
+   * PlayerReport / VideoReport — both URLs land on
+   * `event.beanfun.com`, which is **outside** the backend
+   * `web_browser::ALLOWED_HOSTS` allowlist, so `useInAppBrowser`
+   * will detect the `system.invalid_url` reject and fall back to
+   * `commands.openUrl` (system browser). Same outcome WPF gives
+   * for these URLs in practice (the `event.beanfun.com` cookies
+   * live in the user's default browser, not in WebView2's
+   * partitioned jar).
    */
   (event: 'open-web-browser', url: string): void
   /** Ask the parent to open the EquipCalculator dialog (P12.5 D5). */

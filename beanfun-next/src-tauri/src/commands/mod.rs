@@ -144,6 +144,7 @@ pub mod state;
 pub mod storage;
 pub mod system;
 pub mod update;
+pub mod web_browser;
 
 use tauri_specta::{collect_commands, Builder};
 
@@ -283,6 +284,17 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         game::list_games,
         // maple_cache (P12.5 D1 — Recycling button on MapleTools)
         maple_cache::clean_maple_game_cache,
+        // web_browser (P12.4-followup-B — in-app browser window)
+        //
+        // Generic over `R: tauri::Runtime` for the same reason as
+        // `auth::open_gamepass_window`: it takes an `AppHandle<R>`
+        // (to call `WebviewWindowBuilder::new`). The specta
+        // turbofish must pin to `tauri::Wry` while the tauri side
+        // monomorphises against the runtime `build_specta_builder`
+        // is instantiated with — see the `auth::login_gamepass_start`
+        // comment above for the full E0401 / runtime-agnostic
+        // bindings rationale.
+        web_browser::open_in_app_browser::<tauri::Wry>,
     ])
 }
 
@@ -457,6 +469,8 @@ mod bindings_file_tests {
         "setActiveService",
         // --- P12.5 D1 — MapleStory cache cleanup --------------------
         "cleanMapleGameCache",
+        // --- P12.4-followup-B — in-app browser window ---------------
+        "openInAppBrowser",
     ];
 
     /// DTO type names the frontend imports from `bindings.ts`.
