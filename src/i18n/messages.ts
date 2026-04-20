@@ -312,8 +312,8 @@ const zhTW = {
     refresh: '重新整理',
   },
   accountList: {
-    title: '帳號清單',
-    subtitle: '選擇遊戲帳號以開始遊戲，或新增、管理帳號。',
+    title: '帳號管理',
+    subtitle: '管理您的遊戲帳號',
     serviceAccountsHeading: '遊戲帳號',
     accountCount: '{count} 個帳號',
     loading: '載入中…',
@@ -524,8 +524,8 @@ const zhCN = {
     refresh: '重新加载',
   },
   accountList: {
-    title: '账号列表',
-    subtitle: '选择游戏账号以开始游戏，或新增、管理账号。',
+    title: '账号管理',
+    subtitle: '管理您的游戏账号',
     serviceAccountsHeading: '游戏账号',
     accountCount: '{count} 个账号',
     loading: '加载中…',
@@ -738,8 +738,8 @@ const enUS = {
     refresh: 'Reload',
   },
   accountList: {
-    title: 'Accounts',
-    subtitle: 'Pick a game account to start playing, or add and manage accounts.',
+    title: 'Account Management',
+    subtitle: 'Manage your game accounts',
     serviceAccountsHeading: 'Game Accounts',
     accountCount: '{count} accounts',
     loading: 'Loading…',

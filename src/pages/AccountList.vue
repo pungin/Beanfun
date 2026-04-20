@@ -2002,6 +2002,7 @@ onBeforeUnmount(destroySortable)
             <span>{{ t('GashRecharge') }}</span>
           </button>
           <button
+            v-if="auth.session?.region === 'TW'"
             type="button"
             class="account-list__quick-link bf-glass-card bf-ghost-border"
             data-test="account-list-app-gash-recharge"
@@ -2368,7 +2369,6 @@ onBeforeUnmount(destroySortable)
 
 .account-list__container {
   width: 100%;
-  max-width: 560px;
   display: flex;
   flex-direction: column;
   gap: 1rem;
