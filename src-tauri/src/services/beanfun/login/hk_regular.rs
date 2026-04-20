@@ -129,6 +129,8 @@ pub async fn login_hk_regular(
     // so callers pattern-match on a single shape regardless of which
     // flow produced the error — this mirrors the other two required
     // fields below, which are flattened by construction.
+    // Log the login page to see form field names
+
     let viewstate = extract_viewstate(&html).map_err(|e| match e {
         ParserError::MissingViewState => LoginError::MissingViewState,
         other => LoginError::Parser(other),
@@ -154,20 +156,21 @@ pub async fn login_hk_regular(
     if is_advance_check(&body) {
         return Err(LoginError::AdvanceCheckRequired { url: None });
     }
+
     if is_totp_required(&body) {
-        // Consume `viewstate` into the challenge (we no longer need
-        // the local copies of `generator` / `event_validation` after
-        // this point, and the challenge type owns all three fields
-        // pre-parsed so TOTP can reuse them without another scrape).
-        //
-        // `service_code` / `service_region` are captured here too so
-        // `login_totp` can forward them to `login_completed` without
-        // the UI layer having to re-thread app-config state through
-        // the OTP prompt. See `TotpChallenge` module docs for the
-        // WPF-equivalence argument.
+        // WPF stashes the POST response HTML as `this.totpResponse`
+        // and re-scrapes viewstate inside `TotpLogin`. We must do
+        // the same — the POST response carries a FRESH viewstate
+        // that the TOTP submission needs. Using the GET viewstate
+        // (from step 2) causes an ASP.NET ViewState validation error.
+        let totp_viewstate = extract_viewstate(&body).map_err(|e| match e {
+            ParserError::MissingViewState => LoginError::MissingViewState,
+            other => LoginError::Parser(other),
+        })?;
+
         let challenge = TotpChallenge {
             totp_url: login_url,
-            viewstate,
+            viewstate: totp_viewstate,
             session_key: skey,
             account_id: creds.account.clone(),
             service_code: service_code.to_owned(),
@@ -200,13 +203,12 @@ pub async fn login_hk_regular(
 // Helpers — pure, covered by unit tests below
 // -----------------------------------------------------------------------------
 
-/// Build `https://{login_host}/login/id-pass_form_newBF.aspx?otp1={skey}`
-/// on top of `client.config().endpoints.login_base`.
+/// Build the HK login page URL.
 ///
-/// We append `otp1` via `query_pairs_mut().append_pair` so the URL
-/// crate handles percent-encoding for us. The `pSKey` helper on
-/// `BeanfunClient` uses a different parameter name (`pSKey`), so we
-/// build HK's URL inline here instead of adding a one-off helper.
+/// Uses the direct login form URL (`login/id-pass_form_newBF.aspx`)
+/// which contains the actual ASP.NET form fields. The portal now
+/// redirects to `loginform_newBF.aspx` (a wrapper page with banners),
+/// but the direct form URL still works and is what WPF used.
 fn build_hk_login_url(client: &BeanfunClient, skey: &str) -> Result<url::Url, LoginError> {
     let mut url = client.login_url("login/id-pass_form_newBF.aspx")?;
     url.query_pairs_mut().append_pair("otp1", skey);

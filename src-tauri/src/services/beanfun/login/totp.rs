@@ -177,10 +177,6 @@ pub async fn login_totp(
 
     let (final_url, body) = post_totp(client, challenge.totp_url.clone(), &form).await?;
 
-    // Branch order mirrors WPF L359-388 exactly. The TOTP flow has
-    // *no* `totpLoginBtn` re-entry branch (this request IS the OTP
-    // submission, and a server repeating the form would be a bug
-    // surfaced by the default LoginNoAkey path).
     if is_advance_check(&body) {
         return Err(LoginError::AdvanceCheckRequired { url: None });
     }

@@ -164,9 +164,11 @@ async fn user_agent_matches_wpf_reference() {
     // so a missing / different UA silently 404s and we see a 404-derived
     // error instead of the expected success.
     Mock::given(method("GET"))
+        .and(path("/beanfun_block/bflogin/default.aspx"))
+        .and(query_param("service", "999999_T0"))
         .and(header(
             "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         ))
         .respond_with(
             ResponseTemplate::new(200)
