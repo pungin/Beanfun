@@ -117,9 +117,3 @@ cargo test
 1. 從 `code` 分支出新 feature branch。
 2. PR 到 `code` 時會跑 CI（lint / format / typecheck / test）。
 3. 送 PR 前請先跑 `npm run format` + `cargo fmt`。
-
----
-
-## 授權 (License)
-
-與主專案 [pungin/Beanfun](https://github.com/pungin/Beanfun) 相同。
