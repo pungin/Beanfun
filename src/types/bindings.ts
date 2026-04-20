@@ -1947,6 +1947,30 @@ async openMemberCenterBrowser() : Promise<Result<null, CommandError>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Open the Beanfun **Gash recharge** page in a dedicated in-app
+ * webview window. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::bfb_Gash_Click`.
+ * 
+ * Same security rationale as [`open_member_center_browser`] — the
+ * URL embeds `web_token`, so it must be built backend-side to keep
+ * the secret confined to Rust.
+ * 
+ * # Errors
+ * 
+ * - `auth.session_required` — no active session.
+ * - [`INVALID_URL_CODE`] — `build_gash_recharge_url` produced a
+ * URL outside the allowlist (defensive — should be unreachable).
+ * - `ui.window_create_failed` — see [`open_url_in_webview`].
+ */
+async openGashRechargeBrowser() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_gash_recharge_browser") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 

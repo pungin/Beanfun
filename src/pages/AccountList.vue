@@ -103,6 +103,7 @@ import {
   DocumentCopy,
   EditPen,
   InfoFilled,
+  Iphone,
   Key,
   Message,
   MoreFilled,
@@ -114,6 +115,7 @@ import {
   SwitchButton,
   User,
   VideoPlay,
+  Wallet,
 } from '@element-plus/icons-vue'
 import Sortable from 'sortablejs'
 
@@ -436,6 +438,35 @@ async function handleCustomerService(): Promise<void> {
     return
   }
   await inAppBrowser.open(CUSTOMER_SERVICE_URLS[region])
+}
+
+/* --- Gash Recharge / App Gash Recharge (WPF bfb_Gash_Click + btn_Deposite_Click parity) --- */
+
+/**
+ * Open the Beanfun **Gash recharge** page. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::bfb_Gash_Click`.
+ *
+ * Same pattern as {@link handleMemberCenter} — the URL embeds
+ * `web_token`, so a dedicated backend command keeps the secret
+ * confined to Rust.
+ */
+async function handleGashRecharge(): Promise<void> {
+  const result = await safeInvoke(commands.openGashRechargeBrowser())
+  if (!result.ok) {
+    ElMessage.error(result.error.message || t('inAppBrowser.openFailed'))
+  }
+}
+
+/**
+ * Open the **beanfun! App Gash deposit** page. Mirrors WPF
+ * `Pages/AccountList.xaml.cs::btn_Deposite_Click`.
+ *
+ * No `web_token` needed — the URL is a static `m.beanfun.com`
+ * endpoint. Dispatched through {@link inAppBrowser} (same pattern
+ * as {@link handleCustomerService}).
+ */
+async function handleAppGashRecharge(): Promise<void> {
+  await inAppBrowser.open('https://m.beanfun.com/Deposite')
 }
 
 /* --------------- P12.5 D7 — Tools button real handler --------------- */
@@ -1968,6 +1999,24 @@ onBeforeUnmount(destroySortable)
             <el-icon><Refresh /></el-icon>
           </button>
         </div>
+        <button
+          type="button"
+          class="account-list__quick-link bf-glass-card bf-ghost-border"
+          data-test="account-list-gash-recharge"
+          @click="handleGashRecharge"
+        >
+          <el-icon><Wallet /></el-icon>
+          <span>{{ t('GashRecharge') }}</span>
+        </button>
+        <button
+          type="button"
+          class="account-list__quick-link bf-glass-card bf-ghost-border"
+          data-test="account-list-app-gash-recharge"
+          @click="handleAppGashRecharge"
+        >
+          <el-icon><Iphone /></el-icon>
+          <span>{{ t('AppGashRecharge') }}</span>
+        </button>
         <button
           type="button"
           class="account-list__quick-link bf-glass-card bf-ghost-border"

@@ -592,6 +592,58 @@ pub async fn open_member_center_browser<R: tauri::Runtime>(
     open_url_in_webview(&app, target_url, Some(client)).await
 }
 
+/// Build the WPF-equivalent Gash recharge URL for the given session.
+/// Mirrors WPF `Pages/AccountList.xaml.cs::bfb_Gash_Click`:
+///
+/// ```text
+/// TW: https://tw.beanfun.com/TW/auth.aspx?channel=gash
+///       &page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0
+///       &web_token={WebToken}
+/// HK: https://bfweb.hk.beanfun.com/HK/auth.aspx?channel=gash
+///       &page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0
+///       &web_token={WebToken}
+/// ```
+///
+/// Both regions share the same `page_and_query` (unlike Member Center
+/// where TW uses `index_new.aspx`). The only difference is the base
+/// host (`tw.beanfun.com` vs `bfweb.hk.beanfun.com`).
+fn build_gash_recharge_url(session: &Session) -> String {
+    let base = match session.region {
+        LoginRegion::TW => "https://tw.beanfun.com/TW/",
+        LoginRegion::HK => "https://bfweb.hk.beanfun.com/HK/",
+    };
+    format!(
+        "{base}auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token={}",
+        session.web_token
+    )
+}
+
+/// Open the Beanfun **Gash recharge** page in a dedicated in-app
+/// webview window. Mirrors WPF
+/// `Pages/AccountList.xaml.cs::bfb_Gash_Click`.
+///
+/// Same security rationale as [`open_member_center_browser`] — the
+/// URL embeds `web_token`, so it must be built backend-side to keep
+/// the secret confined to Rust.
+///
+/// # Errors
+///
+/// - `auth.session_required` — no active session.
+/// - [`INVALID_URL_CODE`] — `build_gash_recharge_url` produced a
+///   URL outside the allowlist (defensive — should be unreachable).
+/// - `ui.window_create_failed` — see [`open_url_in_webview`].
+#[tauri::command]
+#[specta::specta]
+pub async fn open_gash_recharge_browser<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<(), CommandError> {
+    let (client, session) = require_auth(state.inner()).await?;
+    let url_str = build_gash_recharge_url(&session);
+    let target_url = parse_and_validate(&url_str)?;
+    open_url_in_webview(&app, target_url, Some(client)).await
+}
+
 #[cfg(test)]
 mod tests {
     //! Pure-helper tests. The full IPC path through
@@ -800,6 +852,50 @@ mod tests {
         let url = build_member_center_url(&session);
         assert!(
             url.contains("web_token=VERY_DISTINCT_TOKEN_VALUE_42"),
+            "URL must embed the session's actual web_token; got: {url}"
+        );
+        assert!(
+            !url.contains("web_token=&") && !url.ends_with("web_token="),
+            "URL must not contain an empty web_token query value; got: {url}"
+        );
+    }
+
+    #[test]
+    fn build_gash_recharge_url_tw_mirrors_wpf_byte_for_byte() {
+        let session = sample_session(LoginRegion::TW, "WTOKEN_TW_GASH");
+        let url = build_gash_recharge_url(&session);
+        assert_eq!(
+            url,
+            "https://tw.beanfun.com/TW/auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token=WTOKEN_TW_GASH"
+        );
+    }
+
+    #[test]
+    fn build_gash_recharge_url_hk_mirrors_wpf_byte_for_byte() {
+        let session = sample_session(LoginRegion::HK, "WTOKEN_HK_GASH");
+        let url = build_gash_recharge_url(&session);
+        assert_eq!(
+            url,
+            "https://bfweb.hk.beanfun.com/HK/auth.aspx?channel=gash&page_and_query=default.aspx%3Fservice_code%3D999999%26service_region%3DT0&web_token=WTOKEN_HK_GASH"
+        );
+    }
+
+    #[test]
+    fn build_gash_recharge_url_passes_allowlist_for_both_regions() {
+        for region in [LoginRegion::TW, LoginRegion::HK] {
+            let session = sample_session(region, "WTOKEN_GASH_PARSE_OK");
+            let url = build_gash_recharge_url(&session);
+            parse_and_validate(&url)
+                .unwrap_or_else(|e| panic!("region {region:?} URL must validate: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn build_gash_recharge_url_embeds_web_token_verbatim() {
+        let session = sample_session(LoginRegion::TW, "DISTINCT_GASH_TOKEN_99");
+        let url = build_gash_recharge_url(&session);
+        assert!(
+            url.contains("web_token=DISTINCT_GASH_TOKEN_99"),
             "URL must embed the session's actual web_token; got: {url}"
         );
         assert!(
