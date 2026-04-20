@@ -11,36 +11,36 @@
  * 2. On click, persists the choice to Config.xml under the legacy
  *    `loginRegion` key (so old WPF installs reading the same file see
  *    the value preserved verbatim).
- * 3. Navigates to the next step in the login funnel — the regular
- *    id-pass form. Future P12.1 D-steps may swap the destination
- *    based on the previously-used login method (the WPF
- *    `MainWindow.Initialize()` logic).
+ * 3. Navigates to the next step in the login funnel based on the
+ *    saved `loginMethod` — regular id-pass form (`0`) or QR form
+ *    (`1`, TW only). HK always routes to id-pass because the HK
+ *    portal does not expose the QR endpoint.
  *
- * # WPF deviation (intentional)
+ * # Auto-redirect (WPF `loginMethodInit` parity)
  *
- * WPF only popped this window on `LoadDataError` (catch path);
- * normal boots silently used the cached `App.LoginRegion`. We elevate
- * it to a real route here because:
+ * WPF only popped `LoginRegionSelection.xaml` on `LoadDataError`;
+ * normal boots silently used the cached `App.LoginRegion` and
+ * `App.LoginMethod` to jump straight to the correct form
+ * (`MainWindow.xaml.cs::loginMethodInit` L1027-1114).
  *
- * - The mockup design (`mockups/LoginRegionSelection.html`) expects
- *   it to be a deliberate first-time-setup screen.
- * - SPA navigation feels more natural with route-driven UI than with
- *   imperative `ShowDialog()` calls.
- *
- * The "skip picker if already chosen" logic is a P12.1 D10 concern
- * (router `beforeEach` guard); D2 keeps the picker reachable so the
- * first-launch + manual region-switch flows both work.
+ * The SPA mirrors this by watching `config.loaded`: once the
+ * Config.xml snapshot is available, if a `loginRegion` is already
+ * saved **and** the route has no `?pick` query, the picker replaces
+ * itself with the target form via `router.replace`. The `?pick`
+ * escape hatch lets login-form back buttons return the user to the
+ * picker without triggering the redirect again.
  */
 
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useConfigStore } from '../stores/config'
 import type { LoginRegion } from '../types/bindings'
 
 defineOptions({ name: 'LoginRegionSelection' })
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const config = useConfigStore()
 
@@ -76,20 +76,38 @@ const heading = computed(() => t('BeanfunRegionSelected'))
 const subline = computed(() => t('loginRegion.subline'))
 const tip = computed(() => t('loginRegion.tip'))
 
-async function selectRegion(region: LoginRegion): Promise<void> {
-  /*
-   * Match the WPF `loginRegion` key verbatim so an existing user
-   * picking up the new build sees their region choice survive.
-   */
-  await config.set('loginRegion', region)
+/**
+ * Resolve the login form path for a given region, honouring the
+ * saved `loginMethod` preference. QR (`loginMethod === '1'`) is
+ * TW-only; HK always falls back to id-pass.
+ */
+function resolveLoginPath(region: LoginRegion): string {
+  const method = config.get('loginMethod')
+  if (method === '1' && region === 'TW') return '/login/qr'
+  return '/login/id-pass'
+}
 
-  /*
-   * Forward to the regular id-pass form by default. The "remember
-   * last login method" branch (WPF `loginMethodInit`) lands in the
-   * D10 router guard once `/login/qr` and `/login/gamepass` exist as
-   * destinations.
-   */
-  await router.push('/login/id-pass')
+/*
+ * Auto-redirect: once config is loaded, if a region is already
+ * saved and the user didn't explicitly ask for the picker
+ * (`?pick=1`), jump straight to the correct login form.
+ */
+watch(
+  () => config.loaded,
+  (loaded) => {
+    if (!loaded) return
+    if (route.query.pick) return
+    const saved = config.get('loginRegion')
+    if (saved === 'TW' || saved === 'HK') {
+      void router.replace(resolveLoginPath(saved as LoginRegion))
+    }
+  },
+  { immediate: true },
+)
+
+async function selectRegion(region: LoginRegion): Promise<void> {
+  await config.set('loginRegion', region)
+  await router.push(resolveLoginPath(region))
 }
 </script>
 

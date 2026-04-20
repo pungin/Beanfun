@@ -238,7 +238,7 @@ onMounted(async () => {
   if (region !== 'TW') {
     ElMessage.info(t('loginQr.unsupportedHK'))
     disposed = true
-    await router.push('/login')
+    await router.push({ path: '/login', query: { pick: '1' } })
     return
   }
   await doStart()
@@ -299,7 +299,7 @@ async function refresh(): Promise<void> {
 async function goBack(): Promise<void> {
   disposed = true
   clearPollTimer()
-  await router.push('/login')
+  await router.push({ path: '/login', query: { pick: '1' } })
 }
 
 /**

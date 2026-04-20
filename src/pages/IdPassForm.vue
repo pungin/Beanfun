@@ -248,12 +248,11 @@ function prefillFromStoredRecord(): void {
 
 function goBack(): void {
   /*
-   * Use explicit `push('/login')` instead of `router.back()` — browser
-   * history may contain `/login/qr` or other siblings if the user
-   * landed here via forward-nav, and "back" in the WPF sense always
-   * means the region picker.
+   * Navigate to the region picker with `?pick=1` so the auto-
+   * redirect guard in `LoginRegionSelection.vue` does not fire —
+   * the user explicitly wants to change their region.
    */
-  void router.push('/login')
+  void router.push({ path: '/login', query: { pick: '1' } })
 }
 
 function switchToQr(): void {
