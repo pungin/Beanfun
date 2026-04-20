@@ -103,11 +103,9 @@ describe('useGameStore — pure helpers (no Pinia)', () => {
   })
 
   it('imageUrl falls back to the unified images.beanfun.com base for an HK bare filename', () => {
-    // Same single-host base as TW (TW/HK currently share
-    // `images.beanfun.com`); the HK arm exists to lock
-    // behaviour parity in case of a future host re-split.
+    // HK images still served from legacy hk.images host.
     expect(imageUrl('610074.jpg', 'HK')).toBe(
-      'https://images.beanfun.com/GameZone/610074.jpg',
+      'http://hk.images.beanfun.com/uploaded_images/beanfun/game_zone/610074.jpg',
     )
   })
 

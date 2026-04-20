@@ -320,6 +320,7 @@ async function handleLogout(): Promise<void> {
      */
   }
   account.clearSessionData()
+  game.clearGameData()
   await router.push('/login')
 }
 

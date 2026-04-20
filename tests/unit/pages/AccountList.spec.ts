@@ -2152,7 +2152,7 @@ describe('AccountList page', () => {
      * the WebView.
      */
     expect(img.attributes('src')).toBe(
-      'https://tw.images.beanfun.com/uploaded_images/beanfun_tw/game_zone/610074_small.jpg',
+      'https://images.beanfun.com/GameZone/610074_small.jpg',
     )
     expect(img.attributes('alt')).toBe('MapleStory TW')
   })
