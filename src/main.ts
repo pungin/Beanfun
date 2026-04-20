@@ -108,4 +108,6 @@ installRouterGuards(router, {
   },
 })
 
+document.addEventListener('contextmenu', (e) => e.preventDefault())
+
 app.mount('#app')

@@ -148,7 +148,7 @@ use crate::core::time::dt_compact_now;
 
 use super::client::{BeanfunClient, LoginRegion};
 use super::error::LoginError;
-use super::login::ensure_success;
+use super::login::{ensure_success, read_bfwebtoken_from_jar};
 use super::session::Session;
 
 // -----------------------------------------------------------------------------
@@ -276,6 +276,13 @@ pub async fn get_accounts(
     auth_aspx(client, session, service_code, service_region).await?;
     let body = fetch_account_list_html(client, service_code, service_region).await?;
 
+    tracing::debug!(
+        service_code,
+        service_region,
+        body_len = body.len(),
+        "get_accounts: fetched account list HTML"
+    );
+
     let mut accounts: Vec<ServiceAccount> = Vec::new();
     for row in extract_service_accounts(&body) {
         let screatetime = get_create_time(client, service_code, service_region, &row.ssn).await;
@@ -296,6 +303,23 @@ pub async fn get_accounts(
     accounts.sort_by(|a, b| a.ssn.cmp(&b.ssn));
 
     let amount_limit_notice = classify_amount_limit_notice(&body);
+
+    tracing::debug!(
+        service_code,
+        service_region,
+        account_count = accounts.len(),
+        "get_accounts: parsed result"
+    );
+
+    if accounts.is_empty() {
+        tracing::warn!(
+            service_code,
+            service_region,
+            body_len = body.len(),
+            body_preview = &body[..body.len().min(500)],
+            "get_accounts: returned 0 accounts — possible stale cookie issue"
+        );
+    }
 
     Ok(AccountListResult {
         accounts,
@@ -568,17 +592,48 @@ async fn auth_aspx(
     // URL; reqwest's `.query()` URL-encodes it for us, producing the
     // exact `%3F` / `%3D` byte sequence WPF builds inline.
     let inner = format!("game_start.aspx?service_code_and_region={service_code}_{service_region}");
+
+    // Prefer the live bfWebToken cookie from the jar over the static
+    // snapshot stored at login time. The auth.aspx redirect chain for
+    // certain games may update the bfWebToken cookie; using the stale
+    // session value afterward causes the server to return an empty
+    // account page on the next game switch.
+    let live_token = read_bfwebtoken_from_jar(client);
+    let web_token = live_token.as_deref().unwrap_or(session.web_token.as_str());
+
+    let jar_before = read_bfwebtoken_from_jar(client);
+    tracing::debug!(
+        service_code,
+        service_region,
+        session_web_token = session.web_token.as_str(),
+        jar_web_token = ?jar_before,
+        used_web_token = web_token,
+        "auth_aspx: before request"
+    );
+
     let resp = client
         .http()
         .get(url)
         .query(&[
             ("channel", "game_zone"),
             ("page_and_query", inner.as_str()),
-            ("web_token", session.web_token.as_str()),
+            ("web_token", web_token),
         ])
         .send()
         .await?;
     ensure_success(&resp, "auth.aspx")?;
+
+    let jar_after = read_bfwebtoken_from_jar(client);
+    if jar_before != jar_after {
+        tracing::warn!(
+            service_code,
+            service_region,
+            before = ?jar_before,
+            after = ?jar_after,
+            "auth_aspx: bfWebToken cookie changed during request"
+        );
+    }
+
     // Body intentionally not consumed: WPF discards it too.
     Ok(())
 }

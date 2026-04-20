@@ -832,7 +832,7 @@ mod tests {
         // must pass `is_allowed_host`. Sourced from:
         // - `src/constants/login.ts::LOGIN_EXTERNAL_URLS`
         //   (RegisterAccount / ForgotPassword in IdPassForm)
-        // - `src/windows/MapleTools.vue` (PLAYER_REPORT_URL)
+        // - `src/windows/MapleTools.vue` (PLAYER_REPORT_URL, VIDEO_REPORT_URL)
         // - `src/windows/KartTools.vue` (KART_TOOLS_ACTIONS)
         for url in [
             "https://tw.beanfun.com/TW/signup/Join_beanfun_signup.aspx",
@@ -840,6 +840,7 @@ mod tests {
             "https://tw.beanfun.com/member/forgot_pwd.aspx",
             "https://hk.beanfun.com/member/forgot_pwd.aspx",
             "https://event.beanfun.com/customerservice/PluginReporting/PlayerReport.aspx",
+            "https://beanfun-event.beanfun.com/EventAD_Mobile/EventAD?eventAdId=3453",
             "https://tw.beanfun.com/KartRider/guild/maneger_data.aspx",
             "https://tw.beanfun.com/kartrider/guild/rank.aspx",
             "https://tw.beanfun.com/KartRider/guild/rank_team_in.aspx",

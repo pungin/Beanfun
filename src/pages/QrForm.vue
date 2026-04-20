@@ -258,6 +258,19 @@ const canCopyDeeplink = computed(() => {
 
 const isStarting = computed(() => auth.pendingAction === AUTH_ACTIONS.LoginQrStart)
 
+async function copyQrImage(): Promise<void> {
+  const dataUrl = bitmap.value
+  if (!dataUrl) return
+  try {
+    const res = await fetch(dataUrl)
+    const blob = await res.blob()
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
+    ElMessage.success(t('CopyFinished'))
+  } catch {
+    ElMessage.error(t('CopyFailed'))
+  }
+}
+
 async function copyDeeplink(): Promise<void> {
   const link = deeplink.value
   if (!link) {
@@ -318,6 +331,7 @@ function handleGameStart(): void {
         :alt="t('loginQr.title')"
         class="qr-form__bitmap"
         data-testid="qr-bitmap"
+        @contextmenu.stop.prevent="copyQrImage"
       />
       <div v-else class="qr-form__placeholder" />
     </div>
@@ -439,13 +453,17 @@ function handleGameStart(): void {
 
 .qr-form__actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.75rem;
+}
+
+.qr-form__actions :deep(.el-button) {
+  width: 100%;
+  margin-left: 0;
 }
 
 .qr-form__back,
 .qr-form__refresh {
-  width: 100%;
   font-weight: 700;
 }
 

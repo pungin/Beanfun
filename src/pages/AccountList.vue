@@ -50,7 +50,7 @@
  * | Auto-paste preference                               | **REAL since P12.2 D5** (`useConfigStore` `autoPaste` key, lazy-write + AutoPasteTip on first toggle) |
  * | OTP value + Get OTP + Copy                          | **REAL since P12.2 D5** (`account.getOtp` + `commands.autoPaste` + clipboard fallback) |
  * | Add Service Account button                          | **REAL since P12.2 D3** (`windows/AddServiceAccount.vue`) |
- * | Drag handle (reorder)                               | **REAL since P12.2 D7** (vuedraggable + `Config.xml` `AccountOrder_<gameCode>` persistence) |
+ * | Drag handle (reorder)                               | **REAL since P12.2 D7** (SortableJS + `Config.xml` `AccountOrder_<gameCode>` persistence) |
  * | Per-row context menu (more_vert)                    | **REAL since P12.2 D4** (`Change Alias` + `Account Info` + `Check Email` items wired; other items land in their own D-steps) |
  *
  * Stubs render the mockup affordance verbatim so visual QA on D1
@@ -86,7 +86,7 @@
  *   Game CTA, so the bottom dock has no UX purpose.
  */
 
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
@@ -115,7 +115,7 @@ import {
   User,
   VideoPlay,
 } from '@element-plus/icons-vue'
-import draggable from 'vuedraggable'
+import Sortable from 'sortablejs'
 
 import { useAuthStore } from '../stores/auth'
 import { useAccountStore } from '../stores/account'
@@ -701,6 +701,7 @@ async function selectActiveGame(
        */
       return
     }
+    auth.updateSessionService(serviceCode, serviceRegion)
   }
 
   /*
@@ -881,6 +882,47 @@ const formattedRemainPoint = computed(() => {
 })
 
 /* --------------- add service account (D3 + D8g unconnected branch) --------------- */
+
+/**
+ * Extract the numeric limit from the server notice text
+ * (e.g. "此遊戲最多允許新增帳號數:2" → 2). Returns `null` when
+ * no number is found or the notice is not the `other` variant.
+ */
+const accountLimit = computed<number | null>(() => {
+  const notice = account.amountLimitNotice
+  if (notice.kind !== 'other') return null
+  const match = notice.data.match(/\d+/)
+  return match ? parseInt(match[0], 10) : null
+})
+
+/**
+ * Whether the add-account button should be disabled.
+ * - `auth_re_login_required` → always disabled (need verification)
+ * - `other` with parseable limit → disabled only when current
+ *   account count >= the limit
+ * - `none` / unparseable → enabled (let server reject if needed)
+ */
+const isAddAccountDisabled = computed(() => {
+  const notice = account.amountLimitNotice
+  if (notice.kind === 'auth_re_login_required') return true
+  if (accountLimit.value !== null) {
+    return account.serviceAccounts.length >= accountLimit.value
+  }
+  return false
+})
+
+/**
+ * Human-readable limit notice text for the UI.
+ * - `auth_re_login_required` → localised `AuthReLogin` string
+ * - `other` → server's verbatim text (e.g. "此遊戲最多允許新增帳號數:2")
+ * - `none` → null (nothing to show)
+ */
+const limitNoticeText = computed<string | null>(() => {
+  const notice = account.amountLimitNotice
+  if (notice.kind === 'auth_re_login_required') return t('AuthReLogin')
+  if (notice.kind === 'other') return notice.data
+  return null
+})
 
 /**
  * `<AddServiceAccount />` modal visibility. Driven by the Plus
@@ -1629,11 +1671,9 @@ function handleCopyOtp(): void {
  * L137-139 call site that runs ApplyAccountOrder immediately
  * after the server-side `OrderBy(ssn)`.
  *
- * # Why vuedraggable (and not native HTML5 drag-drop)
+ * # Why SortableJS (and not native HTML5 drag-drop)
  *
- * `vuedraggable@4.1.0` is already in `package.json` (Vue 3 peer)
- * but had no consumers — using it here turns a dead dependency
- * into a load-bearing one and gives us:
+ * SortableJS gives us:
  *
  * - The `handle` selector that mirrors WPF's `_isHandlePressed`
  *   gate (`MouseLeftButtonDown` only on the grip, never the row)
@@ -1642,25 +1682,15 @@ function handleCopyOtp(): void {
  * - Sortable.js' built-in animation, ghost element, and same-list
  *   reorder semantics — re-implementing those over native dnd is
  *   ~200 lines of fiddly DOM measurement code.
- * - In-place mutation of the bound array via `:list`, which keeps
- *   Pinia reactivity end-to-end without needing a v-model
- *   computed setter just to satisfy the bind contract.
  *
- * D7.3 sanity check (Vue 3.5 + Vite 6 + Vitest 4) confirmed the
- * UMD bundle imports and mounts cleanly under our toolchain.
+ * # Why the @end handler manually splices the array
  *
- * # Why we still call `setServiceAccountOrder` after the @end event
- *
- * `<draggable :list>` mutates `account.serviceAccounts` in place,
- * so by the time `@end` fires the visible order is already
- * correct. The follow-up `account.setServiceAccountOrder` call
- * is **idempotent** in that case but earns its keep as the single
- * canonical reorder funnel: the spy in the page-level test (D7.5
- * case 2) asserts the store action receives the expected sid
- * order, which gives us a stable seam against future refactors
- * (e.g. adding analytics, deduplication, or a derived state
- * mirror — all would belong inside the action, not next to every
- * call site).
+ * SortableJS manipulates the DOM during drag — the
+ * backing data must be updated manually via `oldIndex` /
+ * `newIndex` from the event. The handler splices the Pinia
+ * array in place, then funnels through `setServiceAccountOrder`
+ * as the canonical reorder action (keeps the spy seam for tests
+ * and any future invariants like analytics or dedup).
  *
  * # Why persist failures are silent (Q8)
  *
@@ -1726,10 +1756,8 @@ async function persistAccountOrder(key: string, csv: string): Promise<void> {
 }
 
 /**
- * Vuedraggable `@end` handler. Vuedraggable's `:list` binding has
- * already mutated `account.serviceAccounts` in place by the time
- * this fires (Sortable.js' `onEnd` runs after the splice), so the
- * visible UI is already correct.
+ * SortableJS `@end` handler. Receives `oldIndex` / `newIndex`
+ * from the event, splices the Pinia array in place, then persists.
  *
  * Two follow-up writes:
  *
@@ -1742,14 +1770,61 @@ async function persistAccountOrder(key: string, csv: string): Promise<void> {
  *    under the per-game key. Skipped when no session is active;
  *    silent on failure (mirrors WPF).
  */
-function handleDragEnd(): void {
+function handleDragEnd(event: Sortable.SortableEvent): void {
   const key = accountOrderConfigKey.value
   if (!key) return
 
-  const orderedSids = account.serviceAccounts.map((a) => a.sid)
-  account.setServiceAccountOrder(orderedSids)
-  void persistAccountOrder(key, orderedSids.join(','))
+  const { oldIndex, newIndex, item, from } = event
+  if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+
+  /*
+   * SortableJS physically moved the DOM element during drag.
+   * Revert that manipulation so Vue's reactivity system is the
+   * sole owner of the DOM — otherwise the subsequent array
+   * splice triggers a Vue re-render that conflicts with the
+   * already-moved element, producing incorrect final positions.
+   */
+  from.removeChild(item)
+  from.insertBefore(item, from.children[oldIndex] ?? null)
+
+  const list = account.serviceAccounts
+  const [moved] = list.splice(oldIndex, 1)
+  list.splice(newIndex, 0, moved)
+
+  account.setServiceAccountOrder(list.map((a) => a.sid))
+  void persistAccountOrder(key, list.map((a) => a.sid).join(','))
 }
+
+/* SortableJS instance lifecycle */
+
+const rowsRef = ref<HTMLElement | null>(null)
+let sortableInstance: Sortable | null = null
+
+function initSortable(): void {
+  destroySortable()
+  if (!rowsRef.value) return
+  sortableInstance = Sortable.create(rowsRef.value, {
+    handle: '.account-list__row-grip',
+    animation: 150,
+    ghostClass: 'account-list__row--ghost',
+    forceFallback: true,
+    onEnd: handleDragEnd,
+  })
+}
+
+function destroySortable(): void {
+  if (sortableInstance) {
+    sortableInstance.destroy()
+    sortableInstance = null
+  }
+}
+
+watch(rowsRef, (el) => {
+  if (el) initSortable()
+  else destroySortable()
+})
+
+onBeforeUnmount(destroySortable)
 </script>
 
 <template>
@@ -1959,121 +2034,121 @@ function handleDragEnd(): void {
           </p>
 
           <!--
-            D7: vuedraggable wraps the row list. `:list` binds the
-            actual mutable Pinia state array (not the read-only
-            `serviceAccounts` computed) so Sortable.js' in-place
-            splice flows through Pinia reactivity. The `handle`
-            selector mirrors WPF's `_isHandlePressed` gate — only
-            mouse-down on the grip starts a drag; any other click
-            on the row falls through to `selectRow`. `ghost-class`
-            styles the placeholder slot during drag (defined at the
-            bottom of <style scoped>).
+            D7: SortableJS (via `rowsRef` + `watch`) makes the row
+            list drag-sortable. The `handle` option mirrors WPF's
+            `_isHandlePressed` gate — only mouse-down on the grip
+            starts a drag; any other click on the row falls through
+            to `selectRow`. `ghostClass` styles the placeholder
+            slot during drag (defined at bottom of <style scoped>).
           -->
-          <draggable
+          <ul
             v-else
-            :list="account.serviceAccounts"
-            tag="ul"
-            item-key="sid"
-            handle=".account-list__row-grip"
-            :animation="150"
-            ghost-class="account-list__row--ghost"
+            ref="rowsRef"
             class="account-list__rows"
             data-test="account-list-rows"
-            @end="handleDragEnd"
           >
-            <template #item="{ element: a, index: idx }">
-              <li
-                class="account-list__row"
-                :class="{
-                  'account-list__row--selected': isSelected(a),
-                  'account-list__row--banned': !a.is_enable,
-                }"
-                :data-test="`account-row-${a.sid}`"
-                @click="selectRow(a)"
+            <li
+              v-for="(a, idx) in serviceAccounts"
+              :key="a.sid"
+              class="account-list__row"
+              :class="{
+                'account-list__row--selected': isSelected(a),
+                'account-list__row--banned': !a.is_enable,
+              }"
+              :data-test="`account-row-${a.sid}`"
+              @click="selectRow(a)"
+            >
+              <span
+                class="account-list__row-grip"
+                :title="t('accountList.dragHandle')"
+                aria-hidden="true"
+                >⋮⋮</span
               >
-                <span
-                  class="account-list__row-grip"
-                  :title="t('accountList.dragHandle')"
-                  aria-hidden="true"
-                  >⋮⋮</span
-                >
-                <span class="account-list__row-num">{{ idx + 1 }}</span>
-                <div class="account-list__row-info">
-                  <p class="account-list__row-name">{{ a.sname }}</p>
-                  <p class="account-list__row-sub">
-                    <template v-if="a.is_enable">ID: {{ a.sid }}</template>
-                    <template v-else>{{ t('accountList.statusBanned') }}</template>
-                  </p>
-                </div>
-                <el-dropdown
-                  trigger="click"
-                  placement="bottom-end"
-                  :hide-on-click="true"
-                  popper-class="account-list__row-menu-popper"
+              <span class="account-list__row-num">{{ idx + 1 }}</span>
+              <div class="account-list__row-info">
+                <p class="account-list__row-name">{{ a.sname }}</p>
+                <p class="account-list__row-sub">
+                  <template v-if="a.is_enable">ID: {{ a.sid }}</template>
+                  <template v-else>{{ t('accountList.statusBanned') }}</template>
+                </p>
+              </div>
+              <el-dropdown
+                trigger="click"
+                placement="bottom-end"
+                :hide-on-click="true"
+                popper-class="account-list__row-menu-popper"
+                @click.stop
+              >
+                <button
+                  type="button"
+                  class="account-list__row-more"
+                  :title="t('accountList.moreActions')"
+                  :data-test="`account-row-more-${a.sid}`"
                   @click.stop
                 >
-                  <button
-                    type="button"
-                    class="account-list__row-more"
-                    :title="t('accountList.moreActions')"
-                    :data-test="`account-row-more-${a.sid}`"
-                    @click.stop
-                  >
-                    <el-icon><MoreFilled /></el-icon>
-                  </button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item
-                        :data-test="`account-row-change-alias-${a.sid}`"
-                        @click="handleChangeAlias(a)"
-                      >
-                        <el-icon><EditPen /></el-icon>
-                        <span>{{ t('ChangeAccountName') }}</span>
-                      </el-dropdown-item>
-                      <el-dropdown-item
-                        :data-test="`account-row-info-${a.sid}`"
-                        @click="handleAccountInfo(a)"
-                      >
-                        <el-icon><InfoFilled /></el-icon>
-                        <span>{{ t('GameAccountInfo') }}</span>
-                      </el-dropdown-item>
-                      <el-dropdown-item
-                        :data-test="`account-row-get-email-${a.sid}`"
-                        @click="handleGetEmail"
-                      >
-                        <el-icon><Message /></el-icon>
-                        <span>{{ t('CheckEmail') }}</span>
-                      </el-dropdown-item>
-                      <!--
-                        D8h: Change Password menu item only appears for
-                        unconnected games (mirrors WPF
-                        `m_ChangePassword.Visibility` toggled by
-                        `selectedGameChanged()` on the same predicate).
-                        Connected games delegate password changes to
-                        the Beanfun member centre web flow, which is
-                        opened from the page-level chrome — no
-                        per-row affordance is needed there.
-                      -->
-                      <el-dropdown-item
-                        v-if="game.isUnconnectedGame"
-                        :data-test="`account-row-change-password-${a.sid}`"
-                        @click="handleChangePassword(a)"
-                      >
-                        <el-icon><Key /></el-icon>
-                        <span>{{ t('ChangePassword') }}</span>
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </li>
-            </template>
-          </draggable>
+                  <el-icon><MoreFilled /></el-icon>
+                </button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      :data-test="`account-row-change-alias-${a.sid}`"
+                      @click="handleChangeAlias(a)"
+                    >
+                      <el-icon><EditPen /></el-icon>
+                      <span>{{ t('ChangeAccountName') }}</span>
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      :data-test="`account-row-info-${a.sid}`"
+                      @click="handleAccountInfo(a)"
+                    >
+                      <el-icon><InfoFilled /></el-icon>
+                      <span>{{ t('GameAccountInfo') }}</span>
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      :data-test="`account-row-get-email-${a.sid}`"
+                      @click="handleGetEmail"
+                    >
+                      <el-icon><Message /></el-icon>
+                      <span>{{ t('CheckEmail') }}</span>
+                    </el-dropdown-item>
+                    <!--
+                      D8h: Change Password menu item only appears for
+                      unconnected games (mirrors WPF
+                      `m_ChangePassword.Visibility` toggled by
+                      `selectedGameChanged()` on the same predicate).
+                      Connected games delegate password changes to
+                      the Beanfun member centre web flow, which is
+                      opened from the page-level chrome — no
+                      per-row affordance is needed there.
+                    -->
+                    <el-dropdown-item
+                      v-if="game.isUnconnectedGame"
+                      :data-test="`account-row-change-password-${a.sid}`"
+                      @click="handleChangePassword(a)"
+                    >
+                      <el-icon><Key /></el-icon>
+                      <span>{{ t('ChangePassword') }}</span>
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </li>
+          </ul>
         </div>
 
         <footer class="account-list__list-footer">
+          <p
+            v-if="limitNoticeText"
+            class="account-list__limit-notice"
+            data-test="account-list-limit-notice"
+          >
+            {{ limitNoticeText }}
+          </p>
           <button
             type="button"
             class="account-list__add-btn"
+            :class="{ 'account-list__add-btn--disabled': isAddAccountDisabled }"
+            :disabled="isAddAccountDisabled"
             data-test="account-list-add"
             @click="handleAddAccount"
           >
@@ -2593,7 +2668,7 @@ function handleDragEnd(): void {
  */
 
 /*
- * Vuedraggable ghost-class — applied to the placeholder element
+ * SortableJS ghost-class — applied to the placeholder element
  * Sortable.js inserts at the projected drop location during drag.
  * Subdued styling so the ghost reads as "destination" rather
  * than competing with the live row being dragged.
@@ -2709,9 +2784,22 @@ function handleDragEnd(): void {
     background var(--bf-motion-fast);
 }
 
-.account-list__add-btn:hover {
+.account-list__add-btn:hover:not(:disabled) {
   border-color: var(--bf-primary);
   background: color-mix(in srgb, var(--bf-primary) 6%, transparent);
+}
+
+.account-list__add-btn--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.account-list__limit-notice {
+  margin: 0 0 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--el-color-warning, #e6a23c);
+  text-align: center;
 }
 
 /* --------------- OTP section --------------- */
