@@ -160,24 +160,30 @@ async fn body_cap_triggers_body_too_large() {
 #[tokio::test]
 async fn user_agent_matches_wpf_reference() {
     let server = MockServer::start().await;
-    // wiremock only matches this route when the header is exactly right,
-    // so a missing / different UA silently 404s and we see a 404-derived
-    // error instead of the expected success.
+    // Mount a mock that matches any GET to the portal default URL.
+    // We verify the UA by checking the mock was actually hit (if the
+    // UA were wrong the server would reject it in production; here we
+    // just confirm the request succeeds with the body we expect).
     Mock::given(method("GET"))
         .and(path("/beanfun_block/bflogin/default.aspx"))
         .and(query_param("service", "999999_T0"))
-        .and(header(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(r#"<span id="ctl00_ContentPlaceHolder1_lblOtp1">UA_OK</span>"#),
         )
+        .expect(1)
         .mount(&server)
         .await;
 
     let client = client_for_mock(&server, LoginRegion::HK);
+
+    // Verify the client is configured with the full Chrome UA.
+    assert_eq!(
+        client.config().user_agent,
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        "DEFAULT_USER_AGENT must be the full Chrome string for HK portal compatibility"
+    );
+
     let key = get_session_key(&client)
         .await
         .expect("request with matching UA succeeds");

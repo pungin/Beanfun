@@ -133,6 +133,8 @@
 pub mod account;
 pub mod auth;
 pub mod config;
+#[cfg(target_os = "windows")]
+pub mod cookie_native;
 pub mod dto;
 pub mod error;
 pub mod game;

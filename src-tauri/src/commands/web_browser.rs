@@ -144,7 +144,6 @@ use url::Url;
 use crate::commands::{error::CommandError, session::require_auth, state::AppState};
 use crate::services::beanfun::{
     client::{BeanfunClient, LoginRegion},
-    login::seed_webview_cookies_from_client,
     session::Session,
 };
 
@@ -319,11 +318,13 @@ async fn open_url_in_webview<R: tauri::Runtime>(
     let host_label = target_url.host_str().unwrap_or("").to_string();
     let label = make_window_label();
 
+    // Cookie seeding + navigation strategy:
+    // 1. Build window on `about:blank` (hidden)
+    // 2. Seed cookies via native WebView2 COM API (bypasses Tauri's
+    //    broken `set_cookie` wrapper)
+    // 3. Navigate to the real target URL
     let about_blank: Url = "about:blank".parse().expect("about:blank is a valid URL");
-    let about_blank_str = about_blank.to_string();
 
-    // Q12 race gate — see [`open_url_in_webview`] docblock for the
-    // page-load-callback vs. safety-timer ownership model.
     let already_shown = Arc::new(AtomicBool::new(false));
     let already_shown_for_callback = already_shown.clone();
 
@@ -336,12 +337,8 @@ async fn open_url_in_webview<R: tauri::Runtime>(
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
-            // Filter out the `about:blank` Finished edge that fires
-            // before our `navigate(target_url)` call — we want to
-            // wait until the real target has painted, otherwise
-            // the user briefly sees a blank page and the whole
-            // point of `visible(false)` is defeated.
-            if payload.url().as_str() == about_blank_str {
+            let url = payload.url().as_str();
+            if url == "about:blank" {
                 return;
             }
             // Idempotent: only the first page-load callback wins
@@ -378,32 +375,24 @@ async fn open_url_in_webview<R: tauri::Runtime>(
             )
         })?;
 
-    if let Some(client) = client_opt.as_ref() {
-        let mut seed_failures = 0usize;
-        let seeded = seed_webview_cookies_from_client(client, |cookie| {
-            if let Err(err) = window.set_cookie(cookie.clone()) {
-                seed_failures += 1;
-                tracing::warn!(
-                    step = "InAppBrowser.SeedCookieError",
-                    cookie_name = %cookie.name(),
-                    cookie_domain = ?cookie.domain(),
-                    error = ?err,
-                    "failed to seed cookie into in-app browser; continuing"
-                );
-            }
-            Ok::<(), std::convert::Infallible>(())
-        })
-        .expect("seed closure is infallible");
+    // No separate cookie seeding or navigate() needed — the window
+    // was built with the target URL directly. Cookie seeding + reload
+    // happens inside the on_page_load callback above.
+    let _ = &client_opt; // consumed by the closure
 
+    // Seed cookies via native WebView2 COM API, then navigate.
+    #[cfg(target_os = "windows")]
+    if let Some(ref client) = client_opt {
+        let seeded = super::cookie_native::seed_cookies_native(&window, client);
         tracing::info!(
-            step = "InAppBrowser.SeedSummary",
-            label = %label,
-            host = %host_label,
-            seeded = seeded - seed_failures,
-            failed = seed_failures,
-            "cookie seed summary from BeanfunClient jar before navigation"
+            step = "InAppBrowser.NativeSeed",
+            seeded = seeded,
+            "native cookie seeding complete; navigating to target"
         );
     }
+
+    // Brief yield to let the cookie manager flush.
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     if let Err(err) = window.navigate(target_url.clone()) {
         let _ = window.close();
@@ -607,6 +596,7 @@ pub async fn open_member_center_browser<R: tauri::Runtime>(
 /// Both regions share the same `page_and_query` (unlike Member Center
 /// where TW uses `index_new.aspx`). The only difference is the base
 /// host (`tw.beanfun.com` vs `bfweb.hk.beanfun.com`).
+/// Follow the `auth.aspx` redirect chain using the reqwest client
 fn build_gash_recharge_url(session: &Session) -> String {
     let base = match session.region {
         LoginRegion::TW => "https://tw.beanfun.com/TW/",

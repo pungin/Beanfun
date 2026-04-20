@@ -271,7 +271,32 @@ where
             continue;
         };
         let mut raw = cookie.deref().clone();
-        raw.set_domain(host.into_owned());
+
+        // WebView2's `ICoreWebView2CookieManager::CreateCookie` treats
+        // the domain literally: `"beanfun.com"` matches only the exact
+        // host, while `".beanfun.com"` matches the apex **and** every
+        // subdomain (`bfweb.hk.beanfun.com`, `tw.beanfun.com`, …).
+        //
+        // Suffix cookies (from `Set-Cookie` with explicit `Domain=`)
+        // must domain-match subdomains per RFC 6265 §5.2.3. The store's
+        // `as_cow()` returns the bare host without a leading dot, so
+        // WebView2 would pin them to the apex only. We detect suffix
+        // cookies by checking whether the *original* `RawCookie` (via
+        // `Deref`) already had a `domain()` — suffix entries do,
+        // host-only entries don't (their `domain()` is `None`).
+        //
+        // WPF sidesteps this: `System.Net.CookieContainer` stores the
+        // domain with a leading dot for suffix cookies, so
+        // `CreateCookie` gets the dot-prefixed form automatically.
+        let domain_str = host.into_owned();
+        let is_suffix = raw.domain().is_some();
+        let webview_domain = if is_suffix && !domain_str.starts_with('.') {
+            format!(".{domain_str}")
+        } else {
+            domain_str
+        };
+        raw.set_domain(webview_domain);
+
         sink(raw)?;
         seeded += 1;
     }
