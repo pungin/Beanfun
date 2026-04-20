@@ -105,6 +105,7 @@ import AddAccount from '../windows/AddAccount.vue'
 import ChangeAccount from '../windows/ChangeAccount.vue'
 import { useAccountStore } from '../stores/account'
 import type { Account } from '../types/bindings'
+import TitleBar from '../components/TitleBar.vue'
 
 defineOptions({ name: 'ManageAccount' })
 
@@ -498,208 +499,213 @@ function handleBack(): void {
 </script>
 
 <template>
-  <main class="manage bf-mica-bg">
-    <div class="manage__container">
-      <!-- Header -->
-      <header class="manage__header">
-        <div class="manage__header-icon" aria-hidden="true">
-          <el-icon :size="24"><UserFilled /></el-icon>
-        </div>
-        <div class="manage__header-text">
-          <h1 class="manage__title bf-text-gradient">{{ t('ManageAccount') }}</h1>
-          <p class="manage__subline">{{ t('manageAccount.subtitle') }}</p>
-        </div>
-      </header>
-
-      <!-- Toolbar: search + import / export / add -->
-      <section class="manage__toolbar bf-glass-panel">
-        <div class="manage__toolbar-search">
-          <el-input
-            v-model="query"
-            :placeholder="t('manageAccount.searchPlaceholder')"
-            :disabled="loadState === 'loading'"
-            clearable
-            data-test="manage-account-search"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </div>
-        <div class="manage__toolbar-actions">
-          <el-button
-            class="bf-btn-secondary manage__action-btn"
-            :disabled="importing"
-            data-test="manage-account-import"
-            @click="handleImport"
-          >
-            <el-icon><Upload /></el-icon>
-            <span>{{ t('manageAccount.import') }}</span>
-          </el-button>
-          <el-button
-            class="bf-btn-secondary manage__action-btn"
-            :disabled="exporting || account.accounts.length === 0"
-            data-test="manage-account-export"
-            @click="handleExport"
-          >
-            <el-icon><Download /></el-icon>
-            <span>{{ t('manageAccount.export') }}</span>
-          </el-button>
-          <el-button
-            class="bf-btn-secondary manage__action-btn"
-            data-test="manage-account-backup"
-            @click="openBackup"
-          >
-            <el-icon><Lock /></el-icon>
-            <span>{{ t('DataBackup') }}</span>
-          </el-button>
-          <button
-            type="button"
-            class="bf-btn-gradient manage__action-btn"
-            data-test="manage-account-add"
-            @click="openAdd"
-          >
-            <el-icon><Plus /></el-icon>
-            <span>{{ t('Add') }}</span>
-          </button>
-        </div>
-      </section>
-
-      <!-- Stats: single card (Q7) -->
-      <section class="manage__stats">
-        <div class="manage__stat-card bf-glass-card bf-ghost-border">
-          <el-icon class="manage__stat-icon" :size="20"><UserFilled /></el-icon>
-          <div class="manage__stat-text">
-            <span class="manage__stat-label">
-              {{ t('manageAccount.totalAccounts') }}
-            </span>
-            <span class="manage__stat-value" data-test="manage-account-total">
-              {{ totalAccounts }}
-            </span>
+  <main class="manage bf-glass-window" data-window-root>
+    <TitleBar />
+    <div class="manage__scroll">
+      <div class="manage__container">
+        <!-- Header -->
+        <header class="manage__header">
+          <div class="manage__header-icon" aria-hidden="true">
+            <el-icon :size="24"><UserFilled /></el-icon>
           </div>
-        </div>
-      </section>
+          <div class="manage__header-text">
+            <h1 class="manage__title bf-text-gradient">{{ t('ManageAccount') }}</h1>
+            <p class="manage__subline">{{ t('manageAccount.subtitle') }}</p>
+          </div>
+        </header>
 
-      <!-- Table -->
-      <section class="manage__list bf-glass-panel">
-        <div class="manage__list-header">
-          <div class="manage__col-handle" />
-          <div class="manage__col-account">{{ t('manageAccount.colAccount') }}</div>
-          <div class="manage__col-remark">{{ t('manageAccount.colRemark') }}</div>
-          <div class="manage__col-region">{{ t('manageAccount.colRegion') }}</div>
-          <div class="manage__col-last">{{ t('manageAccount.colLastLogin') }}</div>
-          <div class="manage__col-actions">{{ t('manageAccount.colActions') }}</div>
-        </div>
-
-        <div class="manage__list-body bf-custom-scrollbar">
-          <p
-            v-if="loadState === 'loading'"
-            class="manage__list-state"
-            data-test="manage-account-loading"
-          >
-            {{ t('accountList.loading') }}
-          </p>
-
-          <div
-            v-else-if="loadState === 'error'"
-            class="manage__list-state manage__list-state--error"
-            data-test="manage-account-error"
-          >
-            <p>{{ loadError ?? t('accountList.loadFailed') }}</p>
+        <!-- Toolbar: search + import / export / add -->
+        <section class="manage__toolbar bf-glass-panel">
+          <div class="manage__toolbar-search">
+            <el-input
+              v-model="query"
+              :placeholder="t('manageAccount.searchPlaceholder')"
+              :disabled="loadState === 'loading'"
+              clearable
+              data-test="manage-account-search"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+          </div>
+          <div class="manage__toolbar-actions">
             <el-button
-              type="primary"
-              plain
-              size="small"
-              data-test="manage-account-retry"
-              @click="loadList"
+              class="bf-btn-secondary manage__action-btn"
+              :disabled="importing"
+              data-test="manage-account-import"
+              @click="handleImport"
             >
-              {{ t('accountList.retry') }}
+              <el-icon><Upload /></el-icon>
+              <span>{{ t('manageAccount.import') }}</span>
             </el-button>
-          </div>
-
-          <p
-            v-else-if="loadState === 'empty'"
-            class="manage__list-state"
-            data-test="manage-account-empty"
-          >
-            {{ t('manageAccount.empty') }}
-          </p>
-
-          <p
-            v-else-if="searchedAccounts.length === 0"
-            class="manage__list-state"
-            data-test="manage-account-no-search-result"
-          >
-            {{ t('manageAccount.noSearchResult') }}
-          </p>
-
-          <div
-            v-for="(row, index) in searchedAccounts"
-            v-else
-            :key="`${row.region}|${row.account_id}`"
-            class="manage__row"
-            :class="{ 'manage__row--last': index === searchedAccounts.length - 1 }"
-            :data-test="`manage-account-row-${row.region}-${row.account_id}`"
-          >
-            <span
-              class="manage__drag-handle"
-              :title="t('manageAccount.dragDisabledTip')"
-              data-test="manage-account-drag-handle"
+            <el-button
+              class="bf-btn-secondary manage__action-btn"
+              :disabled="exporting || account.accounts.length === 0"
+              data-test="manage-account-export"
+              @click="handleExport"
             >
-              <el-icon><Rank /></el-icon>
-            </span>
-            <div class="manage__cell-account">
-              <div class="manage__avatar" aria-hidden="true">{{ avatarGlyph(row) }}</div>
-              <span class="manage__account-id">{{ row.account_id }}</span>
-            </div>
-            <div class="manage__cell-remark">
-              <span v-if="row.account_name.trim().length > 0">{{ row.account_name }}</span>
-              <span v-else class="manage__remark-empty">
-                {{ t('manageAccount.remarkEmpty') }}
+              <el-icon><Download /></el-icon>
+              <span>{{ t('manageAccount.export') }}</span>
+            </el-button>
+            <el-button
+              class="bf-btn-secondary manage__action-btn"
+              data-test="manage-account-backup"
+              @click="openBackup"
+            >
+              <el-icon><Lock /></el-icon>
+              <span>{{ t('DataBackup') }}</span>
+            </el-button>
+            <button
+              type="button"
+              class="bf-btn-gradient manage__action-btn"
+              data-test="manage-account-add"
+              @click="openAdd"
+            >
+              <el-icon><Plus /></el-icon>
+              <span>{{ t('Add') }}</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Stats: single card (Q7) -->
+        <section class="manage__stats">
+          <div class="manage__stat-card bf-glass-card bf-ghost-border">
+            <el-icon class="manage__stat-icon" :size="20"><UserFilled /></el-icon>
+            <div class="manage__stat-text">
+              <span class="manage__stat-label">
+                {{ t('manageAccount.totalAccounts') }}
               </span>
-            </div>
-            <div class="manage__cell-region">
-              <span class="manage__chip" :class="{ 'manage__chip--primary': row.region === 'TW' }">
-                {{ regionLabel(row.region) }}
+              <span class="manage__stat-value" data-test="manage-account-total">
+                {{ totalAccounts }}
               </span>
-            </div>
-            <div class="manage__cell-last">
-              {{ t('manageAccount.lastLoginUnknown') }}
-            </div>
-            <div class="manage__cell-actions">
-              <button
-                type="button"
-                class="manage__icon-btn"
-                :title="t('manageAccount.editAction')"
-                :data-test="`manage-account-edit-${row.region}-${row.account_id}`"
-                @click="openEdit(row)"
-              >
-                <el-icon><EditPen /></el-icon>
-              </button>
-              <button
-                type="button"
-                class="manage__icon-btn"
-                :title="t('manageAccount.copyIdAction')"
-                :data-test="`manage-account-copy-${row.region}-${row.account_id}`"
-                @click="handleCopyId(row)"
-              >
-                <el-icon><DocumentCopy /></el-icon>
-              </button>
-              <button
-                type="button"
-                class="manage__icon-btn manage__icon-btn--danger"
-                :title="t('manageAccount.deleteAction')"
-                :data-test="`manage-account-delete-${row.region}-${row.account_id}`"
-                @click="handleDelete(row)"
-              >
-                <el-icon><Delete /></el-icon>
-              </button>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!--
+        <!-- Table -->
+        <section class="manage__list bf-glass-panel">
+          <div class="manage__list-header">
+            <div class="manage__col-handle" />
+            <div class="manage__col-account">{{ t('manageAccount.colAccount') }}</div>
+            <div class="manage__col-remark">{{ t('manageAccount.colRemark') }}</div>
+            <div class="manage__col-region">{{ t('manageAccount.colRegion') }}</div>
+            <div class="manage__col-last">{{ t('manageAccount.colLastLogin') }}</div>
+            <div class="manage__col-actions">{{ t('manageAccount.colActions') }}</div>
+          </div>
+
+          <div class="manage__list-body bf-custom-scrollbar">
+            <p
+              v-if="loadState === 'loading'"
+              class="manage__list-state"
+              data-test="manage-account-loading"
+            >
+              {{ t('accountList.loading') }}
+            </p>
+
+            <div
+              v-else-if="loadState === 'error'"
+              class="manage__list-state manage__list-state--error"
+              data-test="manage-account-error"
+            >
+              <p>{{ loadError ?? t('accountList.loadFailed') }}</p>
+              <el-button
+                type="primary"
+                plain
+                size="small"
+                data-test="manage-account-retry"
+                @click="loadList"
+              >
+                {{ t('accountList.retry') }}
+              </el-button>
+            </div>
+
+            <p
+              v-else-if="loadState === 'empty'"
+              class="manage__list-state"
+              data-test="manage-account-empty"
+            >
+              {{ t('manageAccount.empty') }}
+            </p>
+
+            <p
+              v-else-if="searchedAccounts.length === 0"
+              class="manage__list-state"
+              data-test="manage-account-no-search-result"
+            >
+              {{ t('manageAccount.noSearchResult') }}
+            </p>
+
+            <div
+              v-for="(row, index) in searchedAccounts"
+              v-else
+              :key="`${row.region}|${row.account_id}`"
+              class="manage__row"
+              :class="{ 'manage__row--last': index === searchedAccounts.length - 1 }"
+              :data-test="`manage-account-row-${row.region}-${row.account_id}`"
+            >
+              <span
+                class="manage__drag-handle"
+                :title="t('manageAccount.dragDisabledTip')"
+                data-test="manage-account-drag-handle"
+              >
+                <el-icon><Rank /></el-icon>
+              </span>
+              <div class="manage__cell-account">
+                <div class="manage__avatar" aria-hidden="true">{{ avatarGlyph(row) }}</div>
+                <span class="manage__account-id">{{ row.account_id }}</span>
+              </div>
+              <div class="manage__cell-remark">
+                <span v-if="row.account_name.trim().length > 0">{{ row.account_name }}</span>
+                <span v-else class="manage__remark-empty">
+                  {{ t('manageAccount.remarkEmpty') }}
+                </span>
+              </div>
+              <div class="manage__cell-region">
+                <span
+                  class="manage__chip"
+                  :class="{ 'manage__chip--primary': row.region === 'TW' }"
+                >
+                  {{ regionLabel(row.region) }}
+                </span>
+              </div>
+              <div class="manage__cell-last">
+                {{ t('manageAccount.lastLoginUnknown') }}
+              </div>
+              <div class="manage__cell-actions">
+                <button
+                  type="button"
+                  class="manage__icon-btn"
+                  :title="t('manageAccount.editAction')"
+                  :data-test="`manage-account-edit-${row.region}-${row.account_id}`"
+                  @click="openEdit(row)"
+                >
+                  <el-icon><EditPen /></el-icon>
+                </button>
+                <button
+                  type="button"
+                  class="manage__icon-btn"
+                  :title="t('manageAccount.copyIdAction')"
+                  :data-test="`manage-account-copy-${row.region}-${row.account_id}`"
+                  @click="handleCopyId(row)"
+                >
+                  <el-icon><DocumentCopy /></el-icon>
+                </button>
+                <button
+                  type="button"
+                  class="manage__icon-btn manage__icon-btn--danger"
+                  :title="t('manageAccount.deleteAction')"
+                  :data-test="`manage-account-delete-${row.region}-${row.account_id}`"
+                  @click="handleDelete(row)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!--
         Footer: encryption hint (left) + Back button (right).
         Hint and back button share the same flex row so the
         layout collapses gracefully on narrow widths (the back
@@ -708,36 +714,41 @@ function handleBack(): void {
         (P12.4-followup-B-fix F6 — without this the page had no
         navigation affordance back to Settings).
       -->
-      <footer class="manage__footer">
-        <div class="manage__footer-hint">
-          <el-icon><InfoFilled /></el-icon>
-          <span>{{ t('manageAccount.footerHint') }}</span>
-        </div>
-        <el-button
-          class="bf-btn-secondary manage__back-btn"
-          data-test="manage-account-back"
-          @click="handleBack"
-        >
-          <el-icon><ArrowLeft /></el-icon>
-          <span>{{ t('Back') }}</span>
-        </el-button>
-      </footer>
+        <footer class="manage__footer">
+          <div class="manage__footer-hint">
+            <el-icon><InfoFilled /></el-icon>
+            <span>{{ t('manageAccount.footerHint') }}</span>
+          </div>
+          <el-button
+            class="bf-btn-secondary manage__back-btn"
+            data-test="manage-account-back"
+            @click="handleBack"
+          >
+            <el-icon><ArrowLeft /></el-icon>
+            <span>{{ t('Back') }}</span>
+          </el-button>
+        </footer>
 
-      <!-- Add / Edit / Recovery dialogs — mounted unconditionally for transitions. -->
-      <AddAccount v-model:visible="addVisible" />
-      <ChangeAccount v-model:visible="editVisible" :account="editTarget" />
-      <AccRecovery v-model:visible="accRecoveryVisible" @restored="handleRestored" />
+        <!-- Add / Edit / Recovery dialogs — mounted unconditionally for transitions. -->
+        <AddAccount v-model:visible="addVisible" />
+        <ChangeAccount v-model:visible="editVisible" :account="editTarget" />
+        <AccRecovery v-model:visible="accRecoveryVisible" @restored="handleRestored" />
+      </div>
     </div>
   </main>
 </template>
 
 <style scoped>
 .manage {
-  box-sizing: border-box;
-  min-height: 100vh;
-  padding: 2.5rem 1.5rem;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.manage__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
 }
 
 .manage__container {
