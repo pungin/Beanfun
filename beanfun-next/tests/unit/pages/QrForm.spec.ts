@@ -99,7 +99,24 @@ vi.mock('../../../src/types/bindings', () => ({
     getVerifyCaptcha: vi.fn(),
     submitVerify: vi.fn(),
     logout: vi.fn(),
+    detectGamePath: vi.fn(),
+    listGameProcesses: vi.fn(),
+    killGameProcesses: vi.fn(),
+    openUrl: vi.fn(),
+    launchGame: vi.fn(),
   },
+}))
+
+/*
+ * P12.4 followup-A D9 — stub the launcher composable so QrForm
+ * `GameStart` tests don't have to seed game store + config + 5 IPC
+ * mocks. We only assert that the button delegates correctly; the
+ * composable's own spec covers the launch pipeline behaviour.
+ */
+const { runGameSpy } = vi.hoisted(() => ({ runGameSpy: vi.fn() }))
+
+vi.mock('../../../src/composables/useGameLauncher', () => ({
+  useGameLauncher: () => ({ runGame: runGameSpy }),
 }))
 
 import { commands } from '../../../src/types/bindings'
@@ -218,6 +235,7 @@ describe('QrForm', () => {
     elMessageInfo.mockReset()
     elMessageSuccess.mockReset()
     elMessageError.mockReset()
+    runGameSpy.mockReset()
     mockClipboard(() => Promise.resolve())
   })
 
@@ -482,5 +500,34 @@ describe('QrForm', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18nMessages['en-US'].loginQr.title)
+  })
+
+  /**
+   * P12.4 followup-A D9 — GameStart parity (WPF
+   * `qr_form.xaml.cs::btn_StartGame_Click` L84-87, a 3-line
+   * `App.MainWnd.runGame()` call).
+   *
+   * The composable owns snapshot restoration + the empty-state
+   * `GameSelected` toast, so this spec asserts only the
+   * delegation path: click → `useGameLauncher().runGame()` with
+   * no credential args, and no incidental network side-effects
+   * (no `loginQrStart` re-fire / no `loginQrCheck` extra hits).
+   */
+  it('GameStart delegates to useGameLauncher().runGame() with no credentials', async () => {
+    mockLoginQrStart.mockReturnValueOnce(ok(CHALLENGE))
+    mockLoginQrCheck.mockResolvedValue({ status: 'ok', data: STATUS_PENDING })
+
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    const startCallsBefore = mockLoginQrStart.mock.calls.length
+    await wrapper.find('[data-testid="qr-game-start"]').trigger('click')
+    await flushPromises()
+
+    expect(runGameSpy).toHaveBeenCalledTimes(1)
+    expect(runGameSpy).toHaveBeenCalledWith()
+    expect(mockLoginQrStart.mock.calls.length).toBe(startCallsBefore)
+    expect(ctx.router.currentRoute.value.path).toBe('/login/qr')
   })
 })

@@ -121,7 +121,7 @@ import { useAuthStore } from '../stores/auth'
 import { useAccountStore } from '../stores/account'
 import { useConfigStore } from '../stores/config'
 import { useGameStore, gameCodeOf, imageUrl } from '../stores/game'
-import { commands, type GameStartMode, type ServiceAccount } from '../types/bindings'
+import { commands, type ServiceAccount } from '../types/bindings'
 import {
   CommandInvocationError,
   safeInvoke,
@@ -137,6 +137,7 @@ import ToolsDialogStack from '../windows/ToolsDialogStack.vue'
 import UnconnectedGameAddAccount from '../windows/UnconnectedGame_AddAccount.vue'
 import UnconnectedGameChangePassword from '../windows/UnconnectedGame_ChangePassword.vue'
 import { TOOLS_GAME_CODES } from '../constants/tools'
+import { useGameLauncher } from '../composables/useGameLauncher'
 
 defineOptions({ name: 'AccountList' })
 
@@ -163,6 +164,17 @@ const configStore = useConfigStore()
  * detection).
  */
 const game = useGameStore()
+/*
+ * P12.4 followup-A D4 — game-launch chain extracted into the
+ * `useGameLauncher` composable so `pages/IdPassForm.vue` and
+ * `pages/QrForm.vue` can share the same `runGame(account, password)`
+ * pipeline (WPF `MainWindow.runGame` is called from both LoginPage
+ * forms via `btn_StartGame_Click` and from AccountList via
+ * `Button_Click`). The composable keeps every WPF parity behaviour
+ * (resolveGamePath / pathHasWideChar / process check / mode resolve
+ * / final spawn) — see its docblock for the WPF source line table.
+ */
+const launcher = useGameLauncher()
 
 /* --------------- service-account list state --------------- */
 
@@ -542,6 +554,37 @@ async function selectActiveGame(
    * matches WPF's "set first, then act" ordering at L661.
    */
   await configStore.set('loginGame', gameCodeOf(serviceCode, serviceRegion))
+  /*
+   * P12.4 followup-A D5 — also persist the active game's INI
+   * snapshot so `pages/IdPassForm.vue` / `pages/QrForm.vue`
+   * GameStart buttons (WPF `btn_StartGame_Click`) can launch the
+   * same game from the LoginPage even after `clearGameData` wiped
+   * the in-memory game store on logout / session-expired.
+   *
+   * Mirrors WPF MainWindow instance state lifetime — the
+   * `game_exe` / `game_commandLine` / `game.dir_value_name` /
+   * `game.dir_reg` / `win_class_name` fields survive a logout
+   * because they live on the `MainWindow` instance, not the
+   * session. They only reset on full process restart.
+   *
+   * Stored as JSON because `useConfigStore` is string-only K-V;
+   * `game.restoreLastSelected()` (D6) is the symmetric read path
+   * used by `useGameLauncher` consumers running outside an
+   * authenticated session. Existing `loginGame` config key (WPF
+   * `Config.xml::loginGame` — `setupGameOnMount` source of
+   * truth, L641) is reused for the gameCode itself; only the
+   * INI body needs the new key.
+   *
+   * Soft-fails if `selectedIni` is somehow null (cold mount
+   * race window). The launcher's `restoreLastSelected` will
+   * then return `false` and the LoginForm GameStart button will
+   * surface `GameSelected` toast — same fallback as WPF when
+   * `service_code` is empty.
+   */
+  const activeIni = game.selectedIni
+  if (activeIni !== null) {
+    await configStore.set('lastSelectedIni', JSON.stringify(activeIni))
+  }
 
   const session = auth.session
   const sameAsSession =
@@ -931,239 +974,6 @@ const startGameDisabled = computed<boolean>(() => {
 })
 
 /**
- * Map the `startGameMode` config value (string-encoded integer
- * `"0"` / `"1"` / `"2"` per WPF `MainWindow.xaml.cs` L1837 +
- * `enum GameStartMode` L32-37) to the backend [`GameStartMode`]
- * tagged union.
- *
- * The backend enum re-serialises as PascalCase string literals
- * (`"Auto"` / `"Normal"` / `"LocaleRemulator"`) over IPC — mapping
- * here lets the frontend read the legacy integer config without
- * the backend having to accept either shape. Defaults to `Auto`
- * on missing / unparseable input, mirroring WPF's `int.Parse`
- * fallback path (default `"0"` is `Auto`).
- */
-function resolveStartMode(): GameStartMode {
-  const raw = configStore.getOr('startGameMode', '0')
-  const parsed = Number.parseInt(raw, 10)
-  if (Number.isNaN(parsed) || parsed <= 0) return 'Auto'
-  if (parsed === 1) return 'Normal'
-  return 'LocaleRemulator'
-}
-
-/**
- * Test whether `gamePath` contains any non-ASCII char (>0x80) —
- * mirrors WPF `MainWindow.xaml.cs` L1753-1763 which warns on
- * "wide chars" in the path because Locale Emulator (the LR
- * launch mode) is known to choke on multi-byte path characters.
- *
- * The check is purely advisory — we surface `MsgGamePathHaveWChar`
- * but continue with the launch (matching WPF's `break` after the
- * MessageBox).
- */
-function pathHasWideChar(gamePath: string): boolean {
-  for (let i = 0; i < gamePath.length; i += 1) {
-    if (gamePath.charCodeAt(i) > 128) return true
-  }
-  return false
-}
-
-/**
- * Resolve the install path for the active game's executable.
- *
- * Mirrors WPF L1727-1751:
- * 1. Read from `settingPage.t_GamePath.Text` (= Config.xml under
- *    `<dir_value_name>.<gameCode>` in the SPA backend, see
- *    `commands/launcher.rs::detect_game_path`).
- * 2. If empty / file missing → `MsgCantFindGame` Yes/No prompt.
- *    - Yes (or no game selected) → would normally open the file
- *      picker (`btn_SetGamePath_Click`). The Settings page is
- *      P12.4 scope; until then we surface a
- *      `accountList.gamePathPickerPending` toast so the user knows
- *      the redirect target is missing.
- *    - No → open the game's `download_url` (`Process.Start` with
- *      `UseShellExecute = true` — IPC equivalent is
- *      [`commands.openUrl`]).
- *    Either branch returns `null` to signal "abort the launch".
- * 3. Re-read after the prompt (WPF L1747-1751 paranoid double-check
- *    in case the user picked a path mid-flow). Replicated for
- *    parity even though the SPA's prompt path doesn't currently
- *    mutate the config inline.
- *
- * Returns the resolved game path on success, `null` when the
- * launch should abort (user chose "No" / pending-Settings toast
- * surfaced / re-read still empty).
- */
-async function resolveGamePath(): Promise<string | null> {
-  const selected = game.selectedGame
-  const ini = game.selectedIni
-  if (!selected || !ini || game.selectedGameCode === null) {
-    ElMessage.warning(t('GameSelected'))
-    return null
-  }
-
-  const detectResult = await safeInvoke(
-    commands.detectGamePath(game.selectedGameCode, ini.dir_value_name, ini.dir_reg),
-  )
-  const detected = detectResult.ok ? (detectResult.data ?? '') : ''
-
-  if (detected !== '') return detected
-
-  /*
-   * MsgCantFindGame prompt mirrors WPF L1730-1746:
-   *   Yes → open the path picker (Settings page P12.4 stub).
-   *   No  → open the download URL.
-   * `ElMessageBox.confirm` rejects on Cancel (= the picker close
-   * button); we treat that as "cancel the launch" rather than a
-   * third option.
-   */
-  let prompt: 'yes' | 'no'
-  try {
-    await ElMessageBox.confirm(t('MsgCantFindGame'), '', {
-      confirmButtonText: t('Yes'),
-      cancelButtonText: t('No'),
-      type: 'warning',
-    })
-    prompt = 'yes'
-  } catch (cancelOrNo) {
-    /*
-     * `ElMessageBox.confirm` rejects with `'cancel'` on Cancel and
-     * `'close'` on the X / Esc. Treat `'cancel'` as the "No" branch
-     * so the user can use the cancel button as the WPF `No` button
-     * (matches mockup parity); `'close'` short-circuits the launch.
-     */
-    if (cancelOrNo === 'cancel') {
-      prompt = 'no'
-    } else {
-      return null
-    }
-  }
-
-  if (prompt === 'yes') {
-    /*
-     * Settings page (where `btn_SetGamePath_Click` lives) is
-     * P12.4 scope. Surface a pending-Settings toast so the user
-     * isn't left wondering why nothing happened — and so QA can
-     * spot the missing redirect.
-     */
-    ElMessage.info(t('accountList.gamePathPickerPending'))
-    return null
-  }
-
-  /*
-   * `download_url` is empty for some unconnected games (the
-   * Beanfun catalogue doesn't always populate it). Fall through
-   * to the same pending-Settings toast in that case so the user
-   * has a consistent fallback message instead of a silent no-op.
-   */
-  if (selected.download_url === '') {
-    ElMessage.info(t('accountList.gamePathPickerPending'))
-    return null
-  }
-  await safeInvoke(commands.openUrl(selected.download_url))
-  return null
-}
-
-/**
- * Already-running-process check + optional kill prompt. Mirrors
- * WPF L1765-1833:
- * 1. Enumerate processes whose `executable_path` matches the
- *    target `gamePath` (backend `list_game_processes`
- *    encapsulates the WPF process-name regex + WMI filter).
- * 2. If any match, prompt `MsgGameAlreadyRun` Yes/No.
- *    - Yes → `kill_game_processes(pids)` and continue.
- *    - No  → continue without killing (WPF launches anyway,
- *      treating the prompt as advisory).
- *
- * Returns `true` to proceed with the launch, `false` to abort
- * (user dismissed the prompt with Esc / X).
- */
-async function checkAndKillRunningGameProcesses(gamePath: string): Promise<boolean> {
-  const listResult = await safeInvoke(commands.listGameProcesses(gamePath))
-  if (!listResult.ok) {
-    /*
-     * Process enumeration failed (rare — usually a WMI permission
-     * issue). The standard wrapCommand-style toast would be too
-     * loud here; log and continue so the user can still launch.
-     */
-    console.warn('[AccountList] listGameProcesses failed:', listResult.error)
-    return true
-  }
-  if (listResult.data.length === 0) return true
-
-  let confirmed: boolean
-  try {
-    await ElMessageBox.confirm(t('MsgGameAlreadyRun'), '', {
-      confirmButtonText: t('Yes'),
-      cancelButtonText: t('No'),
-      type: 'warning',
-    })
-    confirmed = true
-  } catch (cancelOrNo) {
-    /*
-     * Mirrors WPF: only the explicit Yes branch kills processes.
-     * `cancel` (No) and `close` (Esc / X) both fall through to
-     * "launch anyway" — WPF doesn't gate the launch on the kill
-     * prompt either.
-     */
-    void cancelOrNo
-    confirmed = false
-  }
-
-  if (confirmed) {
-    const pids = listResult.data.map((p) => p.pid)
-    await safeInvoke(commands.killGameProcesses(pids))
-  }
-  return true
-}
-
-/**
- * Main launch entry point. Mirrors WPF `runGame(account, password)`
- * (`MainWindow.xaml.cs` L1724-1900) end-to-end with the WPF
- * sub-routines factored into the helpers above for SRP.
- *
- * Empty `account` / `password` string args (the default) mean
- * "no credentials" — `commands.launchGame` treats that as
- * `command_line` substitution being disabled, matching WPF L1867-1879
- * (`account != "" && password != "" && game_commandLine != ""`).
- *
- * # Why no try/catch around `commands.launchGame`
- *
- * The IPC funnels failures through `wrapCommand` already (toast +
- * console). WPF L1895-1899 wraps the launch in a try/catch that
- * surfaces `MsgLocalePluginRunError` for LR-mode failures; the
- * backend `launch_game` already maps LR-resource / spawn errors to
- * structured `CommandError` codes that the frontend toasts via
- * `wrapCommand`. Re-catching here would double-toast.
- */
-async function runGame(accountId = '', password = ''): Promise<void> {
-  const ini = game.selectedIni
-  if (!ini) {
-    ElMessage.warning(t('GameSelected'))
-    return
-  }
-
-  const gamePath = await resolveGamePath()
-  if (gamePath === null) return
-
-  if (pathHasWideChar(gamePath)) {
-    /*
-     * Advisory-only — WPF L1760-1762 shows the MsgBox then
-     * `break`s out of the scan loop and continues the launch. We
-     * do the same with a non-blocking warning toast.
-     */
-    ElMessage.warning(t('MsgGamePathHaveWChar'))
-  }
-
-  const proceed = await checkAndKillRunningGameProcesses(gamePath)
-  if (!proceed) return
-
-  const mode = resolveStartMode()
-
-  await wrapCommand(commands.launchGame(gamePath, mode, ini.exe, accountId, password))
-}
-
-/**
  * Start Game button click handler. Mirrors WPF
  * `Pages/AccountList.xaml.cs::Button_Click` (L55-71):
  *
@@ -1188,7 +998,7 @@ async function handleStartGame(): Promise<void> {
     return
   }
   if (startGameDirect.value) {
-    await runGame()
+    await launcher.runGame()
     return
   }
   await handleGetOtp()
@@ -1629,7 +1439,7 @@ async function handleGetOtp(): Promise<void> {
    */
   if (otpLaunchChain.value) {
     gettingOtp.value = false
-    await runGame(target.sid, otp)
+    await launcher.runGame(target.sid, otp)
     return
   }
 

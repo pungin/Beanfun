@@ -60,6 +60,16 @@
  * so the affordance is zero-click obvious. Otherwise
  * `navigator.clipboard.writeText` + success toast; clipboard API
  * failure → `CopyFailed` toast (same resource key WPF used).
+ *
+ * # P12.4 followup-A: GameStart button
+ *
+ * WPF `qr_form.xaml.cs::btn_StartGame_Click` (L84-87) is a
+ * 3-line `App.MainWnd.runGame()` call — same parity surface as
+ * `id-pass_form.xaml.cs` L297-300. The SPA delegates to the
+ * shared `useGameLauncher` composable so QR + IdPass both go
+ * through the same restoration + launch chain. Snapshot
+ * absent → `GameSelected` toast (`useGameLauncher` internal),
+ * matching WPF's behaviour when `service_code` is empty.
  */
 
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -71,6 +81,7 @@ import { AUTH_ACTIONS, useAuthStore } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
 import { CommandInvocationError } from '../services/invoke'
 import type { LoginRegion } from '../types/bindings'
+import { useGameLauncher } from '../composables/useGameLauncher'
 
 defineOptions({ name: 'QrForm' })
 
@@ -88,6 +99,13 @@ const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 const config = useConfigStore()
+/*
+ * P12.4 followup-A D8 — GameStart parity (WPF
+ * `qr_form.xaml.cs::btn_StartGame_Click` L84-87). Composable
+ * does its own `restoreLastSelected(config)` so this file
+ * doesn't have to know about the persistence shape.
+ */
+const launcher = useGameLauncher()
 
 /**
  * Inline "connection lost" banner flag. Flipped true when the poll
@@ -270,6 +288,20 @@ async function goBack(): Promise<void> {
   clearPollTimer()
   await router.push('/login')
 }
+
+/**
+ * GameStart button — fires the shared launcher chain. See file
+ * docblock "P12.4 followup-A: GameStart button" for the WPF
+ * parity rationale; the composable handles snapshot
+ * restoration + the empty-state `GameSelected` toast on its
+ * own, so this handler is a one-liner.
+ *
+ * Fire-and-forget — every failure path is toasted inside the
+ * composable / its IPC `wrapCommand` calls.
+ */
+function handleGameStart(): void {
+  void launcher.runGame()
+}
 </script>
 
 <template>
@@ -319,6 +351,15 @@ async function goBack(): Promise<void> {
         {{ t('RefreshQRCode') }}
       </el-button>
     </div>
+
+    <el-button
+      class="qr-form__game-start"
+      size="large"
+      data-testid="qr-game-start"
+      @click="handleGameStart"
+    >
+      {{ t('GameStart') }}
+    </el-button>
   </section>
 </template>
 
@@ -404,6 +445,11 @@ async function goBack(): Promise<void> {
 
 .qr-form__back,
 .qr-form__refresh {
+  width: 100%;
+  font-weight: 700;
+}
+
+.qr-form__game-start {
   width: 100%;
   font-weight: 700;
 }

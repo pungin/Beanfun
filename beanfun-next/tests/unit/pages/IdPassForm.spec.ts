@@ -168,7 +168,56 @@ vi.mock('../../../src/types/bindings', () => ({
     logout: vi.fn(),
     loadAccounts: vi.fn(),
     saveAccount: vi.fn(),
+    detectGamePath: vi.fn(),
+    listGameProcesses: vi.fn(),
+    killGameProcesses: vi.fn(),
+    openUrl: vi.fn(),
+    launchGame: vi.fn(),
   },
+}))
+
+/*
+ * P12.4 followup-A D9 — stub the WebBrowser dialog so opening it
+ * doesn't pull in the full Element Plus + iframe machinery. The
+ * stub records the last `url` prop and `visible` state so tests
+ * can assert region-aware URL routing.
+ */
+const { lastWebBrowserUrl, lastWebBrowserVisible } = vi.hoisted(() => ({
+  lastWebBrowserUrl: { current: '' as string },
+  lastWebBrowserVisible: { current: false },
+}))
+
+vi.mock('../../../src/windows/WebBrowser.vue', () => ({
+  default: defineComponent({
+    name: 'WebBrowserStub',
+    props: {
+      visible: { type: Boolean, default: false },
+      url: { type: String, default: '' },
+    },
+    setup(props) {
+      return () => {
+        lastWebBrowserUrl.current = props.url
+        lastWebBrowserVisible.current = props.visible
+        return h('div', {
+          class: 'web-browser-stub',
+          'data-test': 'web-browser-stub',
+          'data-url': props.url,
+          'data-visible': props.visible ? 'true' : 'false',
+        })
+      }
+    },
+  }),
+}))
+
+/*
+ * P12.4 followup-A D9 — stub the launcher composable so GameStart
+ * tests don't have to seed game store + config + 5 IPC mocks. We
+ * just want to assert the button wires through.
+ */
+const { runGameSpy } = vi.hoisted(() => ({ runGameSpy: vi.fn() }))
+
+vi.mock('../../../src/composables/useGameLauncher', () => ({
+  useGameLauncher: () => ({ runGame: runGameSpy }),
 }))
 
 import { commands } from '../../../src/types/bindings'
@@ -667,5 +716,98 @@ describe('IdPassForm — P12.2 D2 credential persistence', () => {
 
     expect(ctx.router.currentRoute.value.path).toBe('/login/verify')
     expect(auth.loginIntent?.accountId).toBe('alice')
+  })
+})
+
+/**
+ * P12.4 followup-A D9 — RegisterAccount / ForgotPassword / GameStart.
+ *
+ * What this block locks down (matches WPF
+ * `id-pass_form.xaml(.cs)` `RegAcc_Click` / `FindPwd_Click` /
+ * `btn_StartGame_Click` parity decisions made in D7):
+ *
+ * 1. ForgotPassword button → opens `WebBrowser` dialog with the
+ *    region-aware `LOGIN_EXTERNAL_URLS.forgotPwd[region]` URL.
+ *    Default region (no Config.xml override) → TW URL.
+ * 2. ForgotPassword button respects HK from Config.xml → HK URL.
+ * 3. RegisterAccount button → same dispatch, but with the
+ *    `register` URL set, region-aware (TW default + HK override).
+ * 4. GameStart button → delegates to `useGameLauncher().runGame()`
+ *    with no credentials (matches WPF `App.MainWnd.runGame()` no-arg
+ *    call). The composable owns the `restoreLastSelected` hand-off
+ *    and the empty-store toast, so this spec only asserts the
+ *    delegation.
+ */
+describe('IdPassForm — P12.4 followup-A (Register / Forgot / GameStart)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockLoginRegular.mockReset()
+    mockSaveAccount.mockReset()
+    mockSetConfig.mockReset()
+    elMessageError.mockReset()
+    runGameSpy.mockReset()
+    lastWebBrowserUrl.current = ''
+    lastWebBrowserVisible.current = false
+  })
+
+  it('ForgotPassword opens WebBrowser dialog with TW forgot_pwd URL by default', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+
+    expect(lastWebBrowserVisible.current).toBe(false)
+    await wrapper.get('[data-test="id-pass-forgot-password"]').trigger('click')
+    await flushPromises()
+
+    expect(lastWebBrowserVisible.current).toBe(true)
+    expect(lastWebBrowserUrl.current).toBe('https://tw.beanfun.com/member/forgot_pwd.aspx')
+    expect(runGameSpy).not.toHaveBeenCalled()
+  })
+
+  it('ForgotPassword respects HK from Config.xml → HK forgot_pwd URL', async () => {
+    const ctx = mountForm('HK')
+    const wrapper = await ctx.mountIt()
+
+    await wrapper.get('[data-test="id-pass-forgot-password"]').trigger('click')
+    await flushPromises()
+
+    expect(lastWebBrowserVisible.current).toBe(true)
+    expect(lastWebBrowserUrl.current).toBe('https://bfweb.hk.beanfun.com/member/forgot_pwd.aspx')
+  })
+
+  it('RegisterAccount opens WebBrowser dialog with TW signup URL by default', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+
+    await wrapper.get('[data-test="id-pass-register"]').trigger('click')
+    await flushPromises()
+
+    expect(lastWebBrowserVisible.current).toBe(true)
+    expect(lastWebBrowserUrl.current).toBe(
+      'https://tw.beanfun.com/TW/signup/Join_beanfun_signup.aspx?service=999999_T0',
+    )
+  })
+
+  it('RegisterAccount respects HK from Config.xml → HK signup URL', async () => {
+    const ctx = mountForm('HK')
+    const wrapper = await ctx.mountIt()
+
+    await wrapper.get('[data-test="id-pass-register"]').trigger('click')
+    await flushPromises()
+
+    expect(lastWebBrowserUrl.current).toBe(
+      'https://bfweb.hk.beanfun.com/beanfun_web_ap/signup/preregistration.aspx?service=999999_T0',
+    )
+  })
+
+  it('GameStart delegates to useGameLauncher().runGame() with no credentials', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+
+    await wrapper.get('[data-test="id-pass-game-start"]').trigger('click')
+    await flushPromises()
+
+    expect(runGameSpy).toHaveBeenCalledTimes(1)
+    expect(runGameSpy).toHaveBeenCalledWith()
+    expect(mockLoginRegular).not.toHaveBeenCalled()
   })
 })

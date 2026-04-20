@@ -305,6 +305,118 @@ export const useGameStore = defineStore('game', () => {
   }
 
   /**
+   * Re-hydrate `selectedGameCode` + the matching `ini` entry from
+   * the persisted Config.xml snapshot written by
+   * `pages/AccountList.vue::selectActiveGame` (P12.4 followup-A
+   * D5).
+   *
+   * # When this is called
+   *
+   * `pages/IdPassForm.vue` / `pages/QrForm.vue` GameStart
+   * buttons (WPF `btn_StartGame_Click`, `id-pass_form.xaml.cs`
+   * L297-300 + `qr_form.xaml.cs` L84-87) defer to
+   * `useGameLauncher().runGame()`, which requires
+   * `selectedGameCode` + `selectedIni` to be populated. On the
+   * LoginPage the user hasn't authenticated, so:
+   *
+   * - `loadGames()` never ran — `services` and `ini` are both
+   *   empty {} / [].
+   * - `selectGame()` was never called — `selectedGameCode` is null.
+   *
+   * `restoreLastSelected()` patches just enough of the store to
+   * make a launch attempt possible: copy the persisted
+   * gameCode + INI entry into the in-memory state without
+   * triggering the (auth-required) catalogue fetch. `services`
+   * stays empty — the launcher only needs `selectedIni` (for
+   * `exe` / `dir_value_name` / `dir_reg`), not `selectedGame`,
+   * for the path-detect + spawn flow. The single
+   * `selectedGame`-dependent branch (`download_url` fallback in
+   * `resolveGamePath`) gracefully degrades to the same
+   * `gamePathPickerPending` toast since `selectedGame` will be
+   * `null` (the catalogue isn't loaded), which is acceptable
+   * fallback semantics — the user can re-login + select game +
+   * try again.
+   *
+   * # Why a Pinia action and not a composable
+   *
+   * The state being mutated (`selectedGameCode` + the `ini` map)
+   * is store-owned. Putting the patch inside the store keeps the
+   * mutation surface single-source — every other place that
+   * touches these refs (`selectGame`, `applyBundle`,
+   * `clearGameData`) already lives here, so a follow-up
+   * developer reading the store has a complete picture.
+   *
+   * # Mirrors WPF instance state lifetime
+   *
+   * WPF `MainWindow.service_code` / `service_region` /
+   * `game_exe` / `game_commandLine` / `game.dir_value_name` /
+   * `game.dir_reg` survive logout (only reset on full process
+   * restart) — `MainWindow.runGame()` running on the LoginPage
+   * after logout works because those fields are still
+   * populated. The SPA's `clearGameData()` reset on logout is
+   * stricter than WPF; this restore action narrows the gap by
+   * letting the launch-relevant subset survive across the
+   * Config.xml round-trip.
+   *
+   * # Return value
+   *
+   * `true` when both keys resolve to non-empty / parseable
+   * snapshots; `false` otherwise (no `loginGame`, no
+   * `lastSelectedIni`, JSON parse failure, etc.). The launcher
+   * caller surfaces the same `GameSelected` toast WPF shows
+   * when `service_code` is empty.
+   *
+   * # Idempotent / safe to call from a populated state
+   *
+   * If `selectedGameCode` is already set (post-login session
+   * with the catalogue loaded), this action is a no-op short
+   * of the IPC round-trip — the persisted snapshot would
+   * either match (no-op write) or be stale (we still prefer
+   * the in-memory live data). Returns `true` in that case to
+   * unblock the launcher fast-path.
+   *
+   * @param configStore — caller-injected `useConfigStore()` instance
+   *                      so this action stays test-friendly without
+   *                      depending on the global Pinia activation
+   *                      order at module-load time.
+   */
+  function restoreLastSelected(configStore: { get: (key: string) => string | undefined }): boolean {
+    if (selectedGameCode.value !== null && selectedIni.value !== null) {
+      return true
+    }
+
+    const savedCode = configStore.get('loginGame') ?? ''
+    const savedIniRaw = configStore.get('lastSelectedIni') ?? ''
+    if (savedCode === '' || savedIniRaw === '') return false
+
+    let parsedIni: GameIniEntry
+    try {
+      parsedIni = JSON.parse(savedIniRaw) as GameIniEntry
+    } catch {
+      /*
+       * Corrupted snapshot (manual Config.xml edit / partial
+       * write on previous crash). Soft-fail to false so the
+       * caller surfaces the same `GameSelected` toast as the
+       * "no snapshot" path — the user can re-login + select
+       * game + the next `selectActiveGame` will overwrite the
+       * bad row.
+       */
+      return false
+    }
+
+    /*
+     * Patch the entry into the existing `ini` map (don't
+     * replace the map — a concurrent `loadGames` finishing
+     * after this restore would otherwise lose its bundle).
+     * The new entry is the only one we care about because
+     * `selectedIni` is keyed off `selectedGameCode`.
+     */
+    ini.value = { ...ini.value, [savedCode]: parsedIni }
+    selectedGameCode.value = savedCode
+    return true
+  }
+
+  /**
    * Wipe every piece of game-scoped state. Composed into
    * `main.ts::installRouterGuards.clearAccountSession` so the
    * session-expired bridge clears the catalogue alongside the
@@ -315,6 +427,16 @@ export const useGameStore = defineStore('game', () => {
    * Resets `loadState` to `'idle'` (not `'loaded'`) so the next
    * `loadGames()` is treated as a fresh fetch by the caching
    * branch.
+   *
+   * # P12.4 followup-A D6 note
+   *
+   * `clearGameData` only wipes the in-memory store; the
+   * persisted `loginGame` / `lastSelectedIni` Config.xml keys
+   * are intentionally left intact so
+   * {@link restoreLastSelected} can re-hydrate the launch
+   * subset on the LoginPage after logout. Mirrors WPF
+   * MainWindow instance state — survives logout, only reset on
+   * full process restart.
    */
   function clearGameData(): void {
     ini.value = {}
@@ -337,6 +459,7 @@ export const useGameStore = defineStore('game', () => {
 
     loadGames,
     selectGame,
+    restoreLastSelected,
     clearGameData,
   }
 })

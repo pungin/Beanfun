@@ -31,8 +31,38 @@
  * - "Remember" actually persisting password to Users.dat → D9
  *   (account store integration)
  * - Game icon (gbtn) + GameList dialog → P12.3
- * - Register / ForgotPassword / GameStart buttons → P12.4 (open
- *   WebBrowser)
+ *
+ * # P12.4 followup-A: RegisterAccount / ForgotPassword / GameStart
+ *
+ * The three remaining WPF buttons land here in P12.4-followup-A
+ * after the P12 acceptance gap surfaced them missing:
+ *
+ * - **RegisterAccount** (WPF `id-pass_form.xaml` L73 +
+ *   `RegAcc_Click` L39-52) → opens region-aware signup URL in
+ *   the in-app `WebBrowser` dialog. Both TW + HK URLs sit on
+ *   `tw.beanfun.com` / `bfweb.hk.beanfun.com`, both inside
+ *   `WebBrowser.URL_NEEDS_COOKIE_HOSTS` → the dialog
+ *   immediately falls back to `commands.openUrl` so the user's
+ *   system browser handles the page (where Beanfun login
+ *   cookies probably already live).
+ * - **ForgotPassword** (WPF L627 + `FindPwd_Click` L54-66) →
+ *   same pattern, region-aware `forgot_pwd.aspx`.
+ * - **GameStart** (WPF L655 + `btn_StartGame_Click` L297-300) →
+ *   delegates to `useGameLauncher().runGame()`, which calls
+ *   `game.restoreLastSelected()` to re-hydrate the launch
+ *   subset from the persisted Config.xml snapshot (the post-
+ *   logout LoginPage has no in-memory game store state). When
+ *   the snapshot is absent / corrupt → `GameSelected` toast,
+ *   matching WPF's behaviour when `service_code` is empty.
+ *
+ * URLs centralised in `src/constants/login.ts`
+ * (`LOGIN_EXTERNAL_URLS`) so a Beanfun URL move tomorrow is a
+ * one-line change. The WebBrowser dialog is self-mounted here
+ * (not promoted to LoginPage shell) because the dialog is a
+ * private detail of the form's external-URL handlers — leaking
+ * it to LoginPage would force every sibling form
+ * (QrForm / GamepassForm / VerifyPage) to share state they
+ * don't need.
  *
  * # D3 → D4 hotfix: navigation affordances
  *
@@ -90,8 +120,10 @@ import { ArrowLeft, Lock, User } from '@element-plus/icons-vue'
 import { useAccountStore } from '../stores/account'
 import { useAuthStore, AUTH_ACTIONS, type LoginIntent } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
-import { LOGIN_METHOD } from '../constants/login'
+import { LOGIN_EXTERNAL_URLS, LOGIN_METHOD, type LoginExternalUrlKind } from '../constants/login'
 import type { LoginRegion } from '../types/bindings'
+import { useGameLauncher } from '../composables/useGameLauncher'
+import WebBrowser from '../windows/WebBrowser.vue'
 
 defineOptions({ name: 'IdPassForm' })
 
@@ -110,6 +142,16 @@ const router = useRouter()
 const auth = useAuthStore()
 const accountStore = useAccountStore()
 const config = useConfigStore()
+/*
+ * P12.4 followup-A D7 — game-launcher composable for the
+ * GameStart button (WPF `btn_StartGame_Click` /
+ * `id-pass_form.xaml.cs` L297-300). The composable internally
+ * calls `game.restoreLastSelected(config)` so the launch can
+ * proceed even when the in-memory game store is empty (post-
+ * logout LoginPage state). See `useGameLauncher` docblock for
+ * the WPF parity table.
+ */
+const launcher = useGameLauncher()
 
 /**
  * Default the region from Config.xml so the picker → form handoff
@@ -210,6 +252,65 @@ function switchToQr(): void {
 
 function switchToGamepass(): void {
   void router.push('/login/gamepass')
+}
+
+/* --------------- P12.4 followup-A: external URLs + GameStart --------------- */
+
+/**
+ * In-app `WebBrowser` dialog state. Self-mounted at the bottom
+ * of the template (not lifted to LoginPage) — see file docblock
+ * "Why a self-mount" for the SRP rationale.
+ *
+ * `webBrowserVisible` toggles via `v-model:visible`;
+ * `webBrowserUrl` is the per-open target captured at click
+ * time so a quick double-trigger can't race the dialog into a
+ * stale URL.
+ */
+const webBrowserVisible = ref(false)
+const webBrowserUrl = ref('')
+
+/**
+ * Generic external-URL handler. Single dispatch site for
+ * RegisterAccount + ForgotPassword keeps the per-button click
+ * stub a one-liner and centralises the
+ * `LOGIN_EXTERNAL_URLS[kind][region]` lookup so adding a new
+ * `kind` (e.g. "support" / "news") later touches only the
+ * constants table + a new template button — no new handler
+ * function needed.
+ */
+function openExternalUrl(kind: LoginExternalUrlKind): void {
+  const region = readRegion()
+  webBrowserUrl.value = LOGIN_EXTERNAL_URLS[kind][region]
+  webBrowserVisible.value = true
+}
+
+function handleRegisterAccount(): void {
+  openExternalUrl('register')
+}
+
+function handleForgotPassword(): void {
+  openExternalUrl('forgotPwd')
+}
+
+/**
+ * GameStart button — mirrors WPF `btn_StartGame_Click`
+ * (`id-pass_form.xaml.cs` L297-300) which calls
+ * `App.MainWnd.runGame()` with no credential args, relying on
+ * the persisted `MainWindow` instance state (`service_code` /
+ * `game_exe` / Settings `t_GamePath`) to drive the launch.
+ *
+ * The composable internally calls `restoreLastSelected` to
+ * patch the empty post-logout game store from the persisted
+ * Config.xml snapshot; absent / corrupt snapshot → `GameSelected`
+ * toast (same UX WPF surfaces when `service_code` is empty
+ * because the user never selected a game in this process).
+ *
+ * Fire-and-forget — the composable surfaces every failure path
+ * via `wrapCommand` toast / inline ElMessage. Wrapping in
+ * `try/catch` here would only double-toast.
+ */
+function handleGameStart(): void {
+  void launcher.runGame()
 }
 
 async function submit(): Promise<void> {
@@ -381,17 +482,45 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
     <div class="id-pass-form__options">
       <el-checkbox v-model="remember" :label="t('RememberPassword')" />
       <el-checkbox v-model="autoLogin" :label="t('AutoLogin')" />
+      <div class="id-pass-form__inline-links">
+        <button
+          type="button"
+          class="id-pass-form__inline-link"
+          data-test="id-pass-register"
+          @click="handleRegisterAccount"
+        >
+          {{ t('RegisterAccount') }}
+        </button>
+        <button
+          type="button"
+          class="id-pass-form__inline-link"
+          data-test="id-pass-forgot-password"
+          @click="handleForgotPassword"
+        >
+          {{ t('ForgotPassword') }}
+        </button>
+      </div>
     </div>
 
-    <el-button
-      type="primary"
-      size="large"
-      class="id-pass-form__submit"
-      native-type="submit"
-      :loading="submitting"
-    >
-      {{ t('Login') }}
-    </el-button>
+    <div class="id-pass-form__primary-actions">
+      <el-button
+        type="primary"
+        size="large"
+        class="id-pass-form__submit"
+        native-type="submit"
+        :loading="submitting"
+      >
+        {{ t('Login') }}
+      </el-button>
+      <el-button
+        size="large"
+        class="id-pass-form__game-start"
+        data-test="id-pass-game-start"
+        @click="handleGameStart"
+      >
+        {{ t('GameStart') }}
+      </el-button>
+    </div>
 
     <div class="id-pass-form__switches">
       <button
@@ -412,6 +541,8 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
       </button>
     </div>
   </el-form>
+
+  <WebBrowser v-model:visible="webBrowserVisible" :url="webBrowserUrl" />
 </template>
 
 <style scoped>
@@ -460,9 +591,42 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
   gap: 1.25rem;
 }
 
-.id-pass-form__submit {
-  width: 100%;
+.id-pass-form__inline-links {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.id-pass-form__inline-link {
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  background: transparent;
+  color: #a06a3a;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15rem;
+  transition: color 0.15s ease;
+}
+
+.id-pass-form__inline-link:hover,
+.id-pass-form__inline-link:focus-visible {
+  color: #7a4a20;
+  outline: none;
+}
+
+.id-pass-form__primary-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
   margin-top: 0.5rem;
+}
+
+.id-pass-form__submit,
+.id-pass-form__game-start {
+  width: 100%;
   font-weight: 700;
 }
 

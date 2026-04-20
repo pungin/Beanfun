@@ -69,3 +69,64 @@ export const LOGIN_METHOD = {
  * the type automatically.
  */
 export type LoginMethod = (typeof LOGIN_METHOD)[keyof typeof LOGIN_METHOD]
+
+/**
+ * Region-aware external URLs surfaced from the login forms.
+ *
+ * Mirrors the two URL-launching handlers in WPF
+ * `Beanfun/Pages/id-pass_form.xaml.cs`:
+ *
+ * - `RegAcc_Click` (L39-52) — RegisterAccount button (XAML L73)
+ *   opens a new in-app `WebBrowser(url)` window pointed at the
+ *   region-appropriate signup page.
+ * - `FindPwd_Click` (L54-66) — ForgotPassword button (XAML L627)
+ *   opens the region-appropriate `forgot_pwd.aspx` page in a
+ *   new in-app `WebBrowser(url)` window.
+ *
+ * Both handlers share the exact same TW/HK URL fork shape, so we
+ * factor the constants into a single 2D map `kind × region → url`
+ * to (a) keep the WPF parity table in one place and (b) let the
+ * frontend `IdPassForm.vue::handleExternalUrl` dispatch generically
+ * by `kind` (no per-button URL literal in the template).
+ *
+ * # Why a constant module instead of inlining in IdPassForm.vue
+ *
+ * Same SRP rationale as the rest of `src/constants/*` — a Beanfun
+ * URL move tomorrow is a one-line change here, not a hunt across
+ * the component tree. Tests can also iterate the same map to assert
+ * region-aware dispatch without duplicating the URL fixture.
+ *
+ * # Wire-shape contract
+ *
+ * Both handlers in WPF call `new WebBrowser(url).Show()` — i.e. the
+ * URL is consumed by the in-app `WebBrowser` window. The SPA
+ * equivalent is `windows/WebBrowser.vue` (P12.4 D8); `tw.beanfun.com`
+ * + `bfweb.hk.beanfun.com` both sit inside its
+ * `URL_NEEDS_COOKIE_HOSTS` set so the dialog will immediately
+ * fall back to `commands.openUrl` (system browser, where the
+ * Beanfun login cookie likely already lives) — same UX path as
+ * P12.5 KartTools' six convoy/rider URLs.
+ *
+ * URLs ported verbatim from `id-pass_form.xaml.cs` L42-50 / L57-64.
+ * Do **not** simplify the HK signup URL — `bfweb.hk.beanfun.com`
+ * is the correct host (NOT `hk.beanfun.com`); they're different
+ * Beanfun sub-properties and the wrong one returns a 404 page.
+ */
+export const LOGIN_EXTERNAL_URLS = {
+  register: {
+    TW: 'https://tw.beanfun.com/TW/signup/Join_beanfun_signup.aspx?service=999999_T0',
+    HK: 'https://bfweb.hk.beanfun.com/beanfun_web_ap/signup/preregistration.aspx?service=999999_T0',
+  },
+  forgotPwd: {
+    TW: 'https://tw.beanfun.com/member/forgot_pwd.aspx',
+    HK: 'https://bfweb.hk.beanfun.com/member/forgot_pwd.aspx',
+  },
+} as const
+
+/**
+ * Discriminator for {@link LOGIN_EXTERNAL_URLS}. Kept as a string
+ * literal union (not a numeric enum) because the values appear
+ * verbatim in `data-test` attributes — string keys eliminate a
+ * stringify step in the template binding.
+ */
+export type LoginExternalUrlKind = keyof typeof LOGIN_EXTERNAL_URLS

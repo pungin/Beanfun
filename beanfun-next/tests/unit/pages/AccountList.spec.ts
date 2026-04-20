@@ -2055,6 +2055,65 @@ describe('AccountList page', () => {
   })
 
   /* ---------------------------------------------------------------- */
+  /*  P12.4 followup-A D5 — lastSelectedIni persistence on selection   */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * P12.4 followup-A D5 — `selectActiveGame` must persist a
+   * JSON snapshot of the active `GameIniEntry` to Config.xml
+   * under `lastSelectedIni` so the LoginPage `GameStart` button
+   * (`useGameLauncher` → `game.restoreLastSelected(config)`)
+   * can re-launch the same game after a logout that empties the
+   * in-memory game store.
+   *
+   * WPF parity rationale: `MainWindow.runGame` reads the launch
+   * subset (`game_exe` / `dir_value_name` / `dir_reg` /
+   * `win_class_name`) from the live `MainWindow` instance, which
+   * survives logout because it lives on the singleton window.
+   * Pinia's `clearGameData` (called on `auth.logout`) wipes the
+   * SPA equivalent, so we mirror WPF lifetime by parking the
+   * snapshot in Config.xml — the only persistence layer that
+   * spans both the authenticated and unauthenticated halves of
+   * the SPA.
+   *
+   * Asserts the call is paired with the existing `loginGame`
+   * write (gameCode → loginGame, INI → lastSelectedIni) so a
+   * future refactor can't silently drop one half of the pair
+   * without taking the test with it.
+   */
+  it('D5: selectActiveGame persists lastSelectedIni JSON alongside loginGame', async () => {
+    vi.mocked(commands.listGames).mockReturnValueOnce(
+      ok({
+        ini: { '610074_T9': MAPLESTORY_TW_INI },
+        services: [MAPLESTORY_TW],
+      }),
+    )
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.setConfig).mockReturnValue(ok(null))
+
+    const ctx = buildHarness()
+    useAuthStore().session = { ...FAKE_SESSION, service_code: '610074', service_region: 'T9' }
+    /*
+     * Saved loginGame matches the session → cold-mount path runs
+     * `selectActiveGame('610074', 'T9', true)` via
+     * `setupGameOnMount`'s "saved value valid" branch (D8c
+     * "matches session" specs above lock down that orchestration).
+     * That call is what should fire the two setConfig writes
+     * we're asserting on here.
+     */
+    useConfigStore().entries['loginGame'] = '610074_T9'
+
+    await ctx.mountIt()
+    await flushPromises()
+
+    expect(commands.setConfig).toHaveBeenCalledWith('loginGame', '610074_T9')
+    expect(commands.setConfig).toHaveBeenCalledWith(
+      'lastSelectedIni',
+      JSON.stringify(MAPLESTORY_TW_INI),
+    )
+  })
+
+  /* ---------------------------------------------------------------- */
   /*  D8d — game info bar real name + image                            */
   /* ---------------------------------------------------------------- */
 
