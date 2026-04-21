@@ -1536,6 +1536,18 @@ describe('AccountList page', () => {
     expect(configStore.get('autoPaste')).toBe('false')
   })
 
+  /*
+   * Enter-hotkey coverage lives in its own spec file
+   * (`AccountList.EnterHotkey.spec.ts`) because the window-level
+   * `keydown` listener that mirrors WPF's "select row + press Enter
+   * → Get OTP" behaviour interacts with jsdom's shared `window`
+   * across test cases — the mounts in this file intentionally
+   * never call `unmount()` (see the D1 stylistic convention above),
+   * so their listeners accumulate and would flake the Enter assertions
+   * here. Vitest's per-file jsdom isolation gives the Enter tests a
+   * fresh `window`, keeping each hotkey guard deterministic.
+   */
+
   /* ---------------------------------------------------------------- */
   /*  D7 — drag-and-drop reorder + per-game persistence                */
   /* ---------------------------------------------------------------- */

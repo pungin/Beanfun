@@ -1857,6 +1857,93 @@ watch(rowsRef, (el) => {
 })
 
 onBeforeUnmount(destroySortable)
+
+/* --------------- Enter hotkey (WPF / Beanfun B6 parity) --------------- */
+
+/**
+ * Mirrors the legacy Beanfun (B6) client: once a service account row is
+ * highlighted, pressing `Enter` kicks off the same Get-OTP flow as
+ * clicking the button.
+ *
+ * # Why a `window`-level listener (vs a row-level `@keydown`)
+ *
+ * Clicking a row in our layout sets `account.selectedSid` but does not
+ * move DOM focus onto the `<li>` (rows are intentionally not tab stops
+ * — adding `tabindex` would change tab order and leak focus rings onto
+ * the whole list). Without focus on the row, a row-scoped `@keydown`
+ * never fires. A window-level listener sees the Enter keystroke
+ * regardless of which non-form element currently holds focus, which is
+ * the same behaviour WPF `lstViewAccount.KeyDown` had on Key.Enter.
+ *
+ * # Guards
+ *
+ * 1. `event.key === 'Enter'` — only Enter, and not on synthetic repeats
+ *    (holding Enter shouldn't spam-fire the OTP IPC), and not mid-IME
+ *    composition (CJK users would otherwise trigger an OTP every time
+ *    they commit a candidate).
+ * 2. Focus inside a form control (`input` / `textarea` / `[contenteditable]`)
+ *    → let the control handle its own Enter (e.g. submitting a dialog
+ *    form). Our `readonly` OTP `<input>` passes this filter so Enter
+ *    while it happens to hold focus after a "Copy OTP" click still
+ *    routes through.
+ * 3. Focus on a `<button>` — the browser will already fire a `click`
+ *    for Enter on a focused button, and our handler would double-fire
+ *    (once as keydown → `handleGetOtp`, once as the button's own click
+ *    handler). Skip so the button-scoped behaviour wins.
+ * 4. Any Element Plus overlay (`.el-overlay` — covers `ElDialog` +
+ *    `ElMessageBox`, both of which render outside our page subtree via
+ *    `append-to-body`) has an element focused inside → the modal owns
+ *    Enter (confirm button, form submit, etc). Without this guard the
+ *    "Change Alias" dialog's OK-on-Enter would also fire GetOtp on the
+ *    page behind it.
+ * 5. `gettingOtp.value === true` — an OTP fetch is already in flight;
+ *    `handleGetOtp` would no-op anyway, but short-circuiting here
+ *    skips the (harmless) `e.preventDefault()` so assistive tech
+ *    isn't told we swallowed the key when we actually didn't.
+ * 6. `!account.selectedSid` — nothing to fetch for. Staying silent
+ *    (no toast) matches B6: pressing Enter before picking an account
+ *    simply did nothing. We intentionally don't route through
+ *    `handleGetOtp` in this case because its built-in "no selection"
+ *    toast was written for a button click — a keyboard press that
+ *    accidentally lands on an empty list shouldn't spam the user
+ *    with a warning.
+ */
+function handleGlobalEnter(event: KeyboardEvent): void {
+  if (event.key !== 'Enter') return
+  if (event.isComposing || event.repeat) return
+
+  /*
+   * `event.target` can be the `Window` itself when the key is
+   * dispatched without a focused element (typical on first paint
+   * before the user has clicked anything). `closest` only exists on
+   * `Element`, so narrow first — a non-Element target means "focus
+   * is nowhere", which is exactly the case we want to forward.
+   */
+  const target = event.target
+  if (target instanceof HTMLElement) {
+    const tag = target.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+    if (target.isContentEditable) return
+    if (tag === 'BUTTON' || target.closest('button')) return
+  }
+
+  const active = document.activeElement as HTMLElement | null
+  if (active?.closest('.el-overlay')) return
+
+  if (gettingOtp.value) return
+  if (!account.selectedSid) return
+
+  event.preventDefault()
+  void handleGetOtp()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleGlobalEnter)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalEnter)
+})
 </script>
 
 <template>
