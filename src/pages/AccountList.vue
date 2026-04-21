@@ -1882,7 +1882,7 @@ onBeforeUnmount(destroySortable)
       </button>
     </TitleBar>
     <div class="account-list__scroll">
-      <div class="account-list__container">
+      <div class="account-list__container" data-window-content>
         <header class="account-list__header">
           <div class="account-list__header-text">
             <h1 class="account-list__title bf-text-gradient">{{ t('accountList.title') }}</h1>

@@ -604,25 +604,58 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
 
   /**
    * Tear down the previous route's observer, attach a fresh one to
-   * the new route's `[data-window-root]`, and perform the first
-   * fit. `skipFirstObserverCallback` swallows the synthetic
-   * notification `ResizeObserver.observe()` fires immediately after
-   * attaching — the manual `fitWindow()` right below already covers
-   * that initial measurement, so we'd otherwise fit twice in a row.
+   * the new route's `[data-window-root]` *and* its
+   * `[data-window-content]` inner wrapper (if present), then perform
+   * the first fit.
+   *
+   * # Why two observation targets (issue #236 follow-up)
+   *
+   * `[data-window-root]` is always `100vh` so `ResizeObserver`
+   * callbacks never fire on changes that leave the outer frame alone
+   * — e.g. a language switch that lengthens a label inside the page,
+   * or async data arriving into the body after the initial fit.
+   * Observing the inner `[data-window-content]` wrapper (added to
+   * every top-level page template) catches these content-only height
+   * changes so the window re-fits automatically. The outer root is
+   * still observed so size changes to the window itself (F11, DPI
+   * change) continue to trigger a re-fit.
+   *
+   * # Why the `initialNotificationsIgnored` rAF gate
+   *
+   * `ResizeObserver.observe()` fires a synthetic notification for
+   * each observed target immediately after attaching, *before* the
+   * first paint. The manual `fitWindow()` at the end of this
+   * function already covers that initial measurement, so the
+   * synthetic fires would double-fit. With two targets the old
+   * "skip first callback" flag was racy (the two initials might
+   * arrive in one callback or two depending on the browser), so we
+   * instead swallow every callback until the first post-attach rAF
+   * flips the gate — guaranteed to be after all synthetic initials
+   * (they fire in the same microtask as `observe()`).
    */
   function attachObserver(): void {
     if (observer) observer.disconnect()
     const root = document.querySelector('[data-window-root]') as HTMLElement | null
     if (!root) return
-    let skipFirstObserverCallback = true
+    const content = root.querySelector('[data-window-content]') as HTMLElement | null
+    let initialNotificationsIgnored = false
     observer = new ResizeObserver(() => {
-      if (skipFirstObserverCallback) {
-        skipFirstObserverCallback = false
-        return
-      }
+      if (!initialNotificationsIgnored) return
       scheduleOnNextPaint(fitWindow)
     })
     observer.observe(root)
+    if (content) observer.observe(content)
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => {
+        initialNotificationsIgnored = true
+      })
+    } else {
+      // jsdom / SSR path — the harness stubs `ResizeObserver` so
+      // the gate never matters, but flipping immediately keeps the
+      // behaviour consistent with real browsers in case a test ever
+      // exercises the observer path.
+      initialNotificationsIgnored = true
+    }
     fitWindow()
   }
 

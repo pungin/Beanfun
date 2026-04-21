@@ -602,7 +602,7 @@ onMounted(() => {
   <main class="settings bf-glass-window" data-window-root>
     <TitleBar />
     <div class="settings__scroll">
-      <div class="settings__container">
+      <div class="settings__container" data-window-content>
         <!-- Header -->
         <header class="settings__header">
           <div class="settings__header-icon" aria-hidden="true">
