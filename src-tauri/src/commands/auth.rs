@@ -210,6 +210,24 @@ fn spawn_ping_loop(client: BeanfunClient, cancel: CancellationToken) {
 /// on their next meaningful action (Get OTP, launch game), just
 /// like WPF.
 async fn run_ping_loop(client: BeanfunClient, cancel: CancellationToken) {
+    run_ping_loop_with_interval(client, cancel, PING_INTERVAL).await;
+}
+
+/// Inner implementation of [`run_ping_loop`] with the sleep interval
+/// pulled out as a parameter.
+///
+/// The production loop always passes [`PING_INTERVAL`] (60 s, matching
+/// WPF). Splitting the interval out keeps the unit tests fast and
+/// hermetic — they can drive the loop with a 50 ms cadence and assert
+/// real wall-clock behaviour without depending on `start_paused = true`,
+/// which interacts poorly with `wiremock`'s hyper server (the paused
+/// runtime time freezes hyper's internal time wheel and the HTTP
+/// request never resolves on Windows CI).
+async fn run_ping_loop_with_interval(
+    client: BeanfunClient,
+    cancel: CancellationToken,
+    interval: Duration,
+) {
     loop {
         tokio::select! {
             biased;
@@ -227,7 +245,7 @@ async fn run_ping_loop(client: BeanfunClient, cancel: CancellationToken) {
         tokio::select! {
             biased;
             _ = cancel.cancelled() => return,
-            _ = tokio::time::sleep(PING_INTERVAL) => {}
+            _ = tokio::time::sleep(interval) => {}
         }
     }
 }
@@ -1963,8 +1981,17 @@ mod tests {
     /// A 5xx response from `echo_token.ashx` must NOT kill the
     /// loop — WPF's `catch { }` swallows errors and the next tick
     /// retries. We pin this by waiting for *two* requests to land
-    /// against a server that always returns 500.
-    #[tokio::test(start_paused = true)]
+    /// against a server that always returns 500, using a 50 ms
+    /// interval so the test stays sub-second.
+    ///
+    /// We deliberately avoid `start_paused = true` here: the paused
+    /// runtime time freezes hyper's internal time wheel, and on
+    /// Windows CI the wiremock-served request never resolves
+    /// (observed: the rust test job hung past the 6 h GitHub
+    /// timeout). The interval-injection seam in
+    /// [`run_ping_loop_with_interval`] lets us keep real time + a
+    /// short cadence instead.
+    #[tokio::test]
     async fn run_ping_loop_keeps_running_after_ping_failure() {
         let server = MockServer::start().await;
         Mock::given(wm_method("GET"))
@@ -1976,34 +2003,29 @@ mod tests {
 
         let cancel = CancellationToken::new();
         let cancel_for_loop = cancel.clone();
-        let handle = tokio::spawn(async move { run_ping_loop(client, cancel_for_loop).await });
+        let handle = tokio::spawn(async move {
+            run_ping_loop_with_interval(client, cancel_for_loop, StdDuration::from_millis(50)).await
+        });
 
-        // Wait for the *first* real ping to land. With `start_paused
-        // = true` the runtime clock doesn't advance until we call
-        // `advance`, so the first ping — which fires immediately —
-        // is the one we wait for here.
-        while server
-            .received_requests()
-            .await
-            .map(|r| r.len())
-            .unwrap_or(0)
-            < 1
-        {
-            tokio::task::yield_now().await;
-        }
-
-        // Fast-forward past the 60s sleep so the second tick fires
-        // without actually sleeping in wall-clock time.
-        tokio::time::advance(PING_INTERVAL + StdDuration::from_millis(50)).await;
-
-        while server
-            .received_requests()
-            .await
-            .map(|r| r.len())
-            .unwrap_or(0)
-            < 2
-        {
-            tokio::task::yield_now().await;
+        // Poll for two requests to land — at 50 ms cadence the second
+        // ping should arrive within ~100 ms even on slow CI; the 10 s
+        // ceiling is a generous backstop, not the expected duration.
+        let deadline = tokio::time::Instant::now() + StdDuration::from_secs(10);
+        loop {
+            let count = server
+                .received_requests()
+                .await
+                .map(|r| r.len())
+                .unwrap_or(0);
+            if count >= 2 {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                panic!(
+                    "second ping never arrived within 10s (got {count}); 5xx must not stop the loop"
+                );
+            }
+            tokio::time::sleep(StdDuration::from_millis(10)).await;
         }
 
         cancel.cancel();

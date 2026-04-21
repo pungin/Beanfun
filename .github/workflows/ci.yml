@@ -44,6 +44,11 @@ jobs:
   rust:
     name: 'Rust: fmt / Clippy / Test'
     runs-on: windows-latest
+    # Cap the job at 25 min so a hung test (e.g. wiremock + tokio
+    # paused-time interaction on Windows) fails loudly within the
+    # next CI cycle instead of silently consuming the GitHub default
+    # 6-hour budget. Healthy runs land in 4-8 min on a warm cache.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: src-tauri
