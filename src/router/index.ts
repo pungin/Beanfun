@@ -484,10 +484,45 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
    * `[data-window-root]` element so the window tracks content
    * height changes (e.g. sections appearing/disappearing, async
    * data loading). Width comes from route meta.
+   *
+   * # Why double `requestAnimationFrame` (issue #236)
+   *
+   * Previously this code used `setTimeout(setupObserver, 80)` after
+   * every `afterEach`. Four bugs fell out of that:
+   *
+   * 1. **Timing race** — 80ms is not tied to Vue's render flush or
+   *    the browser's paint, so on a slow boot (config.xml IPC taking
+   *    longer than 80ms) the observer attached to a half-rendered
+   *    DOM and measured a shorter-than-final `scrollHeight`, leaving
+   *    the user with a window that never grew to match the real
+   *    content height.
+   * 2. **Navigation storm** — on first launch the router fires
+   *    `afterEach` twice in rapid succession: `/` → `/login/`
+   *    (region picker empty child) → `/login/id-pass` (via
+   *    `LoginRegionSelection.vue::watch(config.loaded)`). Both
+   *    `setTimeout` s fired, the earlier one measuring the picker
+   *    DOM just as it was being replaced. `scheduleOnNextPaint`
+   *    auto-cancels the previous pending callback so only the final
+   *    destination's DOM gets measured.
+   * 3. **`setSize` → layout-restore race** — the old code ran
+   *    `height='auto'` → measure → `setSize().then(() => height='100vh')`.
+   *    `setSize` is an async IPC (10-50 ms), so the DOM stayed in
+   *    "height: auto" for a frame-and-a-half while the window was
+   *    still at its old size — user-visible if the new content was
+   *    taller than the old window. The new `fitWindow` flips
+   *    `auto` → `100vh` synchronously within one frame (the browser
+   *    never paints the intermediate state) and fires the `setSize`
+   *    IPC without awaiting the layout restore.
+   * 4. **Observer loop** — the `height='auto'` flip fired the
+   *    observer, which called `fitWindow`, which flipped it again.
+   *    The same-frame flip-back in (3) coalesces the observer
+   *    notifications to a no-op (`100vh` in → `100vh` out), so no
+   *    explicit guard flag is needed.
    */
   const appWindow = getCurrentWindow()
   let currentWidth = 560
   let observer: ResizeObserver | null = null
+  let pendingFrame: number | null = null
 
   /**
    * Upper bound applied to the auto-fit height.
@@ -513,23 +548,80 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     return 900
   }
 
+  /**
+   * Measure the current `[data-window-root]`'s natural content
+   * height and resize the OS window to match. Both the
+   * `height: auto` measurement flip and the `height: 100vh` restore
+   * land inside a single synchronous block so the browser never
+   * paints the intermediate "unclipped" state — only one frame is
+   * ever rendered per fit regardless of how long the IPC takes.
+   *
+   * Safe to call concurrently: successive invocations just re-run
+   * the measurement cycle. The `pendingFrame` guard upstream keeps
+   * the rate low enough that this isn't a hot path.
+   */
   function fitWindow(): void {
     const root = document.querySelector('[data-window-root]') as HTMLElement | null
     if (!root) return
-    // Remove height lock to measure natural content height
+    // Both flips happen in the same synchronous block so the browser
+    // never paints the intermediate `height: auto` state (it's a
+    // forced-layout read followed by a write, both before the next
+    // paint). See bug (3) in the header docblock above.
     root.style.height = 'auto'
     const h = Math.max(300, Math.min(Math.ceil(root.scrollHeight), maxFitHeight()))
-    void appWindow.setSize(new LogicalSize(currentWidth, h)).then(() => {
-      // Lock height to viewport so flex scroll areas work
-      root.style.height = '100vh'
+    root.style.height = '100vh'
+    void appWindow.setSize(new LogicalSize(currentWidth, h))
+  }
+
+  /**
+   * Schedule `cb` to run after two animation frames.
+   *
+   * Two rAFs — not one — because Vue's async scheduler flushes
+   * on the microtask immediately after the first rAF, so the DOM is
+   * usually correct on the *second* rAF. Concrete symptom if we
+   * only used one: `LoginRegionSelection.vue::watch(config.loaded)`
+   * auto-redirects to `/login/id-pass` on the first post-mount
+   * tick, and a single-rAF measurement would race that redirect.
+   *
+   * Cancels any previously pending callback so an `afterEach` storm
+   * collapses to a single fit on the final settled destination.
+   */
+  function scheduleOnNextPaint(cb: () => void): void {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      // jsdom / SSR path — just run immediately so specs don't need
+      // a rAF polyfill.
+      cb()
+      return
+    }
+    if (pendingFrame !== null) window.cancelAnimationFrame(pendingFrame)
+    pendingFrame = window.requestAnimationFrame(() => {
+      pendingFrame = window.requestAnimationFrame(() => {
+        pendingFrame = null
+        cb()
+      })
     })
   }
 
-  function setupObserver(): void {
+  /**
+   * Tear down the previous route's observer, attach a fresh one to
+   * the new route's `[data-window-root]`, and perform the first
+   * fit. `skipFirstObserverCallback` swallows the synthetic
+   * notification `ResizeObserver.observe()` fires immediately after
+   * attaching — the manual `fitWindow()` right below already covers
+   * that initial measurement, so we'd otherwise fit twice in a row.
+   */
+  function attachObserver(): void {
     if (observer) observer.disconnect()
     const root = document.querySelector('[data-window-root]') as HTMLElement | null
     if (!root) return
-    observer = new ResizeObserver(() => fitWindow())
+    let skipFirstObserverCallback = true
+    observer = new ResizeObserver(() => {
+      if (skipFirstObserverCallback) {
+        skipFirstObserverCallback = false
+        return
+      }
+      scheduleOnNextPaint(fitWindow)
+    })
     observer.observe(root)
     fitWindow()
   }
@@ -537,7 +629,6 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   router.afterEach((to) => {
     const w = to.meta.windowWidth as number | undefined
     if (w) currentWidth = w
-    // Give Vue time to mount the new route component
-    setTimeout(setupObserver, 80)
+    scheduleOnNextPaint(attachObserver)
   })
 }
