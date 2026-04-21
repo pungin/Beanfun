@@ -393,9 +393,7 @@ pub fn run() {
             if is_windows_10() {
                 if let Some(window) = app.get_webview_window("main") {
                     if let Err(err) = window.set_shadow(false) {
-                        tracing::warn!(
-                            "set_shadow(false) on Windows 10 main window failed: {err}"
-                        );
+                        tracing::warn!("set_shadow(false) on Windows 10 main window failed: {err}");
                     }
                 }
             }
