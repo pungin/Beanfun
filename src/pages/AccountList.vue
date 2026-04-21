@@ -2362,13 +2362,40 @@ onBeforeUnmount(destroySortable)
   background: rgba(0, 0, 0, 0.06);
 }
 
+/*
+ * Follow-up to #236: the page used to let the *outer* `__scroll`
+ * container overflow when the combined height of the game bar +
+ * quick actions + account list + OTP section exceeded the window.
+ * With many service accounts on a small-to-medium display that
+ * pushed the OTP section off-screen, forcing the user to scroll
+ * the wheel before they could hit "Get OTP" — diverging from the
+ * legacy Beanfun (B6) single-page layout.
+ *
+ * The fix turns the scroll container into a non-scrolling flex
+ * column and flips the *inner* account list (`__list` →
+ * `__list-body` below) into the only scroller. Everything else
+ * (header, game bar, quick actions, OTP footer) retains its
+ * natural height so the OTP row is always anchored at the bottom
+ * of the window, and only the list itself scrolls when the account
+ * count outgrows the available space.
+ *
+ * `min-height: 0` on every intermediate flex level is required by
+ * the flexbox spec so that `flex: 1` children can actually shrink
+ * below their content height (without it the inner scrollbar never
+ * appears and the list clips).
+ */
 .account-list__scroll {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
   padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .account-list__container {
+  flex: 1;
+  min-height: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -2609,6 +2636,8 @@ onBeforeUnmount(destroySortable)
 /* --------------- list section --------------- */
 
 .account-list__list {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2640,13 +2669,24 @@ onBeforeUnmount(destroySortable)
 
 .account-list__list-body {
   flex: 1;
+  /*
+   * Follow-up to #236: dropped the previous `max-height: 300px`
+   * cap so this container scrolls whatever vertical space the
+   * surrounding flex chain has left (see `__scroll` / `__container`
+   * / `__list` docblock above). The old fixed cap combined with
+   * the outer `__scroll` overflow meant that once the account list
+   * hit 300 px, any further height (OTP footer etc.) was pushed
+   * below the window fold and the user had to scroll to reach
+   * "Get OTP". With `flex: 1 + min-height: 0` in the parent chain
+   * the list is always the one that scrolls and the OTP footer
+   * stays pinned at the bottom regardless of account count.
+   */
+  min-height: 80px;
   overflow-y: auto;
-  max-height: 300px;
   padding: 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  min-height: 80px;
 }
 
 .account-list__list-state {
