@@ -489,12 +489,36 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   let currentWidth = 560
   let observer: ResizeObserver | null = null
 
+  /**
+   * Upper bound applied to the auto-fit height.
+   *
+   * Previously hard-coded to `900` which was narrower than several
+   * pages (Settings with the Game section expanded, AccountList with
+   * a populated service-account list) — the cap forced the inner
+   * `__scroll` container to paint its own scrollbar and was the root
+   * cause of issue #236 "returning from Settings still has a scroll
+   * bar". Scaling to the actual display instead fits the content
+   * naturally on any desktop without letting the window eat the
+   * taskbar (50px safety margin keeps the window draggable on
+   * Windows's default 40px taskbar).
+   *
+   * Falls back to 900 when `window.screen` is unavailable (jsdom /
+   * headless CI) so the spec harness keeps working.
+   */
+  function maxFitHeight(): number {
+    const avail = typeof window !== 'undefined' ? window.screen?.availHeight : undefined
+    if (typeof avail === 'number' && avail > 0) {
+      return Math.max(300, avail - 50)
+    }
+    return 900
+  }
+
   function fitWindow(): void {
     const root = document.querySelector('[data-window-root]') as HTMLElement | null
     if (!root) return
     // Remove height lock to measure natural content height
     root.style.height = 'auto'
-    const h = Math.max(300, Math.min(Math.ceil(root.scrollHeight), 900))
+    const h = Math.max(300, Math.min(Math.ceil(root.scrollHeight), maxFitHeight()))
     void appWindow.setSize(new LogicalSize(currentWidth, h)).then(() => {
       // Lock height to viewport so flex scroll areas work
       root.style.height = '100vh'
