@@ -145,6 +145,15 @@ webview2-com = "0.38"
 # avoids a standalone `version = "..."` line that the release workflow's
 # version-bump regex previously misidentified as the package version.
 wv2-windows-core = { package = "windows-core", version = "0.61" }
+# Windows build number detection — used by `lib.rs::run` to disable the
+# window shadow on Windows 10 only. Works around upstream tauri-apps/tauri
+# #11654 / #13176 where the undecorated shadow inset calculation is wrong
+# on Win10 and paints a 1px artefact border after DWM redraws. Win11
+# (build >= 22000) keeps the default shadow because the upstream fix
+# (tao #1052) renders correctly there and the shadow gives the rounded
+# glass panel its depth. `default-features = false` opts out of the optional
+# `serde` feature; we only need `os_info::get()` for the version check.
+os_info = { version = "3", default-features = false }
 
 [dev-dependencies]
 wiremock = "0.6"
