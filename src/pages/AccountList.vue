@@ -2506,14 +2506,17 @@ onBeforeUnmount(() => {
 
 .account-list__title {
   margin: 0;
-  font-size: 1.625rem;
+  /* rule in this section is nudged +~0.0625rem so the page reads  */
+  /* more comfortably on high-DPI displays without overshooting    */
+  /* the rest of the chrome's proportions.                           */
+  font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 
 .account-list__subline {
   margin: 0.25rem 0 0;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--bf-on-surface-variant);
 }
 
@@ -2584,13 +2587,13 @@ onBeforeUnmount(() => {
 }
 
 .account-list__game-name {
-  font-size: 1rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .account-list__game-status {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--bf-on-surface-variant);
   display: inline-flex;
   align-items: center;
@@ -2656,7 +2659,7 @@ onBeforeUnmount(() => {
 }
 
 .account-list__balance-label {
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--bf-on-surface-variant);
@@ -2664,7 +2667,7 @@ onBeforeUnmount(() => {
 }
 
 .account-list__balance-value {
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--bf-on-surface);
 }
@@ -2711,7 +2714,7 @@ onBeforeUnmount(() => {
   gap: 0.25rem;
   padding: 0.5rem;
   cursor: pointer;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--bf-on-surface-variant);
   transition: color var(--bf-motion-fast);
 }
@@ -2740,13 +2743,13 @@ onBeforeUnmount(() => {
 
 .account-list__list-title {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--bf-on-surface);
 }
 
 .account-list__list-count {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--bf-on-surface-variant);
   background: var(--bf-surface-container);
@@ -2780,7 +2783,7 @@ onBeforeUnmount(() => {
   margin: auto;
   padding: 1.5rem 1rem;
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--bf-on-surface-variant);
 }
 
@@ -2832,7 +2835,7 @@ onBeforeUnmount(() => {
 
 .account-list__row-grip {
   color: var(--bf-outline-variant);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   user-select: none;
   cursor: grab;
   letter-spacing: -0.15em;
@@ -2870,7 +2873,7 @@ onBeforeUnmount(() => {
   background: var(--bf-surface-variant);
   color: var(--bf-on-surface);
   font-weight: 700;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -2889,7 +2892,7 @@ onBeforeUnmount(() => {
 
 .account-list__row-name {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--bf-on-surface);
   white-space: nowrap;
@@ -2909,7 +2912,7 @@ onBeforeUnmount(() => {
 
 .account-list__row-sub {
   margin: 0.0625rem 0 0;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--bf-on-surface-variant);
   white-space: nowrap;
   overflow: hidden;
@@ -2956,7 +2959,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--bf-primary);
   background: transparent;
@@ -2981,7 +2984,7 @@ onBeforeUnmount(() => {
 .account-list__limit-notice {
   margin: 0 0 0.5rem;
   padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--el-color-warning, #e6a23c);
   text-align: center;
 }
@@ -3003,7 +3006,7 @@ onBeforeUnmount(() => {
 
 .account-list__otp-title {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--bf-on-surface);
 }
@@ -3027,7 +3030,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-bottom: 2px solid var(--bf-outline-variant);
   font-family: 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   letter-spacing: 0.2em;
   text-align: center;
   padding: 0.5rem 2rem 0.5rem 0.5rem;
@@ -3066,7 +3069,7 @@ onBeforeUnmount(() => {
 .account-list__otp-get {
   min-width: 100px;
   padding: 0 1rem;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
