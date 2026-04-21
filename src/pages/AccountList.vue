@@ -792,6 +792,39 @@ function handleGameSelected(serviceCode: string, serviceRegion: string): void {
  *    item when no `loginGame` matches.
  */
 async function setupGameOnMount(): Promise<void> {
+  /*
+   * Fast path — "navigate back from Settings / About" UX fix.
+   *
+   * `AccountList` is a regular routed component, so visiting
+   * `/settings` or `/about` unmounts it and visiting back
+   * remounts it. Without this skip, every return would re-run
+   * the full bootstrap (`game.loadGames` + `selectActiveGame` +
+   * `loadList`) and the user would see the spinner + an empty
+   * list flash before the data refilled. Users with custom
+   * drag-and-drop sort orders read that flash as "my order was
+   * reset" because the persistent CSV (`AccountOrder_<code>_<region>`)
+   * is only re-applied AFTER the HTTP response lands.
+   *
+   * Skipping is safe because every code path that *should*
+   * cause a re-fetch already clears `serviceAccounts` first:
+   *
+   * - logout / session expired → `clearAccountSession` resets
+   *   the store (router guard + `registerSessionExpiredHandler`).
+   * - change game → `setActiveService` clears the store before
+   *   the new fetch.
+   * - first cold mount after login → store is empty by
+   *   construction, so the predicate is false and the full
+   *   bootstrap runs.
+   *
+   * `loadState` would otherwise sit at its initial `'loading'`
+   * sentinel forever (no `loadList` to flip it to `'ready'`),
+   * so we flip it inline before returning.
+   */
+  if (account.serviceAccounts.length > 0 && auth.session !== null) {
+    loadState.value = 'ready'
+    return
+  }
+
   await game.loadGames()
 
   if (game.loadState === 'error') {
