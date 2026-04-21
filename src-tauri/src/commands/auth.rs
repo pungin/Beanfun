@@ -83,12 +83,15 @@
 //!
 //! [`AppState::pending_totp`]: super::state::AppState::pending_totp
 
+use std::time::Duration;
+
 use serde::Serialize;
 use specta::Type;
 use tauri::{
     webview::PageLoadEvent, AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
 };
+use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::commands::{
@@ -110,8 +113,124 @@ use crate::services::beanfun::{
         get_verify_page_info as get_verify_page_info_service,
         submit_verify as submit_verify_service, VerifyOutcome,
     },
-    LoginError,
+    LoginError, Session,
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// Session keep-alive (WPF pingWorker parity)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Interval between consecutive [`BeanfunClient::ping`] calls inside
+/// [`run_ping_loop`].
+///
+/// 60 s matches WPF `MainWindow.pingWorker_DoWork` (`WaitSecs = 60`,
+/// `MainWindow.xaml.cs` L2327). The Beanfun portal drops idle sessions
+/// after a few minutes server-side; pinging every minute has proved
+/// sufficient (WPF users reported sessions surviving for days).
+const PING_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Install a freshly-minted `(client, session)` pair onto
+/// [`AppState::auth`] and spawn the session keep-alive ping loop.
+///
+/// Centralises the four-site login-finalisation pattern:
+///
+/// 1. Derive the [`SessionInfo`] DTO **before** moving `session` so we
+///    can still return it to the caller.
+/// 2. Wrap `client` + `session` in an [`AuthContext`] — each call
+///    mints a fresh [`CancellationToken`] via
+///    [`AuthContext::new`].
+/// 3. Install the context on [`AppState::auth`]. Holds the write lock
+///    for the shortest possible window (no `.await` points between
+///    the acquire and the release besides the `replace` itself).
+/// 4. Spawn [`run_ping_loop`] with a clone of `client` + a clone of
+///    the context's `ping_cancel` token. The clones share the same
+///    cookie jar and cancellation signal as the installed context,
+///    so `logout` -> `cancel()` stops the loop promptly.
+///
+/// # Why clone `client` for the spawned task?
+///
+/// [`BeanfunClient`] is cheap to clone (all inner fields are
+/// `Arc<_>`), and cloning keeps ownership semantics simple: the
+/// spawned task outlives any single `AppState::auth` read guard.
+async fn install_session_and_start_ping(
+    state: &AppState,
+    client: BeanfunClient,
+    session: Session,
+) -> SessionInfo {
+    let info = SessionInfo::from(&session);
+    let ctx = AuthContext::new(client, session);
+    let ping_client = ctx.client.clone();
+    let ping_cancel = ctx.ping_cancel.clone();
+
+    // Atomic replace: if a prior `AuthContext` was still installed
+    // (e.g. the user re-logged in without first calling `logout`,
+    // or a `session_required` flow recovered mid-session), cancel
+    // its keep-alive loop so we don't leak an orphaned background
+    // task holding a stale cookie jar.
+    let prev = state.auth.write().await.replace(ctx);
+    if let Some(prev_ctx) = prev {
+        prev_ctx.ping_cancel.cancel();
+    }
+
+    spawn_ping_loop(ping_client, ping_cancel);
+    info
+}
+
+/// Spawn [`run_ping_loop`] as a detached Tokio task.
+///
+/// Split out of [`install_session_and_start_ping`] so unit tests can
+/// drive [`run_ping_loop`] directly without a live Tokio reactor
+/// observing a spawned future.
+fn spawn_ping_loop(client: BeanfunClient, cancel: CancellationToken) {
+    tokio::spawn(run_ping_loop(client, cancel));
+}
+
+/// Periodically hit [`BeanfunClient::ping`] until `cancel` fires.
+///
+/// Ports WPF `MainWindow.pingWorker_DoWork`
+/// (`MainWindow.xaml.cs` L2322-2368). The WPF loop is:
+///
+/// 1. Ping.
+/// 2. Sleep `WaitSecs` (60 s), checking cancellation each second.
+/// 3. Goto 1.
+///
+/// Our Tokio rewrite uses [`tokio::select!`] on the cancel token so
+/// shutdown fires immediately instead of waiting up to 1 s for the
+/// next inner tick. Cancellation is also checked *during* the ping
+/// itself so a mid-flight request doesn't delay shutdown by up to
+/// the client timeout (tens of seconds).
+///
+/// # Error handling
+///
+/// Ping failures are swallowed at `tracing::debug!` level to match
+/// WPF `BeanfunClient.Ping()`'s `catch { }` (bfClient.cs L193-212).
+/// A transient network hiccup or a 5xx from the Beanfun portal must
+/// not kill the keep-alive loop — the next tick 60 s later is the
+/// retry. If the session is genuinely dead the user will find out
+/// on their next meaningful action (Get OTP, launch game), just
+/// like WPF.
+async fn run_ping_loop(client: BeanfunClient, cancel: CancellationToken) {
+    loop {
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return,
+            res = client.ping() => {
+                if let Err(err) = res {
+                    tracing::debug!(
+                        error = ?err,
+                        "session keep-alive ping failed; will retry next tick"
+                    );
+                }
+            }
+        }
+
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return,
+            _ = tokio::time::sleep(PING_INTERVAL) => {}
+        }
+    }
+}
 
 /// Error code surfaced to the frontend when [`login_totp`] runs and
 /// there is no pending TOTP challenge on [`AppState::pending_totp`].
@@ -252,8 +371,7 @@ pub async fn login_regular(
 
     match outcome {
         Ok(session) => {
-            let info = SessionInfo::from(&session);
-            *state.auth.write().await = Some(AuthContext::new(client, session));
+            let info = install_session_and_start_ping(&state, client, session).await;
             Ok(info)
         }
         Err(LoginError::TotpRequired(challenge)) => {
@@ -322,8 +440,7 @@ pub async fn login_totp(
     .await?;
 
     *state.pending_totp.write().await = None;
-    let info = SessionInfo::from(&session);
-    *state.auth.write().await = Some(AuthContext::new(client, session));
+    let info = install_session_and_start_ping(&state, client, session).await;
     Ok(info)
 }
 
@@ -526,8 +643,7 @@ pub async fn login_qr_check(state: State<'_, AppState>) -> Result<QrStatus, Comm
         QrPollOutcome::Approved => {
             let session = finalize_qr_login(&client, &init).await?;
             *state.pending_qr.write().await = None;
-            let info = SessionInfo::from(&session);
-            *state.auth.write().await = Some(AuthContext::new(client, session));
+            let info = install_session_and_start_ping(&state, client, session).await;
             Ok(QrStatus::Approved { session: info })
         }
     }
@@ -963,8 +1079,7 @@ async fn handle_gamepass_page_load<R: tauri::Runtime>(
         return;
     }
 
-    let info = SessionInfo::from(&session);
-    *state.auth.write().await = Some(AuthContext::new(client, session));
+    let info = install_session_and_start_ping(&state, client, session).await;
 
     tracing::info!(
         step = "GamepassCompletion.Success",
@@ -1705,6 +1820,15 @@ pub async fn logout(state: State<'_, AppState>) -> Result<(), CommandError> {
     let prev_auth = state.auth.write().await.take();
 
     if let Some(ctx) = prev_auth {
+        // Cancel the session keep-alive ping loop *first* so the
+        // background task doesn't race with `logout_service` and
+        // POST a keep-alive ping against a server the server-side
+        // logout just invalidated. `cancel()` is idempotent and
+        // non-blocking; the spawned task observes the signal on
+        // the next `tokio::select!` wake-up inside
+        // [`run_ping_loop`].
+        ctx.ping_cancel.cancel();
+
         if let Err(err) = logout_service(&ctx.client).await {
             tracing::warn!(
                 error = ?err,
@@ -1724,6 +1848,257 @@ mod tests {
 
     fn empty_state() -> AppState {
         AppState::new(PathBuf::from(r"C:\tmp"))
+    }
+
+    // ── Session keep-alive (run_ping_loop) ────────────────────────
+
+    use crate::services::beanfun::Endpoints;
+    use std::time::Duration as StdDuration;
+    use url::Url;
+    use wiremock::matchers::{method as wm_method, path as wm_path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn fake_session() -> Session {
+        Session::new(
+            LoginRegion::TW,
+            "skey-test",
+            "web-token-test",
+            "acc-test",
+            LoginRegion::TW.default_service_code(),
+            LoginRegion::TW.default_service_region(),
+        )
+    }
+
+    /// Build a [`BeanfunClient`] whose `portal_base` points at
+    /// `server`. Shared between the cancellation and error-handling
+    /// tests for [`run_ping_loop`].
+    fn ping_client_against(server: &MockServer) -> BeanfunClient {
+        let base = Url::parse(&format!("{}/", server.uri())).expect("mock URL parses");
+        let endpoints = Endpoints {
+            login_base: base.clone(),
+            portal_base: base.clone(),
+            newlogin_base: base,
+        };
+        let mut cfg = ClientConfig::for_region(LoginRegion::TW);
+        cfg.endpoints = endpoints;
+        BeanfunClient::new(cfg).expect("client builds")
+    }
+
+    async fn mount_echo_token_200(server: &MockServer) {
+        Mock::given(wm_method("GET"))
+            .and(wm_path("/beanfun_block/generic_handlers/echo_token.ashx"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .mount(server)
+            .await;
+    }
+
+    /// Cancelling the token *before* the first ping fires must
+    /// terminate [`run_ping_loop`] without issuing any HTTP
+    /// request. This pins the shutdown semantics that `logout`
+    /// relies on: `ctx.ping_cancel.cancel()` takes effect
+    /// immediately, not "after the next tick".
+    #[tokio::test]
+    async fn run_ping_loop_exits_promptly_when_cancelled_before_first_tick() {
+        let server = MockServer::start().await;
+        mount_echo_token_200(&server).await;
+        let client = ping_client_against(&server);
+
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+
+        tokio::time::timeout(StdDuration::from_secs(5), run_ping_loop(client, cancel))
+            .await
+            .expect("loop must return promptly on pre-cancelled token");
+
+        let requests = server.received_requests().await.expect("log enabled");
+        assert!(
+            requests.is_empty(),
+            "no ping should fire if token is cancelled before loop entry; got {} request(s)",
+            requests.len(),
+        );
+    }
+
+    /// After one successful ping, cancelling the token mid-sleep
+    /// must cause the loop to exit on the next `select!` wake
+    /// without waiting the full [`PING_INTERVAL`]. This is the
+    /// hot path — a user that logs out 1 s after login should
+    /// not leave a 59 s zombie task running.
+    #[tokio::test]
+    async fn run_ping_loop_exits_during_sleep_after_first_ping() {
+        let server = MockServer::start().await;
+        mount_echo_token_200(&server).await;
+        let client = ping_client_against(&server);
+
+        let cancel = CancellationToken::new();
+        let cancel_for_loop = cancel.clone();
+        let handle = tokio::spawn(async move { run_ping_loop(client, cancel_for_loop).await });
+
+        // Wait until the first ping has been observed by the mock,
+        // then cancel. We poll instead of `sleep` so the test stays
+        // deterministic across slow CI machines.
+        let deadline = tokio::time::Instant::now() + StdDuration::from_secs(5);
+        loop {
+            let count = server
+                .received_requests()
+                .await
+                .map(|r| r.len())
+                .unwrap_or(0);
+            if count >= 1 {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                panic!("first ping never arrived within 5s");
+            }
+            tokio::time::sleep(StdDuration::from_millis(10)).await;
+        }
+
+        cancel.cancel();
+
+        tokio::time::timeout(StdDuration::from_secs(5), handle)
+            .await
+            .expect("loop must exit promptly after cancel")
+            .expect("spawned task must not panic");
+    }
+
+    /// A 5xx response from `echo_token.ashx` must NOT kill the
+    /// loop — WPF's `catch { }` swallows errors and the next tick
+    /// retries. We pin this by waiting for *two* requests to land
+    /// against a server that always returns 500.
+    #[tokio::test(start_paused = true)]
+    async fn run_ping_loop_keeps_running_after_ping_failure() {
+        let server = MockServer::start().await;
+        Mock::given(wm_method("GET"))
+            .and(wm_path("/beanfun_block/generic_handlers/echo_token.ashx"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+        let client = ping_client_against(&server);
+
+        let cancel = CancellationToken::new();
+        let cancel_for_loop = cancel.clone();
+        let handle = tokio::spawn(async move { run_ping_loop(client, cancel_for_loop).await });
+
+        // Wait for the *first* real ping to land. With `start_paused
+        // = true` the runtime clock doesn't advance until we call
+        // `advance`, so the first ping — which fires immediately —
+        // is the one we wait for here.
+        while server
+            .received_requests()
+            .await
+            .map(|r| r.len())
+            .unwrap_or(0)
+            < 1
+        {
+            tokio::task::yield_now().await;
+        }
+
+        // Fast-forward past the 60s sleep so the second tick fires
+        // without actually sleeping in wall-clock time.
+        tokio::time::advance(PING_INTERVAL + StdDuration::from_millis(50)).await;
+
+        while server
+            .received_requests()
+            .await
+            .map(|r| r.len())
+            .unwrap_or(0)
+            < 2
+        {
+            tokio::task::yield_now().await;
+        }
+
+        cancel.cancel();
+        tokio::time::timeout(StdDuration::from_secs(5), handle)
+            .await
+            .expect("loop exits after cancel even while failing")
+            .expect("spawned task must not panic");
+    }
+
+    /// End-to-end wiring for the login-path helper:
+    /// `install_session_and_start_ping` must populate `AppState::auth`
+    /// *and* spawn a ping loop that actually fires. If wiring is
+    /// broken we'd observe the auth context installed but no
+    /// request ever hitting the mock server.
+    #[tokio::test]
+    async fn install_session_and_start_ping_populates_auth_and_fires_ping() {
+        let server = MockServer::start().await;
+        mount_echo_token_200(&server).await;
+        let client = ping_client_against(&server);
+
+        let state = empty_state();
+        // Minimal placeholder session — fields aren't inspected by
+        // the keep-alive loop, only `client` is.
+        let session = fake_session();
+
+        let _info = install_session_and_start_ping(&state, client, session).await;
+
+        assert!(
+            state.auth.read().await.is_some(),
+            "auth context must be installed",
+        );
+
+        // Wait for first ping to fire so we know the spawn actually
+        // landed a live task.
+        let deadline = tokio::time::Instant::now() + StdDuration::from_secs(5);
+        loop {
+            let count = server
+                .received_requests()
+                .await
+                .map(|r| r.len())
+                .unwrap_or(0);
+            if count >= 1 {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                panic!("ping loop never fired the first request within 5s");
+            }
+            tokio::time::sleep(StdDuration::from_millis(10)).await;
+        }
+
+        // Clean up so the spawned task doesn't keep looping in the
+        // background after this test returns.
+        let taken = state.auth.write().await.take();
+        if let Some(ctx) = taken {
+            ctx.ping_cancel.cancel();
+        }
+    }
+
+    /// Installing a second session must cancel the first session's
+    /// ping loop. Without this the old task would hold the old
+    /// cookie jar alive and keep calling the mock forever.
+    #[tokio::test]
+    async fn install_session_and_start_ping_cancels_previous_loop() {
+        let server = MockServer::start().await;
+        mount_echo_token_200(&server).await;
+
+        let state = empty_state();
+
+        let first_client = ping_client_against(&server);
+        install_session_and_start_ping(&state, first_client, fake_session()).await;
+        let first_token = state
+            .auth
+            .read()
+            .await
+            .as_ref()
+            .expect("first install populates auth")
+            .ping_cancel
+            .clone();
+        assert!(
+            !first_token.is_cancelled(),
+            "fresh install must leave token uncancelled",
+        );
+
+        let second_client = ping_client_against(&server);
+        install_session_and_start_ping(&state, second_client, fake_session()).await;
+        assert!(
+            first_token.is_cancelled(),
+            "replacing an auth context must cancel the prior ping loop",
+        );
+
+        // Clean up the second loop.
+        let taken = state.auth.write().await.take();
+        if let Some(ctx) = taken {
+            ctx.ping_cancel.cancel();
+        }
     }
 
     // ── split_otp_digits ──────────────────────────────────────────

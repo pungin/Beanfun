@@ -68,6 +68,7 @@
 use std::path::PathBuf;
 
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 
 use crate::services::beanfun::{
     client::BeanfunClient,
@@ -103,6 +104,29 @@ pub struct AuthContext {
     /// fields are redacted by the `Debug` impl — see
     /// [`Session`]'s module docs for the sensitivity policy.
     pub session: Session,
+
+    /// Cancellation handle for the session keep-alive ping loop
+    /// ([`run_ping_loop`][crate::commands::auth::run_ping_loop]),
+    /// ported from the WPF `pingWorker` background worker
+    /// (`MainWindow.xaml.cs` L2322-2368). Logout / session-clear
+    /// paths call [`.cancel()`][CancellationToken::cancel] on this
+    /// token so the spawned task exits promptly instead of living on
+    /// past the `AuthContext` it belongs to.
+    ///
+    /// Each [`AuthContext::new`] call mints a **fresh** token
+    /// ([`CancellationToken::new`]), so logging in twice spawns two
+    /// independent loops whose lifecycles are individually bounded —
+    /// a previous login's ping task is always cancelled as part of
+    /// that login's `clear_all_auth_state` before the new loop is
+    /// spawned (see `commands::auth`).
+    ///
+    /// Cloning an `AuthContext` clones the token, but
+    /// [`CancellationToken`] is internally `Arc`-backed: every clone
+    /// observes the same cancel signal. That is *exactly* the
+    /// semantics we want for the `require_auth` escape-hatch
+    /// (callers take an owned snapshot, drop the `RwLock` guard,
+    /// and the snapshot still points at the live token).
+    pub ping_cancel: CancellationToken,
 }
 
 impl AuthContext {
@@ -110,9 +134,16 @@ impl AuthContext {
     /// single swap-able unit.
     ///
     /// Callers (login commands) should immediately `write()` the
-    /// result into [`AppState::auth`] so downstream commands see it.
+    /// result into [`AppState::auth`] so downstream commands see it,
+    /// then spawn the session keep-alive ping loop using
+    /// [`ping_cancel`][Self::ping_cancel] as the shutdown signal
+    /// (see `commands::auth::spawn_ping_loop`).
     pub fn new(client: BeanfunClient, session: Session) -> Self {
-        Self { client, session }
+        Self {
+            client,
+            session,
+            ping_cancel: CancellationToken::new(),
+        }
     }
 }
 
