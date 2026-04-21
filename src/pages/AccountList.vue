@@ -2770,8 +2770,20 @@ onBeforeUnmount(() => {
    * "Get OTP". With `flex: 1 + min-height: 0` in the parent chain
    * the list is always the one that scrolls and the OTP footer
    * stays pinned at the bottom regardless of account count.
+   *
+   * `min-height: 9rem` guarantees at least two rows are always
+   * fully visible before the internal scrollbar kicks in. Budget:
+   *   row      = 0.625rem × 2 padding + ~28px content ≈ 52px
+   *   2 rows   = 104px
+   *   gap      = 0.25rem between rows = 4px
+   *   padding  = 0.5rem × 2 on __list-body = 16px
+   *   total    ≈ 124px, rounded up to 144px (9rem) for buffer.
+   * Downside: with a single account the list has a small empty
+   * area below the row. Accepted trade-off — the user reported
+   * that a partially-clipped second row (the prior 80px floor)
+   * was worse than a slightly loose single-row view.
    */
-  min-height: 80px;
+  min-height: 9rem;
   overflow-y: auto;
   padding: 0.5rem;
   display: flex;
