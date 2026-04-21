@@ -17,7 +17,9 @@
  *    `connection-lost` banner shows and the steps stay at `0`.
  * 5. Refresh re-issues both commands and clears the banner on
  *    success.
- * 6. Back button navigates to `/login` without further calls.
+ * 6. Back button ("返回一般登入") navigates to `/login/id-pass` (NOT
+ *    `/login?pick=1` — the button switches login mode within the same
+ *    region, it does not re-pick region) without further backend calls.
  * 7. Locale switch re-renders the localized copy.
  *
  * CP4 event-wiring assertions (new):
@@ -231,6 +233,14 @@ function mountForm(opts: { region?: string } = {}) {
     routes: [
       { path: '/login', name: 'login', component: LoginStub },
       { path: '/login/gamepass', name: 'login-gamepass', component: GamepassForm },
+      {
+        path: '/login/id-pass',
+        name: 'login-id-pass',
+        component: defineComponent({
+          name: 'IdPassStub',
+          render: () => h('div', { 'data-testid': 'id-pass-stub' }),
+        }),
+      },
       { path: '/accounts', name: 'accounts', component: AccountsStub },
     ],
   })
@@ -368,7 +378,13 @@ describe('GamepassForm', () => {
     expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('2')
   })
 
-  it('Back button navigates to /login without further backend calls', async () => {
+  it('Back button ("返回一般登入") navigates to /login/id-pass without further backend calls', async () => {
+    /*
+     * Regression for the bug where goBack pushed `/login?pick=1`,
+     * which dumped the user back at the region picker even though
+     * the button label promised "back to regular (id-pass) login".
+     * The correct behaviour is mode-switch within the saved region.
+     */
     const ctx = mountForm()
     const wrapper = await ctx.mountIt()
     await flushPromises()
@@ -379,7 +395,7 @@ describe('GamepassForm', () => {
     await wrapper.find('[data-testid="gamepass-back"]').trigger('click')
     await flushPromises()
 
-    expect(ctx.router.currentRoute.value.path).toBe('/login')
+    expect(ctx.router.currentRoute.value.path).toBe('/login/id-pass')
     expect(mockLoginGamepassStart.mock.calls.length).toBe(startCallsAfterMount)
     expect(mockOpenGamepassWindow.mock.calls.length).toBe(openCallsAfterMount)
   })

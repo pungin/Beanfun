@@ -17,7 +17,9 @@
  * 7. `loginQrCheck` error result stops polling + shows inline
  *    "connection lost" banner (Q11 = B — no toast, inline fallback).
  * 8. Refresh button re-mints the QR.
- * 9. Back button navigates to `/login` and halts the polling loop.
+ * 9. Back button ("返回一般登入") navigates to `/login/id-pass` (NOT
+ *    `/login?pick=1` — the button switches login mode within the same
+ *    region, it does not re-pick region) and halts the polling loop.
  * 10. Copy deeplink success path uses `navigator.clipboard.writeText`
  *     + success toast.
  * 11. Copy deeplink button is disabled when the server returns no
@@ -179,6 +181,14 @@ function mountForm(opts: { region?: string } = {}) {
     routes: [
       { path: '/login', name: 'login', component: LoginStub },
       { path: '/login/qr', name: 'login-qr', component: QrForm },
+      {
+        path: '/login/id-pass',
+        name: 'login-id-pass',
+        component: defineComponent({
+          name: 'IdPassStub',
+          render: () => h('div', { 'data-testid': 'id-pass-stub' }),
+        }),
+      },
       {
         path: '/accounts',
         name: 'accounts',
@@ -409,7 +419,13 @@ describe('QrForm', () => {
     )
   })
 
-  it('Back button navigates to /login and halts polling', async () => {
+  it('Back button ("返回一般登入") navigates to /login/id-pass and halts polling', async () => {
+    /*
+     * Regression for the bug where goBack pushed `/login?pick=1`,
+     * which dumped the user back at the region picker even though
+     * the button label promised "back to regular (id-pass) login".
+     * The correct behaviour is mode-switch within the saved region.
+     */
     mockLoginQrStart.mockReturnValueOnce(ok(CHALLENGE))
     mockLoginQrCheck.mockResolvedValue({ status: 'ok', data: STATUS_PENDING })
 
@@ -420,7 +436,7 @@ describe('QrForm', () => {
     await wrapper.find('[data-testid="qr-back"]').trigger('click')
     await flushPromises()
 
-    expect(ctx.router.currentRoute.value.path).toBe('/login')
+    expect(ctx.router.currentRoute.value.path).toBe('/login/id-pass')
 
     const callsAfterBack = mockLoginQrCheck.mock.calls.length
     await advancePoll(3)

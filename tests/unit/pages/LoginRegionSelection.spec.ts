@@ -23,6 +23,7 @@ import { defineComponent, h, nextTick } from 'vue'
 import type { I18n } from 'vue-i18n'
 
 import type { CommandError, Result } from '../../../src/types/bindings'
+import { useConfigStore } from '../../../src/stores/config'
 
 vi.mock('element-plus', () => ({
   ElIcon: defineComponent({
@@ -51,6 +52,7 @@ import LoginRegionSelection from '../../../src/pages/LoginRegionSelection.vue'
 import { createAppI18n, i18nMessages, setLocale } from '../../../src/i18n'
 
 const mockSetConfig = vi.mocked(commands.setConfig)
+const mockGetAllConfig = vi.mocked(commands.getAllConfig)
 
 const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ status: 'ok', data })
 
@@ -60,7 +62,7 @@ const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ s
  * `router.push` resolves cleanly. Mirrors the test layout we'll reuse
  * in D3-D8 to verify each form's nav target.
  */
-function mountPicker(): {
+function mountPicker(opts: { initialPath?: string } = {}): {
   router: Router
   i18n: I18n
   mountIt: () => Promise<ReturnType<typeof mount>>
@@ -81,6 +83,14 @@ function mountPicker(): {
           render: () => h('div', { 'data-testid': 'id-pass-stub' }),
         }),
       },
+      {
+        path: '/login/qr',
+        name: 'login-qr',
+        component: defineComponent({
+          name: 'QrStub',
+          render: () => h('div', { 'data-testid': 'qr-stub' }),
+        }),
+      },
     ],
   })
 
@@ -90,7 +100,7 @@ function mountPicker(): {
     router,
     i18n,
     async mountIt() {
-      await router.push('/login/region')
+      await router.push(opts.initialPath ?? '/login/region')
       await router.isReady()
       return mount(LoginRegionSelection, {
         global: { plugins: [router, i18n] },
@@ -104,6 +114,8 @@ describe('LoginRegionSelection', () => {
     setActivePinia(createPinia())
     mockSetConfig.mockReset()
     mockSetConfig.mockReturnValue(ok(null))
+    mockGetAllConfig.mockReset()
+    mockGetAllConfig.mockReturnValue(ok({}))
   })
 
   it('renders both region tiles with their localized labels', async () => {
@@ -170,6 +182,84 @@ describe('LoginRegionSelection', () => {
 
     expect(ctx.router.currentRoute.value.path).toBe('/login/id-pass')
     expect(ctx.router.currentRoute.value.name).toBe('login-id-pass')
+  })
+
+  /*
+   * Auto-redirect (WPF `loginMethodInit` parity, commit `24a07af`).
+   *
+   * Once `Config.xml` is loaded, a saved `loginRegion` should skip
+   * the picker and jump straight to the matching login form. The
+   * `?pick=1` query is the documented escape hatch — login-form back
+   * buttons append it so the user can return to the picker.
+   *
+   * This block locks down the bug fixed in
+   * `fix(login-region): remove duplicate onMounted redirect`: a stray
+   * `onMounted` block was racing the watcher with weaker logic
+   * (no `?pick` check, no `loginMethod` awareness), making the
+   * picker unreachable after first launch.
+   */
+  describe('auto-redirect when Config.xml has saved preferences', () => {
+    it('jumps to /login/id-pass when loginRegion=TW is saved (default loginMethod)', async () => {
+      mockGetAllConfig.mockReturnValue(ok({ loginRegion: 'TW' }))
+      const ctx = mountPicker()
+      const config = useConfigStore()
+      await config.loadAll()
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      expect(ctx.router.currentRoute.value.path).toBe('/login/id-pass')
+      wrapper.unmount()
+    })
+
+    it('jumps to /login/qr when loginRegion=TW + loginMethod=1 are saved', async () => {
+      mockGetAllConfig.mockReturnValue(ok({ loginRegion: 'TW', loginMethod: '1' }))
+      const ctx = mountPicker()
+      const config = useConfigStore()
+      await config.loadAll()
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      expect(ctx.router.currentRoute.value.path).toBe('/login/qr')
+      wrapper.unmount()
+    })
+
+    it('falls back to /login/id-pass for HK even when loginMethod=1 (HK has no QR endpoint)', async () => {
+      mockGetAllConfig.mockReturnValue(ok({ loginRegion: 'HK', loginMethod: '1' }))
+      const ctx = mountPicker()
+      const config = useConfigStore()
+      await config.loadAll()
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      expect(ctx.router.currentRoute.value.path).toBe('/login/id-pass')
+      wrapper.unmount()
+    })
+
+    it('stays on the picker when ?pick=1 is in the route, even with a saved region', async () => {
+      mockGetAllConfig.mockReturnValue(ok({ loginRegion: 'TW' }))
+      const ctx = mountPicker({ initialPath: '/login/region?pick=1' })
+      const config = useConfigStore()
+      await config.loadAll()
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      expect(ctx.router.currentRoute.value.path).toBe('/login/region')
+      expect(wrapper.findAll('.region-tile')).toHaveLength(2)
+      wrapper.unmount()
+    })
+
+    it('stays on the picker on first launch when no region is saved', async () => {
+      mockGetAllConfig.mockReturnValue(ok({}))
+      const ctx = mountPicker()
+      const config = useConfigStore()
+      await config.loadAll()
+      const wrapper = await ctx.mountIt()
+      await flushPromises()
+
+      expect(ctx.router.currentRoute.value.path).toBe('/login/region')
+      expect(wrapper.findAll('.region-tile')).toHaveLength(2)
+      wrapper.unmount()
+    })
   })
 
   it('re-renders heading + tile labels after a runtime locale switch', async () => {

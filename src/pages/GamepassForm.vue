@@ -312,7 +312,12 @@ async function refresh(): Promise<void> {
 
 async function goBack(): Promise<void> {
   disposed = true
-  await router.push({ path: '/login', query: { pick: '1' } })
+  // "返回一般登入" — go back to the regular id-pass form within the
+  // same saved region, NOT to the region picker. Pushing
+  // `/login?pick=1` would force the user to re-pick TW/HK, which the
+  // button label does not promise. Mirrors WPF's
+  // `LoginMethod = Regular` + `loginMethodChanged()` flow.
+  await router.push('/login/id-pass')
 }
 </script>
 

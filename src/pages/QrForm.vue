@@ -17,9 +17,13 @@
  *   QR challenge, overwriting any prior `pending_qr` slot (see
  *   `commands/auth.rs::login_qr_start` side-effect docs).
  * - **Back button**: `qr_form.xaml.cs::btn_back_Click` flips
- *   `App.LoginMethod = Regular` and re-runs `loginMethodChanged()`.
- *   We push `/login`; the parent `LoginPage` re-renders
- *   `LoginRegionSelection` at the root child route.
+ *   `App.LoginMethod = Regular` and re-runs `loginMethodChanged()`,
+ *   which lands the user on the regular id-pass form (the QR mode is
+ *   peer to id-pass within the same region, not above region picking).
+ *   We mirror that with `router.push('/login/id-pass')` — staying in
+ *   the saved region, just switching the login mode. We do NOT push
+ *   `/login?pick=1`; the button is "返回一般登入" (back to regular
+ *   login), not "重選區域" (re-pick region).
  *
  * # Polling strategy (Q2 + Q10)
  *
@@ -300,7 +304,7 @@ async function refresh(): Promise<void> {
 async function goBack(): Promise<void> {
   disposed = true
   clearPollTimer()
-  await router.push({ path: '/login', query: { pick: '1' } })
+  await router.push('/login/id-pass')
 }
 
 /**
