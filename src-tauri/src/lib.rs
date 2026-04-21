@@ -370,6 +370,22 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Remember-window-position: restores the user's last screen
+        // position on launch (e.g. after dragging Beanfun onto a
+        // secondary monitor). `StateFlags::POSITION` intentionally
+        // *excludes* SIZE / MAXIMIZED / DECORATIONS — `tauri.conf.json`
+        // ships `resizable: false` and the router's per-route
+        // `fitWindow` (`src/router/index.ts`) is the canonical owner
+        // of the window's width/height. Persisting size here would
+        // race those handlers and the user would see the window snap
+        // to the saved size before snapping again to the route-driven
+        // size on the first navigation. The state file lives under
+        // the standard `appConfigDir` (Windows: `%APPDATA%\tw.beanfun.app\`).
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(tauri_plugin_window_state::StateFlags::POSITION)
+                .build(),
+        )
         .manage(app_state)
         // Tauri-managed handle to the tray ID so commands (e.g.
         // `system::minimize_main_window`) can drive the tray without

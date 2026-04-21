@@ -37,6 +37,13 @@ tauri-plugin-opener = "2"
 # on Linux); no extra config needed beyond declaring the plugin in `lib.rs`
 # and granting `dialog:default` in `capabilities/default.json`.
 tauri-plugin-dialog = "2"
+# Persists the main window's *position* across launches so users that
+# drag the launcher to e.g. a secondary monitor get it back in the
+# same spot next time. We deliberately enable `StateFlags::POSITION`
+# only — `tauri.conf.json` ships `resizable: false` and the router's
+# `fitWindow` (`router/index.ts`) drives per-route height/width, so
+# persisting SIZE / MAXIMIZED would fight those handlers.
+tauri-plugin-window-state = "2"
 
 # Cross-platform URL / file opener (ShellExecuteW on Windows,
 # LSOpenCFURLRef on macOS, xdg-open on Linux). Already pulled in as
