@@ -130,7 +130,7 @@ nrbf = "0.2"
 zeroize = { version = "1", features = ["derive"] }
 
 # Random number generation (storage entropy salt — OsRng only; CSPRNG)
-rand = "0.8"
+rand = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 # Win32 API bindings — features will be expanded per phase (DPAPI in P5, WMI/PostMessage in P8/P9).
