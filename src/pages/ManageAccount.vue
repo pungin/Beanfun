@@ -520,7 +520,7 @@ function handleBack(): void {
   <main class="manage bf-glass-window" data-window-root>
     <TitleBar />
     <div class="manage__scroll">
-      <div class="manage__container">
+      <div class="manage__container" data-window-content>
         <!-- Header -->
         <header class="manage__header">
           <div class="manage__header-icon" aria-hidden="true">

@@ -602,7 +602,7 @@ onMounted(() => {
   <main class="settings bf-glass-window" data-window-root>
     <TitleBar />
     <div class="settings__scroll">
-      <div class="settings__container">
+      <div class="settings__container" data-window-content>
         <!-- Header -->
         <header class="settings__header">
           <div class="settings__header-icon" aria-hidden="true">
@@ -742,6 +742,7 @@ onMounted(() => {
               <div class="settings__row settings__row--checkbox">
                 <el-tooltip
                   placement="right"
+                  popper-class="settings__tip-popper"
                   :content="t('settings.disableHardwareAccelerationTip')"
                 >
                   <el-checkbox
@@ -788,7 +789,11 @@ onMounted(() => {
             <div class="settings__grid settings__grid--two-col">
               <div class="settings__col">
                 <div class="settings__row settings__row--checkbox">
-                  <el-tooltip placement="right" :content="t('settings.tradLoginTip')">
+                  <el-tooltip
+                    placement="right"
+                    popper-class="settings__tip-popper"
+                    :content="t('settings.tradLoginTip')"
+                  >
                     <el-checkbox
                       :model-value="ui.tradLogin"
                       data-test="settings-trad-login"
@@ -800,7 +805,11 @@ onMounted(() => {
                 </div>
 
                 <div class="settings__row settings__row--checkbox">
-                  <el-tooltip placement="right" :content="t('settings.killPatcherTip')">
+                  <el-tooltip
+                    placement="right"
+                    popper-class="settings__tip-popper"
+                    :content="t('settings.killPatcherTip')"
+                  >
                     <el-checkbox
                       :model-value="ui.autoKillPatcher"
                       data-test="settings-auto-kill-patcher"
@@ -814,7 +823,11 @@ onMounted(() => {
 
               <div class="settings__col">
                 <div class="settings__row settings__row--checkbox">
-                  <el-tooltip placement="right" :content="t('settings.skipPlayWindowTip')">
+                  <el-tooltip
+                    placement="right"
+                    popper-class="settings__tip-popper"
+                    :content="t('settings.skipPlayWindowTip')"
+                  >
                     <el-checkbox
                       :model-value="ui.skipPlayWnd"
                       data-test="settings-skip-play-wnd"
@@ -1067,5 +1080,35 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+}
+</style>
+
+<!--
+ * Non-scoped style block for the `el-tooltip` popper. Element Plus
+ * teleports poppers to `document.body`, which sits outside this
+ * component's scoped CSS boundary, so a scoped rule (even behind
+ * `:deep(...)`) would not match. Keeping it global-but-namespaced
+ * via `.settings__tip-popper` limits the blast radius to the four
+ * tooltips in this page (`popper-class="settings__tip-popper"`).
+ *
+ * Why this exists:
+ *   - Several i18n strings embed `\n` to break long explanations
+ *     into two sentences (see `disableHardwareAccelerationTip` /
+ *     `tradLoginTip` in `src/i18n/messages.ts`). The default
+ *     `white-space: normal` in `el-popper` collapses those
+ *     newlines, and the resulting single-line string is wide
+ *     enough that placement="right" gets clipped by the Tauri
+ *     window edge (reported on PR #237: "Disabling h..." truncation).
+ *   - `max-width: 280px` lets Element Plus' flip strategy fall back
+ *     to `top`/`bottom` if the right placement still cannot fit.
+ *   - `word-break: break-word` protects English copy that has no
+ *     `\n` seam from overflowing when it sits right at the cap.
+ -->
+<style>
+.settings__tip-popper.el-popper {
+  max-width: 280px;
+  white-space: pre-line;
+  word-break: break-word;
+  line-height: 1.5;
 }
 </style>

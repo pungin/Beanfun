@@ -120,6 +120,36 @@ fn resolve_storage_root() -> Result<PathBuf, CommandError> {
     Ok(std::env::temp_dir().join("Beanfun"))
 }
 
+/// Detects whether the host is running Windows 10 (build number < 22000).
+///
+/// Used by [`run`] as a gate for the `set_shadow(false)` workaround for
+/// upstream tauri-apps/tauri#11654 / #13176 — the bug only manifests on
+/// Windows 10 because the undecorated-shadow inset calculation in `tao`
+/// paints a 1px artefact border after DWM redraws. Windows 11 (build
+/// number >= 22000) renders the same shadow correctly since tao #1052
+/// landed, and the shadow there is desirable (it's what gives the rounded
+/// glass panel its depth), so we keep the default behaviour for it.
+///
+/// Returns `false` on any non-Windows host (defensive — the caller is
+/// already behind `#[cfg(target_os = "windows")]`, this mirrors that
+/// contract) and on any Windows host whose `os_info` reports a non-
+/// semantic version (`Unknown` / `Rolling` / `Custom`). "Report uncertain
+/// version → leave shadow alone" is the safer default: keeping the
+/// default shadow on an unknown host is a visual downside at worst,
+/// whereas wrongly disabling it on a Win11 host would cause a visible
+/// regression there.
+#[cfg(target_os = "windows")]
+fn is_windows_10() -> bool {
+    let info = os_info::get();
+    if info.os_type() != os_info::Type::Windows {
+        return false;
+    }
+    match info.version() {
+        os_info::Version::Semantic(_, _, build) => *build < 22000,
+        _ => false,
+    }
+}
+
 /// Regenerate `src/types/bindings.ts` from the live
 /// `tauri-specta` builder.
 ///
@@ -340,6 +370,22 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Remember-window-position: restores the user's last screen
+        // position on launch (e.g. after dragging Beanfun onto a
+        // secondary monitor). `StateFlags::POSITION` intentionally
+        // *excludes* SIZE / MAXIMIZED / DECORATIONS — `tauri.conf.json`
+        // ships `resizable: false` and the router's per-route
+        // `fitWindow` (`src/router/index.ts`) is the canonical owner
+        // of the window's width/height. Persisting size here would
+        // race those handlers and the user would see the window snap
+        // to the saved size before snapping again to the route-driven
+        // size on the first navigation. The state file lives under
+        // the standard `appConfigDir` (Windows: `%APPDATA%\tw.beanfun.app\`).
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(tauri_plugin_window_state::StateFlags::POSITION)
+                .build(),
+        )
         .manage(app_state)
         // Tauri-managed handle to the tray ID so commands (e.g.
         // `system::minimize_main_window`) can drive the tray without
@@ -351,6 +397,23 @@ pub fn run() {
             if let Some(tray_id) = tray::build_tray(app) {
                 *tray_state_for_setup.lock().unwrap() = Some(tray_id);
             }
+
+            // Issue #235 workaround — on Windows 10 the undecorated-window
+            // shadow inset calculation paints a 1px coloured border on DWM
+            // redraws (upstream tauri-apps/tauri#11654 / #13176). Disabling
+            // the shadow removes the artefact. Windows 11 (build >= 22000)
+            // keeps the default shadow because the tao #1052 fix renders
+            // correctly there and the shadow gives the rounded glass panel
+            // its depth. No-op on non-Windows targets.
+            #[cfg(target_os = "windows")]
+            if is_windows_10() {
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Err(err) = window.set_shadow(false) {
+                        tracing::warn!("set_shadow(false) on Windows 10 main window failed: {err}");
+                    }
+                }
+            }
+
             Ok(())
         })
         .on_window_event(move |window, event| {

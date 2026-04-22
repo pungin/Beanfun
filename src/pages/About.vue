@@ -258,7 +258,7 @@ onMounted(() => {
   <main class="about bf-glass-window" data-window-root>
     <TitleBar />
     <div class="about__scroll">
-      <div class="about__container">
+      <div class="about__container" data-window-content>
         <!-- Header: app icon + name + author -->
         <header class="about__header bf-glass-panel">
           <img

@@ -37,6 +37,13 @@ tauri-plugin-opener = "2"
 # on Linux); no extra config needed beyond declaring the plugin in `lib.rs`
 # and granting `dialog:default` in `capabilities/default.json`.
 tauri-plugin-dialog = "2"
+# Persists the main window's *position* across launches so users that
+# drag the launcher to e.g. a secondary monitor get it back in the
+# same spot next time. We deliberately enable `StateFlags::POSITION`
+# only — `tauri.conf.json` ships `resizable: false` and the router's
+# `fitWindow` (`router/index.ts`) drives per-route height/width, so
+# persisting SIZE / MAXIMIZED would fight those handlers.
+tauri-plugin-window-state = "2"
 
 # Cross-platform URL / file opener (ShellExecuteW on Windows,
 # LSOpenCFURLRef on macOS, xdg-open on Linux). Already pulled in as
@@ -82,6 +89,11 @@ reqwest_cookie_store = "0.8"
 
 # Async runtime
 tokio = { version = "1", features = ["rt", "sync", "time", "fs", "macros"] }
+# CancellationToken for the session keep-alive ping loop
+# (see `commands::auth::run_ping_loop` + `commands::state::AuthContext::ping_cancel`).
+# Already pulled in transitively by `tauri`; making the dependency explicit so
+# the feature set doesn't silently regress if an intermediate crate drops it.
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # Crypto
 des = "0.8"
@@ -145,6 +157,15 @@ webview2-com = "0.38"
 # avoids a standalone `version = "..."` line that the release workflow's
 # version-bump regex previously misidentified as the package version.
 wv2-windows-core = { package = "windows-core", version = "0.61" }
+# Windows build number detection — used by `lib.rs::run` to disable the
+# window shadow on Windows 10 only. Works around upstream tauri-apps/tauri
+# #11654 / #13176 where the undecorated shadow inset calculation is wrong
+# on Win10 and paints a 1px artefact border after DWM redraws. Win11
+# (build >= 22000) keeps the default shadow because the upstream fix
+# (tao #1052) renders correctly there and the shadow gives the rounded
+# glass panel its depth. `default-features = false` opts out of the optional
+# `serde` feature; we only need `os_info::get()` for the version check.
+os_info = { version = "3", default-features = false }
 
 [dev-dependencies]
 wiremock = "0.6"

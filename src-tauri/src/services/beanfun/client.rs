@@ -343,6 +343,70 @@ impl BeanfunClient {
             .map_err(|e| LoginError::InvalidUrl(format!("newlogin URL `{path}`: {e}")))
     }
 
+    /// Hit the Beanfun portal's session keep-alive endpoint so the
+    /// server's inactivity timer is reset.
+    ///
+    /// Ports the WPF `BeanfunClient.Ping()` method (`bfClient.cs`
+    /// L193-212). The original implementation is:
+    ///
+    /// ```text
+    /// public void Ping()
+    /// {
+    ///     try
+    ///     {
+    ///         string url = "https://" + (TW ? "tw" : "bfweb.hk") +
+    ///             ".beanfun.com/beanfun_block/generic_handlers/echo_token.ashx?webtoken=1";
+    ///         this.DownloadData(url);
+    ///     }
+    ///     catch { }
+    /// }
+    /// ```
+    ///
+    /// WPF drove this from `MainWindow.pingWorker_DoWork`
+    /// (`MainWindow.xaml.cs` L2322-2368) on a 60-second loop so that
+    /// the Beanfun backend's session-inactivity timeout never fired
+    /// — without it, an idle session is reaped server-side after a
+    /// few minutes and the next user action (Get OTP, launch game)
+    /// fails with a stale-cookie error. See PR #237 for the bug
+    /// report.
+    ///
+    /// # Semantics
+    ///
+    /// - Follows redirects and uses the normal cookie jar so the
+    ///   server sees the same `bfWebToken` that the business-logic
+    ///   calls do.
+    /// - **Ignores the response body** (same as WPF): the request is
+    ///   only useful for its side effect of resetting the server's
+    ///   inactivity timer. We don't even call `bounded_text` because
+    ///   buffering the body wastes bytes on the hot path.
+    /// - Non-2xx responses surface as
+    ///   [`LoginError::Http`][crate::services::beanfun::error::LoginError::Http]
+    ///   via `error_for_status()` so the caller can log; the
+    ///   [`run_ping_loop`][crate::commands::auth::run_ping_loop]
+    ///   wrapper swallows them at `tracing::debug!` level to mirror
+    ///   WPF's `catch { }`.
+    ///
+    /// # Region routing
+    ///
+    /// Derived from the client's configured [`LoginRegion`]:
+    ///
+    /// | Region | Endpoint                                                              |
+    /// |--------|-----------------------------------------------------------------------|
+    /// | TW     | `https://tw.beanfun.com/beanfun_block/generic_handlers/echo_token.ashx?webtoken=1` |
+    /// | HK     | `https://bfweb.hk.beanfun.com/beanfun_block/generic_handlers/echo_token.ashx?webtoken=1` |
+    ///
+    /// Both live on `portal_base`, so we reuse [`portal_url`] rather
+    /// than hardcoding the host — keeps wiremock tests straightforward
+    /// via [`Endpoints::custom`].
+    ///
+    /// [`portal_url`]: Self::portal_url
+    pub async fn ping(&self) -> Result<(), LoginError> {
+        let mut url = self.portal_url("beanfun_block/generic_handlers/echo_token.ashx")?;
+        url.query_pairs_mut().append_pair("webtoken", "1");
+        self.http.get(url).send().await?.error_for_status()?;
+        Ok(())
+    }
+
     /// Read `resp`'s body as UTF-8, capping the accumulated bytes at
     /// [`ClientConfig::max_body_size`].
     ///

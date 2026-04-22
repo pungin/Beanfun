@@ -1536,6 +1536,18 @@ describe('AccountList page', () => {
     expect(configStore.get('autoPaste')).toBe('false')
   })
 
+  /*
+   * Enter-hotkey coverage lives in its own spec file
+   * (`AccountList.EnterHotkey.spec.ts`) because the window-level
+   * `keydown` listener that mirrors WPF's "select row + press Enter
+   * → Get OTP" behaviour interacts with jsdom's shared `window`
+   * across test cases — the mounts in this file intentionally
+   * never call `unmount()` (see the D1 stylistic convention above),
+   * so their listeners accumulate and would flake the Enter assertions
+   * here. Vitest's per-file jsdom isolation gives the Enter tests a
+   * fresh `window`, keeping each hotkey guard deterministic.
+   */
+
   /* ---------------------------------------------------------------- */
   /*  D7 — drag-and-drop reorder + per-game persistence                */
   /* ---------------------------------------------------------------- */
@@ -2060,6 +2072,81 @@ describe('AccountList page', () => {
     expect(useGameStore().selectedGameCode).toBe('610099_T9')
     /* Picker stays closed — the saved value resolved cleanly. */
     expect(wrapper.get('[data-test="game-list-stub"]').attributes('data-visible')).toBe('false')
+  })
+
+  /* ---------------------------------------------------------------- */
+  /*  Mount fast path — no re-fetch when returning from Settings/About */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Regression for the user-reported bug: every visit to Settings
+   * (or About) triggered an account-list re-fetch on return,
+   * making custom drag-sort orders appear to "reset" briefly
+   * before being re-applied from `Config.xml`.
+   *
+   * The fast-path predicate in `setupGameOnMount` is "store
+   * already has accounts AND session is non-null". The two tests
+   * below pin both halves:
+   *
+   * 1. Predicate holds (store seeded, session live) → the page
+   *    must NOT fire `listGames`, `setActiveService`, or
+   *    `getAccounts` on mount.
+   * 2. Predicate fails (store empty) → the full D8c bootstrap
+   *    runs (covered by the D8c specs above; this case re-asserts
+   *    the existing baseline so a future skip-by-default
+   *    regression would fail loudly here too).
+   */
+  it('skips re-fetch on remount when serviceAccounts already cached for current session', async () => {
+    /*
+     * Seed BEFORE mount: this is the "navigate back from
+     * Settings/About" shape — Pinia stores survive the route
+     * change, AccountList is the component that gets unmounted
+     * + remounted, and the cache predicate is what protects the
+     * user from the spinner-flash + sort-reset UX bug.
+     */
+    const auth = useAuthStore()
+    auth.session = FAKE_SESSION
+    const accountStore = useAccountStore()
+    accountStore.serviceAccounts = POPULATED_LIST.accounts
+    /*
+     * Selected sid survives the round-trip too — this is the
+     * "user picked an account, opened Settings, came back"
+     * flow where the OTP button must remain primed.
+     */
+    accountStore.selectedSid = POPULATED_LIST.accounts[0]!.sid
+
+    const ctx = buildHarness()
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    /* Fast path took effect: no IPC calls fired from setupGameOnMount. */
+    expect(commands.listGames).not.toHaveBeenCalled()
+    expect(commands.getAccounts).not.toHaveBeenCalled()
+    expect(commands.setActiveService).not.toHaveBeenCalled()
+
+    /* Account list still rendered (loadState flipped to 'ready' on the skip). */
+    expect(wrapper.find('[data-test="account-list-rows"]').exists()).toBe(true)
+    /* Selection preserved across the remount. */
+    expect(useAccountStore().selectedSid).toBe(POPULATED_LIST.accounts[0]!.sid)
+  })
+
+  it('still re-fetches on remount when serviceAccounts cache is empty (cold mount baseline)', async () => {
+    /*
+     * Sanity-check the negative branch: empty store + live session
+     * must continue to run the full D8c bootstrap so the very
+     * first paint after login still works. If somebody ever
+     * widens the skip predicate to "session non-null only" this
+     * baseline would catch it.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    useAuthStore().session = FAKE_SESSION
+
+    const ctx = buildHarness()
+    await ctx.mountIt()
+    await flushPromises()
+
+    expect(commands.listGames).toHaveBeenCalledTimes(1)
+    expect(commands.getAccounts).toHaveBeenCalledTimes(1)
   })
 
   /* ---------------------------------------------------------------- */

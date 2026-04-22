@@ -792,6 +792,39 @@ function handleGameSelected(serviceCode: string, serviceRegion: string): void {
  *    item when no `loginGame` matches.
  */
 async function setupGameOnMount(): Promise<void> {
+  /*
+   * Fast path — "navigate back from Settings / About" UX fix.
+   *
+   * `AccountList` is a regular routed component, so visiting
+   * `/settings` or `/about` unmounts it and visiting back
+   * remounts it. Without this skip, every return would re-run
+   * the full bootstrap (`game.loadGames` + `selectActiveGame` +
+   * `loadList`) and the user would see the spinner + an empty
+   * list flash before the data refilled. Users with custom
+   * drag-and-drop sort orders read that flash as "my order was
+   * reset" because the persistent CSV (`AccountOrder_<code>_<region>`)
+   * is only re-applied AFTER the HTTP response lands.
+   *
+   * Skipping is safe because every code path that *should*
+   * cause a re-fetch already clears `serviceAccounts` first:
+   *
+   * - logout / session expired → `clearAccountSession` resets
+   *   the store (router guard + `registerSessionExpiredHandler`).
+   * - change game → `setActiveService` clears the store before
+   *   the new fetch.
+   * - first cold mount after login → store is empty by
+   *   construction, so the predicate is false and the full
+   *   bootstrap runs.
+   *
+   * `loadState` would otherwise sit at its initial `'loading'`
+   * sentinel forever (no `loadList` to flip it to `'ready'`),
+   * so we flip it inline before returning.
+   */
+  if (account.serviceAccounts.length > 0 && auth.session !== null) {
+    loadState.value = 'ready'
+    return
+  }
+
   await game.loadGames()
 
   if (game.loadState === 'error') {
@@ -1857,6 +1890,93 @@ watch(rowsRef, (el) => {
 })
 
 onBeforeUnmount(destroySortable)
+
+/* --------------- Enter hotkey (WPF / Beanfun B6 parity) --------------- */
+
+/**
+ * Mirrors the legacy Beanfun (B6) client: once a service account row is
+ * highlighted, pressing `Enter` kicks off the same Get-OTP flow as
+ * clicking the button.
+ *
+ * # Why a `window`-level listener (vs a row-level `@keydown`)
+ *
+ * Clicking a row in our layout sets `account.selectedSid` but does not
+ * move DOM focus onto the `<li>` (rows are intentionally not tab stops
+ * — adding `tabindex` would change tab order and leak focus rings onto
+ * the whole list). Without focus on the row, a row-scoped `@keydown`
+ * never fires. A window-level listener sees the Enter keystroke
+ * regardless of which non-form element currently holds focus, which is
+ * the same behaviour WPF `lstViewAccount.KeyDown` had on Key.Enter.
+ *
+ * # Guards
+ *
+ * 1. `event.key === 'Enter'` — only Enter, and not on synthetic repeats
+ *    (holding Enter shouldn't spam-fire the OTP IPC), and not mid-IME
+ *    composition (CJK users would otherwise trigger an OTP every time
+ *    they commit a candidate).
+ * 2. Focus inside a form control (`input` / `textarea` / `[contenteditable]`)
+ *    → let the control handle its own Enter (e.g. submitting a dialog
+ *    form). Our `readonly` OTP `<input>` passes this filter so Enter
+ *    while it happens to hold focus after a "Copy OTP" click still
+ *    routes through.
+ * 3. Focus on a `<button>` — the browser will already fire a `click`
+ *    for Enter on a focused button, and our handler would double-fire
+ *    (once as keydown → `handleGetOtp`, once as the button's own click
+ *    handler). Skip so the button-scoped behaviour wins.
+ * 4. Any Element Plus overlay (`.el-overlay` — covers `ElDialog` +
+ *    `ElMessageBox`, both of which render outside our page subtree via
+ *    `append-to-body`) has an element focused inside → the modal owns
+ *    Enter (confirm button, form submit, etc). Without this guard the
+ *    "Change Alias" dialog's OK-on-Enter would also fire GetOtp on the
+ *    page behind it.
+ * 5. `gettingOtp.value === true` — an OTP fetch is already in flight;
+ *    `handleGetOtp` would no-op anyway, but short-circuiting here
+ *    skips the (harmless) `e.preventDefault()` so assistive tech
+ *    isn't told we swallowed the key when we actually didn't.
+ * 6. `!account.selectedSid` — nothing to fetch for. Staying silent
+ *    (no toast) matches B6: pressing Enter before picking an account
+ *    simply did nothing. We intentionally don't route through
+ *    `handleGetOtp` in this case because its built-in "no selection"
+ *    toast was written for a button click — a keyboard press that
+ *    accidentally lands on an empty list shouldn't spam the user
+ *    with a warning.
+ */
+function handleGlobalEnter(event: KeyboardEvent): void {
+  if (event.key !== 'Enter') return
+  if (event.isComposing || event.repeat) return
+
+  /*
+   * `event.target` can be the `Window` itself when the key is
+   * dispatched without a focused element (typical on first paint
+   * before the user has clicked anything). `closest` only exists on
+   * `Element`, so narrow first — a non-Element target means "focus
+   * is nowhere", which is exactly the case we want to forward.
+   */
+  const target = event.target
+  if (target instanceof HTMLElement) {
+    const tag = target.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+    if (target.isContentEditable) return
+    if (tag === 'BUTTON' || target.closest('button')) return
+  }
+
+  const active = document.activeElement as HTMLElement | null
+  if (active?.closest('.el-overlay')) return
+
+  if (gettingOtp.value) return
+  if (!account.selectedSid) return
+
+  event.preventDefault()
+  void handleGetOtp()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleGlobalEnter)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalEnter)
+})
 </script>
 
 <template>
@@ -1882,7 +2002,7 @@ onBeforeUnmount(destroySortable)
       </button>
     </TitleBar>
     <div class="account-list__scroll">
-      <div class="account-list__container">
+      <div class="account-list__container" data-window-content>
         <header class="account-list__header">
           <div class="account-list__header-text">
             <h1 class="account-list__title bf-text-gradient">{{ t('accountList.title') }}</h1>
@@ -2362,13 +2482,40 @@ onBeforeUnmount(destroySortable)
   background: rgba(0, 0, 0, 0.06);
 }
 
+/*
+ * Follow-up to #236: the page used to let the *outer* `__scroll`
+ * container overflow when the combined height of the game bar +
+ * quick actions + account list + OTP section exceeded the window.
+ * With many service accounts on a small-to-medium display that
+ * pushed the OTP section off-screen, forcing the user to scroll
+ * the wheel before they could hit "Get OTP" — diverging from the
+ * legacy Beanfun (B6) single-page layout.
+ *
+ * The fix turns the scroll container into a non-scrolling flex
+ * column and flips the *inner* account list (`__list` →
+ * `__list-body` below) into the only scroller. Everything else
+ * (header, game bar, quick actions, OTP footer) retains its
+ * natural height so the OTP row is always anchored at the bottom
+ * of the window, and only the list itself scrolls when the account
+ * count outgrows the available space.
+ *
+ * `min-height: 0` on every intermediate flex level is required by
+ * the flexbox spec so that `flex: 1` children can actually shrink
+ * below their content height (without it the inner scrollbar never
+ * appears and the list clips).
+ */
 .account-list__scroll {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
   padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .account-list__container {
+  flex: 1;
+  min-height: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -2392,14 +2539,17 @@ onBeforeUnmount(destroySortable)
 
 .account-list__title {
   margin: 0;
-  font-size: 1.625rem;
+  /* rule in this section is nudged +~0.0625rem so the page reads  */
+  /* more comfortably on high-DPI displays without overshooting    */
+  /* the rest of the chrome's proportions.                           */
+  font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 
 .account-list__subline {
   margin: 0.25rem 0 0;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--bf-on-surface-variant);
 }
 
@@ -2470,13 +2620,13 @@ onBeforeUnmount(destroySortable)
 }
 
 .account-list__game-name {
-  font-size: 1rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .account-list__game-status {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--bf-on-surface-variant);
   display: inline-flex;
   align-items: center;
@@ -2542,7 +2692,7 @@ onBeforeUnmount(destroySortable)
 }
 
 .account-list__balance-label {
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--bf-on-surface-variant);
@@ -2550,7 +2700,7 @@ onBeforeUnmount(destroySortable)
 }
 
 .account-list__balance-value {
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--bf-on-surface);
 }
@@ -2597,7 +2747,7 @@ onBeforeUnmount(destroySortable)
   gap: 0.25rem;
   padding: 0.5rem;
   cursor: pointer;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--bf-on-surface-variant);
   transition: color var(--bf-motion-fast);
 }
@@ -2609,6 +2759,8 @@ onBeforeUnmount(destroySortable)
 /* --------------- list section --------------- */
 
 .account-list__list {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2624,13 +2776,13 @@ onBeforeUnmount(destroySortable)
 
 .account-list__list-title {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--bf-on-surface);
 }
 
 .account-list__list-count {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--bf-on-surface-variant);
   background: var(--bf-surface-container);
@@ -2640,20 +2792,43 @@ onBeforeUnmount(destroySortable)
 
 .account-list__list-body {
   flex: 1;
+  /*
+   * Follow-up to #236: dropped the previous `max-height: 300px`
+   * cap so this container scrolls whatever vertical space the
+   * surrounding flex chain has left (see `__scroll` / `__container`
+   * / `__list` docblock above). The old fixed cap combined with
+   * the outer `__scroll` overflow meant that once the account list
+   * hit 300 px, any further height (OTP footer etc.) was pushed
+   * below the window fold and the user had to scroll to reach
+   * "Get OTP". With `flex: 1 + min-height: 0` in the parent chain
+   * the list is always the one that scrolls and the OTP footer
+   * stays pinned at the bottom regardless of account count.
+   *
+   * `min-height: 9rem` guarantees at least two rows are always
+   * fully visible before the internal scrollbar kicks in. Budget:
+   *   row      = 0.625rem × 2 padding + ~28px content ≈ 52px
+   *   2 rows   = 104px
+   *   gap      = 0.25rem between rows = 4px
+   *   padding  = 0.5rem × 2 on __list-body = 16px
+   *   total    ≈ 124px, rounded up to 144px (9rem) for buffer.
+   * Downside: with a single account the list has a small empty
+   * area below the row. Accepted trade-off — the user reported
+   * that a partially-clipped second row (the prior 80px floor)
+   * was worse than a slightly loose single-row view.
+   */
+  min-height: 9rem;
   overflow-y: auto;
-  max-height: 300px;
   padding: 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  min-height: 80px;
 }
 
 .account-list__list-state {
   margin: auto;
   padding: 1.5rem 1rem;
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--bf-on-surface-variant);
 }
 
@@ -2705,7 +2880,7 @@ onBeforeUnmount(destroySortable)
 
 .account-list__row-grip {
   color: var(--bf-outline-variant);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   user-select: none;
   cursor: grab;
   letter-spacing: -0.15em;
@@ -2743,7 +2918,7 @@ onBeforeUnmount(destroySortable)
   background: var(--bf-surface-variant);
   color: var(--bf-on-surface);
   font-weight: 700;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -2762,7 +2937,7 @@ onBeforeUnmount(destroySortable)
 
 .account-list__row-name {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--bf-on-surface);
   white-space: nowrap;
@@ -2782,7 +2957,7 @@ onBeforeUnmount(destroySortable)
 
 .account-list__row-sub {
   margin: 0.0625rem 0 0;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--bf-on-surface-variant);
   white-space: nowrap;
   overflow: hidden;
@@ -2829,7 +3004,7 @@ onBeforeUnmount(destroySortable)
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--bf-primary);
   background: transparent;
@@ -2854,7 +3029,7 @@ onBeforeUnmount(destroySortable)
 .account-list__limit-notice {
   margin: 0 0 0.5rem;
   padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--el-color-warning, #e6a23c);
   text-align: center;
 }
@@ -2876,7 +3051,7 @@ onBeforeUnmount(destroySortable)
 
 .account-list__otp-title {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--bf-on-surface);
 }
@@ -2900,7 +3075,7 @@ onBeforeUnmount(destroySortable)
   border: 0;
   border-bottom: 2px solid var(--bf-outline-variant);
   font-family: 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   letter-spacing: 0.2em;
   text-align: center;
   padding: 0.5rem 2rem 0.5rem 0.5rem;
@@ -2939,7 +3114,7 @@ onBeforeUnmount(destroySortable)
 .account-list__otp-get {
   min-width: 100px;
   padding: 0 1rem;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   display: inline-flex;
   align-items: center;

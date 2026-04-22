@@ -372,6 +372,17 @@ function handleCancel(): void {
   color: var(--bf-on-surface);
   margin: 0;
   word-break: break-all;
+  /*
+   * Issue #234: use-case is copy-paste of the account / serial-number
+   * / name / authType strings the dialog surfaces. App.vue disables
+   * text selection globally (-webkit-user-select: none on body) to
+   * feel native; this dialog is the one place an explicit override
+   * matters because every row is a read-only value the user frequently
+   * copies into game support tickets.
+   */
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 .service-account-info__status--ok {

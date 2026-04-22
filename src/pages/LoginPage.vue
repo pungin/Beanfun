@@ -73,7 +73,20 @@ function handleOpenAbout(): void {
       </button>
     </TitleBar>
     <div class="login-shell__body">
-      <RouterView :key="currentRegion" />
+      <!--
+        Issue #236 (i18n follow-up): `data-window-content` lets the
+        router's ResizeObserver track the rendered child form's
+        natural height. `[data-window-root]` above is locked to
+        `100vh` so observing it alone never fires on a language
+        switch; the wrapper below grows/shrinks with the child form's
+        own content and is what actually changes when the i18n store
+        swaps strings. Keeping the wrapper as a pure flow container
+        (no flex sizing of its own) means the child form's existing
+        layout is unchanged.
+      -->
+      <div class="login-shell__content" data-window-content>
+        <RouterView :key="currentRegion" />
+      </div>
     </div>
   </section>
 </template>
