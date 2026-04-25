@@ -853,12 +853,12 @@ describe('AccountList page', () => {
     const rows = wrapper.findAll('.account-list__row')
     expect(rows).toHaveLength(3)
     expect(rows[0].text()).toContain('Main Toon')
-    expect(rows[0].text()).toContain('sid-1')
     expect(rows[1].text()).toContain('Mule Account')
     expect(rows[2].text()).toContain('Suspended User')
     /*
-     * The banned row swaps the ID line for the localized
-     * "Disabled" copy — proves the conditional branch fires.
+     * The banned row shows the localized "Disabled" copy as a
+     * subtitle — proves the conditional branch fires. Enabled
+     * rows show only the display name (no ID subtitle).
      */
     expect(rows[2].text()).toContain(i18nMessages['zh-TW'].accountList.statusBanned)
     expect(rows[2].classes()).toContain('account-list__row--banned')
@@ -915,6 +915,49 @@ describe('AccountList page', () => {
     await wrapper.get('[data-test="account-row-sid-3"]').trigger('click')
 
     expect(account.selectedSid).toBe('sid-1')
+  })
+
+  it('double-clicking an enabled row arms selection and fetches OTP (WPF parity, issue #239)', async () => {
+    /*
+     * WPF `lstViewAccount_MouseDoubleClick` selected the row and fired
+     * `btnGetOtp_Click`, which (with the default autoPaste=off) copies
+     * the OTP to the clipboard. Asserts the full chain so a regression
+     * dropping either side (selection vs. OTP IPC) trips a red test.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.getOtp).mockReturnValueOnce(ok('OTP-DBL'))
+    const clipboard = installClipboardMock()
+
+    const ctx = buildHarness()
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    const account = useAccountStore()
+    expect(account.selectedSid).toBeNull()
+
+    await wrapper.get('[data-test="account-row-sid-2"]').trigger('dblclick')
+    await flushPromises()
+
+    expect(account.selectedSid).toBe('sid-2')
+    expect(commands.getOtp).toHaveBeenCalledTimes(1)
+    expect(commands.getOtp).toHaveBeenCalledWith(SECOND_SA)
+    expect(clipboard.writeText).toHaveBeenCalledWith('OTP-DBL')
+    expect(ElMessage.success).toHaveBeenCalledWith(i18nMessages['zh-TW'].GetOtpSuccessAndCopy)
+  })
+
+  it('double-clicking a banned row is a no-op (mirrors the single-click guard)', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    const ctx = buildHarness()
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    const account = useAccountStore()
+    await wrapper.get('[data-test="account-row-sid-3"]').trigger('dblclick')
+    await flushPromises()
+
+    expect(account.selectedSid).toBeNull()
+    expect(commands.getOtp).not.toHaveBeenCalled()
   })
 
   it('logout: confirm → auth.logout → account.clearSessionData → /login', async () => {
