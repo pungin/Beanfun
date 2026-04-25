@@ -84,7 +84,7 @@
   "AutoCheckUpdate": "Notify when a new version is available",
   "RunAfterLogin": "Launch game after login",
   "MinimizeToTaskbar": "Minimize to system tray",
-  "DisableHardwareAcceleration": "Disable hardware acceleration (lower GPU usage)",
+  "DisableHardwareAcceleration": "Disable hardware acceleration",
   "MsgRestartForHardwareAccelTitle": "Restart required",
   "MsgRestartForHardwareAccel": "Hardware acceleration settings have changed. Fully exit Beanfun and start it again for the main window to use WPF software rendering.",
   "Game": "Game",
