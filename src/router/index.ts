@@ -263,7 +263,7 @@ export const routes: RouteRecordRaw[] = [
     meta: {
       titleKey: 'titleBar.settings',
       titleIcon: 'settings',
-      windowWidth: 680,
+      windowWidth: 660,
       windowHeight: 680,
     },
     /*
