@@ -313,6 +313,18 @@ function selectRow(a: ServiceAccount): void {
   account.selectedSid = a.sid
 }
 
+/**
+ * Double-click on a row → select + fetch OTP + copy to clipboard.
+ * Mirrors WPF `lstViewAccount_MouseDoubleClick` which called
+ * `btnGetOtp_Click` on the double-clicked row. Banned rows are
+ * ignored (same guard as {@link selectRow}).
+ */
+function handleRowDblClick(a: ServiceAccount): void {
+  if (!a.is_enable) return
+  account.selectedSid = a.sid
+  void handleGetOtp()
+}
+
 /* --------------- logout --------------- */
 
 async function handleLogout(): Promise<void> {
@@ -2243,6 +2255,7 @@ onBeforeUnmount(() => {
                 }"
                 :data-test="`account-row-${a.sid}`"
                 @click="selectRow(a)"
+                @dblclick="handleRowDblClick(a)"
               >
                 <span
                   class="account-list__row-grip"
@@ -2253,9 +2266,8 @@ onBeforeUnmount(() => {
                 <span class="account-list__row-num">{{ idx + 1 }}</span>
                 <div class="account-list__row-info">
                   <p class="account-list__row-name">{{ a.sname }}</p>
-                  <p class="account-list__row-sub">
-                    <template v-if="a.is_enable">ID: {{ a.sid }}</template>
-                    <template v-else>{{ t('accountList.statusBanned') }}</template>
+                  <p v-if="!a.is_enable" class="account-list__row-sub">
+                    {{ t('accountList.statusBanned') }}
                   </p>
                 </div>
                 <el-dropdown
