@@ -2892,7 +2892,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0.4375rem 0.75rem;
   border-radius: var(--bf-radius-card);
   cursor: pointer;
   position: relative;
