@@ -894,7 +894,7 @@ describe('AccountList page', () => {
     await flushPromises()
 
     const account = useAccountStore()
-    expect(account.selectedSid).toBeNull()
+    expect(account.selectedSid).toBe('sid-1')
 
     await wrapper.get('[data-test="account-row-sid-2"]').trigger('click')
 
@@ -914,7 +914,7 @@ describe('AccountList page', () => {
     const account = useAccountStore()
     await wrapper.get('[data-test="account-row-sid-3"]').trigger('click')
 
-    expect(account.selectedSid).toBeNull()
+    expect(account.selectedSid).toBe('sid-1')
   })
 
   it('logout: confirm → auth.logout → account.clearSessionData → /login', async () => {
@@ -1062,12 +1062,12 @@ describe('AccountList page', () => {
     await flushPromises()
 
     const account = useAccountStore()
-    expect(account.selectedSid).toBeNull()
+    expect(account.selectedSid).toBe('sid-1')
 
     await wrapper.get('[data-test="account-row-change-alias-sid-2"]').trigger('click')
     await flushPromises()
 
-    expect(account.selectedSid).toBeNull()
+    expect(account.selectedSid).toBe('sid-1')
   })
 
   it('row context menu Account Info → opens dialog with the row account (D6 wiring)', async () => {
@@ -1127,12 +1127,12 @@ describe('AccountList page', () => {
     await flushPromises()
 
     const account = useAccountStore()
-    expect(account.selectedSid).toBeNull()
+    expect(account.selectedSid).toBe('sid-1')
 
     await wrapper.get('[data-test="account-row-info-sid-2"]').trigger('click')
     await flushPromises()
 
-    expect(account.selectedSid).toBeNull()
+    expect(account.selectedSid).toBe('sid-1')
   })
 
   /* ---------------------------------------------------------------- */
@@ -1307,9 +1307,10 @@ describe('AccountList page', () => {
     const wrapper = await ctx.mountIt()
     await flushPromises()
 
-    /* No row selected after the initial fetch. */
+    /* Auto-select picks the first enabled row; clear it to test the
+     * "no selection" guard. */
     const account = useAccountStore()
-    expect(account.selectedSid).toBeNull()
+    account.selectedSid = null
 
     await wrapper.get('[data-test="account-list-otp-get"]').trigger('click')
     await flushPromises()
@@ -2066,8 +2067,8 @@ describe('AccountList page', () => {
     expect(commands.setActiveService).toHaveBeenCalledWith('610099', 'T9')
     /* (b) Account list reloaded for the new game. */
     expect(commands.getAccounts).toHaveBeenCalledTimes(1)
-    /* (c) Stale selection cleared. */
-    expect(useAccountStore().selectedSid).toBeNull()
+    /* (c) Selection auto-picks first enabled account after reload. */
+    expect(useAccountStore().selectedSid).toBe('sid-1')
     /* (d) Game switch reflected in the gameStore. */
     expect(useGameStore().selectedGameCode).toBe('610099_T9')
     /* Picker stays closed — the saved value resolved cleanly. */
