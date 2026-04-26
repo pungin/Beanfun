@@ -917,15 +917,17 @@ describe('AccountList page', () => {
     expect(account.selectedSid).toBe('sid-1')
   })
 
-  it('double-clicking an enabled row arms selection and fetches OTP (WPF parity, issue #239)', async () => {
+  it('double-clicking an enabled row copies sid to clipboard (WPF parity, issue #239)', async () => {
     /*
-     * WPF `lstViewAccount_MouseDoubleClick` selected the row and fired
-     * `btnGetOtp_Click`, which (with the default autoPaste=off) copies
-     * the OTP to the clipboard. Asserts the full chain so a regression
-     * dropping either side (selection vs. OTP IPC) trips a red test.
+     * WPF `lstViewAccount_MouseDoubleClick` only called
+     * `Clipboard.SetText(selected.sid)` — no row-arm, no OTP fetch.
+     * Mirror that here: the dblclick must hit `clipboard.writeText`
+     * with the row's sid and surface a generic `CopyFinished` toast,
+     * without touching `account.selectedSid` or `commands.getOtp`
+     * (those belong to the single-click + Enter path; auto-select
+     * from PR #245 is what arms the initial selection on mount).
      */
     vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
-    vi.mocked(commands.getOtp).mockReturnValueOnce(ok('OTP-DBL'))
     const clipboard = installClipboardMock()
 
     const ctx = buildHarness()
@@ -933,31 +935,41 @@ describe('AccountList page', () => {
     await flushPromises()
 
     const account = useAccountStore()
-    expect(account.selectedSid).toBeNull()
+    /*
+     * Snapshot whatever the auto-select from PR #245 armed on
+     * mount; the dblclick on sid-2 must NOT mutate it (otherwise
+     * the OTP / Start Game UI would silently flip to point at the
+     * just-copied row, which the WPF user never saw).
+     */
+    const selectedBeforeDblClick = account.selectedSid
 
     await wrapper.get('[data-test="account-row-sid-2"]').trigger('dblclick')
     await flushPromises()
 
-    expect(account.selectedSid).toBe('sid-2')
-    expect(commands.getOtp).toHaveBeenCalledTimes(1)
-    expect(commands.getOtp).toHaveBeenCalledWith(SECOND_SA)
-    expect(clipboard.writeText).toHaveBeenCalledWith('OTP-DBL')
-    expect(ElMessage.success).toHaveBeenCalledWith(i18nMessages['zh-TW'].GetOtpSuccessAndCopy)
+    expect(clipboard.writeText).toHaveBeenCalledTimes(1)
+    expect(clipboard.writeText).toHaveBeenCalledWith('sid-2')
+    expect(ElMessage.success).toHaveBeenCalledWith(i18nMessages['zh-TW'].CopyFinished)
+    expect(commands.getOtp).not.toHaveBeenCalled()
+    expect(account.selectedSid).toBe(selectedBeforeDblClick)
   })
 
   it('double-clicking a banned row is a no-op (mirrors the single-click guard)', async () => {
     vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    const clipboard = installClipboardMock()
 
     const ctx = buildHarness()
     const wrapper = await ctx.mountIt()
     await flushPromises()
 
     const account = useAccountStore()
+    const selectedBeforeDblClick = account.selectedSid
+
     await wrapper.get('[data-test="account-row-sid-3"]').trigger('dblclick')
     await flushPromises()
 
-    expect(account.selectedSid).toBeNull()
+    expect(clipboard.writeText).not.toHaveBeenCalled()
     expect(commands.getOtp).not.toHaveBeenCalled()
+    expect(account.selectedSid).toBe(selectedBeforeDblClick)
   })
 
   it('logout: confirm → auth.logout → account.clearSessionData → /login', async () => {

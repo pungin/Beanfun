@@ -314,15 +314,43 @@ function selectRow(a: ServiceAccount): void {
 }
 
 /**
- * Double-click on a row → select + fetch OTP + copy to clipboard.
- * Mirrors WPF `lstViewAccount_MouseDoubleClick` which called
- * `btnGetOtp_Click` on the double-clicked row. Banned rows are
- * ignored (same guard as {@link selectRow}).
+ * Double-click on a row → copy the row's service-account ID (`sid`)
+ * to the clipboard. Mirrors WPF `lstViewAccount_MouseDoubleClick`
+ * (`AccountList.xaml.cs`), whose only side effect was
+ * `Clipboard.SetText(selected.sid)` — paired with the WPF tooltip
+ * resource `DoubleClickCopy` ("雙擊複製帳號 / Double-click to copy
+ * account") which is still shipped via the `DoubleClickCopy` i18n
+ * key today. Banned rows fall through silently (same guard as
+ * {@link selectRow}) so the SPA mirrors WPF's "disabled rows ignore
+ * input" behaviour.
+ *
+ * Selection is intentionally **not** armed here: WPF treats the
+ * double-click as a one-shot copy, not a row-arm; mutating
+ * `selectedSid` would also flip the OTP / Start Game UI on top of
+ * the copy, which the WPF user never saw. Single-click + Enter is
+ * the ergonomic path for OTP fetch (issue #239 fixes the missing
+ * keyboard route too).
+ *
+ * The SPA bypasses the {@link clipboardWriteOtp} helper because that
+ * helper's success / failure toasts use the OTP-specific
+ * `GetOtpSuccessAndCopy` string. A generic `CopyFinished` /
+ * `CopyFailed` toast pair matches the WPF tooltip wording and keeps
+ * the OTP helper single-purpose.
  */
-function handleRowDblClick(a: ServiceAccount): void {
+async function handleRowDblClick(a: ServiceAccount): Promise<void> {
   if (!a.is_enable) return
-  account.selectedSid = a.sid
-  void handleGetOtp()
+  try {
+    await navigator.clipboard.writeText(a.sid)
+    ElMessage.success(t('CopyFinished'))
+  } catch {
+    /*
+     * `navigator.clipboard.writeText` only rejects on permission /
+     * trust-boundary denial inside our Tauri webview — surface it
+     * so the user knows the buffer wasn't updated (otherwise
+     * they'd silently paste stale content into the launcher).
+     */
+    ElMessage.error(t('CopyFailed'))
+  }
 }
 
 /* --------------- logout --------------- */
