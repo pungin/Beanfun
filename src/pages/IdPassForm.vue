@@ -234,6 +234,36 @@ function selectAccount(accountId: string): void {
   }
 }
 
+/**
+ * Cycle through saved accounts via arrow keys or mouse wheel on the
+ * account input. Mirrors WPF where the account TextBox responded to
+ * keyboard arrows and mouse wheel to switch between saved accounts.
+ */
+function cycleAccount(direction: 1 | -1): void {
+  const list = savedAccountsForRegion.value
+  if (list.length === 0) return
+  const currentIdx = list.findIndex((a) => a.account_id === account.value)
+  const nextIdx = currentIdx === -1 ? 0 : (currentIdx + direction + list.length) % list.length
+  selectAccount(list[nextIdx].account_id)
+}
+
+function handleAccountKeydown(e: Event | KeyboardEvent): void {
+  if (!(e instanceof KeyboardEvent)) return
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    cycleAccount(1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    cycleAccount(-1)
+  }
+}
+
+function handleAccountWheel(e: WheelEvent): void {
+  if (savedAccountsForRegion.value.length === 0) return
+  e.preventDefault()
+  cycleAccount(e.deltaY > 0 ? 1 : -1)
+}
+
 const submitting = computed(() => auth.pendingAction === AUTH_ACTIONS.LoginRegular)
 
 /**
@@ -479,6 +509,8 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
           size="default"
           autocomplete="username"
           :placeholder="t('AcountOrEmail')"
+          @keydown="handleAccountKeydown"
+          @wheel.prevent="handleAccountWheel"
         />
         <button
           v-if="savedAccountsForRegion.length > 0"
