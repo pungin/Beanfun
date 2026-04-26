@@ -906,14 +906,14 @@ onMounted(() => {
 .settings__scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
 }
 
 .settings__container {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 /* --------------- header --------------- */

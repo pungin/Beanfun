@@ -263,8 +263,8 @@ export const routes: RouteRecordRaw[] = [
     meta: {
       titleKey: 'titleBar.settings',
       titleIcon: 'settings',
-      windowWidth: 660,
-      windowHeight: 580,
+      windowWidth: 880,
+      windowHeight: 680,
     },
     /*
      * P12.4 D6: Settings page is reachable from both the
@@ -312,8 +312,8 @@ export const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       titleKey: 'titleBar.manageAccount',
       titleIcon: 'manage_accounts',
-      windowWidth: 660,
-      windowHeight: 580,
+      windowWidth: 880,
+      windowHeight: 640,
     },
   },
   {
