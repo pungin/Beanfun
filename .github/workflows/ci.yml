@@ -12,15 +12,57 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # -----------------------------------------------------------
+  # Detect which parts of the repo changed so we can skip jobs
+  # that have no relevant file modifications.
+  # -----------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'src/**'
+              - 'tests/**'
+              - 'scripts/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+              - 'tsconfig.node.json'
+              - 'vite.config.ts'
+              - 'vitest.config.ts'
+              - 'eslint.config.js'
+              - '.prettierrc.json'
+            rust:
+              - 'src-tauri/src/**'
+              - 'src-tauri/tests/**'
+              - 'src-tauri/Cargo.toml'
+              - 'src-tauri/Cargo.lock'
+              - 'src-tauri/build.rs'
+              - 'src-tauri/clippy.toml'
+              - 'src-tauri/rustfmt.toml'
+
+  # -----------------------------------------------------------
+  # Frontend: ESLint / Prettier / TypeCheck / Vitest
+  # -----------------------------------------------------------
   frontend:
     name: 'Frontend: ESLint / Prettier / TypeCheck / Vitest'
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: npm
@@ -41,20 +83,21 @@ jobs:
       - name: Unit tests (Vitest)
         run: npm run test
 
+  # -----------------------------------------------------------
+  # Rust: fmt / Clippy / Test
+  # -----------------------------------------------------------
   rust:
     name: 'Rust: fmt / Clippy / Test'
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
-    # Cap the job at 25 min so a hung test (e.g. wiremock + tokio
-    # paused-time interaction on Windows) fails loudly within the
-    # next CI cycle instead of silently consuming the GitHub default
-    # 6-hour budget. Healthy runs land in 4-8 min on a warm cache.
     timeout-minutes: 25
     defaults:
       run:
         working-directory: src-tauri
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
