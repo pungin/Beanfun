@@ -263,8 +263,8 @@ export const routes: RouteRecordRaw[] = [
     meta: {
       titleKey: 'titleBar.settings',
       titleIcon: 'settings',
-      windowWidth: 880,
-      windowHeight: 680,
+      windowWidth: 660,
+      windowHeight: 580,
     },
     /*
      * P12.4 D6: Settings page is reachable from both the
@@ -312,8 +312,8 @@ export const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       titleKey: 'titleBar.manageAccount',
       titleIcon: 'manage_accounts',
-      windowWidth: 880,
-      windowHeight: 640,
+      windowWidth: 660,
+      windowHeight: 580,
     },
   },
   {
@@ -543,7 +543,12 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   function maxFitHeight(): number {
     const avail = typeof window !== 'undefined' ? window.screen?.availHeight : undefined
     if (typeof avail === 'number' && avail > 0) {
-      return Math.max(300, avail - 50)
+      // Reserve space for the Windows taskbar + some breathing room.
+      // On high-DPI displays (125%/150%), availHeight is already in
+      // CSS pixels but the effective usable area is smaller because
+      // the OS reserves more physical pixels for chrome. Using 80%
+      // of availHeight ensures the window never clips off-screen.
+      return Math.max(300, Math.floor(avail * 0.8))
     }
     return 900
   }
