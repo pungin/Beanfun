@@ -213,6 +213,14 @@ async function loadList(): Promise<void> {
     if (savedKey !== null) {
       account.applyServiceAccountOrderFromSavedCsv(configStore.get(savedKey))
     }
+
+    // Auto-select the first enabled account after load — mirrors WPF
+    // which defaults SelectedIndex to 0 on `redrawSAccountList`.
+    if (!account.selectedSid && account.serviceAccounts.length > 0) {
+      const first = account.serviceAccounts.find((a) => a.is_enable)
+      if (first) account.selectedSid = first.sid
+    }
+
     loadState.value = 'ready'
   } catch (err) {
     /*

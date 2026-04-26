@@ -334,6 +334,9 @@ describe('AccountList — Enter hotkey (B6 / WPF parity)', () => {
     const wrapper = await buildHarness().mountIt()
     await flushPromises()
 
+    // Clear auto-selected account to test the "no selection" guard.
+    useAccountStore().selectedSid = null
+
     dispatchEnter()
     await flushPromises()
 
