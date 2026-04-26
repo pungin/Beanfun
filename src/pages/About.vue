@@ -272,7 +272,7 @@ onMounted(() => {
           <div class="about__header-text">
             <div class="about__title-row">
               <h1 class="about__title bf-text-gradient">{{ t('AppName') }}</h1>
-              <span class="about__author">By Pungin and YCC3741</span>
+              <span class="about__author">By Pungin, YCC3741 and lshw54</span>
             </div>
             <p class="about__version-row" data-test="about-version-row">
               <span>{{ t('Version') }}</span>
@@ -322,6 +322,15 @@ onMounted(() => {
               <a
                 href="#"
                 class="about__contact-link"
+                data-test="about-email-lshw54"
+                @click.prevent="handleEmail('lshw.5454@gmail.com')"
+              >
+                <el-icon><Message /></el-icon>
+                <span>lshw54</span>
+              </a>
+              <a
+                href="#"
+                class="about__contact-link"
                 data-test="about-github"
                 @click.prevent="handleGithub"
               >
@@ -357,7 +366,7 @@ onMounted(() => {
 .about__scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
 }
 
 .about__container {
