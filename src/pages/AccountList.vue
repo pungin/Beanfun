@@ -122,6 +122,7 @@ import { useAuthStore } from '../stores/auth'
 import { useAccountStore } from '../stores/account'
 import { useConfigStore } from '../stores/config'
 import { useGameStore, gameCodeOf, imageUrl } from '../stores/game'
+import { useUiStore } from '../stores/ui'
 import { commands, type LoginRegion, type ServiceAccount } from '../types/bindings'
 import {
   CommandInvocationError,
@@ -156,6 +157,14 @@ const account = useAccountStore()
  * not a generic settings object).
  */
 const configStore = useConfigStore()
+const ui = useUiStore()
+
+/*
+ * One-shot flag: auto-start game on the first successful loadList
+ * after mount. Cleared after first use so retry / game-switch
+ * don't re-trigger.
+ */
+let pendingAutoStart = true
 /*
  * D8 — game store wire-in. Aliased to `game` (matching the
  * `account` / `auth` / `configStore` alias style used above).
@@ -222,6 +231,16 @@ async function loadList(): Promise<void> {
     }
 
     loadState.value = 'ready'
+
+    // Auto-start game after first load if the setting is enabled.
+    // Mirrors WPF `loginWorker_RunWorkerCompleted` L1421-1429.
+    // Only fires once per mount (not on retry / game switch).
+    if (pendingAutoStart) {
+      pendingAutoStart = false
+      if (ui.autoStartGame && account.serviceAccounts.length > 0) {
+        void handleStartGame()
+      }
+    }
   } catch (err) {
     /*
      * `account.getServiceAccounts` funnels through `wrapCommand`,
