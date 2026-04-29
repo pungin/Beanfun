@@ -79,7 +79,9 @@ import type { RouteRecordRaw, Router } from 'vue-router'
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { LogicalSize } from '@tauri-apps/api/dpi'
+import { currentMonitor } from '@tauri-apps/api/window'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
+import { PhysicalSize } from '@tauri-apps/api/dpi'
 
 import { registerSessionExpiredHandler } from '../services/invoke'
 
@@ -90,7 +92,7 @@ import { registerSessionExpiredHandler } from '../services/invoke'
  * Settings page without the Game section when unauthenticated).
  */
 export function resizeWindow(width: number, height: number): void {
-  void getCurrentWindow().setSize(new LogicalSize(width, height))
+  void getCurrentWindow().setSize(new PhysicalSize(width, height))
 }
 
 import LoginPage from '../pages/LoginPage.vue'
@@ -160,7 +162,7 @@ const loginChildren: RouteRecordRaw[] = [
     meta: {
       titleKey: 'titleBar.regionSelection',
       titleIcon: 'public',
-      windowWidth: 560,
+      windowWidth: 420,
       windowHeight: 480,
     },
   },
@@ -168,7 +170,7 @@ const loginChildren: RouteRecordRaw[] = [
     path: 'id-pass',
     name: ROUTE_NAMES.LoginIdPass,
     component: IdPassForm,
-    meta: { titleKey: 'titleBar.login', titleIcon: 'login', windowWidth: 560, windowHeight: 520 },
+    meta: { titleKey: 'titleBar.login', titleIcon: 'login', windowWidth: 420, windowHeight: 520 },
   },
   {
     path: 'qr',
@@ -177,8 +179,8 @@ const loginChildren: RouteRecordRaw[] = [
     meta: {
       titleKey: 'titleBar.login',
       titleIcon: 'qr_code_2',
-      windowWidth: 560,
-      windowHeight: 680,
+      windowWidth: 420,
+      windowHeight: 600,
     },
   },
   {
@@ -188,7 +190,7 @@ const loginChildren: RouteRecordRaw[] = [
     meta: {
       titleKey: 'titleBar.login',
       titleIcon: 'verified_user',
-      windowWidth: 560,
+      windowWidth: 420,
       windowHeight: 460,
     },
   },
@@ -199,7 +201,7 @@ const loginChildren: RouteRecordRaw[] = [
     meta: {
       titleKey: 'titleBar.totp',
       titleIcon: 'encrypted',
-      windowWidth: 520,
+      windowWidth: 420,
       windowHeight: 380,
     },
   },
@@ -210,7 +212,7 @@ const loginChildren: RouteRecordRaw[] = [
     meta: {
       titleKey: 'titleBar.loginWait',
       titleIcon: 'login',
-      windowWidth: 480,
+      windowWidth: 420,
       windowHeight: 360,
     },
   },
@@ -221,7 +223,7 @@ const loginChildren: RouteRecordRaw[] = [
     meta: {
       titleKey: 'titleBar.verify',
       titleIcon: 'shield_lock',
-      windowWidth: 560,
+      windowWidth: 420,
       windowHeight: 480,
     },
   },
@@ -252,8 +254,8 @@ export const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       titleKey: 'titleBar.accounts',
       titleIcon: 'sports_esports',
-      windowWidth: 560,
-      windowHeight: 640,
+      windowWidth: 480,
+      windowHeight: 800,
     },
   },
   {
@@ -284,7 +286,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/about',
     name: ROUTE_NAMES.About,
     component: AboutPage,
-    meta: { titleKey: 'titleBar.about', titleIcon: 'info', windowWidth: 560, windowHeight: 680 },
+    meta: { titleKey: 'titleBar.about', titleIcon: 'info', windowWidth: 420, windowHeight: 680 },
     /*
      * P12.4 D7: same public-route rationale as `/settings` —
      * WPF allowed the About page from both pre-login and
@@ -540,17 +542,31 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
    * Falls back to 900 when `window.screen` is unavailable (jsdom /
    * headless CI) so the spec harness keeps working.
    */
-  function maxFitHeight(): number {
-    const avail = typeof window !== 'undefined' ? window.screen?.availHeight : undefined
-    if (typeof avail === 'number' && avail > 0) {
-      // Reserve space for the Windows taskbar + some breathing room.
-      // On high-DPI displays (125%/150%), availHeight is already in
-      // CSS pixels but the effective usable area is smaller because
-      // the OS reserves more physical pixels for chrome. Using 80%
-      // of availHeight ensures the window never clips off-screen.
-      return Math.max(300, Math.floor(avail * 0.8))
+  async function getMonitorHeight(): Promise<number> {
+    try {
+      const monitor = await currentMonitor()
+      if (monitor) {
+        // monitor.size is physical pixels; divide by scaleFactor to get logical pixels
+        return Math.floor(monitor.size.height / monitor.scaleFactor)
+      }
+    } catch {
+      // fall through to CSS fallback
     }
-    return 900
+    // CSS fallback — may be inaccurate on some WebView2 configs
+    const avail = typeof window !== 'undefined' ? window.screen?.availHeight : undefined
+    return typeof avail === 'number' && avail > 0 ? avail : 900
+  }
+
+  let monitorHeight = 900
+
+  // Fetch monitor height once on init and refresh on DPI change.
+  void getMonitorHeight().then((h) => {
+    monitorHeight = h
+  })
+
+  function maxFitHeight(): number {
+    // Leave 5% for taskbar + breathing room.
+    return Math.max(300, Math.floor(monitorHeight * 0.95))
   }
 
   /**
@@ -568,14 +584,23 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   function fitWindow(): void {
     const root = document.querySelector('[data-window-root]') as HTMLElement | null
     if (!root) return
-    // Both flips happen in the same synchronous block so the browser
-    // never paints the intermediate `height: auto` state (it's a
-    // forced-layout read followed by a write, both before the next
-    // paint). See bug (3) in the header docblock above.
+    // Temporarily disable overflow clipping so scrollHeight reflects
+    // the full content including all account rows + OTP footer.
+    const scroll = root.querySelector('.account-list__scroll') as HTMLElement | null
+    if (scroll) scroll.style.overflow = 'visible'
     root.style.height = 'auto'
-    const h = Math.max(300, Math.min(Math.ceil(root.scrollHeight), maxFitHeight()))
+    const scrollH = root.scrollHeight
+    if (scroll) scroll.style.overflow = ''
+    const cap = maxFitHeight()
+    let zoom = 1.0
+    if (scrollH > cap) {
+      zoom = cap / scrollH
+    }
+    const contentH = Math.ceil(scrollH * zoom)
+    const h = Math.max(300, Math.min(contentH, cap))
     root.style.height = '100vh'
-    void appWindow.setSize(new LogicalSize(currentWidth, h))
+    void getCurrentWebview().setZoom(zoom)
+    void appWindow.setSize(new PhysicalSize(currentWidth, h))
   }
 
   /**
@@ -650,6 +675,27 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     })
     observer.observe(root)
     if (content) observer.observe(content)
+
+    // Also re-fit when the OS font size / DPI changes (Windows
+    // Accessibility text-size slider changes the CSS rem base,
+    // which ResizeObserver may not catch if the root stays 100vh).
+    // A 1rem sentinel element detects font-size changes.
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', () => scheduleOnNextPaint(fitWindow), { passive: true })
+
+      // Sentinel: a 0-size element whose width is 1rem. When the
+      // system font size changes, its pixel width changes and
+      // ResizeObserver fires, triggering a re-fit.
+      let sentinel = document.getElementById('__fit-sentinel')
+      if (!sentinel) {
+        sentinel = document.createElement('div')
+        sentinel.id = '__fit-sentinel'
+        sentinel.style.cssText =
+          'position:fixed;top:-9999px;left:-9999px;width:1rem;height:1rem;pointer-events:none;'
+        document.body.appendChild(sentinel)
+      }
+      observer.observe(sentinel)
+    }
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
       window.requestAnimationFrame(() => {
         initialNotificationsIgnored = true
