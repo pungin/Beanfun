@@ -283,9 +283,33 @@ pub async fn get_accounts(
         "get_accounts: fetched account list HTML"
     );
 
+    let rows = extract_service_accounts(&body);
+
+    // Fetch create-time for all accounts concurrently with a per-request
+    // timeout. HK portal can be slow (~30s per request); concurrent fetch
+    // keeps the total wait bounded. Failures degrade to None.
+    let create_time_futures: Vec<_> = rows
+        .iter()
+        .map(|row| {
+            let client = client.clone();
+            let sc = service_code.to_owned();
+            let sr = service_region.to_owned();
+            let sn = row.ssn.clone();
+            async move {
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    get_create_time(&client, &sc, &sr, &sn),
+                )
+                .await
+                .ok()
+                .flatten()
+            }
+        })
+        .collect();
+    let create_times = futures::future::join_all(create_time_futures).await;
+
     let mut accounts: Vec<ServiceAccount> = Vec::new();
-    for row in extract_service_accounts(&body) {
-        let screatetime = get_create_time(client, service_code, service_region, &row.ssn).await;
+    for (row, screatetime) in rows.into_iter().zip(create_times) {
         accounts.push(ServiceAccount {
             is_enable: row.is_enable,
             visible: true,
