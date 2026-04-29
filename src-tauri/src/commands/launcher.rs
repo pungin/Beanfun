@@ -595,6 +595,16 @@ pub async fn launch_game(
 
     let command_line = build_command_line(&command_line_template, &account, &password);
 
+    tracing::info!(
+        game_path = %game_path,
+        mode = ?mode,
+        template_len = command_line_template.len(),
+        command_line_len = command_line.len(),
+        has_account = !account.is_empty(),
+        has_password = !password.is_empty(),
+        "launch_game: preparing to spawn"
+    );
+
     let req = LaunchRequest {
         game_path: PathBuf::from(game_path),
         command_line,
