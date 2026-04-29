@@ -3,7 +3,7 @@
 [![GitHub all releases](https://img.shields.io/github/downloads/pungin/Beanfun/total)](https://github.com/pungin/Beanfun/releases)
 [![Lint, Format & Test](https://github.com/pungin/Beanfun/actions/workflows/ci.yml/badge.svg)](https://github.com/pungin/Beanfun/actions/workflows/ci.yml)
 
-> **遊戲橘子旗下科技紅利遊戲的第三方啟動器**
+> **遊戲橘子數位科技旗下遊戲的第三方啟動器**
 
 **免責聲明：** 本軟體 **不是** 遊戲橘子旗下科技所開發的官方客戶端程式。若您的帳號使用第三方的方式登錄，請自行三思並且確認下載當前程式的來源是否安全。
 

@@ -112,6 +112,7 @@ export const DEFAULT_LOGIN_METHOD: LoginMethodValue = '0'
  */
 export const UI_CONFIG_KEYS = {
   ThemeColor: 'ThemeColor',
+  DarkMode: 'darkMode',
   Language: 'Language',
   MinimizeToTray: 'minimize_to_tray',
   DisableHardwareAcceleration: 'disableHardwareAcceleration',
@@ -169,6 +170,8 @@ export const useUiStore = defineStore('ui', () => {
     () => config.get(UI_CONFIG_KEYS.ThemeColor) ?? DEFAULT_PRIMARY_COLOR,
   )
 
+  const darkMode = computed<boolean>(() => parseBool(config.get(UI_CONFIG_KEYS.DarkMode), false))
+
   const language = computed<AppLocale>(() => {
     const raw = config.get(UI_CONFIG_KEYS.Language)
     return isAppLocale(raw) ? raw : DEFAULT_LOCALE
@@ -213,6 +216,11 @@ export const useUiStore = defineStore('ui', () => {
   async function setThemeColor(hex: string): Promise<void> {
     await config.set(UI_CONFIG_KEYS.ThemeColor, hex)
     setPrimaryColor(hex)
+  }
+
+  async function setDarkMode(value: boolean): Promise<void> {
+    await config.set(UI_CONFIG_KEYS.DarkMode, stringifyBool(value))
+    applyDarkMode(value)
   }
 
   async function setLanguage(locale: AppLocale): Promise<void> {
@@ -269,6 +277,16 @@ export const useUiStore = defineStore('ui', () => {
    * Config value can't soft-brick boot — fall back to defaults
    * for that one setting and continue.
    */
+  function applyDarkMode(dark: boolean): void {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+    // Element Plus dark mode — requires the `dark` class on <html>
+    if (dark) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }
+
   function applyAll(): void {
     try {
       setPrimaryColor(themeColor.value)
@@ -276,6 +294,8 @@ export const useUiStore = defineStore('ui', () => {
       console.error('[ui.applyAll] failed to apply themeColor; falling back to default', err)
       setPrimaryColor(DEFAULT_PRIMARY_COLOR)
     }
+
+    applyDarkMode(darkMode.value)
 
     if (localeApplier) {
       try {
@@ -291,6 +311,7 @@ export const useUiStore = defineStore('ui', () => {
     currentDialog,
 
     themeColor,
+    darkMode,
     language,
     minimizeToTray,
     disableHwAccel,
@@ -303,6 +324,7 @@ export const useUiStore = defineStore('ui', () => {
     loginMethod,
 
     setThemeColor,
+    setDarkMode,
     setLanguage,
     setMinimizeToTray,
     setDisableHwAccel,
