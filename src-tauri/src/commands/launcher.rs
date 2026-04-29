@@ -600,9 +600,7 @@ pub async fn launch_game(
     // Only `game_commandLine` is used for credential substitution.
     // We replicate the split here so the command line passed to
     // CreateProcess matches WPF byte-for-byte.
-    let args_template = if let Some(pos) = command_line_template
-        .to_ascii_lowercase()
-        .find(".exe ")
+    let args_template = if let Some(pos) = command_line_template.to_ascii_lowercase().find(".exe ")
     {
         &command_line_template[pos + 5..]
     } else {
