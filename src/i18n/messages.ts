@@ -404,6 +404,7 @@ const zhTW = {
     gameSectionEmpty: '尚未選擇任何遊戲，遊戲相關設定將於選擇遊戲後出現。',
     disableHardwareAccelerationTip:
       '關閉硬體加速可降低 GPU 使用，但介面動畫會較不流暢。\n更動後需完全重新啟動 Beanfun 才會套用。',
+    darkMode: '深色模式',
     tradLoginTip: '使用傳統登入流程（多次跳轉），\n適合自動登入失敗或無法跳出登入視窗時使用。',
     killPatcherTip: '阻止 beanfun! 啟動的更新程式 (Patcher.aspx) 自動執行。',
     skipPlayWindowTip: '直接啟動遊戲，跳過 Play 視窗確認步驟。',
@@ -614,6 +615,7 @@ const zhCN = {
     gameSectionEmpty: '尚未选择任何游戏，游戏相关设定将于选择游戏后出现。',
     disableHardwareAccelerationTip:
       '关闭硬件加速可降低 GPU 使用，但界面动画会较不流畅。\n更动后需完全重新启动 Beanfun 才会套用。',
+    darkMode: '深色模式',
     tradLoginTip: '使用传统登录流程（多次跳转），\n适合自动登录失败或无法跳出登录窗口时使用。',
     killPatcherTip: '阻止 beanfun! 启动的更新程序 (Patcher.aspx) 自动执行。',
     skipPlayWindowTip: '直接启动游戏，跳过 Play 窗口确认步骤。',
@@ -832,6 +834,7 @@ const enUS = {
     gameSectionEmpty: 'No game selected. Game-specific settings will appear once you pick one.',
     disableHardwareAccelerationTip:
       'Disabling hardware acceleration lowers GPU use but makes UI animations less smooth.\nA full Beanfun restart is required for the change to take effect.',
+    darkMode: 'Dark Mode',
     tradLoginTip:
       'Use the traditional multi-redirect login flow.\nHandy when auto-login fails or the login window does not appear.',
     killPatcherTip: 'Prevent the beanfun! launcher (Patcher.aspx) from auto-running.',

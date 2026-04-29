@@ -257,3 +257,66 @@
 .bf-custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0, 0, 0, 0.35);
 }
+
+/* =========================================================================
+ * Dark mode overrides for glass utilities
+ * ========================================================================= */
+
+[data-theme='dark'] .bf-glass-window {
+  background:
+    linear-gradient(180deg, rgba(28, 27, 31, 0.92) 0%, rgba(28, 27, 31, 0.88) 100%),
+    radial-gradient(
+      1200px 800px at 10% -10%,
+      color-mix(in srgb, var(--bf-primary-container) 15%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 700px at 110% 110%,
+      color-mix(in srgb, var(--bf-primary) 10%, transparent) 0%,
+      transparent 55%
+    ),
+    linear-gradient(180deg, #1c1b1f 0%, #141316 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    var(--bf-shadow-panel);
+}
+
+[data-theme='dark'] .bf-glass-panel {
+  background: rgba(37, 37, 41, 0.75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    var(--bf-shadow-panel);
+}
+
+[data-theme='dark'] .bf-glass-floating {
+  background: rgba(37, 37, 41, 0.55);
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] .bf-glass-card {
+  background: rgba(47, 47, 51, 0.7);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .bf-ghost-border {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] .bf-text-gradient {
+  background: linear-gradient(135deg, var(--bf-primary-container) 0%, var(--bf-primary) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+[data-theme='dark'] .bf-btn-gradient {
+  background: linear-gradient(135deg, var(--bf-primary-container) 0%, var(--bf-primary) 60%);
+  color: #ffffff;
+}
+
+[data-theme='dark'] .bf-custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+[data-theme='dark'] .bf-custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.35);
+}

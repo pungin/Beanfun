@@ -685,6 +685,16 @@ onMounted(() => {
                 </div>
               </div>
 
+              <div class="settings__row settings__row--checkbox">
+                <el-checkbox
+                  :model-value="ui.darkMode"
+                  data-test="settings-dark-mode"
+                  @change="(value) => ui.setDarkMode(Boolean(value))"
+                >
+                  {{ t('settings.darkMode') }}
+                </el-checkbox>
+              </div>
+
               <div
                 v-if="showLoginModePanel"
                 class="settings__row"
