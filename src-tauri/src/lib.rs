@@ -333,13 +333,7 @@ pub fn run() {
         std::process::exit(1);
     });
 
-    // Read `disableHardwareAcceleration` from Config.xml before the
-    // WebView2 runtime initialises. WPF does the same in
-    // `WebBrowser.xaml.cs` / `GamePassBrowser.xaml.cs` via
-    // `CoreWebView2EnvironmentOptions.AdditionalBrowserArguments`.
-    // Tauri/wry reads `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` at
-    // WebView2 environment creation time — setting it here (before
-    // `tauri::Builder::default()`) is the equivalent.
+    // WebView2 browser arguments — set before the runtime initialises.
     #[cfg(target_os = "windows")]
     {
         let config_path = storage_root.join("Config.xml");
@@ -347,13 +341,22 @@ pub fn run() {
             services::config::get_value_sync(&config_path, "disableHardwareAcceleration")
                 .unwrap_or_default()
                 .eq_ignore_ascii_case("true");
+
+        let mut args = vec![
+            // Lock rendering to 1:1 physical pixels so the app layout
+            // is immune to Windows "Text size" / DPI scaling. The
+            // router's fitWindow compensates by dividing the logical
+            // window size by the OS scale factor.
+            "--force-device-scale-factor=1".to_string(),
+        ];
+
         if disable_hw_accel {
-            std::env::set_var(
-                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-                "--disable-gpu --disable-gpu-compositing",
-            );
+            args.push("--disable-gpu".to_string());
+            args.push("--disable-gpu-compositing".to_string());
             tracing::info!("hardware acceleration disabled via Config.xml");
         }
+
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args.join(" "));
     }
 
     let app_state = AppState::new(storage_root);

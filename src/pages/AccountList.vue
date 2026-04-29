@@ -86,7 +86,7 @@
  *   Game CTA, so the bottom dock has no UX purpose.
  */
 
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
@@ -231,6 +231,10 @@ async function loadList(): Promise<void> {
     }
 
     loadState.value = 'ready'
+
+    // Trigger window resize after account list renders — fitWindow
+    // needs to re-measure now that the DOM has new rows.
+    void nextTick(() => window.dispatchEvent(new Event('resize')))
 
     // Auto-start game after first load if the setting is enabled.
     // Mirrors WPF `loginWorker_RunWorkerCompleted` L1421-1429.
@@ -2070,104 +2074,75 @@ onBeforeUnmount(() => {
     </TitleBar>
     <div class="account-list__scroll">
       <div class="account-list__container" data-window-content>
-        <header class="account-list__header">
-          <div class="account-list__header-text">
-            <h1 class="account-list__title bf-text-gradient">{{ t('accountList.title') }}</h1>
-            <p class="account-list__subline">{{ t('accountList.subtitle') }}</p>
-          </div>
-        </header>
-
-        <!-- Game info bar (D8d) — real game name + image + change-game button. -->
+        <!-- Game bar: icon + name + start button in one compact row -->
         <section class="account-list__game bf-glass-panel">
-          <div class="account-list__game-row">
-            <div class="account-list__game-meta">
-              <div class="account-list__game-icon" aria-hidden="true">
-                <!--
-                D8d: prefer the per-game banner image when the catalogue
-                has hydrated; fall back to the generic VideoPlay glyph
-                so the layout doesn't collapse during the brief setup
-                window before `setupGameOnMount` resolves. The icon's
-                container size is fixed regardless so the row height
-                stays stable across the swap.
-              -->
-                <img
-                  v-if="gameImageUrl"
-                  :src="gameImageUrl"
-                  :alt="gameNameDisplay"
-                  class="account-list__game-icon-img"
-                  data-test="account-list-game-image"
-                />
-                <el-icon v-else :size="24"><VideoPlay /></el-icon>
-              </div>
-              <button
-                type="button"
-                class="account-list__game-info"
-                :title="t('accountList.changeGame')"
-                data-test="account-list-change-game"
-                @click="handleChangeGame"
-              >
-                <span class="account-list__game-name" data-test="account-list-game-name">
-                  {{ gameNameDisplay }}
-                </span>
-                <span class="account-list__game-status">
-                  <span class="account-list__game-status-dot" />
-                  {{ t('accountList.statusOnline') }}
-                </span>
-              </button>
-            </div>
-            <div class="account-list__game-actions">
-              <!--
-              D8e: Tools button is only rendered for the three game
-              codes WPF whitelisted (`610074_T9` / `610075_T9` /
-              `610096_TE`). Hidden via `v-if` rather than `display:
-              none` so QA can't see a hover affordance for a button
-              that isn't reachable, and so the surrounding flex row
-              tightens up cleanly when the button is absent.
-            -->
-              <button
-                v-if="showToolsButton"
-                type="button"
-                class="bf-btn-ghost-icon account-list__icon-btn"
-                :title="t('accountList.toolsButton')"
-                data-test="account-list-tools"
-                @click="handleTools"
-              >
-                <el-icon><Operation /></el-icon>
-              </button>
-              <button
-                type="button"
-                class="bf-btn-ghost-icon account-list__icon-btn account-list__icon-btn--danger"
-                :title="t('Logout')"
-                data-test="account-list-logout"
-                @click="handleLogout"
-              >
-                <el-icon><SwitchButton /></el-icon>
-              </button>
-            </div>
+          <div class="account-list__game-icon" aria-hidden="true">
+            <img
+              v-if="gameImageUrl"
+              :src="gameImageUrl"
+              :alt="gameNameDisplay"
+              class="account-list__game-icon-img"
+              data-test="account-list-game-image"
+            />
+            <el-icon v-else :size="20"><VideoPlay /></el-icon>
           </div>
           <button
             type="button"
-            class="bf-btn-gradient account-list__start-btn"
-            :disabled="startGameDisabled"
-            data-test="account-list-start"
-            @click="handleStartGame"
+            class="account-list__game-info"
+            :title="t('accountList.changeGame')"
+            data-test="account-list-change-game"
+            @click="handleChangeGame"
           >
-            <el-icon><VideoPlay /></el-icon>
-            <span>{{ t('GameStart') }}</span>
+            <span class="account-list__game-name" data-test="account-list-game-name">
+              {{ gameNameDisplay }}
+            </span>
+            <span class="account-list__game-status">
+              <span class="account-list__game-status-dot" />
+              {{ t('accountList.statusOnline') }}
+            </span>
           </button>
+          <div class="account-list__game-actions">
+            <button
+              type="button"
+              class="bf-btn-gradient account-list__start-btn"
+              :disabled="startGameDisabled"
+              data-test="account-list-start"
+              @click="handleStartGame"
+            >
+              <el-icon :size="14"><VideoPlay /></el-icon>
+              <span>{{ t('GameStart') }}</span>
+            </button>
+            <button
+              v-if="showToolsButton"
+              type="button"
+              class="bf-btn-ghost-icon account-list__icon-btn"
+              :title="t('accountList.toolsButton')"
+              data-test="account-list-tools"
+              @click="handleTools"
+            >
+              <el-icon><Operation /></el-icon>
+            </button>
+            <button
+              type="button"
+              class="bf-btn-ghost-icon account-list__icon-btn account-list__icon-btn--danger"
+              :title="t('Logout')"
+              data-test="account-list-logout"
+              @click="handleLogout"
+            >
+              <el-icon><SwitchButton /></el-icon>
+            </button>
+          </div>
         </section>
 
-        <!-- Quick actions row: balance + member center + support (all stubs) -->
-        <section class="account-list__quick">
-          <div class="account-list__balance bf-glass-card bf-ghost-border">
-            <div class="account-list__balance-text">
-              <span class="account-list__balance-label">
-                {{ t('accountList.gashBalance') }}
-              </span>
-              <span class="account-list__balance-value" data-test="account-list-balance-value">
-                {{ formattedRemainPoint }}
-              </span>
-            </div>
+        <!-- Quick actions: balance left, action buttons right -->
+        <section class="account-list__quick bf-glass-panel">
+          <div class="account-list__balance">
+            <span class="account-list__balance-label">
+              {{ t('accountList.gashBalance') }}
+            </span>
+            <span class="account-list__balance-value" data-test="account-list-balance-value">
+              {{ formattedRemainPoint }}
+            </span>
             <button
               type="button"
               class="account-list__balance-refresh"
@@ -2177,46 +2152,48 @@ onBeforeUnmount(() => {
               data-test="account-list-refresh-balance"
               @click="handleRefreshBalance"
             >
-              <el-icon><Refresh /></el-icon>
+              <el-icon :size="14"><Refresh /></el-icon>
             </button>
           </div>
-          <button
-            type="button"
-            class="account-list__quick-link bf-glass-card bf-ghost-border"
-            data-test="account-list-gash-recharge"
-            @click="handleGashRecharge"
-          >
-            <el-icon><Wallet /></el-icon>
-            <span>{{ t('GashRecharge') }}</span>
-          </button>
-          <button
-            v-if="auth.session?.region === 'TW'"
-            type="button"
-            class="account-list__quick-link bf-glass-card bf-ghost-border"
-            data-test="account-list-app-gash-recharge"
-            @click="handleAppGashRecharge"
-          >
-            <el-icon><Iphone /></el-icon>
-            <span>{{ t('AppGashRecharge') }}</span>
-          </button>
-          <button
-            type="button"
-            class="account-list__quick-link bf-glass-card bf-ghost-border"
-            data-test="account-list-member-center"
-            @click="handleMemberCenter"
-          >
-            <el-icon><User /></el-icon>
-            <span>{{ t('accountList.memberCenter') }}</span>
-          </button>
-          <button
-            type="button"
-            class="account-list__quick-link bf-glass-card bf-ghost-border"
-            data-test="account-list-customer-service"
-            @click="handleCustomerService"
-          >
-            <el-icon><Service /></el-icon>
-            <span>{{ t('accountList.customerService') }}</span>
-          </button>
+          <div class="account-list__quick-actions">
+            <button
+              type="button"
+              class="account-list__quick-btn"
+              data-test="account-list-gash-recharge"
+              @click="handleGashRecharge"
+            >
+              <el-icon :size="14"><Wallet /></el-icon>
+              <span>{{ t('GashRecharge') }}</span>
+            </button>
+            <button
+              v-if="auth.session?.region === 'TW'"
+              type="button"
+              class="account-list__quick-btn"
+              data-test="account-list-app-gash-recharge"
+              @click="handleAppGashRecharge"
+            >
+              <el-icon :size="14"><Iphone /></el-icon>
+              <span>{{ t('AppGashRecharge') }}</span>
+            </button>
+            <button
+              type="button"
+              class="account-list__quick-btn"
+              data-test="account-list-member-center"
+              @click="handleMemberCenter"
+            >
+              <el-icon :size="14"><User /></el-icon>
+              <span>{{ t('accountList.memberCenter') }}</span>
+            </button>
+            <button
+              type="button"
+              class="account-list__quick-btn"
+              data-test="account-list-customer-service"
+              @click="handleCustomerService"
+            >
+              <el-icon :size="14"><Service /></el-icon>
+              <span>{{ t('accountList.customerService') }}</span>
+            </button>
+          </div>
         </section>
 
         <!-- Service accounts list — 4 rendered states (REAL) -->
@@ -2225,9 +2202,27 @@ onBeforeUnmount(() => {
             <h2 class="account-list__list-title">
               {{ t('accountList.serviceAccountsHeading') }}
             </h2>
-            <span class="account-list__list-count" data-test="account-list-count">
-              {{ t('accountList.accountCount', { count: accountCount }) }}
-            </span>
+            <div class="account-list__list-header-right">
+              <span
+                v-if="limitNoticeText"
+                class="account-list__limit-badge"
+                data-test="account-list-limit-notice"
+              >
+                {{ limitNoticeText }}
+              </span>
+              <button
+                type="button"
+                class="account-list__add-btn-inline"
+                :disabled="isAddAccountDisabled"
+                data-test="account-list-add"
+                @click="handleAddAccount"
+              >
+                <el-icon :size="12"><Plus /></el-icon>
+              </button>
+              <span class="account-list__list-count" data-test="account-list-count">
+                {{ t('accountList.accountCount', { count: accountCount }) }}
+              </span>
+            </div>
           </header>
 
           <div class="account-list__list-body bf-custom-scrollbar">
@@ -2361,27 +2356,6 @@ onBeforeUnmount(() => {
               </li>
             </ul>
           </div>
-
-          <footer class="account-list__list-footer">
-            <p
-              v-if="limitNoticeText"
-              class="account-list__limit-notice"
-              data-test="account-list-limit-notice"
-            >
-              {{ limitNoticeText }}
-            </p>
-            <button
-              type="button"
-              class="account-list__add-btn"
-              :class="{ 'account-list__add-btn--disabled': isAddAccountDisabled }"
-              :disabled="isAddAccountDisabled"
-              data-test="account-list-add"
-              @click="handleAddAccount"
-            >
-              <el-icon><Plus /></el-icon>
-              <span>{{ t('AddServiceAccount') }}</span>
-            </button>
-          </footer>
         </section>
 
         <!-- Add Service Account modal (D3) — mounted unconditionally so its
@@ -2574,19 +2548,18 @@ onBeforeUnmount(() => {
 .account-list__scroll {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
-  padding: 1.5rem;
+  overflow-y: auto;
+  padding: 0.75rem;
   display: flex;
   flex-direction: column;
 }
 
 .account-list__container {
   flex: 1;
-  min-height: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 /* --------------- header --------------- */
@@ -2623,29 +2596,15 @@ onBeforeUnmount(() => {
 /* --------------- game info bar --------------- */
 
 .account-list__game {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-}
-
-.account-list__game-row {
+  padding: 0.5rem 0.75rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.account-list__game-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
+  gap: 0.5rem;
 }
 
 .account-list__game-icon {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--bf-radius-button);
   background: linear-gradient(
     135deg,
@@ -2675,9 +2634,10 @@ onBeforeUnmount(() => {
   text-align: left;
   cursor: pointer;
   min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: 0.0625rem;
   color: var(--bf-on-surface);
   transition: color var(--bf-motion-fast);
 }
@@ -2708,12 +2668,6 @@ onBeforeUnmount(() => {
   display: inline-block;
 }
 
-.account-list__game-actions {
-  display: flex;
-  gap: 0.375rem;
-  flex-shrink: 0;
-}
-
 .account-list__icon-btn {
   width: 32px;
   height: 32px;
@@ -2726,50 +2680,52 @@ onBeforeUnmount(() => {
 }
 
 .account-list__start-btn {
-  width: 100%;
-  padding: 0.75rem 1rem;
+  padding: 0.375rem 0.75rem;
   font-weight: 700;
+  font-size: 0.8125rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.account-list__game-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
 }
 
 /* --------------- quick actions --------------- */
 
 .account-list__quick {
+  padding: 0.375rem 0.75rem;
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
 }
 
 .account-list__balance {
-  flex: 1;
-  padding: 0.625rem 0.75rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.account-list__balance-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+  gap: 0.375rem;
+  width: 100%;
 }
 
 .account-list__balance-label {
   font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--bf-on-surface-variant);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .account-list__balance-value {
-  font-size: 1rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: var(--bf-on-surface);
+  white-space: nowrap;
 }
 
 .account-list__balance-refresh {
@@ -2778,9 +2734,10 @@ onBeforeUnmount(() => {
   border: 0;
   cursor: pointer;
   color: var(--bf-on-surface-variant);
-  padding: 0.25rem;
+  padding: 0.125rem;
   border-radius: var(--bf-radius-input);
   transition: color var(--bf-motion-fast);
+  flex-shrink: 0;
 }
 
 .account-list__balance-refresh:hover {
@@ -2805,85 +2762,109 @@ onBeforeUnmount(() => {
   }
 }
 
-.account-list__quick-link {
-  width: 76px;
+.account-list__quick-actions {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: 0.25rem;
-  padding: 0.5rem;
-  cursor: pointer;
-  font-size: 0.75rem;
-  color: var(--bf-on-surface-variant);
-  transition: color var(--bf-motion-fast);
+  flex-shrink: 0;
 }
 
-.account-list__quick-link:hover {
+.account-list__quick-btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.25rem 0.375rem;
+  font-size: 0.6875rem;
+  color: var(--bf-on-surface-variant);
+  border-radius: var(--bf-radius-input);
+  transition:
+    color var(--bf-motion-fast),
+    background var(--bf-motion-fast);
+  white-space: nowrap;
+}
+
+.account-list__quick-btn:hover {
   color: var(--bf-primary);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 /* --------------- list section --------------- */
 
 .account-list__list {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .account-list__list-header {
-  padding: 0.875rem 1rem;
+  padding: 0.5rem 0.75rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.375rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.account-list__list-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
 }
 
 .account-list__list-title {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: var(--bf-on-surface);
+  white-space: nowrap;
 }
 
 .account-list__list-count {
-  font-size: 0.8125rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   color: var(--bf-on-surface-variant);
   background: var(--bf-surface-container);
-  padding: 0.1875rem 0.5rem;
+  padding: 0.125rem 0.375rem;
   border-radius: var(--bf-radius-input);
 }
 
+.account-list__add-btn-inline {
+  appearance: none;
+  background: transparent;
+  border: 1px dashed var(--bf-outline-variant);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--bf-primary);
+  border-radius: 50%;
+  transition:
+    border-color var(--bf-motion-fast),
+    background var(--bf-motion-fast);
+  flex-shrink: 0;
+}
+
+.account-list__add-btn-inline:hover:not(:disabled) {
+  border-color: var(--bf-primary);
+  background: color-mix(in srgb, var(--bf-primary) 10%, transparent);
+}
+
+.account-list__add-btn-inline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.account-list__limit-badge {
+  font-size: 0.625rem;
+  color: var(--bf-primary);
+  white-space: nowrap;
+}
+
 .account-list__list-body {
-  flex: 1;
-  /*
-   * Follow-up to #236: dropped the previous `max-height: 300px`
-   * cap so this container scrolls whatever vertical space the
-   * surrounding flex chain has left (see `__scroll` / `__container`
-   * / `__list` docblock above). The old fixed cap combined with
-   * the outer `__scroll` overflow meant that once the account list
-   * hit 300 px, any further height (OTP footer etc.) was pushed
-   * below the window fold and the user had to scroll to reach
-   * "Get OTP". With `flex: 1 + min-height: 0` in the parent chain
-   * the list is always the one that scrolls and the OTP footer
-   * stays pinned at the bottom regardless of account count.
-   *
-   * `min-height: 9rem` guarantees at least two rows are always
-   * fully visible before the internal scrollbar kicks in. Budget:
-   *   row      = 0.625rem × 2 padding + ~28px content ≈ 52px
-   *   2 rows   = 104px
-   *   gap      = 0.25rem between rows = 4px
-   *   padding  = 0.5rem × 2 on __list-body = 16px
-   *   total    ≈ 124px, rounded up to 144px (9rem) for buffer.
-   * Downside: with a single account the list has a small empty
-   * area below the row. Accepted trade-off — the user reported
-   * that a partially-clipped second row (the prior 80px floor)
-   * was worse than a slightly loose single-row view.
-   */
-  min-height: 9rem;
   overflow-y: auto;
   padding: 0.5rem;
   display: flex;
@@ -3004,7 +2985,7 @@ onBeforeUnmount(() => {
 
 .account-list__row-name {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--bf-on-surface);
   white-space: nowrap;
@@ -3104,10 +3085,10 @@ onBeforeUnmount(() => {
 /* --------------- OTP section --------------- */
 
 .account-list__otp {
-  padding: 1rem;
+  padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  gap: 0.375rem;
 }
 
 .account-list__otp-header {
@@ -3118,14 +3099,14 @@ onBeforeUnmount(() => {
 
 .account-list__otp-title {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: var(--bf-on-surface);
 }
 
 .account-list__otp-row {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.375rem;
   align-items: stretch;
 }
 
@@ -3142,10 +3123,10 @@ onBeforeUnmount(() => {
   border: 0;
   border-bottom: 2px solid var(--bf-outline-variant);
   font-family: 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
-  font-size: 1.25rem;
-  letter-spacing: 0.2em;
+  font-size: 1rem;
+  letter-spacing: 0.15em;
   text-align: center;
-  padding: 0.5rem 2rem 0.5rem 0.5rem;
+  padding: 0.375rem 2rem 0.375rem 0.5rem;
   border-radius: var(--bf-radius-input) var(--bf-radius-input) 0 0;
   color: var(--bf-on-surface);
   cursor: default;
@@ -3179,9 +3160,9 @@ onBeforeUnmount(() => {
 }
 
 .account-list__otp-get {
-  min-width: 100px;
-  padding: 0 1rem;
-  font-size: 0.9375rem;
+  min-width: 80px;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
