@@ -233,11 +233,16 @@ async fn run_ping_loop_with_interval(
             biased;
             _ = cancel.cancelled() => return,
             res = client.ping() => {
-                if let Err(err) = res {
-                    tracing::debug!(
-                        error = ?err,
-                        "session keep-alive ping failed; will retry next tick"
-                    );
+                match res {
+                    Ok(()) => {
+                        tracing::debug!("session keep-alive ping ok");
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            error = ?err,
+                            "session keep-alive ping failed; will retry next tick"
+                        );
+                    }
                 }
             }
         }

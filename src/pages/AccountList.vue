@@ -1243,6 +1243,7 @@ const otpLaunchChain = computed<boolean>(() => {
  *   `bfClient.GetOTP(account, ...)` needs a target.
  */
 const startGameDisabled = computed<boolean>(() => {
+  if (launchingGame.value) return true
   if (!game.selectedGame) return true
   if (startGameDirect.value) return false
   return account.selectedServiceAccount === null
@@ -1267,16 +1268,24 @@ const startGameDisabled = computed<boolean>(() => {
  * Adding a global busy guard here would just reproduce the WPF
  * foot-gun where a slow launch blocks Logout.
  */
+const launchingGame = ref(false)
+
 async function handleStartGame(): Promise<void> {
+  if (launchingGame.value) return
   if (!game.selectedGame) {
     ElMessage.warning(t('GameSelected'))
     return
   }
-  if (startGameDirect.value) {
-    await launcher.runGame()
-    return
+  launchingGame.value = true
+  try {
+    if (startGameDirect.value) {
+      await launcher.runGame()
+      return
+    }
+    await handleGetOtp()
+  } finally {
+    launchingGame.value = false
   }
-  await handleGetOtp()
 }
 
 /* --------------- per-row context menu (D4) --------------- */

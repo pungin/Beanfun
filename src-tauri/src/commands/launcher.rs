@@ -593,7 +593,30 @@ pub async fn launch_game(
         .with_details(json!({ "io_kind": format!("{:?}", err.kind()) }))
     })?;
 
-    let command_line = build_command_line(&command_line_template, &account, &password);
+    // WPF splits the INI `exe` field into `game_exe` (filename) and
+    // `game_commandLine` (args with %s placeholders) via:
+    //   game_exe = Regex("(.*).exe").Match(exe) + ".exe"
+    //   game_commandLine = Regex(".exe (.*)").Match(exe)
+    // Only `game_commandLine` is used for credential substitution.
+    // We replicate the split here so the command line passed to
+    // CreateProcess matches WPF byte-for-byte.
+    let args_template = if let Some(pos) = command_line_template.to_ascii_lowercase().find(".exe ")
+    {
+        &command_line_template[pos + 5..]
+    } else {
+        ""
+    };
+    let command_line = build_command_line(args_template, &account, &password);
+
+    tracing::info!(
+        game_path = %game_path,
+        mode = ?mode,
+        template_len = command_line_template.len(),
+        command_line_len = command_line.len(),
+        has_account = !account.is_empty(),
+        has_password = !password.is_empty(),
+        "launch_game: preparing to spawn"
+    );
 
     let req = LaunchRequest {
         game_path: PathBuf::from(game_path),
