@@ -9,6 +9,8 @@
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:window:allow-set-size",
+    "core:window:allow-current-monitor",
+    "core:webview:allow-set-webview-zoom",
     "opener:default",
     "dialog:default",
     "window-state:default"
