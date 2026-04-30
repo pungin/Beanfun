@@ -72,7 +72,7 @@
   <system:String x:Key="GashRemainInGame"> (In-game {0})</system:String>
   <system:String x:Key="GashRefresh">Refresh Points</system:String>
   <system:String x:Key="GashRecharge">Top Up</system:String>
-  <system:String x:Key="AppGashRecharge">Redeem beanfun! App Gash Points</system:String>
+  <system:String x:Key="AppGashRecharge">Redeem App Gash Points</system:String>
   <system:String x:Key="MemberCenter">Member Center</system:String>
   <system:String x:Key="CustomerService">Customer Service</system:String>
   <system:String x:Key="RightClickMenu">Right-click for menu</system:String>

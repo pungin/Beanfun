@@ -57,7 +57,7 @@
   <system:String x:Key="GashRemainInGame"> (遊戲內 {0})</system:String>
   <system:String x:Key="GashRefresh">更新點數</system:String>
   <system:String x:Key="GashRecharge">儲值與購點</system:String>
-  <system:String x:Key="AppGashRecharge">兌換beanfun!App樂豆點</system:String>
+  <system:String x:Key="AppGashRecharge">兌換 App 樂豆點</system:String>
   <system:String x:Key="MemberCenter">會員中心</system:String>
   <system:String x:Key="CustomerService">客服中心</system:String>
   <system:String x:Key="RightClickMenu">右鍵開啟選單</system:String>

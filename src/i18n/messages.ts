@@ -269,7 +269,7 @@ const zhTW = {
     verify: '進階驗證',
     accounts: '遊戲帳號',
     settings: '設定',
-    about: '關於 beanfun! Next',
+    about: '關於 beanfun!',
     manageAccount: '管理帳號',
   },
   loginRegion: {
@@ -480,7 +480,7 @@ const zhCN = {
     verify: '进阶验证',
     accounts: '游戏帐号',
     settings: '设置',
-    about: '关于 beanfun! Next',
+    about: '关于 beanfun!',
     manageAccount: '管理帐号',
   },
   loginRegion: {
@@ -691,7 +691,7 @@ const enUS = {
     verify: 'Verification',
     accounts: 'Game Accounts',
     settings: 'Settings',
-    about: 'About beanfun! Next',
+    about: 'About beanfun!',
     manageAccount: 'Manage Accounts',
   },
   loginRegion: {
