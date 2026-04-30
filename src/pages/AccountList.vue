@@ -2711,27 +2711,26 @@ onBeforeUnmount(() => {
 .account-list__quick {
   padding: 0.375rem 0.75rem;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem 0.5rem;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .account-list__balance {
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  width: 100%;
 }
 
 .account-list__balance-label {
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   color: var(--bf-on-surface-variant);
   font-weight: 600;
   white-space: nowrap;
 }
 
 .account-list__balance-value {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--bf-on-surface);
   white-space: nowrap;
@@ -2772,7 +2771,8 @@ onBeforeUnmount(() => {
 }
 
 .account-list__quick-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, auto);
   gap: 0.25rem;
   flex-shrink: 0;
 }
