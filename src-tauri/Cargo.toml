@@ -1,6 +1,6 @@
 [package]
 name = "beanfun"
-version = "5.9.5"
+version = "5.9.6"
 description = "Beanfun — Rust/Tauri reimplementation of Beanfun launcher"
 authors = ["Pungin", "YCC3741"]
 edition = "2021"
