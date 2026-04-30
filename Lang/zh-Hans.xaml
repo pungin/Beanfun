@@ -60,7 +60,7 @@
   <system:String x:Key="GashRemainInGame"> (游戏内 {0})</system:String>
   <system:String x:Key="GashRefresh">更新点数</system:String>
   <system:String x:Key="GashRecharge">充值与购点</system:String>
-  <system:String x:Key="AppGashRecharge">兑换beanfun!App乐豆点</system:String>
+  <system:String x:Key="AppGashRecharge">兑换 App 乐豆点</system:String>
   <system:String x:Key="MemberCenter">会员中心</system:String>
   <system:String x:Key="RightClickMenu">右键开启菜单</system:String>
   <system:String x:Key="AccountBanned">账号已锁定</system:String>
