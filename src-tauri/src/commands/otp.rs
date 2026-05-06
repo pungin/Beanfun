@@ -30,8 +30,12 @@
 
 use tauri::State;
 
-use crate::commands::{error::CommandError, session::require_auth, state::AppState};
-use crate::services::beanfun::{get_otp as service_get_otp, ServiceAccount};
+use crate::commands::{
+    error::CommandError,
+    session::{require_auth, SESSION_REQUIRED_CODE},
+    state::AppState,
+};
+use crate::services::beanfun::{get_otp as service_get_otp, LoginError, ServiceAccount};
 
 /// Retrieve the one-time game-launch password for a given service
 /// account.
@@ -61,11 +65,21 @@ use crate::services::beanfun::{get_otp as service_get_otp, ServiceAccount};
 ///
 /// # Errors
 ///
-/// - `auth.session_required` — no login is active.
-/// - Any [`LoginError`][le] surfaced by the service (transport,
-///   JSON parse, WCDES decrypt, server-side intResult ≠ 1). The
-///   P10.1 `From<LoginError>` impl maps each variant to its
-///   structured `CommandError` shape.
+/// - `auth.session_required` — no login is active, **or** the
+///   server-side session expired mid-flight (issue #264). The
+///   latter is detected heuristically: when the OTP HTTP steps
+///   return a login-redirect HTML page instead of the expected
+///   JavaScript/JSON content, the regex-based parsers fail with
+///   [`LoginError::OtpMissingLongPollingKey`] or
+///   [`LoginError::OtpMissingSecretCode`]. We treat these as
+///   session-expired, clear the stale local auth context, and
+///   surface the canonical `auth.session_required` code so the
+///   frontend's session-expired handler redirects to the login
+///   page (with the i18n toast "您的登入狀態已失效，請重新登入。").
+/// - Any other [`LoginError`][le] surfaced by the service
+///   (transport, JSON parse, WCDES decrypt, server-side
+///   intResult ≠ 1). The P10.1 `From<LoginError>` impl maps
+///   each variant to its structured `CommandError` shape.
 ///
 /// # Frontend usage
 ///
@@ -86,15 +100,56 @@ pub async fn get_otp(
     account: ServiceAccount,
 ) -> Result<String, CommandError> {
     let (client, session) = require_auth(state.inner()).await?;
-    let otp = service_get_otp(
+    match service_get_otp(
         &client,
         &session,
         &account,
         &session.service_code,
         &session.service_region,
     )
-    .await?;
-    Ok(otp)
+    .await
+    {
+        Ok(otp) => Ok(otp),
+        Err(e) if is_likely_session_expired(&e) => {
+            // Server-side session expired while the local auth state was
+            // still populated (e.g. multi-device login kicked this
+            // session — issue #264). Clear the stale auth context and
+            // cancel its keep-alive ping loop so subsequent commands
+            // don't repeat the same HTML-response failure.
+            let taken = state.auth.write().await.take();
+            if let Some(ctx) = taken {
+                ctx.ping_cancel.cancel();
+            }
+            Err(CommandError::new(
+                SESSION_REQUIRED_CODE,
+                "No active Beanfun session. Please log in and try again.",
+            ))
+        }
+        Err(e) => Err(CommandError::from(e)),
+    }
+}
+
+/// Heuristic for detecting server-side session expiry during the
+/// OTP flow.
+///
+/// When the Beanfun cookie session is invalidated remotely (e.g.
+/// another device logs in), the OTP HTTP steps return a
+/// login-redirect HTML page instead of the expected
+/// JavaScript/JSON content. The regex parsers then fail to find
+/// the expected literals:
+///
+/// - Step 1 (`game_start_step2.aspx`) → [`LoginError::OtpMissingLongPollingKey`]
+/// - Step 2 (`get_cookies.ashx`) → [`LoginError::OtpMissingSecretCode`]
+///
+/// Both are strong indicators because `require_auth` already
+/// passed (the *local* `AppState.auth` was populated), so the
+/// failure is almost certainly a server-side invalidation rather
+/// than a "never logged in" state.
+fn is_likely_session_expired(e: &LoginError) -> bool {
+    matches!(
+        e,
+        LoginError::OtpMissingLongPollingKey { .. } | LoginError::OtpMissingSecretCode
+    )
 }
 
 #[cfg(test)]
@@ -111,5 +166,42 @@ mod tests {
     #[test]
     fn get_otp_command_exists_with_declared_signature() {
         let _ = get_otp;
+    }
+
+    #[test]
+    fn missing_long_polling_key_is_likely_session_expired() {
+        let e = LoginError::OtpMissingLongPollingKey {
+            snippet: "<html>login page</html>".to_string(),
+        };
+        assert!(is_likely_session_expired(&e));
+    }
+
+    #[test]
+    fn missing_secret_code_is_likely_session_expired() {
+        assert!(is_likely_session_expired(
+            &LoginError::OtpMissingSecretCode
+        ));
+    }
+
+    #[test]
+    fn transport_error_is_not_session_expired() {
+        let e = LoginError::Unknown("network timeout".to_string());
+        assert!(!is_likely_session_expired(&e));
+    }
+
+    #[test]
+    fn otp_server_rejected_is_not_session_expired() {
+        let e = LoginError::OtpServerRejected {
+            message: "maintenance".to_string(),
+        };
+        assert!(!is_likely_session_expired(&e));
+    }
+
+    #[test]
+    fn otp_decrypt_failure_is_not_session_expired() {
+        let e = LoginError::OtpDecryptionFailed {
+            cause: "invalid hex".to_string(),
+        };
+        assert!(!is_likely_session_expired(&e));
     }
 }
