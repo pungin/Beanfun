@@ -79,9 +79,20 @@
     linear-gradient(180deg, #f7f1ec 0%, #ece1d6 100%);
   border: 1px solid var(--bf-glass-border);
   border-radius: var(--bf-radius-panel);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    var(--bf-shadow-panel);
+  /*
+   * Issue #262 — drop the `inset 0 1px 0 rgba(255,255,255,0.7)` top
+   * highlight that used to sit alongside `--bf-shadow-panel`. The
+   * 1px highlight only painted along the top edge and traced the
+   * top corners' arc, while the bottom edge had no equivalent
+   * stroke. The eye reads the top corners as visibly more rounded
+   * than the bottom corners (most striking in dark mode where the
+   * white highlight contrasts strongly with the dark surface). Only
+   * `.bf-glass-window` is treated here because it's the only class
+   * that paints the actual window outline; `.bf-glass-panel` /
+   * `.bf-glass-floating` are inner surfaces clipped by this
+   * container's `overflow: hidden` and never touch the outer arc.
+   */
+  box-shadow: var(--bf-shadow-panel);
 }
 
 /* =========================================================================
@@ -276,9 +287,7 @@
       transparent 55%
     ),
     linear-gradient(180deg, #1c1b1f 0%, #141316 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    var(--bf-shadow-panel);
+  box-shadow: var(--bf-shadow-panel);
 }
 
 [data-theme='dark'] .bf-glass-panel {
