@@ -301,6 +301,20 @@ onMounted(() => {
 const serviceAccounts = computed(() => account.serviceAccounts)
 const accountCount = computed(() => serviceAccounts.value.length)
 
+/*
+ * #263: Maximum number of account rows visible before scrolling kicks in.
+ * Keep in sync with the max-height calculation in .account-list__list-body CSS.
+ */
+const MAX_VISIBLE_ROWS = 5
+
+/*
+ * #263: Show a floating scroll indicator when there are more accounts
+ * than can fit in the visible area. The indicator uses an SVG chevron
+ * that fades in/out based on scroll position, helping users discover
+ * that the list is scrollable.
+ */
+const showScrollIndicator = computed(() => accountCount.value > MAX_VISIBLE_ROWS)
+
 function isSelected(a: ServiceAccount): boolean {
   return account.selectedSid === a.sid
 }
@@ -1945,6 +1959,13 @@ function handleDragEnd(event: Sortable.SortableEvent): void {
 const rowsRef = ref<HTMLElement | null>(null)
 let sortableInstance: Sortable | null = null
 
+/*
+ * #263: Ref for the list body container to track scroll position
+ * for the floating scroll indicator.
+ */
+const listBodyRef = ref<HTMLElement | null>(null)
+const listScrolledToBottom = ref(false)
+
 function initSortable(): void {
   destroySortable()
   if (!rowsRef.value) return
@@ -1962,6 +1983,16 @@ function destroySortable(): void {
     sortableInstance.destroy()
     sortableInstance = null
   }
+}
+
+/*
+ * #263: Track scroll position to toggle the scroll indicator visibility.
+ * The indicator fades out when the user scrolls near the bottom.
+ */
+function handleListScroll(event: Event): void {
+  const el = event.target as HTMLElement
+  const threshold = 20 // pixels from bottom to consider "at bottom"
+  listScrolledToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
 }
 
 watch(rowsRef, (el) => {
@@ -2234,7 +2265,11 @@ onBeforeUnmount(() => {
             </div>
           </header>
 
-          <div class="account-list__list-body bf-custom-scrollbar">
+          <div
+            ref="listBodyRef"
+            class="account-list__list-body bf-custom-scrollbar"
+            @scroll="handleListScroll"
+          >
             <p
               v-if="loadState === 'loading'"
               class="account-list__list-state"
@@ -2364,6 +2399,35 @@ onBeforeUnmount(() => {
                 </el-dropdown>
               </li>
             </ul>
+
+            <!--
+              #263: Floating scroll indicator shown when there are more than
+              5 accounts. The SVG chevron fades out when the user scrolls
+              near the bottom of the list.
+            -->
+            <Transition name="account-list__scroll-hint-fade">
+              <div
+                v-if="showScrollIndicator && !listScrolledToBottom"
+                class="account-list__scroll-hint"
+                aria-hidden="true"
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M7 10L12 15L17 10"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </div>
+            </Transition>
           </div>
         </section>
 
@@ -2879,6 +2943,62 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  /*
+   * #263: cap the visible rows. Keep --max-visible-rows in sync with
+   * MAX_VISIBLE_ROWS constant in <script>. Each row is ~36px height +
+   * 0.25rem gap between rows + 1rem total padding (0.5rem top + bottom).
+   */
+  --max-visible-rows: 5;
+  max-height: calc(var(--max-visible-rows) * 36px + (var(--max-visible-rows) - 1) * 0.25rem + 1rem);
+  position: relative;
+}
+
+/*
+ * #263: Floating scroll hint indicator. Appears at the bottom of the
+ * account list when there are more accounts than can fit, prompting
+ * the user that the list is scrollable. Fades out when scrolled near bottom.
+ */
+.account-list__scroll-hint {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 24px;
+  background: linear-gradient(to top, var(--bf-surface-container-low), transparent);
+  color: var(--bf-on-surface-variant);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.account-list__scroll-hint svg {
+  animation: account-list__scroll-hint-bounce 1.5s ease-in-out infinite;
+}
+
+@keyframes account-list__scroll-hint-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+/*
+ * #263: Transition for the scroll hint fade in/out.
+ */
+.account-list__scroll-hint-fade-enter-active,
+.account-list__scroll-hint-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.account-list__scroll-hint-fade-enter-from,
+.account-list__scroll-hint-fade-leave-to {
+  opacity: 0;
 }
 
 .account-list__list-state {
