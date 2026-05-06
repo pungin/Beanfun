@@ -78,6 +78,7 @@
 import type { RouteRecordRaw, Router } from 'vue-router'
 import { createRouter, createWebHashHistory } from 'vue-router'
 
+import { nextTick } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { currentMonitor } from '@tauri-apps/api/window'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
@@ -475,10 +476,21 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   registerSessionExpiredHandler(() => {
     deps.clearSession()
     deps.clearAccountSession?.()
-    void router.push({
-      path: '/login',
-      query: { sessionExpired: '1' },
-    })
+    void nextTick().then(() =>
+      router
+        .push({
+          path: '/login',
+          query: { sessionExpired: '1' },
+        })
+        .then((failure) => {
+          if (failure) {
+            console.warn('[router] session-expired redirect returned NavigationFailure', failure)
+          }
+        })
+        .catch((err: unknown) => {
+          console.error('[router] session-expired redirect threw', err)
+        }),
+    )
   })
 
   /*
