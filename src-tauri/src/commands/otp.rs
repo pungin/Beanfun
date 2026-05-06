@@ -177,9 +177,7 @@ mod tests {
 
     #[test]
     fn missing_secret_code_is_likely_session_expired() {
-        assert!(is_likely_session_expired(
-            &LoginError::OtpMissingSecretCode
-        ));
+        assert!(is_likely_session_expired(&LoginError::OtpMissingSecretCode));
     }
 
     #[test]
