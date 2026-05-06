@@ -191,7 +191,7 @@ async fn set_active_service_internal(
         }
         None => Err(CommandError::new(
             crate::commands::session::SESSION_REQUIRED_CODE,
-            "No active Beanfun session. Please log in and try again.",
+            crate::commands::session::SESSION_REQUIRED_MESSAGE,
         )),
     }
 }

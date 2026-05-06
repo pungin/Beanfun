@@ -32,7 +32,7 @@ use tauri::State;
 
 use crate::commands::{
     error::CommandError,
-    session::{require_auth, SESSION_REQUIRED_CODE},
+    session::{require_auth, SESSION_REQUIRED_CODE, SESSION_REQUIRED_MESSAGE},
     state::AppState,
 };
 use crate::services::beanfun::{get_otp as service_get_otp, LoginError, ServiceAccount};
@@ -111,18 +111,17 @@ pub async fn get_otp(
     {
         Ok(otp) => Ok(otp),
         Err(e) if is_likely_session_expired(&e) => {
-            // Server-side session expired while the local auth state was
-            // still populated (e.g. multi-device login kicked this
-            // session — issue #264). Clear the stale auth context and
-            // cancel its keep-alive ping loop so subsequent commands
-            // don't repeat the same HTML-response failure.
+            tracing::warn!(
+                error = %e,
+                "OTP flow detected likely server-side session expiry; clearing local auth context"
+            );
             let taken = state.auth.write().await.take();
             if let Some(ctx) = taken {
                 ctx.ping_cancel.cancel();
             }
             Err(CommandError::new(
                 SESSION_REQUIRED_CODE,
-                "No active Beanfun session. Please log in and try again.",
+                SESSION_REQUIRED_MESSAGE,
             ))
         }
         Err(e) => Err(CommandError::from(e)),

@@ -63,6 +63,12 @@ use crate::services::beanfun::{client::BeanfunClient, session::Session};
 /// all reference one source of truth.
 pub const SESSION_REQUIRED_CODE: &str = "auth.session_required";
 
+/// Human-readable message paired with [`SESSION_REQUIRED_CODE`].
+/// Shared across every site that mints this error so a future
+/// wording change only touches one line.
+pub const SESSION_REQUIRED_MESSAGE: &str =
+    "No active Beanfun session. Please log in and try again.";
+
 /// Resolve the `(client, session)` pair from
 /// [`AppState::auth`][crate::commands::state::AppState::auth], mapping
 /// the unauthenticated case to a [`CommandError`] with
@@ -79,7 +85,7 @@ pub(crate) async fn require_auth(
         Some(ctx) => Ok((ctx.client.clone(), ctx.session.clone())),
         None => Err(CommandError::new(
             SESSION_REQUIRED_CODE,
-            "No active Beanfun session. Please log in and try again.",
+            SESSION_REQUIRED_MESSAGE,
         )),
     }
 }
