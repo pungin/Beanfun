@@ -79,6 +79,24 @@ use crate::services::beanfun::{
 /// [bc]: crate::services::beanfun::BeanfunClient
 /// [sesh]: crate::services::beanfun::Session
 async fn list_accounts_internal(state: &AppState) -> Result<AccountListResult, CommandError> {
+    /*
+     * #263: Check if accounts were prefetched during login. If so, return
+     * the cached data immediately (mirrors WPF where `BeanfunClient.Login`
+     * already called `GetAccounts`). This eliminates the "blank loading
+     * state" gap between login and AccountList render.
+     */
+    {
+        let mut guard = state.prefetched_accounts.write().await;
+        if let Some(accounts) = guard.take() {
+            tracing::debug!(
+                account_count = accounts.accounts.len(),
+                "get_accounts: returning prefetched data"
+            );
+            return Ok(accounts);
+        }
+    }
+
+    // No prefetched data — fetch from server
     let (client, session) = require_auth(state).await?;
     let result = service_get_accounts(
         &client,

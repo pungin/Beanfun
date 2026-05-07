@@ -100,6 +100,7 @@ use crate::commands::{
     state::{AppState, AuthContext, PendingGamepass, PendingQr, PendingTotp, PendingVerify},
 };
 use crate::services::beanfun::{
+    account::get_accounts as service_get_accounts,
     client::{BeanfunClient, ClientConfig, LoginRegion},
     login::{
         finalize_qr_login, get_session_key, init_qr_login, inject_webview_cookies,
@@ -158,7 +159,7 @@ async fn install_session_and_start_ping(
     session: Session,
 ) -> SessionInfo {
     let info = SessionInfo::from(&session);
-    let ctx = AuthContext::new(client, session);
+    let ctx = AuthContext::new(client.clone(), session.clone());
     let ping_client = ctx.client.clone();
     let ping_cancel = ctx.ping_cancel.clone();
 
@@ -170,6 +171,39 @@ async fn install_session_and_start_ping(
     let prev = state.auth.write().await.replace(ctx);
     if let Some(prev_ctx) = prev {
         prev_ctx.ping_cancel.cancel();
+    }
+
+    /*
+     * #263: Prefetch accounts immediately after login success, mirroring
+     * WPF behaviour where `BeanfunClient.Login` calls `GetAccounts` before
+     * returning. This ensures account data is available by the time the
+     * frontend navigates to AccountList, eliminating the "blank loading
+     * state" gap. Errors are logged but not surfaced — the frontend will
+     * still call `get_accounts` and handle the error there with proper UX.
+     */
+    match service_get_accounts(
+        &client,
+        &session,
+        &session.service_code,
+        &session.service_region,
+    )
+    .await
+    {
+        Ok(accounts) => {
+            tracing::debug!(
+                account_count = accounts.accounts.len(),
+                "prefetch: accounts loaded during login"
+            );
+            // Store the prefetched accounts so the frontend can use them immediately
+            let mut guard = state.prefetched_accounts.write().await;
+            *guard = Some(accounts);
+        }
+        Err(err) => {
+            tracing::warn!(
+                ?err,
+                "prefetch: get_accounts failed during login (frontend will retry)"
+            );
+        }
     }
 
     spawn_ping_loop(ping_client, ping_cancel);
@@ -1794,6 +1828,7 @@ pub async fn submit_verify(
 /// `tracing` logs (if any) read consistently in debugging.
 async fn clear_all_auth_state(state: &AppState) {
     *state.auth.write().await = None;
+    *state.prefetched_accounts.write().await = None;
     *state.pending_totp.write().await = None;
     *state.pending_qr.write().await = None;
     *state.pending_verify.write().await = None;
