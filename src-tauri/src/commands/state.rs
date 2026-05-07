@@ -457,6 +457,14 @@ pub struct AppState {
     /// logout) are rare and exclusive.
     pub auth: RwLock<Option<AuthContext>>,
 
+    /// #263: Prefetched account list from the login flow.
+    /// Populated by `install_session_and_start_ping` (mirrors WPF's
+    /// `BeanfunClient.Login` calling `GetAccounts` before returning).
+    /// The frontend `get_accounts` command checks this slot first and
+    /// returns the cached data if present, eliminating the "blank
+    /// loading state" gap. Cleared on logout and after being consumed.
+    pub prefetched_accounts: RwLock<Option<crate::services::beanfun::account::AccountListResult>>,
+
     /// Backend-held TOTP continuation — see [`PendingTotp`] for the
     /// full lifecycle. `None` whenever no login is awaiting a
     /// 6-digit OTP response. Uses its own [`RwLock`] rather than
@@ -524,6 +532,7 @@ impl AppState {
         Self {
             storage_root,
             auth: RwLock::new(None),
+            prefetched_accounts: RwLock::new(None),
             pending_totp: RwLock::new(None),
             pending_qr: RwLock::new(None),
             pending_verify: RwLock::new(None),

@@ -192,7 +192,14 @@ const launcher = useGameLauncher()
 
 type LoadState = 'loading' | 'ready' | 'error'
 
-const loadState = ref<LoadState>('loading')
+/*
+ * #263: Initialize loadState based on whether data is already present
+ * from a login-form prefetch. This eliminates the "blank loading state"
+ * gap when navigating from login forms that already called getServiceAccounts.
+ * Mirrors WPF behaviour where `BeanfunClient.Login` populates `accountList`
+ * before navigation, so `redrawSAccountList` renders immediately.
+ */
+const loadState = ref<LoadState>(account.serviceAccounts.length > 0 ? 'ready' : 'loading')
 /**
  * Backend-supplied error message kept alongside `loadState` so the
  * inline banner can surface the actual server reason without the
@@ -202,7 +209,14 @@ const loadState = ref<LoadState>('loading')
 const loadError = ref<string | null>(null)
 
 async function loadList(): Promise<void> {
-  loadState.value = 'loading'
+  /*
+   * #263: Only show loading state if there's no data yet. If the store
+   * already has accounts (from login-form prefetch), keep showing the
+   * existing data while the refresh runs in the background.
+   */
+  if (account.serviceAccounts.length === 0) {
+    loadState.value = 'loading'
+  }
   loadError.value = null
   try {
     await account.getServiceAccounts()
