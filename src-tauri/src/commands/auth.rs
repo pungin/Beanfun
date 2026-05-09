@@ -104,9 +104,9 @@ use crate::services::beanfun::{
     client::{BeanfunClient, ClientConfig, LoginRegion},
     login::{
         finalize_qr_login, get_session_key, init_qr_login, inject_webview_cookies,
-        login_totp as login_totp_service, login_with, logout as logout_service,
-        poll_qr_login_status, seed_webview_cookies_from_client, try_complete_gamepass_login,
-        LoginMethod, QrPollOutcome,
+        login_registered_device, login_totp as login_totp_service, login_with,
+        logout as logout_service, poll_qr_login_status, seed_webview_cookies_from_client,
+        try_complete_gamepass_login, LoginMethod, QrPollOutcome,
     },
     session::Credentials,
     verify::{
@@ -129,6 +129,13 @@ use crate::services::beanfun::{
 /// after a few minutes server-side; pinging every minute has proved
 /// sufficient (WPF users reported sessions surviving for days).
 const PING_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Poll cadence for the HK "registered device" continuation.
+///
+/// Matches WPF `MainWindow.bfAPPAutoLogin.Interval = 2 seconds`
+/// (`MainWindow.xaml.cs` L177) so the mobile-app approval flow feels
+/// the same as the legacy client.
+const DEVICE_REGISTRATION_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// Install a freshly-minted `(client, session)` pair onto
 /// [`AppState::auth`] and spawn the session keep-alive ping loop.
@@ -289,6 +296,63 @@ async fn run_ping_loop_with_interval(
     }
 }
 
+/// Drive WPF's `bfAPPAutoLogin` continuation loop until the server
+/// either approves / rejects / times out the device-registration
+/// request.
+///
+/// The service layer already ports one *single* `bfAPPAutoLogin.ashx`
+/// round-trip (`login_registered_device`). The WPF client wraps that
+/// call in a 2-second UI timer on both the HK regular and TOTP
+/// branches; without this command-layer loop the first
+/// `DeviceRegistrationRequired` result bubbles to the frontend as a
+/// terminal error, which is the regression users are seeing as
+/// "missing akey".
+async fn await_registered_device_login(
+    client: &BeanfunClient,
+    login_token: &str,
+    session_key: &str,
+    account_id: &str,
+    service_code: &str,
+    service_region: &str,
+) -> Result<Session, LoginError> {
+    await_registered_device_login_with_interval(
+        client,
+        login_token,
+        session_key,
+        account_id,
+        service_code,
+        service_region,
+        DEVICE_REGISTRATION_POLL_INTERVAL,
+    )
+    .await
+}
+
+async fn await_registered_device_login_with_interval(
+    client: &BeanfunClient,
+    login_token: &str,
+    session_key: &str,
+    account_id: &str,
+    service_code: &str,
+    service_region: &str,
+    interval: Duration,
+) -> Result<Session, LoginError> {
+    loop {
+        match login_registered_device(
+            client,
+            login_token,
+            session_key,
+            account_id,
+            service_code,
+            service_region,
+        )
+        .await?
+        {
+            Some(session) => return Ok(session),
+            None => tokio::time::sleep(interval).await,
+        }
+    }
+}
+
 /// Error code surfaced to the frontend when [`login_totp`] runs and
 /// there is no pending TOTP challenge on [`AppState::pending_totp`].
 ///
@@ -421,6 +485,9 @@ pub async fn login_regular(
     let client = BeanfunClient::new(ClientConfig::for_region(region))?;
     let creds = Credentials::new(account, password);
     let method = default_method_for(region);
+    let account_id = creds.account.clone();
+    let service_code = region.default_service_code().to_owned();
+    let service_region = region.default_service_region().to_owned();
 
     let outcome = login_with(&client, method, &creds).await;
 
@@ -439,6 +506,20 @@ pub async fn login_regular(
                 "TOTP one-time password required to complete login.",
             )
             .with_details(&display))
+        }
+        Err(LoginError::DeviceRegistrationRequired { login_token, .. }) => {
+            let session_key = get_session_key(&client).await?;
+            let session = await_registered_device_login(
+                &client,
+                &login_token,
+                &session_key,
+                &account_id,
+                &service_code,
+                &service_region,
+            )
+            .await?;
+            let info = install_session_and_start_ping(&state, client, session).await;
+            Ok(info)
         }
         Err(err) => Err(err.into()),
     }
@@ -491,10 +572,25 @@ pub async fn login_totp(
         (pt.client.clone(), pt.challenge.clone())
     };
 
-    let session = login_totp_service(
+    let session = match login_totp_service(
         &client, &challenge, &digits[0], &digits[1], &digits[2], &digits[3], &digits[4], &digits[5],
     )
-    .await?;
+    .await
+    {
+        Ok(session) => session,
+        Err(LoginError::DeviceRegistrationRequired { login_token, .. }) => {
+            await_registered_device_login(
+                &client,
+                &login_token,
+                &challenge.session_key,
+                &challenge.account_id,
+                &challenge.service_code,
+                &challenge.service_region,
+            )
+            .await?
+        }
+        Err(other) => return Err(other.into()),
+    };
 
     *state.pending_totp.write().await = None;
     let info = install_session_and_start_ping(&state, client, session).await;
@@ -1913,7 +2009,7 @@ mod tests {
     use crate::services::beanfun::Endpoints;
     use std::time::Duration as StdDuration;
     use url::Url;
-    use wiremock::matchers::{method as wm_method, path as wm_path};
+    use wiremock::matchers::{body_string_contains, method as wm_method, path as wm_path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn fake_session() -> Session {
@@ -1942,10 +2038,58 @@ mod tests {
         BeanfunClient::new(cfg).expect("client builds")
     }
 
+    fn device_login_client_against(server: &MockServer) -> BeanfunClient {
+        let base = Url::parse(&format!("{}/", server.uri())).expect("mock URL parses");
+        let endpoints = Endpoints {
+            login_base: base.clone(),
+            portal_base: base.clone(),
+            newlogin_base: base,
+        };
+        let mut cfg = ClientConfig::for_region(LoginRegion::HK);
+        cfg.endpoints = endpoints;
+        BeanfunClient::new(cfg).expect("client builds")
+    }
+
     async fn mount_echo_token_200(server: &MockServer) {
         Mock::given(wm_method("GET"))
             .and(wm_path("/beanfun_block/generic_handlers/echo_token.ashx"))
             .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .mount(server)
+            .await;
+    }
+
+    async fn mount_device_poll_success(server: &MockServer, login_token: &str, akey: &str) {
+        let poll_body =
+            format!(r#"{{"IntResult":"2","StrReslut":"MLogin/done.aspx?akey={akey}"}}"#);
+        Mock::given(wm_method("POST"))
+            .and(wm_path("/login/bfAPPAutoLogin.ashx"))
+            .and(body_string_contains(format!("LT={login_token}")))
+            .respond_with(ResponseTemplate::new(200).set_body_string(poll_body))
+            .mount(server)
+            .await;
+
+        Mock::given(wm_method("GET"))
+            .and(wm_path("/login/MLogin/done.aspx"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .mount(server)
+            .await;
+    }
+
+    async fn mount_login_completed_success(server: &MockServer, web_token: &str) {
+        Mock::given(wm_method("POST"))
+            .and(wm_path("/beanfun_block/bflogin/return.aspx"))
+            .and(body_string_contains("AuthKey="))
+            .respond_with(
+                ResponseTemplate::new(302)
+                    .append_header("Set-Cookie", format!("bfWebToken={web_token}; Path=/;"))
+                    .append_header("Location", format!("{}/after", server.uri())),
+            )
+            .mount(server)
+            .await;
+
+        Mock::given(wm_method("GET"))
+            .and(wm_path("/after"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("done"))
             .mount(server)
             .await;
     }
@@ -2164,6 +2308,61 @@ mod tests {
     }
 
     // ── split_otp_digits ──────────────────────────────────────────
+
+    #[tokio::test]
+    async fn await_registered_device_login_finishes_when_poll_returns_session() {
+        let server = MockServer::start().await;
+        let client = device_login_client_against(&server);
+        mount_device_poll_success(&server, "TOK_DEVICE", "AKEY_DEVICE").await;
+        mount_login_completed_success(&server, "WEB_DEVICE").await;
+
+        let session = await_registered_device_login_with_interval(
+            &client,
+            "TOK_DEVICE",
+            "SKEY_DEVICE",
+            "alice",
+            "610074",
+            "T9",
+            StdDuration::from_millis(10),
+        )
+        .await
+        .expect("device approval should complete login");
+
+        assert_eq!(session.region, LoginRegion::HK);
+        assert_eq!(session.skey, "SKEY_DEVICE");
+        assert_eq!(session.web_token, "WEB_DEVICE");
+        assert_eq!(session.account_id, "alice");
+    }
+
+    #[tokio::test]
+    async fn await_registered_device_login_surfaces_timeout() {
+        let server = MockServer::start().await;
+        let client = device_login_client_against(&server);
+
+        Mock::given(wm_method("POST"))
+            .and(wm_path("/login/bfAPPAutoLogin.ashx"))
+            .and(body_string_contains("LT=TOK_TIMEOUT"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(r#"{"IntResult":"-2","StrReslut":"timeout"}"#),
+            )
+            .mount(&server)
+            .await;
+
+        let err = await_registered_device_login_with_interval(
+            &client,
+            "TOK_TIMEOUT",
+            "SKEY_TIMEOUT",
+            "alice",
+            "610074",
+            "T9",
+            StdDuration::from_millis(10),
+        )
+        .await
+        .expect_err("timeout branch must surface as LoginError");
+
+        assert!(matches!(err, LoginError::DeviceLoginTimeout));
+    }
 
     #[test]
     fn split_otp_digits_accepts_six_ascii_digits() {
