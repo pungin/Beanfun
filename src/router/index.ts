@@ -86,6 +86,13 @@ import { PhysicalSize } from '@tauri-apps/api/dpi'
 
 import { registerSessionExpiredHandler } from '../services/invoke'
 
+let cachedWindowZoom = 1
+
+function physicalWindowSize(width: number, height: number): PhysicalSize {
+  const zoom = Math.max(1, cachedWindowZoom)
+  return new PhysicalSize(Math.ceil(width * zoom), Math.ceil(height * zoom))
+}
+
 /**
  * Resize the Tauri window to the given logical dimensions.
  * Exported so individual pages can call it on mount when their
@@ -93,7 +100,7 @@ import { registerSessionExpiredHandler } from '../services/invoke'
  * Settings page without the Game section when unauthenticated).
  */
 export function resizeWindow(width: number, height: number): void {
-  void getCurrentWindow().setSize(new PhysicalSize(width, height))
+  void getCurrentWindow().setSize(physicalWindowSize(width, height))
 }
 
 import LoginPage from '../pages/LoginPage.vue'
@@ -554,27 +561,28 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
    * Falls back to 900 when `window.screen` is unavailable (jsdom /
    * headless CI) so the spec harness keeps working.
    */
-  async function getMonitorHeight(): Promise<number> {
+  async function refreshMonitorMetrics(): Promise<void> {
     try {
       const monitor = await currentMonitor()
       if (monitor) {
-        // monitor.size is physical pixels; divide by scaleFactor to get logical pixels
-        return Math.floor(monitor.size.height / monitor.scaleFactor)
+        const isUhdMonitor = monitor.size.width >= 3840 || monitor.size.height >= 2160
+        cachedWindowZoom = isUhdMonitor ? Math.max(1, monitor.scaleFactor || 1) : 1
+        monitorHeight = Math.floor(monitor.size.height)
+        return
       }
     } catch {
       // fall through to CSS fallback
     }
     // CSS fallback — may be inaccurate on some WebView2 configs
     const avail = typeof window !== 'undefined' ? window.screen?.availHeight : undefined
-    return typeof avail === 'number' && avail > 0 ? avail : 900
+    cachedWindowZoom = 1
+    monitorHeight = typeof avail === 'number' && avail > 0 ? avail : 900
   }
 
   let monitorHeight = 900
 
-  // Fetch monitor height once on init and refresh on DPI change.
-  void getMonitorHeight().then((h) => {
-    monitorHeight = h
-  })
+  // Fetch monitor height/scale once on init and refresh on DPI change.
+  void refreshMonitorMetrics()
 
   function maxFitHeight(): number {
     // Leave 5% for taskbar + breathing room.
@@ -604,15 +612,16 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     const scrollH = root.scrollHeight
     if (scroll) scroll.style.overflow = ''
     const cap = maxFitHeight()
-    let zoom = 1.0
-    if (scrollH > cap) {
+    const nativeZoom = Math.max(1, cachedWindowZoom)
+    let zoom = nativeZoom
+    if (scrollH * zoom > cap) {
       zoom = cap / scrollH
     }
     const contentH = Math.ceil(scrollH * zoom)
     const h = Math.max(300, Math.min(contentH, cap))
     root.style.height = '100vh'
     void getCurrentWebview().setZoom(zoom)
-    void appWindow.setSize(new PhysicalSize(currentWidth, h))
+    void appWindow.setSize(new PhysicalSize(Math.ceil(currentWidth * zoom), h))
   }
 
   /**
@@ -694,6 +703,7 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     // A 1rem sentinel element detects font-size changes.
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', () => scheduleOnNextPaint(fitWindow), { passive: true })
+      void refreshMonitorMetrics().then(() => scheduleOnNextPaint(fitWindow))
 
       // Sentinel: a 0-size element whose width is 1rem. When the
       // system font size changes, its pixel width changes and

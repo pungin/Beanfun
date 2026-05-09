@@ -343,12 +343,15 @@ pub fn run() {
                 .eq_ignore_ascii_case("true");
 
         let mut args = vec![
-            // Lock rendering to 1:1 physical pixels so the app layout
-            // is immune to Windows "Text size" / DPI scaling. The
-            // router's fitWindow compensates by dividing the logical
-            // window size by the OS scale factor.
+            // Keep the existing DPI/resolution behaviour: render at
+            // 1:1 physical pixels and let the router's fitWindow
+            // compensate the logical window size.
             "--force-device-scale-factor=1".to_string(),
+            // Treat Windows Accessibility "Text size" as 100% so
+            // user text-size changes do not inflate app content.
+            "--force-text-scale-factor=1".to_string(),
         ];
+        tracing::info!("forcing WebView2 device scale and text scale factors");
 
         if disable_hw_accel {
             args.push("--disable-gpu".to_string());
