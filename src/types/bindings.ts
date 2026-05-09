@@ -1113,11 +1113,21 @@ async setActiveService(serviceCode: string, serviceRegion: string) : Promise<Res
  * 
  * # Errors
  * 
- * - `auth.session_required` — no login is active.
- * - Any [`LoginError`][le] surfaced by the service (transport,
- * JSON parse, WCDES decrypt, server-side intResult ≠ 1). The
- * P10.1 `From<LoginError>` impl maps each variant to its
- * structured `CommandError` shape.
+ * - `auth.session_required` — no login is active, **or** the
+ * server-side session expired mid-flight (issue #264). The
+ * latter is detected heuristically: when the OTP HTTP steps
+ * return a login-redirect HTML page instead of the expected
+ * JavaScript/JSON content, the regex-based parsers fail with
+ * [`LoginError::OtpMissingLongPollingKey`] or
+ * [`LoginError::OtpMissingSecretCode`]. We treat these as
+ * session-expired, clear the stale local auth context, and
+ * surface the canonical `auth.session_required` code so the
+ * frontend's session-expired handler redirects to the login
+ * page (with the i18n toast "您的登入狀態已失效，請重新登入。").
+ * - Any other [`LoginError`][le] surfaced by the service
+ * (transport, JSON parse, WCDES decrypt, server-side
+ * intResult ≠ 1). The P10.1 `From<LoginError>` impl maps
+ * each variant to its structured `CommandError` shape.
  * 
  * # Frontend usage
  * 
