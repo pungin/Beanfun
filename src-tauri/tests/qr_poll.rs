@@ -50,6 +50,13 @@ fn fake_init() -> QrLoginInit {
     }
 }
 
+fn fake_init_without_verification_token() -> QrLoginInit {
+    QrLoginInit {
+        verification_token: String::new(),
+        ..fake_init()
+    }
+}
+
 /// Build a [`BeanfunClient`] whose login_base / portal_base /
 /// newlogin_base all point at `server`. Region is parameterised so
 /// the HK guard test can use the same builder.
@@ -324,5 +331,27 @@ async fn request_carries_expected_headers_and_empty_form_body() {
         req.body.is_empty(),
         "POST body must be empty (WPF empty NameValueCollection serializes to ''), got {:?}",
         String::from_utf8_lossy(&req.body),
+    );
+}
+
+#[tokio::test]
+async fn request_omits_verification_header_when_init_had_no_token() {
+    let server = MockServer::start().await;
+    mount_check_login_status_with_message(&server, "Failed").await;
+    let client = client_for(&server, LoginRegion::TW);
+
+    poll_qr_login_status(&client, &fake_init_without_verification_token())
+        .await
+        .expect("happy roundtrip so we can inspect the request");
+
+    let received = server.received_requests().await.expect("requests recorded");
+    let req = received
+        .iter()
+        .find(|r| r.url.path() == "/QRLogin/CheckLoginStatus")
+        .expect("CheckLoginStatus request was sent");
+
+    assert!(
+        req.headers.get("RequestVerificationToken").is_none(),
+        "QR poll should mirror WPF null-token behavior by omitting the header"
     );
 }

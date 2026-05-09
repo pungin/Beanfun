@@ -286,20 +286,29 @@ async fn hk_region_returns_qr_unsupported_without_http_traffic() {
 }
 
 // -----------------------------------------------------------------------------
-// Step 1 (Login/Index) error propagation
+// Step 1 (Login/Index) token leniency
 // -----------------------------------------------------------------------------
 
 #[tokio::test]
-async fn missing_verification_token_propagates_from_index() {
+async fn missing_verification_token_still_initializes_qr() {
     let server = MockServer::start().await;
     mount_index_without_token(&server).await;
-    // No InitLogin mock — should never be called.
+
+    mount_init_login_get_json(
+        &server,
+        happy_init_body("https://target.example/auth?code=xyz"),
+    )
+    .await;
 
     let client = client_for(&server, LoginRegion::TW);
-    let err = init_qr_login(&client, SESSION_KEY)
+    let init = init_qr_login(&client, SESSION_KEY)
         .await
-        .expect_err("missing token should error before InitLogin");
-    assert!(matches!(err, LoginError::MissingVerificationToken));
+        .expect("missing token should not block QR init");
+    assert_eq!(init.verification_token, "");
+    assert_eq!(
+        init.bitmap_base64,
+        format!("data:image/png;base64,{QR_IMAGE_BASE64}")
+    );
 }
 
 // -----------------------------------------------------------------------------

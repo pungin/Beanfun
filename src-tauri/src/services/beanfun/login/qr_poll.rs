@@ -184,18 +184,21 @@ pub async fn poll_qr_login_status(
     //   rejects both alternatives with `HTTP 411 Length Required`
     //   (observed live 2026-04-18). An explicit zero-length header
     //   restores byte-equal wire parity with WPF's `UploadString`.
-    let resp = client
+    let mut req = client
         .http()
         .post(url)
         .header(header::ACCEPT, "application/json, text/plain, */*")
         .header(header::REFERER, referer_url.as_str())
         .header("Origin", origin)
-        .header("RequestVerificationToken", &init.verification_token)
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
         .header(header::CONTENT_LENGTH, "0")
-        .body("")
-        .send()
-        .await?;
+        .body("");
+
+    if !init.verification_token.is_empty() {
+        req = req.header("RequestVerificationToken", &init.verification_token);
+    }
+
+    let resp = req.send().await?;
 
     ensure_success(&resp, "QRLogin/CheckLoginStatus")?;
     let body = client.bounded_text(resp).await?;

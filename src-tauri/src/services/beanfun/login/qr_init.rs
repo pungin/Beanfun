@@ -61,7 +61,8 @@ use reqwest::header;
 use serde::Deserialize;
 use url::Url;
 
-use super::{ensure_success, get_login_index};
+use super::ensure_success;
+use crate::core::parser::extract_verification_token;
 use crate::services::beanfun::{BeanfunClient, LoginError, LoginRegion};
 
 /// QR-code login bootstrap data — what `GetQRCodeValue` returns in WPF
@@ -134,9 +135,26 @@ pub async fn init_qr_login(
     }
 
     // Step 1 — same `GET Login/Index?pSKey=...` call the TW Regular
-    // flow makes; reuse it so the antiforgery extraction lives in
-    // one place.
-    let index = get_login_index(client, session_key).await?;
+    // flow makes, but QR is intentionally more lenient: WPF leaves
+    // `requestVerificationToken = null` when the hidden input is absent
+    // and still proceeds to `Login/InitLogin`.
+    let index_url = client.login_url_with_skey("Login/Index", session_key)?;
+    let resp = client
+        .http()
+        .get(index_url.clone())
+        .header(header::ACCEPT, "text/html")
+        .send()
+        .await?;
+
+    ensure_success(&resp, "Login/Index")?;
+    let index_body = client.bounded_text(resp).await?;
+    let verification_token = extract_verification_token(&index_body).unwrap_or_else(|_| {
+        tracing::warn!(
+            step = "qr_init",
+            "Login/Index did not include __RequestVerificationToken; continuing like WPF",
+        );
+        String::new()
+    });
 
     // Step 2 — JSON GET. WPF's `Origin` header is the bare scheme +
     // host of the login base; `Url::origin().ascii_serialization()`
@@ -155,7 +173,7 @@ pub async fn init_qr_login(
         .http()
         .get(init_url)
         .header(header::ACCEPT, "application/json, text/plain, */*")
-        .header(header::REFERER, index.index_url.as_str())
+        .header(header::REFERER, index_url.as_str())
         .header("X-Requested-With", "XMLHttpRequest")
         .header("Origin", origin)
         .send()
@@ -202,7 +220,7 @@ pub async fn init_qr_login(
         skey: session_key.to_owned(),
         bitmap_base64,
         deeplink,
-        verification_token: index.verification_token,
+        verification_token,
     })
 }
 
