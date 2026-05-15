@@ -3262,7 +3262,20 @@ onBeforeUnmount(() => {
 
 .account-list__otp-field {
   width: 100%;
-  background: rgba(226, 226, 226, 0.3);
+  /*
+   * Issue #272 — was a literal `rgba(226, 226, 226, 0.3)` (a
+   * light-grey wash that read fine on the warm light-mode
+   * glass panel). In dark mode the same grey overlay landed
+   * on top of the `#252529` panel and produced a low-contrast
+   * smudge with the placeholder text inside it. Route the
+   * background through `color-mix` against the token's
+   * on-surface colour: 8% in light mode reproduces the same
+   * faint grey lift the original literal achieved, and in
+   * dark mode the same 8% becomes a subtle white tint (on
+   * `#e6e1e5`) that gives the field a visible chrome edge
+   * without blowing out brightness.
+   */
+  background: color-mix(in srgb, var(--bf-on-surface) 8%, transparent);
   border: 0;
   border-bottom: 2px solid var(--bf-outline-variant);
   font-family: 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
@@ -3274,6 +3287,19 @@ onBeforeUnmount(() => {
   color: var(--bf-on-surface);
   cursor: default;
   transition: border-color var(--bf-motion-fast);
+}
+
+/*
+ * Issue #272 — the OTP "尚未取得" placeholder used the browser
+ * default (`color` * ~54% in WebView2), which produced
+ * unreadable dark-grey-on-dark-grey in dark mode. Pin the
+ * placeholder to `--bf-on-surface-variant` (`#54443a` light /
+ * `#c9c5ca` dark) at 70% opacity so it still reads as
+ * secondary text while staying legible in both themes.
+ */
+.account-list__otp-field::placeholder {
+  color: var(--bf-on-surface-variant);
+  opacity: 0.7;
 }
 
 .account-list__otp-field:focus {
