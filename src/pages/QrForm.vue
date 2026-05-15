@@ -432,13 +432,29 @@ function handleGameStart(): void {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
-  color: #1f1a16;
+  /*
+   * Issue #272 — was hardcoded `#1f1a16` (the light-mode WPF dark
+   * brown). In dark mode the page background flips to ~#1c1b1f
+   * but this dark-on-dark text became unreadable. Route through
+   * `--bf-on-surface` so the token bridge in `design-tokens.css`
+   * (`#221a11` light / `#e6e1e5` dark) handles the contrast flip
+   * for free, matching every other glass-panel heading.
+   */
+  color: var(--bf-on-surface);
 }
 
 .qr-form__subtitle {
   margin: 0.375rem 0 0;
   font-size: 0.8125rem;
-  color: #54443a;
+  /*
+   * Issue #272 — same fix as the title. The literal `#54443a`
+   * was the light-mode WPF "muted body copy" color; in dark
+   * mode it would render as a barely-visible smudge against the
+   * dark glass background. `--bf-on-surface-variant` flips to
+   * `#c9c5ca` in dark mode, mirroring the contrast tier the
+   * mockups use for secondary text.
+   */
+  color: var(--bf-on-surface-variant);
 }
 
 .qr-form__display {

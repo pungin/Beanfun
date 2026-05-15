@@ -323,6 +323,31 @@
   color: #ffffff;
 }
 
+/*
+ * Issue #272 — `.bf-btn-secondary` baseline (above) hardcodes
+ * `background: rgba(255, 255, 255, 0.6)` for the light-mode
+ * frosted look, but the `color` property routes through
+ * `--bf-on-surface` (which flips to `#e6e1e5` in dark mode).
+ * The result on the dark theme was a white-on-white button
+ * (Settings page "管理帳號" / "工具" / "返回") that the user
+ * couldn't read. Mirror the bf-glass-card dark recipe: drop
+ * the white sheet to an 8%-alpha lift over the dark panel
+ * (visible chrome edge without blasting the eye), match the
+ * border to the same 12% white the glass-card uses, and bump
+ * the hover state to 16% for the same +0.08 alpha delta the
+ * light theme uses (0.6 → 0.85, ~+0.25 visual lift). `color`
+ * stays on the token — `--bf-on-surface` `#e6e1e5` reads
+ * cleanly against the new 8% lift.
+ */
+[data-theme='dark'] .bf-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme='dark'] .bf-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 [data-theme='dark'] .bf-custom-scrollbar::-webkit-scrollbar-thumb {
   background-color: rgba(255, 255, 255, 0.2);
 }
