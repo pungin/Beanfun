@@ -556,6 +556,15 @@ function handleGameStart(): void {
   background: rgba(255, 255, 255, 0.9);
 }
 
+[data-theme='dark'] .qr-form__qr-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme='dark'] .qr-form__qr-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .qr-form__overlay {
   position: fixed;
   inset: 0;
