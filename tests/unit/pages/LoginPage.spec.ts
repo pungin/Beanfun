@@ -59,6 +59,17 @@ describe('LoginPage shell', () => {
     expect(wrapper.find('.bf-titlebar').exists()).toBe(true)
   })
 
+  it('does not expose raw Material Symbols ligature names in the title bar', async () => {
+    const ctx = mountLoginPage()
+    const wrapper = await ctx.mount()
+
+    const titleBarText = wrapper.get('.bf-titlebar').text()
+    expect(titleBarText).not.toContain('settings')
+    expect(titleBarText).not.toContain('info')
+    expect(titleBarText).not.toContain('minimize')
+    expect(titleBarText).not.toContain('close')
+  })
+
   it('exposes a <RouterView /> slot for child routes', async () => {
     const ctx = mountLoginPage('/login/_test')
     const wrapper = await ctx.mount()
