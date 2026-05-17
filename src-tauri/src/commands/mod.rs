@@ -199,6 +199,7 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         // system (P10.1)
         system::version,
         system::ping,
+        system::window_visual_environment,
         // auth (P10.2 — regular family)
         auth::login_regular,
         auth::login_totp,
@@ -426,6 +427,7 @@ mod bindings_file_tests {
         // --- P10.1 — system smoke ------------------------------------
         "version",
         "ping",
+        "windowVisualEnvironment",
         // --- P10.2 — auth regular family -----------------------------
         "loginRegular",
         "loginTotp",
@@ -538,6 +540,7 @@ mod bindings_file_tests {
         // --- P10.1 ---------------------------------------------------
         "CommandError",
         "VersionInfo",
+        "WindowVisualEnvironment",
         // --- P10.2 — auth / session ---------------------------------
         "SessionInfo",
         "LoginRegion",

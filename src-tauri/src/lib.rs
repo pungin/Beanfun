@@ -139,7 +139,7 @@ fn resolve_storage_root() -> Result<PathBuf, CommandError> {
 /// whereas wrongly disabling it on a Win11 host would cause a visible
 /// regression there.
 #[cfg(target_os = "windows")]
-fn is_windows_10() -> bool {
+pub(crate) fn is_windows_10() -> bool {
     let info = os_info::get();
     if info.os_type() != os_info::Type::Windows {
         return false;
@@ -148,6 +148,11 @@ fn is_windows_10() -> bool {
         os_info::Version::Semantic(_, _, build) => *build < 22000,
         _ => false,
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn is_windows_10() -> bool {
+    false
 }
 
 /// Regenerate `src/types/bindings.ts` from the live

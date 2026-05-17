@@ -73,6 +73,21 @@ pub struct VersionInfo {
     pub tauri: String,
 }
 
+/// Runtime visual-environment hints consumed by the frontend before
+/// mounting.
+///
+/// Kept intentionally narrow: the frontend only needs to know when
+/// the host cannot safely use the Win11-style translucent glass recipe
+/// over a transparent Tauri window.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct WindowVisualEnvironment {
+    /// `true` on Windows builds whose build number is below 22000
+    /// (Windows 10). Those hosts need an opaque CSS fallback because
+    /// DWM/WebView2 transparency does not match Windows 11's Mica-like
+    /// composition.
+    pub is_windows_10: bool,
+}
+
 /// Return the static build metadata. Infallible; no parameters; no
 /// state.
 ///
@@ -86,6 +101,20 @@ pub fn version() -> VersionInfo {
     VersionInfo {
         app: env!("CARGO_PKG_VERSION").to_string(),
         tauri: tauri::VERSION.to_string(),
+    }
+}
+
+/// Return host visual-environment flags used by the web UI.
+///
+/// This is deliberately separate from [`version`]: build metadata is
+/// static, while this value depends on the user's OS. It is still
+/// synchronous and infallible so the frontend can query it before
+/// mounting without adding an error surface to startup.
+#[tauri::command]
+#[specta::specta]
+pub fn window_visual_environment() -> WindowVisualEnvironment {
+    WindowVisualEnvironment {
+        is_windows_10: crate::is_windows_10(),
     }
 }
 
@@ -224,6 +253,15 @@ mod tests {
             !info.tauri.is_empty(),
             "tauri::VERSION must not be empty at build time"
         );
+    }
+
+    #[test]
+    fn window_visual_environment_reports_non_windows_as_not_windows_10() {
+        let info = window_visual_environment();
+        #[cfg(not(target_os = "windows"))]
+        assert!(!info.is_windows_10);
+        #[cfg(target_os = "windows")]
+        let _ = info.is_windows_10;
     }
 
     #[tokio::test]
