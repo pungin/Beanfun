@@ -2193,6 +2193,51 @@ describe('AccountList page', () => {
     expect(useAccountStore().selectedSid).toBe(POPULATED_LIST.accounts[0]!.sid)
   })
 
+  it('does not fast-path cached accounts when selected game differs from session', async () => {
+    /*
+     * Regression for issue #274: the UI could retain the previous
+     * selected game (e.g. Mabinogi icon/name) while the authenticated
+     * backend session and cached account list still belonged to the
+     * login-default game (e.g. MapleStory). The old remount fast-path
+     * only checked "accounts exist", skipped `setActiveService`, and
+     * left users looking at MapleStory accounts under a Mabinogi
+     * header until they manually switched away and back.
+     */
+    vi.mocked(commands.listGames).mockReturnValueOnce(
+      ok({
+        ini: {
+          '610074_T9': MAPLESTORY_TW_INI,
+          '610153_TN': MABINOGI_TN_INI,
+        },
+        services: [MAPLESTORY_TW, MABINOGI_TN],
+      }),
+    )
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+
+    useAuthStore().session = { ...FAKE_SESSION, service_code: '610074', service_region: 'T9' }
+    useConfigStore().entries['loginGame'] = '610153_TN'
+
+    const gameStore = useGameStore()
+    gameStore.selectedGameCode = '610153_TN'
+
+    const accountStore = useAccountStore()
+    accountStore.serviceAccounts = POPULATED_LIST.accounts
+    accountStore.selectedSid = 'sid-stale'
+
+    const ctx = buildHarness()
+    await ctx.mountIt()
+    await flushPromises()
+
+    expect(commands.listGames).toHaveBeenCalledTimes(1)
+    expect(commands.setActiveService).toHaveBeenCalledTimes(1)
+    expect(commands.setActiveService).toHaveBeenCalledWith('610153', 'TN')
+    expect(commands.getAccounts).toHaveBeenCalledTimes(1)
+    expect(useAuthStore().session?.service_code).toBe('610153')
+    expect(useAuthStore().session?.service_region).toBe('TN')
+    expect(useGameStore().selectedGameCode).toBe('610153_TN')
+    expect(useAccountStore().selectedSid).toBe('sid-1')
+  })
+
   it('still re-fetches on remount when serviceAccounts cache is empty (cold mount baseline)', async () => {
     /*
      * Sanity-check the negative branch: empty store + live session

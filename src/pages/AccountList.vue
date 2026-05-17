@@ -905,8 +905,17 @@ async function setupGameOnMount(): Promise<void> {
    * reset" because the persistent CSV (`AccountOrder_<code>_<region>`)
    * is only re-applied AFTER the HTTP response lands.
    *
-   * Skipping is safe because every code path that *should*
-   * cause a re-fetch already clears `serviceAccounts` first:
+   * Skipping is safe only when the cached account list still
+   * belongs to the same game the UI says is active. A routed
+   * remount can preserve `game.selectedGameCode` from Config.xml /
+   * previous selection even while the backend session is still
+   * pinned to the login default; in that mismatch shape we must
+   * fall through to `selectActiveGame` so `setActiveService`
+   * runs before the next account-list fetch.
+   *
+   * Every code path that *should* cause a re-fetch either clears
+   * `serviceAccounts` first or leaves selectedGame/session
+   * intentionally mismatched:
    *
    * - logout / session expired → `clearAccountSession` resets
    *   the store (router guard + `registerSessionExpiredHandler`).
@@ -920,7 +929,14 @@ async function setupGameOnMount(): Promise<void> {
    * sentinel forever (no `loadList` to flip it to `'ready'`),
    * so we flip it inline before returning.
    */
-  if (account.serviceAccounts.length > 0 && auth.session !== null) {
+  const session = auth.session
+  const selectedGameCode = game.selectedGameCode
+  const sessionGameCode =
+    session !== null ? gameCodeOf(session.service_code, session.service_region) : null
+  const cachedAccountsMatchSession =
+    selectedGameCode === null || selectedGameCode === sessionGameCode
+
+  if (account.serviceAccounts.length > 0 && session !== null && cachedAccountsMatchSession) {
     loadState.value = 'ready'
     return
   }
@@ -933,8 +949,6 @@ async function setupGameOnMount(): Promise<void> {
   }
 
   const saved = configStore.get('loginGame') ?? ''
-  const session = auth.session
-
   if (saved && session) {
     const sep = saved.lastIndexOf('_')
     if (sep > 0) {
