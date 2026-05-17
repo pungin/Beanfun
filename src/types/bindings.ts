@@ -11,7 +11,7 @@ export const commands = {
 /**
  * Return the static build metadata. Infallible; no parameters; no
  * state.
- * 
+ *
  * Intended as the simplest possible Tauri command — if this
  * doesn't round-trip correctly, nothing else will. Also serves as
  * the canonical example of a sync `#[tauri::command]` with a
@@ -21,8 +21,19 @@ async version() : Promise<VersionInfo> {
     return await TAURI_INVOKE("version");
 },
 /**
+ * Return host visual-environment flags used by the web UI.
+ *
+ * This is deliberately separate from [`version`]: build metadata is
+ * static, while this value depends on the user's OS. It is still
+ * synchronous and infallible so the frontend can query it before
+ * mounting without adding an error surface to startup.
+ */
+async windowVisualEnvironment() : Promise<WindowVisualEnvironment> {
+    return await TAURI_INVOKE("window_visual_environment");
+},
+/**
  * Round-trip an input string through a blocking worker thread.
- * 
+ *
  * Exercises the canonical Win32-wrapping pattern: the closure runs
  * on a [`tokio::task::spawn_blocking`] pool worker (not the reactor
  * thread), sleeps for 60 ms to prove the `await` point genuinely
@@ -3081,6 +3092,22 @@ app: string;
  * Tauri framework version ([`tauri::VERSION`] at compile time).
  */
 tauri: string }
+/**
+ * Runtime visual-environment hints consumed by the frontend before
+ * mounting.
+ *
+ * Kept intentionally narrow: the frontend only needs to know when
+ * the host cannot safely use the Win11-style translucent glass recipe
+ * over a transparent Tauri window.
+ */
+export type WindowVisualEnvironment = {
+/**
+ * `true` on Windows builds whose build number is below 22000
+ * (Windows 10). Those hosts need an opaque CSS fallback because
+ * DWM/WebView2 transparency does not match Windows 11's Mica-like
+ * composition.
+ */
+is_windows_10: boolean }
 
 /** tauri-specta globals **/
 

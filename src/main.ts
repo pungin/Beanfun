@@ -60,6 +60,18 @@ import { createAppRouter, installRouterGuards } from './router'
 import { useAccountStore } from './stores/account'
 import { useAuthStore } from './stores/auth'
 import { useGameStore } from './stores/game'
+import { commands } from './types/bindings'
+
+async function applyPlatformVisualHints(): Promise<void> {
+  try {
+    const environment = await commands.windowVisualEnvironment()
+    if (environment.is_windows_10) {
+      document.documentElement.dataset.platform = 'windows-10'
+    }
+  } catch (err) {
+    console.warn('[main] window_visual_environment failed; using default visual style', err)
+  }
+}
 
 const app = createApp(App)
 
@@ -111,7 +123,9 @@ installRouterGuards(router, {
 
 document.addEventListener('contextmenu', (e) => e.preventDefault())
 
-app.mount('#app')
+void applyPlatformVisualHints().finally(() => {
+  app.mount('#app')
+})
 
 /*
  * Disable the browser right-click context menu so the app feels
