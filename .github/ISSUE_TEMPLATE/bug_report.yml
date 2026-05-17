@@ -1,0 +1,60 @@
+name: "提出 Bug"
+description: "回報你遇到的問題"
+labels: ["bug"]
+body:
+  - type: input
+    id: feature
+    attributes:
+      label: 發生問題的功能
+      description: 請說明是哪個功能出了問題
+      placeholder: "例如：登入、啟動遊戲、自動輸入密碼..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      description: 請描述如何重現這個問題
+      placeholder: |
+        1. 開啟程式
+        2. 點擊 ...
+        3. 出現 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: 錯誤訊息或截圖
+      description: 如果有錯誤訊息或截圖，請貼在這裡
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: 作業系統版本
+      placeholder: "例如：Windows 10 22H2、Windows 11 24H2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 是否只有特定帳號 / 特定遊戲才會發生？
+      options:
+        - 所有帳號 / 遊戲都會發生
+        - 只有特定帳號會發生
+        - 只有特定遊戲會發生
+        - 不確定
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 補充說明
+      description: 其他你覺得有幫助的資訊
+    validations:
+      required: false
