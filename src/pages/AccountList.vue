@@ -111,6 +111,7 @@ import {
   Plus,
   Refresh,
   Service,
+  Setting,
   SwitchButton,
   User,
   VideoPlay,
@@ -2114,7 +2115,7 @@ onBeforeUnmount(() => {
         data-test="account-list-settings"
         @click="handleOpenSettings"
       >
-        <span class="material-symbols-outlined">settings</span>
+        <el-icon aria-hidden="true"><Setting /></el-icon>
       </button>
       <button
         type="button"
@@ -2123,7 +2124,7 @@ onBeforeUnmount(() => {
         data-test="account-list-about"
         @click="handleOpenAbout"
       >
-        <span class="material-symbols-outlined">info</span>
+        <el-icon aria-hidden="true"><InfoFilled /></el-icon>
       </button>
     </TitleBar>
     <div class="account-list__scroll">
@@ -2603,7 +2604,7 @@ onBeforeUnmount(() => {
   transition: background 150ms ease;
   padding: 0;
 }
-.account-list__titlebar-btn .material-symbols-outlined {
+.account-list__titlebar-btn .el-icon {
   font-size: 18px;
 }
 .account-list__titlebar-btn:hover {
@@ -2722,6 +2723,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   min-width: 0;
   flex: 1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.0625rem;
@@ -2734,9 +2736,13 @@ onBeforeUnmount(() => {
 }
 
 .account-list__game-name {
+  max-width: 100%;
   font-size: 1.0625rem;
   font-weight: 700;
   line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account-list__game-status {
@@ -2774,6 +2780,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
+  min-width: 0;
   white-space: nowrap;
 }
 
@@ -2792,12 +2799,15 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .account-list__balance {
   display: flex;
   align-items: center;
   gap: 0.375rem;
+  flex: 1 1 15rem;
+  min-width: 0;
 }
 
 .account-list__balance-label {
@@ -2850,9 +2860,10 @@ onBeforeUnmount(() => {
 
 .account-list__quick-actions {
   display: grid;
-  grid-template-columns: repeat(2, auto);
+  grid-template-columns: repeat(2, minmax(0, auto));
   gap: 0.25rem;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .account-list__quick-btn {
@@ -2871,6 +2882,7 @@ onBeforeUnmount(() => {
     color var(--bf-motion-fast),
     background var(--bf-motion-fast);
   white-space: nowrap;
+  min-width: 0;
 }
 
 .account-list__quick-btn:hover {

@@ -1,8 +1,22 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { ElIcon } from 'element-plus'
+import {
+  Close,
+  Grid,
+  InfoFilled,
+  Key,
+  Lock,
+  Minus,
+  Monitor,
+  Promotion,
+  Setting,
+  SwitchButton,
+  VideoPlay,
+} from '@element-plus/icons-vue'
 import { commands } from '../types/bindings'
 
 const route = useRoute()
@@ -16,6 +30,24 @@ const titleText = computed(() => {
 
 const titleIcon = computed(() => {
   return (route.meta.titleIcon as string | undefined) ?? 'coffee'
+})
+
+const TITLE_ICON_MAP: Record<string, Component> = {
+  coffee: Monitor,
+  encrypted: Lock,
+  info: InfoFilled,
+  login: SwitchButton,
+  manage_accounts: Key,
+  public: Promotion,
+  qr_code_2: Grid,
+  settings: Setting,
+  shield_lock: Lock,
+  sports_esports: VideoPlay,
+  verified_user: Lock,
+}
+
+const titleIconComponent = computed(() => {
+  return TITLE_ICON_MAP[titleIcon.value] ?? Monitor
 })
 
 function handleDrag(e: MouseEvent): void {
@@ -47,7 +79,9 @@ function handleClose(): void {
 <template>
   <div class="bf-titlebar" @mousedown="handleDrag">
     <div class="bf-titlebar__left">
-      <span class="material-symbols-outlined bf-titlebar__icon">{{ titleIcon }}</span>
+      <el-icon class="bf-titlebar__icon" aria-hidden="true">
+        <component :is="titleIconComponent" />
+      </el-icon>
       <span class="bf-titlebar__title">{{ titleText }}</span>
     </div>
     <div class="bf-titlebar__right">
@@ -61,7 +95,7 @@ function handleClose(): void {
         @mousedown.stop
         @click="handleMinimize"
       >
-        <span class="material-symbols-outlined">minimize</span>
+        <el-icon aria-hidden="true"><Minus /></el-icon>
       </button>
       <button
         type="button"
@@ -70,7 +104,7 @@ function handleClose(): void {
         @mousedown.stop
         @click="handleClose"
       >
-        <span class="material-symbols-outlined">close</span>
+        <el-icon aria-hidden="true"><Close /></el-icon>
       </button>
     </div>
   </div>
@@ -92,27 +126,35 @@ function handleClose(): void {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
   pointer-events: none;
 }
 .bf-titlebar__icon {
   font-size: 20px;
   color: var(--bf-primary-container, #ff8201);
+  flex: 0 0 20px;
 }
 .bf-titlebar__title {
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--bf-on-surface, #221a11);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .bf-titlebar__right {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex: 0 0 auto;
 }
 .bf-titlebar__actions {
   display: flex;
   align-items: center;
   gap: 2px;
   margin-right: 4px;
+  flex: 0 0 auto;
 }
 .bf-titlebar__btn {
   appearance: none;
@@ -129,7 +171,7 @@ function handleClose(): void {
   font: inherit;
   padding: 0;
 }
-.bf-titlebar__btn .material-symbols-outlined {
+.bf-titlebar__btn .el-icon {
   font-size: 18px;
 }
 .bf-titlebar__btn:hover {

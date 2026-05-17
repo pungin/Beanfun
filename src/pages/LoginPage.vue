@@ -10,6 +10,8 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { ElIcon } from 'element-plus'
+import { InfoFilled, Promotion, Setting } from '@element-plus/icons-vue'
 import TitleBar from '../components/TitleBar.vue'
 import { useConfigStore } from '../stores/config'
 import type { LoginRegion } from '../types/bindings'
@@ -62,14 +64,14 @@ function handleOpenAbout(): void {
         :title="`Region: ${currentRegion}`"
         @click="toggleRegion"
       >
-        <span class="material-symbols-outlined login-shell__region-icon">public</span>
+        <el-icon class="login-shell__region-icon" aria-hidden="true"><Promotion /></el-icon>
         <span class="login-shell__region-label">{{ currentRegion }}</span>
       </button>
       <button type="button" class="login-shell__action-btn" @click="handleOpenSettings">
-        <span class="material-symbols-outlined">settings</span>
+        <el-icon aria-hidden="true"><Setting /></el-icon>
       </button>
       <button type="button" class="login-shell__action-btn" @click="handleOpenAbout">
-        <span class="material-symbols-outlined">info</span>
+        <el-icon aria-hidden="true"><InfoFilled /></el-icon>
       </button>
     </TitleBar>
     <div class="login-shell__body">
@@ -119,7 +121,7 @@ function handleOpenAbout(): void {
   transition: background 150ms ease;
   padding: 0;
 }
-.login-shell__action-btn .material-symbols-outlined {
+.login-shell__action-btn .el-icon {
   font-size: 18px;
 }
 .login-shell__action-btn:hover {
