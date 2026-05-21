@@ -205,6 +205,12 @@ async fn set_active_service_internal(
         Some(ctx) => {
             ctx.session.service_code = service_code;
             ctx.session.service_region = service_region;
+            drop(guard);
+            // Invalidate prefetched accounts (#286): the prefetch was
+            // performed for the login-time default game; switching the
+            // active service means the next `get_accounts` must fetch
+            // fresh data for the newly selected game.
+            *state.prefetched_accounts.write().await = None;
             Ok(())
         }
         None => Err(CommandError::new(
@@ -1103,5 +1109,35 @@ mod tests {
         let ctx = guard.as_ref().expect("auth populated");
         assert_eq!(ctx.session.service_code, "");
         assert_eq!(ctx.session.service_region, "");
+    }
+
+    /// #286: Switching active service must invalidate the
+    /// `prefetched_accounts` cache so the next `get_accounts` call
+    /// fetches fresh data for the new game instead of returning stale
+    /// prefetched accounts from the login-time default game.
+    #[tokio::test]
+    async fn set_active_service_clears_prefetched_accounts() {
+        let app = empty_state();
+        {
+            let mut guard = app.auth.write().await;
+            *guard = Some(seeded_auth_context());
+        }
+        {
+            let mut guard = app.prefetched_accounts.write().await;
+            *guard = Some(AccountListResult {
+                accounts: vec![],
+                amount_limit_notice: crate::services::beanfun::AmountLimitNotice::None,
+            });
+        }
+
+        set_active_service_internal(&app, "610153".into(), "TN".into())
+            .await
+            .expect("switch succeeds");
+
+        let guard = app.prefetched_accounts.read().await;
+        assert!(
+            guard.is_none(),
+            "prefetched_accounts must be cleared after service switch"
+        );
     }
 }
