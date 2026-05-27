@@ -88,6 +88,7 @@ import { ElButton, ElMessage, ElStep, ElSteps } from 'element-plus'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { AUTH_ACTIONS, useAuthStore } from '../stores/auth'
+import { useAccountStore } from '../stores/account'
 import { useConfigStore } from '../stores/config'
 import { CommandInvocationError, wrapCommand } from '../services/invoke'
 import { commands } from '../types/bindings'
@@ -131,6 +132,7 @@ const STEP_COMPLETE = 4
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
+const account = useAccountStore()
 const config = useConfigStore()
 
 /**
@@ -203,6 +205,7 @@ async function registerEventListeners(): Promise<void> {
   const successUnlisten = await listen<SessionInfo>(GAMEPASS_SUCCESS_EVENT, async (event) => {
     if (disposed) return
     step.value = STEP_COMPLETE
+    account.clearSessionData()
     auth.applyGamepassSession(event.payload)
     disposed = true
     await router.push('/accounts')

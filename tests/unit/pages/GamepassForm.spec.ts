@@ -179,6 +179,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 import { commands } from '../../../src/types/bindings'
 import GamepassForm from '../../../src/pages/GamepassForm.vue'
 import { useAuthStore } from '../../../src/stores/auth'
+import { useAccountStore } from '../../../src/stores/account'
 import { useConfigStore } from '../../../src/stores/config'
 import { createAppI18n, i18nMessages, setLocale } from '../../../src/i18n'
 
@@ -425,11 +426,28 @@ describe('GamepassForm', () => {
     await flushPromises()
 
     const auth = useAuthStore()
+    const account = useAccountStore()
     const applySpy: MockInstance = vi.spyOn(auth, 'applyGamepassSession')
+    const clearSpy: MockInstance = vi.spyOn(account, 'clearSessionData')
+    account.serviceAccounts = [
+      {
+        is_enable: true,
+        visible: true,
+        is_inherited: false,
+        sid: 'stale-sid',
+        ssn: '1',
+        sname: 'Stale Account',
+        screatetime: null,
+        slastusedtime: null,
+        sauthtype: null,
+      },
+    ]
 
     await fireEvent('gamepass-login-success', SAMPLE_SESSION)
 
+    expect(clearSpy).toHaveBeenCalledTimes(1)
     expect(applySpy).toHaveBeenCalledWith(SAMPLE_SESSION)
+    expect(account.serviceAccounts).toEqual([])
     expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('4')
     expect(ctx.router.currentRoute.value.path).toBe('/accounts')
   })
