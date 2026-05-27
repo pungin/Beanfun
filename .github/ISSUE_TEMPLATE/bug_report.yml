@@ -1,13 +1,13 @@
-name: "提出 Bug / Bug Report"
-description: "回報你遇到的問題 / Report an issue you encountered"
-labels: ["bug"]
+name: '提出 Bug / Bug Report'
+description: '回報你遇到的問題 / Report an issue you encountered'
+labels: ['bug']
 body:
   - type: input
     id: feature
     attributes:
       label: 發生問題的功能 / Affected Feature
       description: 請說明是哪個功能出了問題 / Which feature is affected?
-      placeholder: "例如 e.g. 登入 Login、啟動遊戲 Launch Game、自動輸入密碼 Auto-fill Password..."
+      placeholder: '例如 e.g. 登入 Login、啟動遊戲 Launch Game、自動輸入密碼 Auto-fill Password...'
     validations:
       required: true
 
@@ -35,7 +35,7 @@ body:
     id: os
     attributes:
       label: 作業系統版本 / OS Version
-      placeholder: "例如 e.g. Windows 10 22H2、Windows 11 24H2"
+      placeholder: '例如 e.g. Windows 10 22H2、Windows 11 24H2'
     validations:
       required: true
 
