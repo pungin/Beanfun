@@ -84,7 +84,7 @@
 //! | Code                                    | Origin                                                                                             |
 //! | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
 //! | `launcher.spawn_blocking_failed`        | [`tokio::task::JoinError`] from a `spawn_blocking` call (task panicked or was aborted).            |
-//! | `launcher.platform_unsupported`         | [`detect_game_path`] called on a non-Windows build (registry access is HKCU-only, Windows-specific). |
+//! | `launcher.platform_unsupported`         | [`detect_game_path`] called on a non-Windows build (registry/default-path probes are Windows-specific). |
 //!
 //! Every `services::game::launch_game` result flows through the
 //! existing [`From<GameError> for CommandError`][gfrom] in
@@ -104,11 +104,10 @@
 //!   key format (see [`game_path_config_key`]). Cross-platform —
 //!   the write side is just `Config.xml` I/O.
 //! - [`detect_game_path`] — check `Config.xml` first, then fall
-//!   back to a registry lookup (HKCU, with the WPF-compatible
-//!   `HKEY_LOCAL_MACHINE\` prefix strip on `dir_reg`), writing the
-//!   discovered value back to `Config.xml` for future launches. This
-//!   matches the P10.3 Q6 = B decision (read + write fused into one
-//!   IPC call, matching WPF parity).
+//!   back to registry lookup and common install directories,
+//!   writing the discovered value back to `Config.xml` for future
+//!   launches. This matches the P10.3 Q6 = B decision (read + write
+//!   fused into one IPC call, matching WPF parity).
 //!
 //! ## Input shape (INI separation)
 //!
@@ -139,14 +138,12 @@
 //! 1. key = game_path_config_key(dir_value_name, game_code)
 //! 2. let cached = Config[key]
 //!    if cached != "" → return Some(cached)          (no registry call)
-//! 3. if dir_reg == "" → return None                 (WPF L578 guard)
-//! 4. subkey = dir_reg.strip_prefix("HKEY_LOCAL_MACHINE\\").unwrap_or(dir_reg)
-//!                                                   (WPF L580 literal strip)
-//! 5. spawn_blocking {
-//!      registry::read_game_path(Hive::CurrentUser, subkey, dir_value_name)
-//!    }
-//! 6. if found → Config[key] = value                 (WPF L589-592)
-//! 7. return the registry value (Some / None)
+//! 3. build registry candidates from dir_reg's hive prefix
+//! 4. spawn_blocking { read candidates until one returns a value }
+//! 5. if found → Config[key] = value                 (WPF L589-592)
+//! 6. otherwise probe common Program Files install paths
+//! 7. if found → Config[key] = value
+//! 8. return the discovered value (Some / None)
 //! ```
 //!
 //! Registry access is gated on `target_os = "windows"`; non-Windows
@@ -443,10 +440,10 @@ pub struct AutoPasteRequest {
 pub(crate) const SPAWN_BLOCKING_FAILED_CODE: &str = "launcher.spawn_blocking_failed";
 
 /// Command-layer code returned by [`detect_game_path`] on
-/// non-Windows build targets. Registry access is HKCU-only and
-/// implemented via `winreg`, which is itself `#[cfg(windows)]`;
-/// dev boxes (macOS / Linux) can still `cargo check` the command
-/// signature — the body simply errors out at runtime.
+/// non-Windows build targets. Registry and Program Files probes are
+/// implemented via Windows-specific APIs/conventions; dev boxes
+/// (macOS / Linux) can still `cargo check` the command signature —
+/// the body simply errors out at runtime.
 ///
 /// Kept at module scope (rather than inlined into the non-Windows
 /// fallback helper) so the `platform_unsupported_code_is_stable`
@@ -461,7 +458,7 @@ pub(crate) const PLATFORM_UNSUPPORTED_CODE: &str = "launcher.platform_unsupporte
 fn platform_unsupported_error() -> CommandError {
     CommandError::new(
         PLATFORM_UNSUPPORTED_CODE,
-        "detect_game_path requires Windows (HKCU registry lookup for game install path)",
+        "detect_game_path requires Windows (registry/default-path lookup for game install path)",
     )
 }
 
@@ -705,16 +702,16 @@ pub async fn set_game_path(
 }
 
 /// Resolve the install path for `game_code`, consulting
-/// `Config.xml` first and falling back to the Windows registry.
-/// Writes any freshly-discovered registry value back to Config so
-/// future calls are fast (WPF parity — see L574-607).
+/// `Config.xml` first and falling back to the Windows registry,
+/// then common install directories. Writes any freshly-discovered
+/// value back to Config so future calls are fast.
 ///
 /// Returns:
-/// - `Ok(Some(path))` — Config already had a value **or** the
-///   registry supplied one (in which case Config is now updated).
-/// - `Ok(None)` — both Config and the registry came up empty (or
-///   `dir_reg` was an empty string, meaning the INI has no fallback
-///   key configured). WPF shows an empty `t_GamePath` textbox in
+/// - `Ok(Some(path))` — Config already had a value, the registry
+///   supplied one, or a default install-path probe found the exe.
+///   Freshly-discovered values are written back to Config.
+/// - `Ok(None)` — Config, registry, and default install-path probes
+///   all came up empty. WPF shows an empty `t_GamePath` textbox in
 ///   this case; this shape lets the frontend render the same way
 ///   without another round-trip.
 ///
@@ -724,10 +721,13 @@ pub async fn set_game_path(
 /// - `dir_value_name` — INI-sourced Config column name and
 ///   registry `REG_SZ` value name (WPF reuses the same string for
 ///   both, L574 / L587).
-/// - `dir_reg` — INI-sourced registry subkey path. May contain a
-///   leading `HKEY_LOCAL_MACHINE\` literal which is stripped
-///   verbatim before the HKCU lookup (WPF L580 parity; see module
-///   docs for why only HKLM).
+/// - `dir_reg` — INI-sourced registry subkey path. Explicit
+///   `HKEY_LOCAL_MACHINE\` / `HKEY_CURRENT_USER\` prefixes drive
+///   the matching hive lookup; unprefixed paths try HKCU first,
+///   then HKLM.
+/// - `command_line_template` — INI-sourced executable template.
+///   The first token is used to derive the executable filename for
+///   default install-path probes.
 ///
 /// # Errors
 ///
@@ -748,14 +748,28 @@ pub async fn detect_game_path(
     game_code: String,
     dir_value_name: String,
     dir_reg: String,
+    command_line_template: String,
 ) -> Result<Option<String>, CommandError> {
     #[cfg(target_os = "windows")]
     {
-        detect_imp::detect_game_path_impl(&state, game_code, dir_value_name, dir_reg).await
+        detect_imp::detect_game_path_impl(
+            &state,
+            game_code,
+            dir_value_name,
+            dir_reg,
+            command_line_template,
+        )
+        .await
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (state, game_code, dir_value_name, dir_reg);
+        let _ = (
+            state,
+            game_code,
+            dir_value_name,
+            dir_reg,
+            command_line_template,
+        );
         Err(platform_unsupported_error())
     }
 }
@@ -924,18 +938,120 @@ mod detect_imp {
     use super::*;
     use crate::services::registry::{self, Hive};
 
-    /// WPF literal prefix stripped from `dir_reg` before the HKCU
-    /// lookup (see `MainWindow.xaml.cs` L580). Kept as a named
-    /// constant so it's visible in one place and the
-    /// `detect_strip_prefix_helper_matches_wpf_literal` unit test
-    /// can pin the exact bytes.
+    /// Registry hive prefixes accepted from INI `dir_reg` values.
     pub(super) const HKLM_PREFIX: &str = "HKEY_LOCAL_MACHINE\\";
+    pub(super) const HKCU_PREFIX: &str = "HKEY_CURRENT_USER\\";
 
-    /// Strip the WPF literal `HKEY_LOCAL_MACHINE\` prefix from
-    /// `dir_reg` (no-op if absent). Pure function so tests can
-    /// cover the parity quirk without booting the full command.
-    pub(super) fn strip_hklm_prefix(dir_reg: &str) -> &str {
-        dir_reg.strip_prefix(HKLM_PREFIX).unwrap_or(dir_reg)
+    pub(super) fn registry_lookup_candidates(dir_reg: &str) -> Vec<(Hive, String)> {
+        let dir_reg = dir_reg.trim();
+        if dir_reg.is_empty() {
+            return Vec::new();
+        }
+
+        let mut candidates = if let Some(subkey) = dir_reg.strip_prefix(HKLM_PREFIX) {
+            vec![
+                (Hive::LocalMachine, subkey.to_string()),
+                (Hive::CurrentUser, subkey.to_string()),
+            ]
+        } else if let Some(subkey) = dir_reg.strip_prefix(HKCU_PREFIX) {
+            vec![(Hive::CurrentUser, subkey.to_string())]
+        } else {
+            vec![
+                (Hive::CurrentUser, dir_reg.to_string()),
+                (Hive::LocalMachine, dir_reg.to_string()),
+            ]
+        };
+
+        candidates.retain(|(_, subkey)| !subkey.is_empty());
+        candidates
+    }
+
+    fn executable_name_from_template(command_line_template: &str) -> Option<String> {
+        let first_token = command_line_template.split_whitespace().next()?;
+        Path::new(first_token)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+    }
+
+    fn default_install_dir_names(dir_reg: &str, exe_name: &str) -> Vec<String> {
+        let mut names = Vec::new();
+        let subkey = dir_reg
+            .strip_prefix(HKLM_PREFIX)
+            .or_else(|| dir_reg.strip_prefix(HKCU_PREFIX))
+            .unwrap_or(dir_reg);
+        if let Some(leaf) = subkey.rsplit('\\').next().filter(|leaf| !leaf.is_empty()) {
+            names.push(leaf.to_string());
+        }
+
+        if let Some(stem) = Path::new(exe_name)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .filter(|stem| !stem.is_empty())
+        {
+            if !names.iter().any(|name| name.eq_ignore_ascii_case(stem)) {
+                names.push(stem.to_string());
+            }
+        }
+
+        names
+    }
+
+    fn program_files_roots() -> Vec<PathBuf> {
+        let mut roots = Vec::new();
+        for key in ["ProgramFiles(x86)", "ProgramW6432", "ProgramFiles"] {
+            if let Some(path) = std::env::var_os(key).map(PathBuf::from) {
+                if !roots
+                    .iter()
+                    .any(|existing: &PathBuf| paths_eq_ignore_ascii_case(existing, &path))
+                {
+                    roots.push(path);
+                }
+            }
+        }
+        roots
+    }
+
+    fn paths_eq_ignore_ascii_case(left: &Path, right: &Path) -> bool {
+        left.to_string_lossy()
+            .eq_ignore_ascii_case(&right.to_string_lossy())
+    }
+
+    pub(super) fn default_install_path_candidates(
+        dir_reg: &str,
+        command_line_template: &str,
+    ) -> Vec<PathBuf> {
+        let Some(exe_name) = executable_name_from_template(command_line_template) else {
+            return Vec::new();
+        };
+
+        let mut candidates = Vec::new();
+        let dir_names = default_install_dir_names(dir_reg, &exe_name);
+        for root in program_files_roots() {
+            for dir_name in &dir_names {
+                candidates.push(root.join("Gamania").join(dir_name).join(&exe_name));
+                candidates.push(root.join(dir_name).join(&exe_name));
+            }
+        }
+
+        let mut unique = Vec::new();
+        for candidate in candidates {
+            if !unique
+                .iter()
+                .any(|existing: &PathBuf| paths_eq_ignore_ascii_case(existing, &candidate))
+            {
+                unique.push(candidate);
+            }
+        }
+        unique
+    }
+
+    fn first_existing_default_path(dir_reg: &str, command_line_template: &str) -> Option<String> {
+        default_install_path_candidates(dir_reg, command_line_template)
+            .into_iter()
+            .find(|path| path.is_file())
+            .map(|path| path.to_string_lossy().into_owned())
     }
 
     pub(super) async fn detect_game_path_impl(
@@ -943,6 +1059,7 @@ mod detect_imp {
         game_code: String,
         dir_value_name: String,
         dir_reg: String,
+        command_line_template: String,
     ) -> Result<Option<String>, CommandError> {
         let config_path = config_xml_path(state);
         let key = game_path_config_key(&dir_value_name, &game_code);
@@ -952,15 +1069,18 @@ mod detect_imp {
             return Ok(Some(cached));
         }
 
-        if dir_reg.is_empty() {
-            return Ok(None);
-        }
-
-        let subkey = strip_hklm_prefix(&dir_reg).to_string();
+        let registry_candidates = registry_lookup_candidates(&dir_reg);
         let value_name = dir_value_name.clone();
-        let registry_value = tokio::task::spawn_blocking(move || {
-            registry::read_game_path(Hive::CurrentUser, &subkey, &value_name)
-        })
+        let registry_value = tokio::task::spawn_blocking(
+            move || -> Result<Option<String>, registry::RegistryError> {
+                for (hive, subkey) in registry_candidates {
+                    if let Some(value) = registry::read_game_path(hive, &subkey, &value_name)? {
+                        return Ok(Some(value));
+                    }
+                }
+                Ok(None)
+            },
+        )
         .await
         .map_err(|join_err| {
             CommandError::new(
@@ -975,9 +1095,15 @@ mod detect_imp {
 
         if let Some(ref v) = registry_value {
             svc_config::set_value(&config_path, &key, Some(v.as_str())).await?;
+            return Ok(registry_value);
         }
 
-        Ok(registry_value)
+        let default_path = first_existing_default_path(&dir_reg, &command_line_template);
+        if let Some(ref path) = default_path {
+            svc_config::set_value(&config_path, &key, Some(path.as_str())).await?;
+        }
+
+        Ok(default_path)
     }
 }
 
@@ -1321,22 +1447,50 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[test]
-    fn detect_strip_prefix_helper_matches_wpf_literal() {
-        use super::detect_imp::{strip_hklm_prefix, HKLM_PREFIX};
+    fn detect_registry_candidates_parse_hive_prefixes() {
+        use super::detect_imp::{registry_lookup_candidates, HKCU_PREFIX, HKLM_PREFIX};
+        use crate::services::registry::Hive;
+
         assert_eq!(HKLM_PREFIX, "HKEY_LOCAL_MACHINE\\");
+        assert_eq!(HKCU_PREFIX, "HKEY_CURRENT_USER\\");
         assert_eq!(
-            strip_hklm_prefix(r"HKEY_LOCAL_MACHINE\SOFTWARE\Gamania\MapleStory"),
-            r"SOFTWARE\Gamania\MapleStory"
+            registry_lookup_candidates(r"HKEY_LOCAL_MACHINE\SOFTWARE\Gamania\MapleStory"),
+            vec![
+                (Hive::LocalMachine, r"SOFTWARE\Gamania\MapleStory".into()),
+                (Hive::CurrentUser, r"SOFTWARE\Gamania\MapleStory".into()),
+            ]
         );
         assert_eq!(
-            strip_hklm_prefix(r"SOFTWARE\Gamania\MapleStory"),
-            r"SOFTWARE\Gamania\MapleStory",
-            "absent prefix should be a no-op"
+            registry_lookup_candidates(r"HKEY_CURRENT_USER\SOFTWARE\Gamania"),
+            vec![(Hive::CurrentUser, r"SOFTWARE\Gamania".into())]
         );
         assert_eq!(
-            strip_hklm_prefix(r"HKEY_CURRENT_USER\SOFTWARE\Gamania"),
-            r"HKEY_CURRENT_USER\SOFTWARE\Gamania",
-            "only HKLM literal is stripped (WPF parity quirk)"
+            registry_lookup_candidates(r"SOFTWARE\Gamania\MapleStory"),
+            vec![
+                (Hive::CurrentUser, r"SOFTWARE\Gamania\MapleStory".into()),
+                (Hive::LocalMachine, r"SOFTWARE\Gamania\MapleStory".into()),
+            ],
+            "unprefixed INI paths keep the historical HKCU-first probe"
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn detect_default_install_candidates_use_ini_leaf_and_exe_name() {
+        use super::detect_imp::default_install_path_candidates;
+
+        let candidates = default_install_path_candidates(
+            r"HKEY_LOCAL_MACHINE\SOFTWARE\Gamania\MapleStory",
+            "MapleStory.exe tw.login.maplestory.beanfun.com 8484 BeanFun %s %s",
+        );
+
+        assert!(
+            candidates.iter().any(|path| {
+                let s = path.to_string_lossy();
+                s.ends_with(r"Gamania\MapleStory\MapleStory.exe")
+                    || s.ends_with(r"Gamania/MapleStory/MapleStory.exe")
+            }),
+            "expected a Gamania\\MapleStory default candidate, got {candidates:?}"
         );
     }
 
@@ -1366,6 +1520,7 @@ mod tests {
             // Config short-circuit is working, we never touch the
             // registry, so the bogus subkey doesn't matter.
             r"SOFTWARE\__UNLIKELY_SUBKEY__".into(),
+            "MapleStory.exe %s %s".into(),
         )
         .await
         .expect("detect");
@@ -1381,6 +1536,7 @@ mod tests {
             &state,
             "610074_T9".into(),
             "ExecPath".into(),
+            String::new(),
             String::new(),
         )
         .await
@@ -1413,6 +1569,7 @@ mod tests {
             "PROBE_GAME".into(),
             "TEMP".into(),
             "Environment".into(),
+            "MapleStory.exe %s %s".into(),
         )
         .await
         .expect("detect");
@@ -1429,25 +1586,26 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[tokio::test]
-    async fn detect_game_path_strips_hklm_prefix_from_dir_reg() {
+    async fn detect_game_path_reads_hklm_when_dir_reg_has_hklm_prefix() {
         // Drive the same happy path as above but pass `dir_reg`
-        // with the WPF-flavoured literal prefix attached. If the
-        // strip step regresses, the lookup lands on a non-existent
-        // `HKCU\HKEY_LOCAL_MACHINE\Environment` subkey and returns
-        // None instead of the probe TEMP value.
+        // with an explicit HKLM prefix. If the hive parsing regresses,
+        // the lookup falls through instead of reading the stable
+        // HKLM Windows version value.
         let (_dir, state) = temp_app_state();
         let got = detect_imp::detect_game_path_impl(
             &state,
             "PROBE_GAME_2".into(),
-            "TEMP".into(),
-            r"HKEY_LOCAL_MACHINE\Environment".into(),
+            "ProductName".into(),
+            r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion".into(),
+            "MapleStory.exe %s %s".into(),
         )
         .await
         .expect("detect");
 
         assert!(
-            got.as_deref().is_some_and(|v| !v.is_empty()),
-            "HKLM prefix must be stripped; got {got:?}"
+            got.as_deref()
+                .is_some_and(|v| v.to_ascii_lowercase().contains("windows")),
+            "HKLM prefix must use HKLM lookup; got {got:?}"
         );
     }
 
@@ -1467,6 +1625,7 @@ mod tests {
             "NO_GAME".into(),
             "NoSuchValue".into(),
             r"SOFTWARE\__BEANFUN_NEXT_P10_NONCE_9F3C1A__".into(),
+            String::new(),
         )
         .await
         .expect("detect");

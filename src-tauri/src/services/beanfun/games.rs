@@ -143,10 +143,11 @@ pub struct GameIniEntry {
     /// stores the game's installation directory (WPF L574-607).
     pub dir_value_name: String,
 
-    /// `dir_reg` — registry key path (with the leading
-    /// `HKEY_LOCAL_MACHINE\` stripped before use, WPF L580). The
-    /// launcher reads `dir_reg::dir_value_name` and writes it back
-    /// into `Config.xml` for future launches.
+    /// `dir_reg` — registry key path. A leading hive prefix
+    /// (`HKEY_LOCAL_MACHINE\` / `HKEY_CURRENT_USER\`) is preserved
+    /// for the launcher path detector, which uses it to choose the
+    /// registry hive before writing successful detections back into
+    /// `Config.xml`.
     pub dir_reg: String,
 }
 

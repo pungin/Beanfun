@@ -5,7 +5,8 @@
 //! driven by `MainWindow::selectedGameChanged` L574-605. That flow:
 //!
 //! 1. Reads `dir_reg` + `dir_value_name` from the per-game INI (P11 Config).
-//! 2. Tries `HKEY_CURRENT_USER\<dir_reg>@<dir_value_name>`.
+//! 2. Reads the requested hive/subkey candidates for
+//!    `<dir_reg>@<dir_value_name>`.
 //! 3. If present, seeds `ConfigAppSettings` (Config.xml) with the value
 //!    so future launches don't need the registry at all.
 //!
@@ -15,15 +16,12 @@
 //! entropy (which lives in [`crate::services::storage::entropy`]) and
 //! never for game paths.
 //!
-//! # Why no [`Hive::LocalMachine`] in the WPF game-path flow?
+//! # Why both [`Hive`] variants are active
 //!
-//! `ModifyRegistry` defaults to `HKEY_LOCAL_MACHINE`
-//! (`ModifyRegistry.cs` L41), but `selectedGameChanged` L587 flips it
-//! to `Registry.CurrentUser` before calling `Read`. The `LocalMachine`
-//! path is kept as a first-class [`Hive`] variant for future callers
-//! (some legacy installers seed `HKLM` only) even though the P9.1
-//! game-path flow never targets it — semantic completeness > dead-code
-//! removal for a platform abstraction this small.
+//! Some INI rows carry an explicit `HKEY_LOCAL_MACHINE\` prefix while
+//! some legacy installs seed per-user values. The command layer builds
+//! candidate hives from the INI value; this module keeps the read
+//! primitive small and hive-explicit.
 //!
 //! # Layers
 //!

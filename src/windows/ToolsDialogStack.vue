@@ -281,7 +281,7 @@ async function resolveGamePath(gameCode: string): Promise<string> {
   const ini = game.selectedIni
   if (!ini || ini.dir_value_name === '') return ''
   const result = await safeInvoke(
-    commands.detectGamePath(gameCode, ini.dir_value_name, ini.dir_reg),
+    commands.detectGamePath(gameCode, ini.dir_value_name, ini.dir_reg, ini.exe),
   )
   return result.ok ? (result.data ?? '') : ''
 }

@@ -58,7 +58,7 @@ async windowVisualEnvironment() : Promise<WindowVisualEnvironment> {
  * TW / HK regular username+password login.
  *
  * # Protocol
- * 
+ *
  * 1. Best-effort clear [`AppState::pending_totp`]
  * ([`AppState`]) so a stale continuation from an abandoned
  * HK-TOTP attempt cannot leak into the new login's error
@@ -78,7 +78,7 @@ async windowVisualEnvironment() : Promise<WindowVisualEnvironment> {
  * [`LoginError::AdvanceCheckRequired`] which surfaces
  * `auth.advance_check_required` with the challenge URL for the
  * frontend to drive a verify flow.
- * 
+ *
  * # Why take `account` + `password` by value?
  * 
  * `#[tauri::command]` deserialises arguments from the JS invoke
@@ -1642,16 +1642,16 @@ async setGamePath(gameCode: string, dirValueName: string, path: string) : Promis
 },
 /**
  * Resolve the install path for `game_code`, consulting
- * `Config.xml` first and falling back to the Windows registry.
- * Writes any freshly-discovered registry value back to Config so
- * future calls are fast (WPF parity — see L574-607).
+ * `Config.xml` first and falling back to the Windows registry,
+ * then common install directories. Writes any freshly-discovered
+ * value back to Config so future calls are fast.
  * 
  * Returns:
- * - `Ok(Some(path))` — Config already had a value **or** the
- * registry supplied one (in which case Config is now updated).
- * - `Ok(None)` — both Config and the registry came up empty (or
- * `dir_reg` was an empty string, meaning the INI has no fallback
- * key configured). WPF shows an empty `t_GamePath` textbox in
+ * - `Ok(Some(path))` — Config already had a value, the registry
+ * supplied one, or a default install-path probe found the exe.
+ * Freshly-discovered values are written back to Config.
+ * - `Ok(None)` — Config, registry, and default install-path probes
+ * all came up empty. WPF shows an empty `t_GamePath` textbox in
  * this case; this shape lets the frontend render the same way
  * without another round-trip.
  * 
@@ -1661,10 +1661,13 @@ async setGamePath(gameCode: string, dirValueName: string, path: string) : Promis
  * - `dir_value_name` — INI-sourced Config column name and
  * registry `REG_SZ` value name (WPF reuses the same string for
  * both, L574 / L587).
- * - `dir_reg` — INI-sourced registry subkey path. May contain a
- * leading `HKEY_LOCAL_MACHINE\` literal which is stripped
- * verbatim before the HKCU lookup (WPF L580 parity; see module
- * docs for why only HKLM).
+ * - `dir_reg` — INI-sourced registry subkey path. Explicit
+ * `HKEY_LOCAL_MACHINE\` / `HKEY_CURRENT_USER\` prefixes drive
+ * the matching hive lookup; unprefixed paths try HKCU first,
+ * then HKLM.
+ * - `command_line_template` — INI-sourced executable template.
+ * The first token is used to derive the executable filename for
+ * default install-path probes.
  * 
  * # Errors
  * 
@@ -1679,9 +1682,9 @@ async setGamePath(gameCode: string, dirValueName: string, path: string) : Promis
  * `spawn_blocking` task panicked or was cancelled.
  * - `launcher.platform_unsupported` — non-Windows build.
  */
-async detectGamePath(gameCode: string, dirValueName: string, dirReg: string) : Promise<Result<string | null, CommandError>> {
+async detectGamePath(gameCode: string, dirValueName: string, dirReg: string, commandLineTemplate: string) : Promise<Result<string | null, CommandError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("detect_game_path", { gameCode, dirValueName, dirReg }) };
+    return { status: "ok", data: await TAURI_INVOKE("detect_game_path", { gameCode, dirValueName, dirReg, commandLineTemplate }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -2566,10 +2569,11 @@ win_class_name: string;
  */
 dir_value_name: string; 
 /**
- * `dir_reg` — registry key path (with the leading
- * `HKEY_LOCAL_MACHINE\` stripped before use, WPF L580). The
- * launcher reads `dir_reg::dir_value_name` and writes it back
- * into `Config.xml` for future launches.
+ * `dir_reg` — registry key path. A leading hive prefix
+ * (`HKEY_LOCAL_MACHINE\` / `HKEY_CURRENT_USER\`) is preserved
+ * for the launcher path detector, which uses it to choose the
+ * registry hive before writing successful detections back into
+ * `Config.xml`.
  */
 dir_reg: string }
 /**
