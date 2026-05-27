@@ -248,10 +248,7 @@
 //!
 //! | Code                                 | Origin                                                                                 | `details` fields                |
 //! | ------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------- |
-//! | `launcher.target_dir_resolve_failed` | [`super::launcher::launch_game`] — [`default_target_dir`][dtd] returned `io::Error`.   | `io_kind`                       |
 //! | `launcher.spawn_blocking_failed`     | [`super::launcher::launch_game`] — [`tokio::task::JoinError`] from `spawn_blocking`.    | `is_panic` / `is_cancelled`     |
-//!
-//! [dtd]: crate::services::game::default_target_dir
 //!
 //! # Usage at the command boundary
 //!

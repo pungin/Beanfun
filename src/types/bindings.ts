@@ -21,24 +21,13 @@ async version() : Promise<VersionInfo> {
     return await TAURI_INVOKE("version");
 },
 /**
- * Return host visual-environment flags used by the web UI.
- *
- * This is deliberately separate from [`version`]: build metadata is
- * static, while this value depends on the user's OS. It is still
- * synchronous and infallible so the frontend can query it before
- * mounting without adding an error surface to startup.
- */
-async windowVisualEnvironment() : Promise<WindowVisualEnvironment> {
-    return await TAURI_INVOKE("window_visual_environment");
-},
-/**
  * Round-trip an input string through a blocking worker thread.
  *
  * Exercises the canonical Win32-wrapping pattern: the closure runs
  * on a [`tokio::task::spawn_blocking`] pool worker (not the reactor
  * thread), sleeps for 60 ms to prove the `await` point genuinely
  * suspends, then returns `"pong: {input}"`.
- * 
+ *
  * Failure path: if the blocking task panics or is cancelled the
  * [`tokio::task::JoinError`] is mapped to
  * `system.spawn_blocking_failed`. Should never happen in steady
@@ -55,8 +44,19 @@ async ping(message: string) : Promise<Result<string, CommandError>> {
 }
 },
 /**
+ * Return host visual-environment flags used by the web UI.
+ *
+ * This is deliberately separate from [`version`]: build metadata is
+ * static, while this value depends on the user's OS. It is still
+ * synchronous and infallible so the frontend can query it before
+ * mounting without adding an error surface to startup.
+ */
+async windowVisualEnvironment() : Promise<WindowVisualEnvironment> {
+    return await TAURI_INVOKE("window_visual_environment");
+},
+/**
  * TW / HK regular username+password login.
- * 
+ *
  * # Protocol
  * 
  * 1. Best-effort clear [`AppState::pending_totp`]
@@ -1549,12 +1549,9 @@ async checkUpdate(channel: Channel, localVersion: string | null) : Promise<Updat
  * policy, and blocking-isolation contract. The command performs
  * three orchestration steps before delegating:
  * 
- * 1. Resolve the LocaleRemulator staging directory via
- * [`default_target_dir`]. Fails with
- * `launcher.target_dir_resolve_failed` if `current_exe()` or
- * its `.parent()` is unavailable (extremely rare — only
- * happens when the main binary has been deleted while
- * running).
+ * 1. Resolve the LocaleRemulator staging directory from
+ * [`AppState::storage_root`], the same `%APPDATA%\Beanfun`
+ * directory that holds `Config.xml`.
  * 2. Assemble the command-line string via [`build_command_line`]
  * (see that helper's docs for the empty-string short-circuit
  * semantics).
