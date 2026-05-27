@@ -75,6 +75,8 @@ vi.mock('../../../src/types/bindings', () => ({
     detectGamePath: vi.fn(),
     listGameProcesses: vi.fn(),
     killGameProcesses: vi.fn(),
+    closeMaplePlayWindow: vi.fn(),
+    checkAndKillMaplePatcher: vi.fn(),
     openUrl: vi.fn(),
     launchGame: vi.fn(),
     getAllConfig: vi.fn(),
@@ -91,6 +93,8 @@ import { createAppI18n } from '../../../src/i18n'
 const mockDetectGamePath = vi.mocked(commands.detectGamePath)
 const mockListGameProcesses = vi.mocked(commands.listGameProcesses)
 const mockKillGameProcesses = vi.mocked(commands.killGameProcesses)
+const mockCloseMaplePlayWindow = vi.mocked(commands.closeMaplePlayWindow)
+const mockCheckAndKillMaplePatcher = vi.mocked(commands.checkAndKillMaplePatcher)
 const mockOpenUrl = vi.mocked(commands.openUrl)
 const mockLaunchGame = vi.mocked(commands.launchGame)
 
@@ -165,18 +169,25 @@ function seedLiveSelection(game: ReturnType<typeof useGameStore>): void {
 
 describe('useGameLauncher', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
     setActivePinia(createPinia())
     mockDetectGamePath.mockReset()
     mockListGameProcesses.mockReset()
     mockKillGameProcesses.mockReset()
+    mockCloseMaplePlayWindow.mockReset()
+    mockCheckAndKillMaplePatcher.mockReset()
     mockOpenUrl.mockReset()
     mockLaunchGame.mockReset()
+    mockCloseMaplePlayWindow.mockReturnValue(ok(false))
+    mockCheckAndKillMaplePatcher.mockReturnValue(ok([]))
     elMessageWarning.mockReset()
     elMessageInfo.mockReset()
     elMessageBoxConfirm.mockReset()
   })
 
   afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
     vi.clearAllMocks()
   })
 
@@ -192,6 +203,8 @@ describe('useGameLauncher', () => {
     await flushPromises()
 
     expect(mockLaunchGame).toHaveBeenCalledWith(FAKE_PATH, 'Auto', FAKE_INI.exe, '', '')
+    expect(mockCloseMaplePlayWindow).toHaveBeenCalledTimes(1)
+    expect(mockCheckAndKillMaplePatcher).toHaveBeenCalledWith(FAKE_PATH)
   })
 
   it('no live selection + no persisted snapshot → GameSelected warning, no launch', async () => {
@@ -347,6 +360,40 @@ describe('useGameLauncher', () => {
     await flushPromises()
 
     expect(mockLaunchGame).toHaveBeenCalledWith(FAKE_PATH, 'Auto', FAKE_INI.exe, 'alice', 'hunter2')
+  })
+
+  it('Maple launch guards follow skipPlayWnd and autoKillPatcher preferences', async () => {
+    const { runGame, game, config } = mountHarness()
+    seedLiveSelection(game)
+    config.entries['skipPlayWnd'] = 'false'
+    config.entries['autoKillPatcher'] = 'true'
+
+    mockDetectGamePath.mockReturnValueOnce(ok(FAKE_PATH))
+    mockListGameProcesses.mockReturnValueOnce(ok([]))
+    mockLaunchGame.mockReturnValueOnce(ok(null))
+
+    await runGame()
+    await flushPromises()
+
+    expect(mockCloseMaplePlayWindow).not.toHaveBeenCalled()
+    expect(mockCheckAndKillMaplePatcher).toHaveBeenCalledWith(FAKE_PATH)
+  })
+
+  it('non-Maple launches do not start Play/Patcher guards', async () => {
+    const { runGame, game } = mountHarness()
+    seedLiveSelection(game)
+    game.selectedGameCode = '999999_T0'
+    game.ini = { '999999_T0': { ...FAKE_INI, win_class_name: 'OtherClass' } }
+
+    mockDetectGamePath.mockReturnValueOnce(ok(FAKE_PATH))
+    mockListGameProcesses.mockReturnValueOnce(ok([]))
+    mockLaunchGame.mockReturnValueOnce(ok(null))
+
+    await runGame()
+    await flushPromises()
+
+    expect(mockCloseMaplePlayWindow).not.toHaveBeenCalled()
+    expect(mockCheckAndKillMaplePatcher).not.toHaveBeenCalled()
   })
 
   it('corrupt persisted snapshot → restoreLastSelected returns false → GameSelected toast', async () => {

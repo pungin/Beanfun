@@ -1782,6 +1782,39 @@ async killGameProcesses(pids: number[]) : Promise<Result<number[], CommandError>
 }
 },
 /**
+ * Close MapleStory's Nexon launcher Play dialog if it is currently
+ * visible.
+ *
+ * Mirrors one tick of WPF `checkPlayPage_Tick`: find
+ * `StartUpDlgClass` / `MapleStory` and post `WM_CLOSE`. The
+ * frontend drives this command on a short interval when the
+ * MapleStory-only `skipPlayWnd` preference is enabled.
+ */
+async closeMaplePlayWindow() : Promise<Result<boolean, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_maple_play_window") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Best-effort terminate MapleStory's `Patcher.exe` from the same
+ * directory as `game_path`.
+ *
+ * Mirrors one tick of WPF `checkPatcher_Tick`'s kill branch. The
+ * frontend drives this command on a short interval when the
+ * MapleStory-only `autoKillPatcher` preference is enabled.
+ */
+async checkAndKillMaplePatcher(gamePath: string) : Promise<Result<number[], CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("check_and_kill_maple_patcher", { gamePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Type the account name + OTP into the MapleStory launcher's
  * login dialog and press Enter, replicating the tail of
  * `getOtpWorker_RunWorkerCompleted`

@@ -458,7 +458,7 @@ pub(crate) const PLATFORM_UNSUPPORTED_CODE: &str = "launcher.platform_unsupporte
 fn platform_unsupported_error() -> CommandError {
     CommandError::new(
         PLATFORM_UNSUPPORTED_CODE,
-        "detect_game_path requires Windows (registry/default-path lookup for game install path)",
+        "launcher command requires Windows",
     )
 }
 
@@ -873,6 +873,46 @@ pub async fn kill_game_processes(pids: Vec<u32>) -> Result<Vec<u32>, CommandErro
     }
 }
 
+/// Close MapleStory's Nexon launcher Play dialog if it is currently
+/// visible.
+///
+/// Mirrors one tick of WPF `checkPlayPage_Tick`: find
+/// `StartUpDlgClass` / `MapleStory` and post `WM_CLOSE`. The
+/// frontend drives this command on a short interval when the
+/// MapleStory-only `skipPlayWnd` preference is enabled.
+#[tauri::command]
+#[specta::specta]
+pub async fn close_maple_play_window() -> Result<bool, CommandError> {
+    #[cfg(target_os = "windows")]
+    {
+        maple_guard_imp::close_maple_play_window_impl().await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(platform_unsupported_error())
+    }
+}
+
+/// Best-effort terminate MapleStory's `Patcher.exe` from the same
+/// directory as `game_path`.
+///
+/// Mirrors one tick of WPF `checkPatcher_Tick`'s kill branch. The
+/// frontend drives this command on a short interval when the
+/// MapleStory-only `autoKillPatcher` preference is enabled.
+#[tauri::command]
+#[specta::specta]
+pub async fn check_and_kill_maple_patcher(game_path: String) -> Result<Vec<u32>, CommandError> {
+    #[cfg(target_os = "windows")]
+    {
+        maple_guard_imp::check_and_kill_maple_patcher_impl(game_path).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = game_path;
+        Err(platform_unsupported_error())
+    }
+}
+
 /// Type the account name + OTP into the MapleStory launcher's
 /// login dialog and press Enter, replicating the tail of
 /// `getOtpWorker_RunWorkerCompleted`
@@ -1172,6 +1212,53 @@ mod list_imp {
                     "is_cancelled": join_err.is_cancelled(),
                 }))
             })
+    }
+}
+
+// =====================================================================
+// Windows-only MapleStory Play/Patcher guards
+// =====================================================================
+
+#[cfg(target_os = "windows")]
+mod maple_guard_imp {
+    use super::*;
+    use crate::services::process::{
+        check_and_kill_patcher as svc_check_and_kill_patcher,
+        close_play_window as svc_close_play_window,
+    };
+
+    pub(super) async fn close_maple_play_window_impl() -> Result<bool, CommandError> {
+        tokio::task::spawn_blocking(svc_close_play_window)
+            .await
+            .map_err(|join_err| {
+                CommandError::new(
+                    SPAWN_BLOCKING_FAILED_CODE,
+                    format!("close_maple_play_window spawn_blocking failed: {join_err}"),
+                )
+                .with_details(json!({
+                    "is_panic": join_err.is_panic(),
+                    "is_cancelled": join_err.is_cancelled(),
+                }))
+            })?
+            .map_err(CommandError::from)
+    }
+
+    pub(super) async fn check_and_kill_maple_patcher_impl(
+        game_path: String,
+    ) -> Result<Vec<u32>, CommandError> {
+        tokio::task::spawn_blocking(move || svc_check_and_kill_patcher(&PathBuf::from(game_path)))
+            .await
+            .map_err(|join_err| {
+                CommandError::new(
+                    SPAWN_BLOCKING_FAILED_CODE,
+                    format!("check_and_kill_maple_patcher spawn_blocking failed: {join_err}"),
+                )
+                .with_details(json!({
+                    "is_panic": join_err.is_panic(),
+                    "is_cancelled": join_err.is_cancelled(),
+                }))
+            })?
+            .map_err(CommandError::from)
     }
 }
 
