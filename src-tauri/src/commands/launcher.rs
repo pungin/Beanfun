@@ -77,13 +77,12 @@
 //! # Command-layer error codes
 //!
 //! See [`crate::commands::error`] for the full table. D5a / D5b
-//! introduce three **command-only** codes (no service-layer
+//! introduce two **command-only** codes (no service-layer
 //! counterpart) for failures that happen in this module's
 //! orchestration:
 //!
 //! | Code                                    | Origin                                                                                             |
 //! | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
-//! | `launcher.target_dir_resolve_failed`    | [`default_target_dir`] returned an `io::Error` (current_exe / parent resolution failed).           |
 //! | `launcher.spawn_blocking_failed`        | [`tokio::task::JoinError`] from a `spawn_blocking` call (task panicked or was aborted).            |
 //! | `launcher.platform_unsupported`         | [`detect_game_path`] called on a non-Windows build (registry access is HKCU-only, Windows-specific). |
 //!
@@ -326,7 +325,7 @@
 //! [pd]: crate::services::process::auto_paste::PasteDriver
 //! [am]: crate::services::process::auto_paste
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::json;
 use tauri::State;
@@ -335,9 +334,7 @@ use crate::commands::config::config_xml_path;
 use crate::commands::error::CommandError;
 use crate::commands::state::AppState;
 use crate::services::config as svc_config;
-use crate::services::game::{
-    self, default_target_dir, substitute_credentials, GameStartMode, LaunchRequest,
-};
+use crate::services::game::{self, substitute_credentials, GameStartMode, LaunchRequest};
 
 /// IPC-shaped summary of a running game process, returned by
 /// [`list_game_processes`].
@@ -438,16 +435,9 @@ pub struct AutoPasteRequest {
     pub special_click: bool,
 }
 
-/// Command-layer code minted when [`default_target_dir`] fails to
-/// resolve `current_exe().parent()`. Exposed as a `pub(crate)`
-/// const so [`crate::commands::error`] documentation tables and
-/// internal tests can pin the exact string without re-typing it.
-pub(crate) const TARGET_DIR_RESOLVE_FAILED_CODE: &str = "launcher.target_dir_resolve_failed";
-
 /// Command-layer code minted when [`tokio::task::spawn_blocking`]
 /// returns a [`tokio::task::JoinError`] (task panicked or was
-/// aborted). Sibling of [`TARGET_DIR_RESOLVE_FAILED_CODE`]; kept
-/// distinct from the [`crate::services::system::error::SystemError::SpawnBlockingFailed`]
+/// aborted). Kept distinct from the [`crate::services::system::error::SystemError::SpawnBlockingFailed`]
 /// code so UI telemetry can tell "launcher path panicked" apart
 /// from "open_url path panicked" (P10.1 Q8.D4 fine-grained codes).
 pub(crate) const SPAWN_BLOCKING_FAILED_CODE: &str = "launcher.spawn_blocking_failed";
@@ -521,6 +511,37 @@ pub(crate) fn build_command_line(template: &str, account: &str, password: &str) 
     }
 }
 
+pub(crate) fn build_launch_request(
+    storage_root: &Path,
+    game_path: String,
+    mode: GameStartMode,
+    command_line_template: String,
+    account: String,
+    password: String,
+) -> LaunchRequest {
+    // WPF splits the INI `exe` field into `game_exe` (filename) and
+    // `game_commandLine` (args with %s placeholders) via:
+    //   game_exe = Regex("(.*).exe").Match(exe) + ".exe"
+    //   game_commandLine = Regex(".exe (.*)").Match(exe)
+    // Only `game_commandLine` is used for credential substitution.
+    // We replicate the split here so the command line passed to
+    // CreateProcess matches WPF byte-for-byte.
+    let args_template = if let Some(pos) = command_line_template.to_ascii_lowercase().find(".exe ")
+    {
+        &command_line_template[pos + 5..]
+    } else {
+        ""
+    };
+    let command_line = build_command_line(args_template, &account, &password);
+
+    LaunchRequest {
+        game_path: PathBuf::from(game_path),
+        command_line,
+        mode,
+        target_dir: storage_root.to_path_buf(),
+    }
+}
+
 /// Launch the configured game binary with the current account
 /// credentials.
 ///
@@ -529,12 +550,9 @@ pub(crate) fn build_command_line(template: &str, account: &str, password: &str) 
 /// policy, and blocking-isolation contract. The command performs
 /// three orchestration steps before delegating:
 ///
-/// 1. Resolve the LocaleRemulator staging directory via
-///    [`default_target_dir`]. Fails with
-///    `launcher.target_dir_resolve_failed` if `current_exe()` or
-///    its `.parent()` is unavailable (extremely rare — only
-///    happens when the main binary has been deleted while
-///    running).
+/// 1. Resolve the LocaleRemulator staging directory from
+///    [`AppState::storage_root`], the same `%APPDATA%\Beanfun`
+///    directory that holds `Config.xml`.
 /// 2. Assemble the command-line string via [`build_command_line`]
 ///    (see that helper's docs for the empty-string short-circuit
 ///    semantics).
@@ -579,51 +597,54 @@ pub(crate) fn build_command_line(template: &str, account: &str, password: &str) 
 #[tauri::command]
 #[specta::specta]
 pub async fn launch_game(
+    state: State<'_, AppState>,
     game_path: String,
     mode: GameStartMode,
     command_line_template: String,
     account: String,
     password: String,
 ) -> Result<(), CommandError> {
-    let target_dir = default_target_dir().map_err(|err| {
-        CommandError::new(
-            TARGET_DIR_RESOLVE_FAILED_CODE,
-            format!("failed to resolve default target directory: {err}"),
-        )
-        .with_details(json!({ "io_kind": format!("{:?}", err.kind()) }))
-    })?;
+    launch_game_from_storage_root(
+        state.storage_root.clone(),
+        game_path,
+        mode,
+        command_line_template,
+        account,
+        password,
+    )
+    .await
+}
 
-    // WPF splits the INI `exe` field into `game_exe` (filename) and
-    // `game_commandLine` (args with %s placeholders) via:
-    //   game_exe = Regex("(.*).exe").Match(exe) + ".exe"
-    //   game_commandLine = Regex(".exe (.*)").Match(exe)
-    // Only `game_commandLine` is used for credential substitution.
-    // We replicate the split here so the command line passed to
-    // CreateProcess matches WPF byte-for-byte.
-    let args_template = if let Some(pos) = command_line_template.to_ascii_lowercase().find(".exe ")
-    {
-        &command_line_template[pos + 5..]
-    } else {
-        ""
-    };
-    let command_line = build_command_line(args_template, &account, &password);
-
-    tracing::info!(
-        game_path = %game_path,
-        mode = ?mode,
-        template_len = command_line_template.len(),
-        command_line_len = command_line.len(),
-        has_account = !account.is_empty(),
-        has_password = !password.is_empty(),
-        "launch_game: preparing to spawn"
+pub(crate) async fn launch_game_from_storage_root(
+    storage_root: PathBuf,
+    game_path: String,
+    mode: GameStartMode,
+    command_line_template: String,
+    account: String,
+    password: String,
+) -> Result<(), CommandError> {
+    let template_len = command_line_template.len();
+    let has_account = !account.is_empty();
+    let has_password = !password.is_empty();
+    let req = build_launch_request(
+        &storage_root,
+        game_path,
+        mode,
+        command_line_template,
+        account,
+        password,
     );
 
-    let req = LaunchRequest {
-        game_path: PathBuf::from(game_path),
-        command_line,
-        mode,
-        target_dir,
-    };
+    tracing::info!(
+        game_path = %req.game_path.display(),
+        mode = ?mode,
+        template_len,
+        command_line_len = req.command_line.len(),
+        target_dir = %req.target_dir.display(),
+        has_account,
+        has_password,
+        "launch_game: preparing to spawn"
+    );
 
     tokio::task::spawn_blocking(move || game::launch_game(&req))
         .await
@@ -1140,6 +1161,22 @@ mod tests {
         assert_eq!(got, "alice/swordfish/%s");
     }
 
+    #[test]
+    fn build_launch_request_uses_storage_root_as_lr_target_dir() {
+        let storage_root = PathBuf::from(r"C:\Users\Alice\AppData\Roaming\Beanfun");
+        let req = build_launch_request(
+            &storage_root,
+            r"C:\Games\MapleStory\MapleStory.exe".into(),
+            GameStartMode::LocaleRemulator,
+            "MapleStory.exe /u:%s /p:%s".into(),
+            "alice".into(),
+            "swordfish".into(),
+        );
+
+        assert_eq!(req.target_dir, storage_root);
+        assert_eq!(req.command_line, "/u:alice /p:swordfish");
+    }
+
     // ---- GameStartMode IPC serde ----------------------------------------
 
     #[test]
@@ -1180,7 +1217,9 @@ mod tests {
         // covers the underlying GameError::PathEmpty; this test
         // adds the command-layer contract (correct code string,
         // async+spawn_blocking wiring).
-        let err = launch_game(
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let err = launch_game_from_storage_root(
+            dir.path().to_path_buf(),
             String::new(),
             GameStartMode::Normal,
             String::new(),
@@ -1196,7 +1235,8 @@ mod tests {
     async fn launch_game_missing_file_surfaces_game_path_not_found() {
         let dir = tempfile::TempDir::new().expect("tempdir");
         let missing = dir.path().join("does-not-exist.exe");
-        let err = launch_game(
+        let err = launch_game_from_storage_root(
+            dir.path().to_path_buf(),
             missing.to_string_lossy().into_owned(),
             GameStartMode::Normal,
             String::new(),
@@ -1633,14 +1673,10 @@ mod tests {
 
     #[test]
     fn command_layer_codes_are_stable_strings() {
-        // Lock the exact spelling of the three command-only codes
+        // Lock the exact spelling of the command-only codes
         // so a refactor that touches the module docs or the
         // `CommandError::new(...)` call-site doesn't silently
         // change the code the frontend branches on.
-        assert_eq!(
-            TARGET_DIR_RESOLVE_FAILED_CODE,
-            "launcher.target_dir_resolve_failed"
-        );
         assert_eq!(SPAWN_BLOCKING_FAILED_CODE, "launcher.spawn_blocking_failed");
         assert_eq!(PLATFORM_UNSUPPORTED_CODE, "launcher.platform_unsupported");
     }
