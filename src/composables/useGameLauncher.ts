@@ -94,6 +94,15 @@ export interface UseGameLauncherReturn {
   runGame: (accountId?: string, password?: string) => Promise<void>
 }
 
+const MAPLE_GUARD_GAME_CODES = new Set(['610074_T9', '610075_T9'])
+const MAPLE_GUARD_INTERVAL_MS = 100
+const MAPLE_GUARD_TICKS = 150
+
+function parseBool(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined || value === '') return fallback
+  return value.toLowerCase() === 'true'
+}
+
 export function useGameLauncher(): UseGameLauncherReturn {
   const { t } = useI18n()
   const game = useGameStore()
@@ -305,6 +314,30 @@ export function useGameLauncher(): UseGameLauncherReturn {
     return true
   }
 
+  function runMapleLaunchGuards(gamePath: string): void {
+    const code = game.selectedGameCode
+    if (code === null || !MAPLE_GUARD_GAME_CODES.has(code)) return
+
+    const skipPlayWnd = parseBool(configStore.get('skipPlayWnd'), true)
+    const autoKillPatcher = parseBool(configStore.get('autoKillPatcher'), true)
+    if (!skipPlayWnd && !autoKillPatcher) return
+
+    let remaining = MAPLE_GUARD_TICKS
+    const tick = (): void => {
+      if (skipPlayWnd) {
+        void safeInvoke(commands.closeMaplePlayWindow())
+      }
+      if (autoKillPatcher) {
+        void safeInvoke(commands.checkAndKillMaplePatcher(gamePath))
+      }
+      remaining -= 1
+      if (remaining <= 0) window.clearInterval(timer)
+    }
+
+    const timer = window.setInterval(tick, MAPLE_GUARD_INTERVAL_MS)
+    tick()
+  }
+
   async function runGame(accountId = '', password = ''): Promise<void> {
     /*
      * P12.4 followup-A D6 — when invoked from the LoginPage
@@ -352,6 +385,7 @@ export function useGameLauncher(): UseGameLauncherReturn {
     const mode = resolveStartMode()
 
     await wrapCommand(commands.launchGame(gamePath, mode, ini.exe, accountId, password))
+    runMapleLaunchGuards(gamePath)
   }
 
   return { runGame }

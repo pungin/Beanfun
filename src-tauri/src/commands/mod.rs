@@ -288,6 +288,9 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         // launcher (P10.3 — D5c process)
         launcher::list_game_processes,
         launcher::kill_game_processes,
+        // launcher (MapleStory Play/Patcher guards)
+        launcher::close_maple_play_window,
+        launcher::check_and_kill_maple_patcher,
         // launcher (P10.3 — D5d auto-paste)
         launcher::auto_paste,
         // game (P12.3 D2 — list_games)

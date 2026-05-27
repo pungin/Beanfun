@@ -288,6 +288,8 @@ vi.mock('../../../src/types/bindings', () => ({
     detectGamePath: vi.fn(),
     listGameProcesses: vi.fn(),
     killGameProcesses: vi.fn(),
+    closeMaplePlayWindow: vi.fn(),
+    checkAndKillMaplePatcher: vi.fn(),
     launchGame: vi.fn(),
     openUrl: vi.fn(),
     /*
@@ -808,6 +810,8 @@ describe('AccountList page', () => {
     vi.mocked(commands.detectGamePath).mockReturnValue(ok(null))
     vi.mocked(commands.listGameProcesses).mockReturnValue(ok([]))
     vi.mocked(commands.killGameProcesses).mockReturnValue(ok([]))
+    vi.mocked(commands.closeMaplePlayWindow).mockReturnValue(ok(false))
+    vi.mocked(commands.checkAndKillMaplePatcher).mockReturnValue(ok([]))
     vi.mocked(commands.launchGame).mockReturnValue(ok(null))
     vi.mocked(commands.openUrl).mockReturnValue(ok(null))
   })
@@ -2453,6 +2457,41 @@ describe('AccountList page', () => {
     )
     /* launchGame called with empty creds + Auto mode (default config). */
     expect(commands.launchGame).toHaveBeenCalledTimes(1)
+    expect(commands.launchGame).toHaveBeenCalledWith(
+      'C:\\Beanfun\\MapleStory.exe',
+      'Auto',
+      MAPLESTORY_TW_INI.exe,
+      '',
+      '',
+    )
+  })
+
+  it('D8f: traditional login keeps login_action_type=1 on direct empty-credential launch', async () => {
+    /*
+     * WPF direct branch has two arms:
+     *
+     *   (tradLogin && login_action_type == 1) || login_action_type == 0
+     *
+     * The previous case pins the `login_action_type=0` arm; this
+     * one pins the traditional-login MapleStory arm so it cannot
+     * accidentally be routed through the OTP+command-line branch.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.detectGamePath).mockReturnValueOnce(ok('C:\\Beanfun\\MapleStory.exe'))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    seedActiveGame(MAPLESTORY_TW, { ...MAPLESTORY_TW_INI, login_action_type: '1' })
+    useConfigStore().entries['tradLogin'] = 'true'
+    useAccountStore().selectedSid = 'sid-1'
+
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    await wrapper.get('[data-test="account-list-start"]').trigger('click')
+    await flushPromises()
+
+    expect(commands.getOtp).not.toHaveBeenCalled()
     expect(commands.launchGame).toHaveBeenCalledWith(
       'C:\\Beanfun\\MapleStory.exe',
       'Auto',
