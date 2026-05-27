@@ -185,7 +185,7 @@ export function useGameLauncher(): UseGameLauncherReturn {
     const selected = game.selectedGame
 
     const detectResult = await safeInvoke(
-      commands.detectGamePath(game.selectedGameCode, ini.dir_value_name, ini.dir_reg),
+      commands.detectGamePath(game.selectedGameCode, ini.dir_value_name, ini.dir_reg, ini.exe),
     )
     const detected = detectResult.ok ? (detectResult.data ?? '') : ''
 

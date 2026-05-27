@@ -2449,6 +2449,7 @@ describe('AccountList page', () => {
       '610074_T9',
       MAPLESTORY_TW_INI.dir_value_name,
       MAPLESTORY_TW_INI.dir_reg,
+      MAPLESTORY_TW_INI.exe,
     )
     /* launchGame called with empty creds + Auto mode (default config). */
     expect(commands.launchGame).toHaveBeenCalledTimes(1)

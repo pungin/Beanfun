@@ -386,6 +386,7 @@ describe('ToolsDialogStack wrapper', () => {
       '610074_T9',
       MAPLE_TW_INI.dir_value_name,
       MAPLE_TW_INI.dir_reg,
+      MAPLE_TW_INI.exe,
     )
 
     const stub = wrapper.get('[data-test="maple-tools-stub"]')
