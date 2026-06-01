@@ -11,6 +11,12 @@ use crate::services::beanfun::BeanfunClient;
 
 /// Seed every unexpired cookie from `client`'s reqwest jar into the
 /// WebView2 cookie manager of `window` using the native COM API.
+///
+/// This function only *adds* cookies. Callers that need a clean slate
+/// first (the GamePass re-login flow — issue #296) must call
+/// [`clear_all_cookies_native`] in a **separate** pass and wait for it
+/// to flush before seeding; see that function's docs for why the
+/// clear and seed are deliberately not fused into one native call.
 pub fn seed_cookies_native<R: tauri::Runtime>(
     window: &WebviewWindow<R>,
     client: &BeanfunClient,
@@ -121,6 +127,86 @@ pub fn seed_cookies_native<R: tauri::Runtime>(
     }
 
     total
+}
+
+/// Delete **every** cookie in the WebView2 profile of `window` via the
+/// native COM `ICoreWebView2CookieManager::DeleteAllCookies`.
+///
+/// # Why this is separate from [`seed_cookies_native`] (issue #296)
+///
+/// WebView2 keeps a single cookie store per user-data-folder, shared
+/// by every window for the lifetime of the host *process*. After a
+/// GamePass logout the server-side session is dead but its
+/// `bfWebToken` / `ASP.NET_SessionId` cookies linger in that store, so
+/// the next GamePass login (a new window, same process) inherits the
+/// stale token, the portal short-circuits the OAuth round-trip, and
+/// the harvest lifts a dead session. Restarting the .exe was the only
+/// recovery (it ends the WebView2 browser session, dropping the
+/// session cookies). Clearing the store before the next login makes
+/// every attempt start fresh — equivalent to a process restart.
+///
+/// # Why a dedicated pass instead of clearing inside the seed
+///
+/// `DeleteAllCookies` and `AddOrUpdateCookie` are both fire-and-return
+/// COM calls that queue work on the browser process; Microsoft does
+/// **not** document an ordering guarantee between a delete and an
+/// immediately-following add. Fusing them into one `with_webview`
+/// closure risks the pending delete wiping the freshly-seeded cookies.
+/// The caller therefore runs this clear in its own pass, waits a beat
+/// for it to flush, and only then calls [`seed_cookies_native`].
+///
+/// Returns `true` if the `DeleteAllCookies` call was issued
+/// successfully, `false` on any COM failure (logged at WARN). A
+/// `false` return is best-effort — the caller still proceeds to seed.
+pub fn clear_all_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>) -> bool {
+    let issued = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let issued_inner = issued.clone();
+
+    let result = window.with_webview(move |webview| unsafe {
+        let core = match webview.controller().CoreWebView2() {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(step = "NativeClear", error = ?e, "CoreWebView2");
+                return;
+            }
+        };
+
+        let core2: ICoreWebView2_2 = match Interface::cast(&core) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(step = "NativeClear", error = ?e, "cast v2");
+                return;
+            }
+        };
+
+        let manager = match core2.CookieManager() {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(step = "NativeClear", error = ?e, "CookieManager");
+                return;
+            }
+        };
+
+        match manager.DeleteAllCookies() {
+            Ok(()) => {
+                issued_inner.store(true, std::sync::atomic::Ordering::SeqCst);
+                tracing::info!(
+                    step = "NativeClear.Complete",
+                    "DeleteAllCookies issued on WebView2 profile"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(step = "NativeClear.Failed", error = ?e, "DeleteAllCookies failed");
+            }
+        }
+    });
+
+    if let Err(e) = result {
+        tracing::warn!(step = "NativeClear", error = ?e, "with_webview failed");
+        return false;
+    }
+
+    issued.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// Register a `NewWindowRequested` handler on the WebView2 instance

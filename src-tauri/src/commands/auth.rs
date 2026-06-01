@@ -105,8 +105,8 @@ use crate::services::beanfun::{
     login::{
         finalize_qr_login, get_session_key, init_qr_login, inject_webview_cookies,
         login_registered_device, login_totp as login_totp_service, login_with,
-        logout as logout_service, poll_qr_login_status, seed_webview_cookies_from_client,
-        try_complete_gamepass_login, LoginMethod, QrPollOutcome,
+        logout as logout_service, poll_qr_login_status, try_complete_gamepass_login, LoginMethod,
+        QrPollOutcome,
     },
     session::Credentials,
     verify::{
@@ -116,6 +116,13 @@ use crate::services::beanfun::{
     },
     LoginError, Session,
 };
+
+// Only the non-Windows GamePass seed path uses the wry `set_cookie`
+// helper; Windows seeds (and clears, issue #296) through the native
+// COM `cookie_native::seed_cookies_native`, so importing this on
+// Windows would be a dead `use`.
+#[cfg(not(target_os = "windows"))]
+use crate::services::beanfun::login::seed_webview_cookies_from_client;
 
 // ═══════════════════════════════════════════════════════════════════════
 // Session keep-alive (WPF pingWorker parity)
@@ -975,6 +982,63 @@ fn parse_harvest_url(raw: &str) -> Url {
     Url::parse(raw).expect("GAMEPASS_HARVEST_URLS entry must be a valid absolute URL")
 }
 
+/// Diagnostic — log the **names** (never the values) of the cookies
+/// the GamePass WebView currently exposes for each
+/// [`GAMEPASS_HARVEST_URLS`] origin.
+///
+/// # Why this exists (issue #296)
+///
+/// The re-login fix wipes the WebView2 cookie store before seeding a
+/// fresh session (see [`open_gamepass_window`]). Because the clear
+/// happens inside a native COM closure with no return-value cookie
+/// dump, the only way to *prove on a live run* that no stale
+/// `bfWebToken` survived a logout → re-login cycle is to read the
+/// WebView's own view of its cookies on the first page load (the
+/// `Login/Index` entry page, before the user authenticates).
+///
+/// Expected traces on a healthy re-login:
+///
+/// - On the entry page: only the freshly-seeded portal-session
+///   cookies (e.g. `ASP.NET_SessionId`) — **no** `bfWebToken`. A
+///   lingering `bfWebToken` here means the clear failed (or WebView2
+///   restored it from disk) and is the smoking gun for a #296
+///   regression.
+/// - After a real GamePass authentication: `bfWebToken` appears,
+///   which is what [`try_complete_gamepass_login`] then harvests.
+///
+/// Values are deliberately omitted — session cookies are
+/// credentials-equivalent and structured log sinks would capture
+/// them (same stance as [`trace_cookie_jar`]).
+///
+/// Read errors per origin are logged at WARN but never abort the
+/// caller; this is a best-effort observability hook, not a control-
+/// flow gate.
+fn trace_webview_cookies<R: tauri::Runtime>(step: &'static str, window: &WebviewWindow<R>) {
+    for raw_origin in GAMEPASS_HARVEST_URLS {
+        let origin = parse_harvest_url(raw_origin);
+        match window.cookies_for_url(origin.clone()) {
+            Ok(cookies) => {
+                let names: Vec<&str> = cookies.iter().map(|c| c.name()).collect();
+                tracing::info!(
+                    step = step,
+                    origin = %origin,
+                    count = names.len(),
+                    names = ?names,
+                    "webview cookie names for origin"
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    step = step,
+                    origin = %origin,
+                    error = ?err,
+                    "failed to read webview cookies for diagnostic dump"
+                );
+            }
+        }
+    }
+}
+
 /// Diagnostic — dump every unexpired cookie in `client`'s jar to the
 /// tracing pipeline as structured `info!` records, one per cookie
 /// plus a summary line.
@@ -1008,9 +1072,8 @@ fn parse_harvest_url(raw: &str) -> Url {
 ///    returns. Captures what the portal's redirect chain left
 ///    behind in the client jar (the "what WPF's `bfClient` would
 ///    be holding at this point" snapshot).
-/// 2. [`open_gamepass_window`] — right before
-///    [`seed_webview_cookies_from_client`] runs. Captures what we
-///    actually hand off to the WebView.
+/// 2. [`open_gamepass_window`] — right before the WebView cookie
+///    seed runs. Captures what we actually hand off to the WebView.
 ///
 /// Both dumps should be identical in the happy path (no HTTP
 /// happens between them), but pinning both makes any unexpected
@@ -1156,6 +1219,13 @@ async fn handle_gamepass_page_load<R: tauri::Runtime>(
             }
         }
     };
+
+    // Issue #296 diagnostic — dump the WebView's cookie names on EVERY
+    // page load (this runs *before* the completion-URL filter below so
+    // it also fires on the `Login/Index` entry page). A re-login that
+    // shows a stale `bfWebToken` here means the pre-seed
+    // `DeleteAllCookies` in `open_gamepass_window` did not take effect.
+    trace_webview_cookies("GamepassPageLoad.WebViewCookies", &window);
 
     if !should_try_gamepass_completion(&url) {
         tracing::info!(
@@ -1626,43 +1696,88 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
     // from another tauri task) becomes obvious.
     trace_cookie_jar("GamepassWebViewSeed.JarDump", &client);
 
-    // ── Seed every unexpired session cookie from the BeanfunClient
-    // jar into the newly-created WebView. Best-effort per-cookie:
-    // if one `set_cookie` fails (platform regression, corrupted
-    // attributes) we log and continue — identical stance to WPF's
-    // `AddOrUpdateCookie` loop which has no per-cookie try/catch.
-    // If seeding fails *catastrophically* (e.g. the sink closure
-    // errors out by returning `Err` early — our closure never does,
-    // it's infallible-by-construction), propagation would go here;
-    // the current closure can only return `Ok(())`, so the unwrap
-    // at `.expect("seed closure never errors")` is a compile-time
-    // assertion the helper stays fire-and-forget from this call
-    // site.
-    let mut seed_failures = 0usize;
-    let seeded = seed_webview_cookies_from_client(&client, |cookie| {
-        if let Err(err) = window.set_cookie(cookie.clone()) {
-            seed_failures += 1;
-            tracing::warn!(
-                step = "GamepassWebViewSeed.CookieError",
-                cookie_name = %cookie.name(),
-                cookie_domain = ?cookie.domain(),
-                error = ?err,
-                "failed to seed cookie into GamePass WebView; continuing with remaining cookies"
-            );
-        }
-        // Explicit `Ok` so the helper's fail-fast short-circuit
-        // semantics never fire — we want a best-effort full pass
-        // matching WPF.
-        Ok::<(), std::convert::Infallible>(())
-    })
-    .expect("seed closure is infallible");
+    // ── Reset the shared WebView2 cookie store, then seed the fresh
+    // session cookies (issue #296).
+    //
+    // WebView2 keeps ONE cookie store per user-data-folder, shared by
+    // every window for the lifetime of the host *process*. A prior
+    // GamePass login therefore leaves its (now logged-out, server-
+    // invalidated) `bfWebToken` / `ASP.NET_SessionId` behind. On a
+    // second attempt within the same process the portal sees that
+    // stale token, short-circuits the OAuth round-trip, and the
+    // harvest lifts the dead session — surfacing the wrong / empty
+    // account data. Only restarting the .exe (which ends the WebView2
+    // browser session and drops the session cookies) recovered.
+    //
+    // Wiping the store before seeding makes every attempt start from a
+    // fresh-browser state, equivalent to a process restart.
+    #[cfg(target_os = "windows")]
+    {
+        // Two distinct native passes, NOT one fused closure.
+        //
+        // `DeleteAllCookies` and `AddOrUpdateCookie` are both
+        // fire-and-return COM calls that queue work on the WebView2
+        // browser process, and Microsoft documents no ordering
+        // guarantee between a delete and an immediately-following add.
+        // Issuing them back-to-back in the same pass risks the pending
+        // delete wiping the cookies we just seeded — which would
+        // reproduce the very "No such auth key and secret code" failure
+        // the D5 seed fix cured. So: clear, wait for the delete to
+        // flush, THEN seed, then wait for the seed to flush, then
+        // navigate.
+        let cleared = crate::commands::cookie_native::clear_all_cookies_native(&window);
+        tracing::info!(
+            step = "GamepassWebViewClear",
+            cleared = cleared,
+            "issued DeleteAllCookies before seeding (issue #296)"
+        );
+        // Let the delete commit on the browser process before we start
+        // writing the fresh cookies.
+        tokio::time::sleep(Duration::from_millis(200)).await;
 
-    tracing::info!(
-        step = "GamepassWebViewSeed.Summary",
-        seeded = seeded - seed_failures,
-        failed = seed_failures,
-        "cookie seed summary from BeanfunClient jar into WebView before login navigation"
-    );
+        let seeded = crate::commands::cookie_native::seed_cookies_native(&window, &client);
+        tracing::info!(
+            step = "GamepassWebViewSeed.Summary",
+            seeded = seeded,
+            "seeded fresh session cookies after clear (native COM)"
+        );
+        // Let the seed flush before the navigation below sends the
+        // request cookies (same flush stance as `web_browser::open_*`).
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    // Non-Windows has no native cookie API; fall back to wry's
+    // `set_cookie` (best-effort per-cookie). The cookie-persistence
+    // quirk this clears is Windows/WebView2-specific and beanfun ships
+    // Windows-only, so the absence of a clear here is acceptable.
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut seed_failures = 0usize;
+        let seeded = seed_webview_cookies_from_client(&client, |cookie| {
+            if let Err(err) = window.set_cookie(cookie.clone()) {
+                seed_failures += 1;
+                tracing::warn!(
+                    step = "GamepassWebViewSeed.CookieError",
+                    cookie_name = %cookie.name(),
+                    cookie_domain = ?cookie.domain(),
+                    error = ?err,
+                    "failed to seed cookie into GamePass WebView; continuing with remaining cookies"
+                );
+            }
+            // Explicit `Ok` so the helper's fail-fast short-circuit
+            // semantics never fire — we want a best-effort full pass
+            // matching WPF.
+            Ok::<(), std::convert::Infallible>(())
+        })
+        .expect("seed closure is infallible");
+
+        tracing::info!(
+            step = "GamepassWebViewSeed.Summary",
+            seeded = seeded - seed_failures,
+            failed = seed_failures,
+            "cookie seed summary from BeanfunClient jar into WebView before login navigation"
+        );
+    }
 
     // ── Navigate to the real login URL. From here on the page-load
     // handler drives completion (same as before).
