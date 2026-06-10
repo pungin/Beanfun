@@ -2294,145 +2294,154 @@ onBeforeUnmount(() => {
             </div>
           </header>
 
-          <div
-            ref="listBodyRef"
-            class="account-list__list-body bf-custom-scrollbar"
-            @scroll="handleListScroll"
-          >
-            <p
-              v-if="loadState === 'loading'"
-              class="account-list__list-state"
-              data-test="account-list-loading"
-            >
-              {{ t('accountList.loading') }}
-            </p>
-
-            <div
-              v-else-if="loadState === 'error'"
-              class="account-list__list-state account-list__list-state--error"
-              data-test="account-list-error"
-            >
-              <p>{{ loadError ?? t('accountList.loadFailed') }}</p>
-              <el-button
-                type="primary"
-                plain
-                size="small"
-                data-test="account-list-retry"
-                @click="loadList"
-              >
-                {{ t('accountList.retry') }}
-              </el-button>
-            </div>
-
-            <p
-              v-else-if="serviceAccounts.length === 0"
-              class="account-list__list-state"
-              data-test="account-list-empty"
-            >
-              {{ t('accountList.empty') }}
-            </p>
-
-            <!--
-            D7: SortableJS (via `rowsRef` + `watch`) makes the row
-            list drag-sortable. The `handle` option mirrors WPF's
-            `_isHandlePressed` gate — only mouse-down on the grip
-            starts a drag; any other click on the row falls through
-            to `selectRow`. `ghostClass` styles the placeholder
-            slot during drag (defined at bottom of <style scoped>).
+          <!--
+            #295: Wrapper provides the positioning context for the
+            scroll-hint overlay. The hint must be a sibling of
+            list-body (not a child) so that position:absolute anchors
+            to the wrapper's visible bottom edge rather than to the
+            scroll content's bottom, which would shift on scroll.
           -->
-            <ul v-else ref="rowsRef" class="account-list__rows" data-test="account-list-rows">
-              <li
-                v-for="(a, idx) in serviceAccounts"
-                :key="a.sid"
-                class="account-list__row"
-                :class="{
-                  'account-list__row--selected': isSelected(a),
-                  'account-list__row--banned': !a.is_enable,
-                }"
-                :data-test="`account-row-${a.sid}`"
-                @click="selectRow(a)"
-                @dblclick="handleRowDblClick(a)"
+          <div class="account-list__list-scroll-wrapper">
+            <div
+              ref="listBodyRef"
+              class="account-list__list-body bf-custom-scrollbar"
+              @scroll="handleListScroll"
+            >
+              <p
+                v-if="loadState === 'loading'"
+                class="account-list__list-state"
+                data-test="account-list-loading"
               >
-                <span
-                  class="account-list__row-grip"
-                  :title="t('accountList.dragHandle')"
-                  aria-hidden="true"
-                  >⋮⋮</span
+                {{ t('accountList.loading') }}
+              </p>
+
+              <div
+                v-else-if="loadState === 'error'"
+                class="account-list__list-state account-list__list-state--error"
+                data-test="account-list-error"
+              >
+                <p>{{ loadError ?? t('accountList.loadFailed') }}</p>
+                <el-button
+                  type="primary"
+                  plain
+                  size="small"
+                  data-test="account-list-retry"
+                  @click="loadList"
                 >
-                <span class="account-list__row-num">{{ idx + 1 }}</span>
-                <div class="account-list__row-info">
-                  <p class="account-list__row-name">{{ a.sname }}</p>
-                  <p v-if="!a.is_enable" class="account-list__row-sub">
-                    {{ t('accountList.statusBanned') }}
-                  </p>
-                </div>
-                <el-dropdown
-                  trigger="click"
-                  placement="bottom-end"
-                  :hide-on-click="true"
-                  popper-class="account-list__row-menu-popper"
-                  @click.stop
+                  {{ t('accountList.retry') }}
+                </el-button>
+              </div>
+
+              <p
+                v-else-if="serviceAccounts.length === 0"
+                class="account-list__list-state"
+                data-test="account-list-empty"
+              >
+                {{ t('accountList.empty') }}
+              </p>
+
+              <!--
+              D7: SortableJS (via `rowsRef` + `watch`) makes the row
+              list drag-sortable. The `handle` option mirrors WPF's
+              `_isHandlePressed` gate — only mouse-down on the grip
+              starts a drag; any other click on the row falls through
+              to `selectRow`. `ghostClass` styles the placeholder
+              slot during drag (defined at bottom of <style scoped>).
+            -->
+              <ul v-else ref="rowsRef" class="account-list__rows" data-test="account-list-rows">
+                <li
+                  v-for="(a, idx) in serviceAccounts"
+                  :key="a.sid"
+                  class="account-list__row"
+                  :class="{
+                    'account-list__row--selected': isSelected(a),
+                    'account-list__row--banned': !a.is_enable,
+                  }"
+                  :data-test="`account-row-${a.sid}`"
+                  @click="selectRow(a)"
+                  @dblclick="handleRowDblClick(a)"
                 >
-                  <button
-                    type="button"
-                    class="account-list__row-more"
-                    :title="t('accountList.moreActions')"
-                    :data-test="`account-row-more-${a.sid}`"
+                  <span
+                    class="account-list__row-grip"
+                    :title="t('accountList.dragHandle')"
+                    aria-hidden="true"
+                    >⋮⋮</span
+                  >
+                  <span class="account-list__row-num">{{ idx + 1 }}</span>
+                  <div class="account-list__row-info">
+                    <p class="account-list__row-name">{{ a.sname }}</p>
+                    <p v-if="!a.is_enable" class="account-list__row-sub">
+                      {{ t('accountList.statusBanned') }}
+                    </p>
+                  </div>
+                  <el-dropdown
+                    trigger="click"
+                    placement="bottom-end"
+                    :hide-on-click="true"
+                    popper-class="account-list__row-menu-popper"
                     @click.stop
                   >
-                    <el-icon><MoreFilled /></el-icon>
-                  </button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item
-                        :data-test="`account-row-change-alias-${a.sid}`"
-                        @click="handleChangeAlias(a)"
-                      >
-                        <el-icon><EditPen /></el-icon>
-                        <span>{{ t('ChangeAccountName') }}</span>
-                      </el-dropdown-item>
-                      <el-dropdown-item
-                        :data-test="`account-row-info-${a.sid}`"
-                        @click="handleAccountInfo(a)"
-                      >
-                        <el-icon><InfoFilled /></el-icon>
-                        <span>{{ t('GameAccountInfo') }}</span>
-                      </el-dropdown-item>
-                      <el-dropdown-item
-                        :data-test="`account-row-get-email-${a.sid}`"
-                        @click="handleGetEmail"
-                      >
-                        <el-icon><Message /></el-icon>
-                        <span>{{ t('CheckEmail') }}</span>
-                      </el-dropdown-item>
-                      <!--
-                      D8h: Change Password menu item only appears for
-                      unconnected games (mirrors WPF
-                      `m_ChangePassword.Visibility` toggled by
-                      `selectedGameChanged()` on the same predicate).
-                      Connected games delegate password changes to
-                      the Beanfun member centre web flow, which is
-                      opened from the page-level chrome — no
-                      per-row affordance is needed there.
-                    -->
-                      <el-dropdown-item
-                        v-if="game.isUnconnectedGame"
-                        :data-test="`account-row-change-password-${a.sid}`"
-                        @click="handleChangePassword(a)"
-                      >
-                        <el-icon><Key /></el-icon>
-                        <span>{{ t('ChangePassword') }}</span>
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </li>
-            </ul>
+                    <button
+                      type="button"
+                      class="account-list__row-more"
+                      :title="t('accountList.moreActions')"
+                      :data-test="`account-row-more-${a.sid}`"
+                      @click.stop
+                    >
+                      <el-icon><MoreFilled /></el-icon>
+                    </button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item
+                          :data-test="`account-row-change-alias-${a.sid}`"
+                          @click="handleChangeAlias(a)"
+                        >
+                          <el-icon><EditPen /></el-icon>
+                          <span>{{ t('ChangeAccountName') }}</span>
+                        </el-dropdown-item>
+                        <el-dropdown-item
+                          :data-test="`account-row-info-${a.sid}`"
+                          @click="handleAccountInfo(a)"
+                        >
+                          <el-icon><InfoFilled /></el-icon>
+                          <span>{{ t('GameAccountInfo') }}</span>
+                        </el-dropdown-item>
+                        <el-dropdown-item
+                          :data-test="`account-row-get-email-${a.sid}`"
+                          @click="handleGetEmail"
+                        >
+                          <el-icon><Message /></el-icon>
+                          <span>{{ t('CheckEmail') }}</span>
+                        </el-dropdown-item>
+                        <!--
+                        D8h: Change Password menu item only appears for
+                        unconnected games (mirrors WPF
+                        `m_ChangePassword.Visibility` toggled by
+                        `selectedGameChanged()` on the same predicate).
+                        Connected games delegate password changes to
+                        the Beanfun member centre web flow, which is
+                        opened from the page-level chrome — no
+                        per-row affordance is needed there.
+                      -->
+                        <el-dropdown-item
+                          v-if="game.isUnconnectedGame"
+                          :data-test="`account-row-change-password-${a.sid}`"
+                          @click="handleChangePassword(a)"
+                        >
+                          <el-icon><Key /></el-icon>
+                          <span>{{ t('ChangePassword') }}</span>
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </li>
+              </ul>
+            </div>
 
             <!--
-              #263: Floating scroll indicator shown when there are more than
-              5 accounts. The SVG chevron fades out when the user scrolls
-              near the bottom of the list.
+              #295: Scroll indicator is a sibling of list-body (not a child)
+              so position:absolute stays anchored to the wrapper's visible
+              bottom edge regardless of scroll position.
             -->
             <Transition name="account-list__scroll-hint-fade">
               <div
@@ -2977,6 +2986,15 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+/*
+ * #295: Wrapper provides the positioning context for the scroll-hint
+ * overlay so it stays anchored to the visible bottom edge of the list
+ * rather than the scroll content's bottom.
+ */
+.account-list__list-scroll-wrapper {
+  position: relative;
+}
+
 .account-list__list-body {
   overflow-y: auto;
   padding: 0.5rem;
@@ -2990,7 +3008,6 @@ onBeforeUnmount(() => {
    */
   --max-visible-rows: 5;
   max-height: calc(var(--max-visible-rows) * 36px + (var(--max-visible-rows) - 1) * 0.25rem + 1rem);
-  position: relative;
 }
 
 /*
