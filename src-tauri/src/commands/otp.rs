@@ -35,7 +35,10 @@ use crate::commands::{
     session::{require_auth, SESSION_REQUIRED_CODE, SESSION_REQUIRED_MESSAGE},
     state::AppState,
 };
-use crate::services::beanfun::{get_otp as service_get_otp, LoginError, ServiceAccount};
+use crate::services::beanfun::{
+    account::get_accounts as service_get_accounts, get_otp as service_get_otp, LoginError,
+    ServiceAccount,
+};
 
 /// Retrieve the one-time game-launch password for a given service
 /// account.
@@ -111,18 +114,74 @@ pub async fn get_otp(
     {
         Ok(otp) => Ok(otp),
         Err(e) if is_likely_session_expired(&e) => {
+            // Issue #298: pressing "get password" immediately after a QR
+            // (or any) login frequently trips the session-expired
+            // heuristic even though the session is perfectly valid — the
+            // server-side portal session for the game host just isn't
+            // warm yet on the very first OTP attempt, so step 1/2 come
+            // back as a login-redirect page.
+            //
+            // WPF (5.9) tolerates this: `GetOTP` failures only show a
+            // "GetOtpError" toast and the user retries successfully. The
+            // earlier #264 fix over-corrected by nuking the auth context
+            // on the *first* failure, which surfaces as the user-visible
+            // "登入逾期" → forced re-login regression reported in #298.
+            //
+            // Re-warm the portal session exactly the way `get_accounts`
+            // does (the `auth.aspx` cookie-priming GET it runs first) and
+            // retry the OTP once. Only a *second* session-expired-looking
+            // failure is treated as a genuine expiry that clears auth.
             tracing::warn!(
                 error = %e,
-                "OTP flow detected likely server-side session expiry; clearing local auth context"
+                "OTP first attempt looked session-expired; re-warming portal session and retrying once"
             );
-            let taken = state.auth.write().await.take();
-            if let Some(ctx) = taken {
-                ctx.ping_cancel.cancel();
+
+            if let Err(rewarm_err) = service_get_accounts(
+                &client,
+                &session,
+                &session.service_code,
+                &session.service_region,
+            )
+            .await
+            {
+                // Non-fatal: the retry below may still succeed off the
+                // cookies the warm-up GET primed even if list parsing
+                // failed. Log for live-test fault isolation.
+                tracing::warn!(
+                    error = %rewarm_err,
+                    "OTP re-warm get_accounts failed; retrying OTP anyway"
+                );
             }
-            Err(CommandError::new(
-                SESSION_REQUIRED_CODE,
-                SESSION_REQUIRED_MESSAGE,
-            ))
+
+            match service_get_otp(
+                &client,
+                &session,
+                &account,
+                &session.service_code,
+                &session.service_region,
+            )
+            .await
+            {
+                Ok(otp) => {
+                    tracing::info!("OTP succeeded after portal-session re-warm");
+                    Ok(otp)
+                }
+                Err(e2) if is_likely_session_expired(&e2) => {
+                    tracing::warn!(
+                        error = %e2,
+                        "OTP still session-expired after re-warm; clearing local auth context"
+                    );
+                    let taken = state.auth.write().await.take();
+                    if let Some(ctx) = taken {
+                        ctx.ping_cancel.cancel();
+                    }
+                    Err(CommandError::new(
+                        SESSION_REQUIRED_CODE,
+                        SESSION_REQUIRED_MESSAGE,
+                    ))
+                }
+                Err(e2) => Err(CommandError::from(e2)),
+            }
         }
         Err(e) => Err(CommandError::from(e)),
     }
