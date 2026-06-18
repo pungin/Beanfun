@@ -1560,7 +1560,7 @@ describe('AccountList page', () => {
     expect(wrapper.find('[data-test="account-list-otp-field"]').attributes('value')).toBe('')
   })
 
-  it('#300: switching sub-accounts restores each account\'s cached OTP', async () => {
+  it("#300: switching sub-accounts restores each account's cached OTP", async () => {
     /*
      * Issue #300 feature request: an OTP fetched for one sub-account
      * must persist when the user toggles to another account and back,
