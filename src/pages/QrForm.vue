@@ -237,6 +237,30 @@ async function doStart(): Promise<void> {
   }
 }
 
+/**
+ * Cold-start safety net (issue #298).
+ *
+ * On the very first app open the QR area sometimes stayed blank/white
+ * with no error banner, and the only recovery was manually toggling
+ * region (HK → TW) to re-trigger a fresh `loginQrStart`. Two distinct
+ * first-open hazards produce that symptom:
+ *
+ * 1. A transient cold-start network failure on the very first HTTPS
+ *    round-trip to beanfun (DNS / TLS / proxy warm-up). `doStart`
+ *    surfaces that as a toast + `connectionLost`, but a single flake
+ *    shouldn't force the user to fiddle with the region picker.
+ * 2. A navigation-storm race (the boot `/ → /login/ → /login/qr`
+ *    redirect chain) where the first `loginQrStart` is rejected by the
+ *    auth-store `withGuard` (a plain `Error`, deliberately swallowed by
+ *    `doStart`) — leaving the QR blank with no banner at all.
+ *
+ * One automatic retry after a short delay covers both: if we still
+ * have no bitmap shortly after the initial attempt, re-run `doStart`
+ * (which mints a fresh backend client + challenge). The manual Refresh
+ * button remains the user-driven fallback.
+ */
+const COLD_START_RETRY_DELAY_MS = 800
+
 onMounted(async () => {
   const region = readRegion()
   if (region !== 'TW') {
@@ -245,6 +269,12 @@ onMounted(async () => {
     await router.push({ path: '/login', query: { pick: '1' } })
     return
   }
+  await doStart()
+
+  // Auto-retry once if the first attempt produced no QR (see docblock).
+  if (disposed || bitmap.value) return
+  await new Promise((resolve) => setTimeout(resolve, COLD_START_RETRY_DELAY_MS))
+  if (disposed || bitmap.value) return
   await doStart()
 })
 
