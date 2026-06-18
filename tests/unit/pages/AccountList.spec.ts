@@ -1560,6 +1560,79 @@ describe('AccountList page', () => {
     expect(wrapper.find('[data-test="account-list-otp-field"]').attributes('value')).toBe('')
   })
 
+  it("#300: switching sub-accounts restores each account's cached OTP", async () => {
+    /*
+     * Issue #300 feature request: an OTP fetched for one sub-account
+     * must persist when the user toggles to another account and back,
+     * instead of blanking. We fetch for sid-1, hop to sid-2 (no cached
+     * OTP → blank), then return to sid-1 and expect the original OTP
+     * to reappear — with NO second `getOtp` IPC (it came from cache).
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.getOtp).mockReturnValueOnce(ok('OTP-CACHED-1'))
+    installClipboardMock()
+
+    const ctx = buildHarness()
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    const account = useAccountStore()
+    account.selectedSid = 'sid-1'
+
+    await wrapper.get('[data-test="account-list-otp-get"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="account-list-otp-field"]').attributes('value')).toBe(
+      'OTP-CACHED-1',
+    )
+
+    /* Hop to sid-2 — no cached OTP for it yet → field blanks. */
+    await wrapper.get('[data-test="account-row-sid-2"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="account-list-otp-field"]').attributes('value')).toBe('')
+
+    /* Back to sid-1 — cached OTP restored without a fresh fetch. */
+    await wrapper.get('[data-test="account-row-sid-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="account-list-otp-field"]').attributes('value')).toBe(
+      'OTP-CACHED-1',
+    )
+    expect(commands.getOtp).toHaveBeenCalledTimes(1)
+  })
+
+  it('#300: double-clicking the OTP field copies it and surfaces GetOtpSuccessAndCopy', async () => {
+    /*
+     * Issue #300 regression: up to 5.9.2 double-clicking the generated
+     * OTP auto-copied it. Restore that gesture — dblclick on the field
+     * must hit `clipboard.writeText` with the current OTP and toast
+     * the WPF success string (the double-click has no persistent
+     * affordance, so explicit feedback is what confirms the copy).
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(POPULATED_LIST))
+    vi.mocked(commands.getOtp).mockReturnValueOnce(ok('OTP-DBL'))
+    const clipboard = installClipboardMock()
+
+    const ctx = buildHarness()
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    useAccountStore().selectedSid = 'sid-1'
+
+    await wrapper.get('[data-test="account-list-otp-get"]').trigger('click')
+    await flushPromises()
+    /* Clear the copy + toast from the Get OTP (auto-paste-off) flow so
+     * the assertions below count only the double-click's effects. */
+    clipboard.writeText.mockClear()
+    vi.mocked(ElMessage.success).mockClear()
+
+    await wrapper.get('[data-test="account-list-otp-field"]').trigger('dblclick')
+    await flushPromises()
+
+    expect(clipboard.writeText).toHaveBeenCalledTimes(1)
+    expect(clipboard.writeText).toHaveBeenCalledWith('OTP-DBL')
+    expect(ElMessage.success).toHaveBeenCalledTimes(1)
+    expect(ElMessage.success).toHaveBeenCalledWith(i18nMessages['zh-TW'].GetOtpSuccessAndCopy)
+  })
+
   it('D5: first auto-paste toggle shows AutoPasteTip + persists; subsequent toggles persist silently', async () => {
     /*
      * Mirrors WPF L73-79 `autoPaste_CheckedChanged`: the very first

@@ -843,6 +843,10 @@ async function selectActiveGame(
    * `redrawSAccountList`'s `SelectedIndex = -1` reset.
    */
   account.selectedSid = null
+  // Issue #300: the new game has a different account set — drop the
+  // per-account OTP cache so a stale token can't surface against a
+  // same-named sid in another game.
+  otpCache.value.clear()
 
   if (refresh) {
     await loadList()
@@ -1561,6 +1565,31 @@ async function handleGetEmail(): Promise<void> {
 const otpValue = ref('')
 
 /**
+ * Per-sub-account OTP cache (issue #300 feature request).
+ *
+ * Keyed by service-account `sid` → the last OTP fetched for that
+ * account this session. Lets the user toggle between sub-accounts
+ * without losing an OTP they already generated: switching away and
+ * back restores the cached value instead of blanking the field.
+ *
+ * Lifetime is intentionally session/list-scoped, not time-scoped:
+ *
+ * - Populated in {@link handleGetOtp} on every successful fetch.
+ * - Read by the `watch(selectedSid)` below to restore on row change.
+ * - Cleared when the active game changes ({@link selectActiveGame},
+ *   the new game has a different account set) and on logout (the
+ *   whole component unmounts).
+ *
+ * We deliberately do NOT expire entries here — Beanfun OTPs are
+ * short-lived, but the user explicitly asked for the value to persist
+ * across toggles, and the canonical "is it still valid?" answer is a
+ * fresh Get OTP press. Showing the last value is strictly better than
+ * blanking it, and never auto-launches off a cached token (Start Game
+ * always routes through a fresh {@link handleGetOtp}).
+ */
+const otpCache = ref(new Map<string, string>())
+
+/**
  * In-flight guard for the OTP fetch + auto-paste sequence. Drives
  * (a) the Get OTP button's `:disabled` rule (re-entrancy guard) and
  * (b) the button label flip from `GetOtp` → `GettingOtp`, mirroring
@@ -1588,19 +1617,24 @@ const gettingOtp = ref(false)
 const autoPaste = ref(configStore.getOr('autoPaste', 'false').toLowerCase() === 'true')
 
 /**
- * Reset the OTP value when the user picks a different row. Without
- * this, the OTP for the previously-selected account would visually
- * stay attached to whichever row is currently highlighted — a
- * mis-binding bug that's easy to introduce because OTP refresh is
- * gesture-driven, not selection-driven.
+ * Re-bind the OTP value when the user picks a different row.
+ *
+ * The OTP is row-bound and must never visually stay attached to a
+ * different highlighted account (a mis-binding bug that's easy to
+ * introduce because OTP refresh is gesture-driven, not selection-
+ * driven). Issue #300: rather than unconditionally blanking, restore
+ * the cached OTP for the newly-selected account when one exists, so
+ * toggling between sub-accounts keeps each account's last token
+ * visible. Accounts with no cached OTP (or the `null` selection)
+ * fall back to an empty field.
  *
  * Logout is handled separately by `account.clearSessionData()` —
  * `selectedSid` becomes null along with everything else.
  */
 watch(
   () => account.selectedSid,
-  () => {
-    otpValue.value = ''
+  (sid) => {
+    otpValue.value = (sid && otpCache.value.get(sid)) || ''
   },
 )
 
@@ -1749,6 +1783,9 @@ async function handleGetOtp(): Promise<void> {
   }
 
   otpValue.value = otp
+  // Issue #300: remember this account's OTP so switching sub-accounts
+  // and back restores it instead of blanking the field.
+  otpCache.value.set(target.sid, otp)
 
   /*
    * D8f — OTP+launch chain. WPF `MainWindow.xaml.cs` L2152-2155
@@ -1846,6 +1883,22 @@ async function handleGetOtp(): Promise<void> {
 function handleCopyOtp(): void {
   if (!otpValue.value) return
   void clipboardWriteOtp(otpValue.value, false)
+}
+
+/**
+ * Double-click the OTP field → copy to clipboard (issue #300
+ * regression). Up to 5.9.2 double-clicking the generated OTP
+ * auto-copied it; the rewrite dropped that, leaving the dedicated
+ * copy icon as the only path. Restore the gesture here.
+ *
+ * Unlike the silent copy-icon ({@link handleCopyOtp}), the
+ * double-click surfaces the `GetOtpSuccessAndCopy` toast: a
+ * double-click has no persistent affordance (no button highlight),
+ * so explicit feedback is what tells the user the copy landed.
+ */
+function handleOtpDblClick(): void {
+  if (!otpValue.value) return
+  void clipboardWriteOtp(otpValue.value, true)
 }
 
 /* --------------- drag-and-drop reorder (D7) --------------- */
@@ -2577,7 +2630,9 @@ onBeforeUnmount(() => {
                 :value="otpValue"
                 :placeholder="t('accountList.otpPlaceholder')"
                 class="account-list__otp-field"
+                :title="t('accountList.copyOtp')"
                 data-test="account-list-otp-field"
+                @dblclick="handleOtpDblClick"
               />
               <button
                 type="button"
