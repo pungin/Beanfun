@@ -438,6 +438,17 @@ async function submit(): Promise<void> {
       await router.push('/login/verify')
       return
     }
+    /*
+     * issue #308 — the server required a Google reCAPTCHA v2 challenge
+     * for this account/password attempt, which can't be solved
+     * headlessly. The backend parked the session for an interactive
+     * WebView login; route to the reCAPTCHA form which opens the real
+     * beanfun login page so the user can solve "I'm not a robot" there.
+     */
+    if (auth.pendingRecaptcha) {
+      await router.push('/login/recaptcha')
+      return
+    }
   } catch {
     // The auth store already surfaced the error toast via
     // `surfaceCommandError`; staying on the form lets the user

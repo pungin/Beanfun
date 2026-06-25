@@ -155,6 +155,17 @@ export interface VerifyIntent {
 const FLOW_CONTINUATION_CODES = {
   TotpRequired: 'auth.totp_required',
   AdvanceCheckRequired: 'auth.advance_check_required',
+  /**
+   * issue #308 — the TW account/password login required a Google
+   * reCAPTCHA v2 challenge for this attempt, which cannot be solved
+   * headlessly. The backend has parked the session on `pending_gamepass`
+   * (the generic "WebView login awaiting harvest" slot) and expects the
+   * UI to open the interactive account-login WebView via
+   * {@link useAuthStore.openAccountLoginWindow}. Swallowed like the other
+   * continuation codes (no toast) so `IdPassForm` can route to
+   * `/login/recaptcha` instead of surfacing it as an error.
+   */
+  RecaptchaRequired: 'auth.recaptcha_required',
 } as const
 
 /**
@@ -189,6 +200,7 @@ export const AUTH_ACTIONS = {
   LoginQrStart: 'login.qr_start',
   LoginQrCheck: 'login.qr_check',
   LoginGamepassStart: 'login.gamepass_start',
+  OpenAccountLoginWindow: 'login.open_account_login_window',
   GetVerifyPageInfo: 'verify.page_info',
   GetVerifyCaptcha: 'verify.captcha',
   SubmitVerify: 'verify.submit',
@@ -201,6 +213,14 @@ export const useAuthStore = defineStore('auth', () => {
   const session = ref<SessionInfo | null>(null)
   const pendingTotp = ref(false)
   const pendingVerify = ref(false)
+  /**
+   * issue #308 — set when {@link loginRegular} sees
+   * `auth.recaptcha_required`. Tells `IdPassForm` to route to
+   * `/login/recaptcha` (the interactive account-login WebView) instead
+   * of treating the response as a hard error. Cleared on any successful
+   * login and on {@link clearSession}.
+   */
+  const pendingRecaptcha = ref(false)
   const qrChallenge = ref<QrStart | null>(null)
   const pendingAction = ref<AuthAction | null>(null)
 
@@ -289,6 +309,7 @@ export const useAuthStore = defineStore('auth', () => {
         session.value = result.data
         pendingTotp.value = false
         pendingVerify.value = false
+        pendingRecaptcha.value = false
         qrChallenge.value = null
         advanceCheckUrl.value = null
         return result.data
@@ -300,6 +321,10 @@ export const useAuthStore = defineStore('auth', () => {
       if (result.error.code === FLOW_CONTINUATION_CODES.AdvanceCheckRequired) {
         pendingVerify.value = true
         advanceCheckUrl.value = readAdvanceCheckUrl(result.error.details)
+        return null
+      }
+      if (result.error.code === FLOW_CONTINUATION_CODES.RecaptchaRequired) {
+        pendingRecaptcha.value = true
         return null
       }
       surfaceCommandError(result.error)
@@ -321,6 +346,7 @@ export const useAuthStore = defineStore('auth', () => {
         session.value = result.data
         pendingTotp.value = false
         pendingVerify.value = false
+        pendingRecaptcha.value = false
         advanceCheckUrl.value = null
         return result.data
       }
@@ -373,6 +399,7 @@ export const useAuthStore = defineStore('auth', () => {
           qrChallenge.value = null
           pendingTotp.value = false
           pendingVerify.value = false
+          pendingRecaptcha.value = false
           advanceCheckUrl.value = null
         } else if (result.data.status === 'expired') {
           qrChallenge.value = null
@@ -436,8 +463,32 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = info
     pendingTotp.value = false
     pendingVerify.value = false
+    pendingRecaptcha.value = false
     qrChallenge.value = null
     advanceCheckUrl.value = null
+  }
+
+  /**
+   * Open the interactive account-login WebView used by the issue #308
+   * reCAPTCHA flow. The backend has already parked `(client, skey)` on
+   * its `pending_gamepass` slot (via {@link loginRegular}'s
+   * `auth.recaptcha_required` branch), so this just pops the WebView.
+   *
+   * `account` / `password` are the values the user already typed in
+   * `IdPassForm` (read from {@link loginIntent}); the backend uses them
+   * only to best-effort autofill beanfun's own login form so the user
+   * just solves the reCAPTCHA + submits. Pass empty strings to skip
+   * autofill.
+   *
+   * The terminal outcome arrives via the same `gamepass-login-success` /
+   * `-failed` / `-cancelled` Tauri events the GamePass flow uses, which
+   * `RecaptchaForm.vue` listens for and routes through
+   * {@link applyGamepassSession}.
+   */
+  async function openAccountLoginWindow(account: string, password: string): Promise<void> {
+    return withGuard(AUTH_ACTIONS.OpenAccountLoginWindow, async () => {
+      await wrapCommand(commands.openAccountLoginWindow(account, password))
+    })
   }
 
   async function getVerifyPageInfo(advanceCheckUrl: string | null): Promise<VerifyPage> {
@@ -501,6 +552,7 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = null
     pendingTotp.value = false
     pendingVerify.value = false
+    pendingRecaptcha.value = false
     qrChallenge.value = null
     advanceCheckUrl.value = null
     /*
@@ -580,6 +632,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoggedIn,
     pendingTotp,
     pendingVerify,
+    pendingRecaptcha,
     qrChallenge,
     advanceCheckUrl,
     pendingAction,
@@ -591,6 +644,7 @@ export const useAuthStore = defineStore('auth', () => {
     loginQrStart,
     loginQrCheck,
     loginGamepassStart,
+    openAccountLoginWindow,
     applyGamepassSession,
     getVerifyPageInfo,
     getVerifyCaptcha,

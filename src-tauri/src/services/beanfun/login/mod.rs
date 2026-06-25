@@ -26,6 +26,7 @@ pub mod gamepass;
 pub mod hk_error;
 pub mod hk_regular;
 pub mod index;
+pub mod init_login;
 pub mod logout;
 pub mod orchestrator;
 pub mod qr_finalize;
@@ -48,6 +49,7 @@ pub use gamepass::{
 pub use hk_error::{extract_hk_error_signal, HkErrorSignal};
 pub use hk_regular::login_hk_regular;
 pub use index::{get_login_index, LoginIndex};
+pub use init_login::check_recaptcha_required;
 pub use logout::logout;
 pub use orchestrator::{login_with, LoginMethod};
 pub use qr_finalize::finalize_qr_login;

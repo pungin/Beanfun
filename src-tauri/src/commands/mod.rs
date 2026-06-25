@@ -230,6 +230,12 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         // is instantiated with (production uses `Wry`).
         auth::login_gamepass_start::<tauri::Wry>,
         auth::open_gamepass_window::<tauri::Wry>,
+        // auth (issue #308 — reCAPTCHA account login)
+        //
+        // Same `::<tauri::Wry>` turbofish rationale as the GamePass
+        // commands above: generic over `R` (builds a `WebviewWindow<R>`),
+        // pinned to `Wry` on the specta side only.
+        auth::open_account_login_window::<tauri::Wry>,
         // auth (P10.2 — verify family)
         auth::get_verify_page_info,
         auth::get_verify_captcha,

@@ -17,8 +17,8 @@
 //! together and build the final [`Session`].
 
 use super::{
-    account_login, check_account_type, get_login_index, get_session_key, post_return_aspx,
-    send_login,
+    account_login, check_account_type, check_recaptcha_required, get_login_index, get_session_key,
+    post_return_aspx, send_login,
 };
 use crate::services::beanfun::{BeanfunClient, Credentials, LoginError, LoginRegion, Session};
 
@@ -46,6 +46,21 @@ pub async fn login_tw_regular(
     let skey = get_session_key(client).await?;
     let index = get_login_index(client, &skey).await?;
     let index_url = index.index_url.as_str().to_owned();
+
+    // As of 2026-06-25 the server may gate the account/password POSTs
+    // behind a Google reCAPTCHA v2 challenge for this attempt (see the
+    // `init_login` module docs). A v2 token cannot be produced
+    // headlessly, so bail to the interactive WebView login when
+    // required; otherwise the headless flow below is unchanged.
+    if check_recaptcha_required(client, &skey, &index_url).await? {
+        tracing::info!(
+            step = "TwRegular",
+            region = ?LoginRegion::TW,
+            account_id = %creds.account,
+            "reCAPTCHA required; deferring to interactive WebView login",
+        );
+        return Err(LoginError::RecaptchaRequired { skey });
+    }
 
     let captcha = check_account_type(
         client,

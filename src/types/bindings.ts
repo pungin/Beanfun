@@ -11,7 +11,7 @@ export const commands = {
 /**
  * Return the static build metadata. Infallible; no parameters; no
  * state.
- *
+ * 
  * Intended as the simplest possible Tauri command — if this
  * doesn't round-trip correctly, nothing else will. Also serves as
  * the canonical example of a sync `#[tauri::command]` with a
@@ -22,12 +22,12 @@ async version() : Promise<VersionInfo> {
 },
 /**
  * Round-trip an input string through a blocking worker thread.
- *
+ * 
  * Exercises the canonical Win32-wrapping pattern: the closure runs
  * on a [`tokio::task::spawn_blocking`] pool worker (not the reactor
  * thread), sleeps for 60 ms to prove the `await` point genuinely
  * suspends, then returns `"pong: {input}"`.
- *
+ * 
  * Failure path: if the blocking task panics or is cancelled the
  * [`tokio::task::JoinError`] is mapped to
  * `system.spawn_blocking_failed`. Should never happen in steady
@@ -45,7 +45,7 @@ async ping(message: string) : Promise<Result<string, CommandError>> {
 },
 /**
  * Return host visual-environment flags used by the web UI.
- *
+ * 
  * This is deliberately separate from [`version`]: build metadata is
  * static, while this value depends on the user's OS. It is still
  * synchronous and infallible so the frontend can query it before
@@ -56,9 +56,9 @@ async windowVisualEnvironment() : Promise<WindowVisualEnvironment> {
 },
 /**
  * TW / HK regular username+password login.
- *
+ * 
  * # Protocol
- *
+ * 
  * 1. Best-effort clear [`AppState::pending_totp`]
  * ([`AppState`]) so a stale continuation from an abandoned
  * HK-TOTP attempt cannot leak into the new login's error
@@ -78,7 +78,7 @@ async windowVisualEnvironment() : Promise<WindowVisualEnvironment> {
  * [`LoginError::AdvanceCheckRequired`] which surfaces
  * `auth.advance_check_required` with the challenge URL for the
  * frontend to drive a verify flow.
- *
+ * 
  * # Why take `account` + `password` by value?
  * 
  * `#[tauri::command]` deserialises arguments from the JS invoke
@@ -391,6 +391,64 @@ async loginGamepassStart(region: LoginRegion) : Promise<Result<null, CommandErro
 async openGamepassWindow() : Promise<Result<null, CommandError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_gamepass_window") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Open the reCAPTCHA account-login WebView window.
+ * 
+ * Triggered by the frontend after [`login_regular`] surfaces
+ * [`RECAPTCHA_REQUIRED_CODE`]: the TW account/password login required a
+ * Google reCAPTCHA v2 challenge for this attempt, which cannot be
+ * solved headlessly (see
+ * [`crate::services::beanfun::login::init_login`]). This opens the real
+ * `Login/Index?pSKey=…` page in a WebView so the user can type their
+ * account + password and solve the "I'm not a robot" challenge inside
+ * beanfun's own page; the resulting `bfWebToken` is harvested by the
+ * shared [`handle_gamepass_page_load`] hook exactly as GamePass does.
+ * 
+ * # Reuse of the GamePass machinery (deliberate)
+ * 
+ * The reCAPTCHA account login and GamePass login are mechanically
+ * identical — both seed the portal session cookies into an
+ * `about:blank` WebView, navigate to the same `Login/Index?pSKey=…`
+ * URL, and harvest `bfWebToken` once beanfun's redirect chain reaches
+ * `return.aspx`. So this command re-uses:
+ * 
+ * - [`AppState::pending_gamepass`] — parked by [`login_regular`]'s
+ * `RecaptchaRequired` arm (the generic "WebView login awaiting
+ * harvest" slot).
+ * - [`handle_gamepass_page_load`] / [`handle_gamepass_window_destroyed`]
+ * — the completion + cancel hooks.
+ * - The `gamepass-login-success` / `-failed` / `-cancelled` events
+ * (consumed unchanged by the frontend's `applyGamepassSession`).
+ * 
+ * The difference from [`open_gamepass_window`] is the
+ * `initialization_script`: GamePass auto-clicks the "use Gama Pass"
+ * button, whereas here we inject a **best-effort autofill** (built by
+ * [`build_account_autofill_script`]) that pre-fills the `account` +
+ * `password` the user already typed in `IdPassForm`, so they only need
+ * to solve the "I'm not a robot" challenge and submit. We never
+ * auto-click — the reCAPTCHA must be solved by the human. A distinct
+ * window label ([`ACCOUNT_LOGIN_WINDOW_LABEL`]) keeps the double-open
+ * guard independent of the GamePass window.
+ * 
+ * `account` / `password` come from the frontend's `loginIntent` (the
+ * same values it passed to `login_regular`); they are used **only** to
+ * pre-fill beanfun's own login form and are not persisted here. Empty
+ * strings (e.g. direct navigation) make the autofill a no-op.
+ * 
+ * `open_gamepass_window` is left **byte-for-byte untouched** (it was
+ * the subject of the issue #296 stale-cookie fix); the #296-critical
+ * `DeleteAllCookies` / `AddOrUpdateCookie` mechanics live in the shared
+ * [`crate::commands::cookie_native`] module, so only the (trivial)
+ * clear→seed→navigate sequencing is duplicated here.
+ */
+async openAccountLoginWindow(account: string, password: string) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_account_login_window", { account, password }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1784,7 +1842,7 @@ async killGameProcesses(pids: number[]) : Promise<Result<number[], CommandError>
 /**
  * Close MapleStory's Nexon launcher Play dialog if it is currently
  * visible.
- *
+ * 
  * Mirrors one tick of WPF `checkPlayPage_Tick`: find
  * `StartUpDlgClass` / `MapleStory` and post `WM_CLOSE`. The
  * frontend drives this command on a short interval when the
@@ -1801,7 +1859,7 @@ async closeMaplePlayWindow() : Promise<Result<boolean, CommandError>> {
 /**
  * Best-effort terminate MapleStory's `Patcher.exe` from the same
  * directory as `game_path`.
- *
+ * 
  * Mirrors one tick of WPF `checkPatcher_Tick`'s kill branch. The
  * frontend drives this command on a short interval when the
  * MapleStory-only `autoKillPatcher` preference is enabled.
@@ -3129,12 +3187,12 @@ tauri: string }
 /**
  * Runtime visual-environment hints consumed by the frontend before
  * mounting.
- *
+ * 
  * Kept intentionally narrow: the frontend only needs to know when
  * the host cannot safely use the Win11-style translucent glass recipe
  * over a transparent Tauri window.
  */
-export type WindowVisualEnvironment = {
+export type WindowVisualEnvironment = { 
 /**
  * `true` on Windows builds whose build number is below 22000
  * (Windows 10). Those hosts need an opaque CSS fallback because

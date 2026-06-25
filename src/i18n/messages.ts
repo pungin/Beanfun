@@ -311,6 +311,15 @@ const zhTW = {
     windowError: '無法完成 GamePass 登入，請點選重新整理重試。',
     refresh: '重新整理',
   },
+  loginRecaptcha: {
+    title: '完成「我不是機器人」驗證',
+    subtitle: '系統要求進行驗證。請在開啟的視窗中輸入帳號密碼並完成「我不是機器人」驗證以登入。',
+    opening: '正在開啟登入視窗…',
+    waiting: '請在開啟的視窗中完成登入與驗證。',
+    cancelled: '已取消驗證登入。請點選下方返回並重新登入。',
+    windowError: '無法開啟登入視窗，請點選下方返回並重新登入。',
+    altHint: '若驗證一直無法通過，可改用 QR Code 或 Gama Pass 登入。',
+  },
   accountList: {
     serviceAccountsHeading: '遊戲帳號',
     accountCount: '{count} 個帳號',
@@ -521,6 +530,15 @@ const zhCN = {
     connectionLost: '无法与 Beanfun 连接，请点选重新加载重试。',
     windowError: '无法完成 GamePass 登录，请点选重新加载重试。',
     refresh: '重新加载',
+  },
+  loginRecaptcha: {
+    title: '完成「我不是机器人」验证',
+    subtitle: '系统要求进行验证。请在打开的窗口中输入账号密码并完成「我不是机器人」验证以登录。',
+    opening: '正在打开登录窗口…',
+    waiting: '请在打开的窗口中完成登录与验证。',
+    cancelled: '已取消验证登录。请点击下方返回并重新登录。',
+    windowError: '无法打开登录窗口，请点击下方返回并重新登录。',
+    altHint: '若验证始终无法通过，可改用 QR Code 或 Gama Pass 登录。',
   },
   accountList: {
     serviceAccountsHeading: '游戏账号',
@@ -734,6 +752,16 @@ const enUS = {
     connectionLost: 'Unable to reach Beanfun. Please tap Reload and try again.',
     windowError: 'Unable to complete GamePass sign-in. Please tap Reload and try again.',
     refresh: 'Reload',
+  },
+  loginRecaptcha: {
+    title: 'Complete the "I\'m not a robot" check',
+    subtitle:
+      'Verification is required. Enter your account and password and solve the "I\'m not a robot" challenge in the window that opens to sign in.',
+    opening: 'Opening the sign-in window…',
+    waiting: 'Complete sign-in and verification in the window that opened.',
+    cancelled: 'Verification sign-in was cancelled. Tap Back below and sign in again.',
+    windowError: 'Could not open the sign-in window. Tap Back below and sign in again.',
+    altHint: 'If verification keeps failing, try QR Code or Gama Pass sign-in instead.',
   },
   accountList: {
     serviceAccountsHeading: 'Game Accounts',
