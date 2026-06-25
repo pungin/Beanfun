@@ -108,6 +108,7 @@ import LoginRegionSelection from '../pages/LoginRegionSelection.vue'
 import IdPassForm from '../pages/IdPassForm.vue'
 import QrForm from '../pages/QrForm.vue'
 import GamepassForm from '../pages/GamepassForm.vue'
+import RecaptchaForm from '../pages/RecaptchaForm.vue'
 import LoginTotp from '../pages/LoginTotp.vue'
 import LoginWait from '../pages/LoginWait.vue'
 import VerifyPage from '../pages/VerifyPage.vue'
@@ -144,6 +145,7 @@ export const ROUTE_NAMES = {
   LoginIdPass: 'login-id-pass',
   LoginQr: 'login-qr',
   LoginGamepass: 'login-gamepass',
+  LoginRecaptcha: 'login-recaptcha',
   LoginTotp: 'login-totp',
   LoginWait: 'login-wait',
   LoginVerify: 'login-verify',
@@ -195,6 +197,17 @@ const loginChildren: RouteRecordRaw[] = [
     path: 'gamepass',
     name: ROUTE_NAMES.LoginGamepass,
     component: GamepassForm,
+    meta: {
+      titleKey: 'titleBar.login',
+      titleIcon: 'verified_user',
+      windowWidth: 420,
+      windowHeight: 460,
+    },
+  },
+  {
+    path: 'recaptcha',
+    name: ROUTE_NAMES.LoginRecaptcha,
+    component: RecaptchaForm,
     meta: {
       titleKey: 'titleBar.login',
       titleIcon: 'verified_user',

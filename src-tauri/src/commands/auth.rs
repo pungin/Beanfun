@@ -528,6 +528,25 @@ pub async fn login_regular(
             let info = install_session_and_start_ping(&state, client, session).await;
             Ok(info)
         }
+        Err(LoginError::RecaptchaRequired { skey }) => {
+            // The TW account/password page now gates this attempt behind a
+            // Google reCAPTCHA v2 challenge that cannot be solved headlessly
+            // (see `services::beanfun::login::init_login`). Hand off to the
+            // interactive WebView login by re-using the GamePass WebView
+            // machinery: park `(client, skey)` on `pending_gamepass` — the
+            // generic "WebView login awaiting bfWebToken harvest" slot — and
+            // signal the frontend to open the account-login window via
+            // `open_account_login_window`. Clearing the sibling continuations
+            // mirrors the top-of-function resets so only one half-finished
+            // login is ever outstanding.
+            *state.pending_totp.write().await = None;
+            *state.pending_qr.write().await = None;
+            *state.pending_gamepass.write().await = Some(PendingGamepass::new(client, skey));
+            Err(CommandError::new(
+                RECAPTCHA_REQUIRED_CODE,
+                "reCAPTCHA verification is required; complete it in the login window.",
+            ))
+        }
         Err(err) => Err(err.into()),
     }
 }
@@ -852,6 +871,23 @@ pub(crate) const GAMEPASS_WINDOW_ALREADY_OPEN_CODE: &str = "auth.gamepass_window
 /// login attempt.
 const GAMEPASS_WINDOW_LABEL: &str = "gamepass-login";
 
+/// Error code surfaced by [`login_regular`] when the TW account/password
+/// login requires a Google reCAPTCHA v2 challenge for this attempt
+/// (server-side anti-bot; see
+/// [`crate::services::beanfun::login::init_login`]). The frontend reacts
+/// by calling [`open_account_login_window`] so the user can solve the
+/// challenge and finish logging in inside the real beanfun page.
+pub(crate) const RECAPTCHA_REQUIRED_CODE: &str = "auth.recaptcha_required";
+
+/// Fixed Tauri window label for the reCAPTCHA account-login WebView.
+/// Distinct from [`GAMEPASS_WINDOW_LABEL`] so the two windows' double-open
+/// guards are independent, even though both reuse the same
+/// [`AppState::pending_gamepass`] slot + completion handlers (the flows
+/// are mechanically identical — only the landing behaviour differs: the
+/// account-login window does **not** auto-click the Gama Pass button, so
+/// the user sees the normal account/password + reCAPTCHA form).
+const ACCOUNT_LOGIN_WINDOW_LABEL: &str = "account-login";
+
 /// Tauri event names emitted by the GamePass flow. Flat dash-case
 /// per the P12.1 D5 event convention.
 ///
@@ -938,6 +974,83 @@ const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
     clickButton();
   }
 })();"#;
+
+/// Build the best-effort autofill `initialization_script` for the
+/// reCAPTCHA account-login WebView ([`open_account_login_window`]).
+///
+/// `account_js` / `password_js` must already be **JSON-encoded** string
+/// literals (e.g. via `serde_json::to_string`) so they embed safely as
+/// JS string literals — never interpolate raw user input here.
+///
+/// # Behaviour
+///
+/// beanfun's `Login/Index` is a Vue SPA that renders its account +
+/// password `<input>`s with `v-show` (both live in the DOM from first
+/// render; the password block is merely `display:none` until the
+/// account step). The script therefore:
+///
+/// - waits for the form to render (`DOMContentLoaded` + a
+///   `MutationObserver`, since Vue mounts after our init script runs),
+/// - fills both inputs via the **native** value setter + an `input`
+///   event so Vue's `v-model` reactivity picks up the change,
+/// - disconnects once both are filled (or after a 5-min safety timeout).
+///
+/// # Graceful degradation & safety
+///
+/// - Missing input (markup changed) or empty value → silent no-op; the
+///   user just types manually. Autofill never throws or blocks login
+///   (every DOM op is wrapped in `try`).
+/// - The IIFE leaks **no** globals, so beanfun's own page scripts cannot
+///   read `ACC` / `PW` back out.
+/// - We never auto-submit or auto-click — the human still solves the
+///   reCAPTCHA and presses the login buttons.
+fn build_account_autofill_script(account_js: &str, password_js: &str) -> String {
+    // Chinese placeholders are written as JS `\u` escapes so the emitted
+    // script is pure ASCII (the password `type` / `name` fallbacks make
+    // it resilient if beanfun re-words the placeholder).
+    format!(
+        r#"(() => {{
+  const ACC = {account_js};
+  const PW = {password_js};
+  const setVal = (el, val) => {{
+    if (!el || !val) return false;
+    try {{
+      const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value");
+      if (desc && desc.set) {{ desc.set.call(el, val); }} else {{ el.value = val; }}
+      el.dispatchEvent(new Event("input", {{ bubbles: true }}));
+      el.dispatchEvent(new Event("change", {{ bubbles: true }}));
+      return true;
+    }} catch (e) {{ return false; }}
+  }};
+  let accDone = false, pwDone = false;
+  const tryFill = () => {{
+    if (!accDone) {{
+      const a = document.querySelector('input[placeholder="\u8acb\u8f38\u5165\u5e33\u865f"]')
+        || document.querySelector('input[name="aaa"]');
+      if (a) accDone = setVal(a, ACC);
+    }}
+    if (!pwDone) {{
+      const p = document.querySelector('input[type="password"]')
+        || document.querySelector('input[placeholder="\u8acb\u8f38\u5165\u5bc6\u78bc"]')
+        || document.querySelector('input[name="inputName"]');
+      if (p) pwDone = setVal(p, PW);
+    }}
+    return accDone && pwDone;
+  }};
+  const start = () => {{
+    if (tryFill()) return;
+    const obs = new MutationObserver(() => {{ if (tryFill()) obs.disconnect(); }});
+    obs.observe(document.documentElement, {{ childList: true, subtree: true }});
+    setTimeout(() => obs.disconnect(), 300000);
+  }};
+  if (document.readyState === "loading") {{
+    document.addEventListener("DOMContentLoaded", start, {{ once: true }});
+  }} else {{
+    start();
+  }}
+}})();"#
+    )
+}
 
 /// Strip query parameters from a URL for safe logging.
 /// Prevents session tokens (e.g. `pSKey`) from leaking into traces.
@@ -1810,6 +1923,220 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
         step = "GamepassWindowOpened",
         label = GAMEPASS_WINDOW_LABEL,
         "GamePass webview opened; awaiting completion or cancel"
+    );
+
+    Ok(())
+}
+
+/// Open the reCAPTCHA account-login WebView window.
+///
+/// Triggered by the frontend after [`login_regular`] surfaces
+/// [`RECAPTCHA_REQUIRED_CODE`]: the TW account/password login required a
+/// Google reCAPTCHA v2 challenge for this attempt, which cannot be
+/// solved headlessly (see
+/// [`crate::services::beanfun::login::init_login`]). This opens the real
+/// `Login/Index?pSKey=…` page in a WebView so the user can type their
+/// account + password and solve the "I'm not a robot" challenge inside
+/// beanfun's own page; the resulting `bfWebToken` is harvested by the
+/// shared [`handle_gamepass_page_load`] hook exactly as GamePass does.
+///
+/// # Reuse of the GamePass machinery (deliberate)
+///
+/// The reCAPTCHA account login and GamePass login are mechanically
+/// identical — both seed the portal session cookies into an
+/// `about:blank` WebView, navigate to the same `Login/Index?pSKey=…`
+/// URL, and harvest `bfWebToken` once beanfun's redirect chain reaches
+/// `return.aspx`. So this command re-uses:
+///
+/// - [`AppState::pending_gamepass`] — parked by [`login_regular`]'s
+///   `RecaptchaRequired` arm (the generic "WebView login awaiting
+///   harvest" slot).
+/// - [`handle_gamepass_page_load`] / [`handle_gamepass_window_destroyed`]
+///   — the completion + cancel hooks.
+/// - The `gamepass-login-success` / `-failed` / `-cancelled` events
+///   (consumed unchanged by the frontend's `applyGamepassSession`).
+///
+/// The difference from [`open_gamepass_window`] is the
+/// `initialization_script`: GamePass auto-clicks the "use Gama Pass"
+/// button, whereas here we inject a **best-effort autofill** (built by
+/// [`build_account_autofill_script`]) that pre-fills the `account` +
+/// `password` the user already typed in `IdPassForm`, so they only need
+/// to solve the "I'm not a robot" challenge and submit. We never
+/// auto-click — the reCAPTCHA must be solved by the human. A distinct
+/// window label ([`ACCOUNT_LOGIN_WINDOW_LABEL`]) keeps the double-open
+/// guard independent of the GamePass window.
+///
+/// `account` / `password` come from the frontend's `loginIntent` (the
+/// same values it passed to `login_regular`); they are used **only** to
+/// pre-fill beanfun's own login form and are not persisted here. Empty
+/// strings (e.g. direct navigation) make the autofill a no-op.
+///
+/// `open_gamepass_window` is left **byte-for-byte untouched** (it was
+/// the subject of the issue #296 stale-cookie fix); the #296-critical
+/// `DeleteAllCookies` / `AddOrUpdateCookie` mechanics live in the shared
+/// [`crate::commands::cookie_native`] module, so only the (trivial)
+/// clear→seed→navigate sequencing is duplicated here.
+#[tauri::command]
+#[specta::specta]
+pub async fn open_account_login_window<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    account: String,
+    password: String,
+) -> Result<(), CommandError> {
+    let (client, skey) = {
+        let guard = state.pending_gamepass.read().await;
+        match guard.as_ref() {
+            Some(pg) => (pg.client.clone(), pg.skey.clone()),
+            None => {
+                return Err(CommandError::new(
+                    RECAPTCHA_REQUIRED_CODE,
+                    "No reCAPTCHA login is active; submit the account/password form first.",
+                ));
+            }
+        }
+    };
+
+    if app.get_webview_window(ACCOUNT_LOGIN_WINDOW_LABEL).is_some() {
+        return Err(CommandError::new(
+            GAMEPASS_WINDOW_ALREADY_OPEN_CODE,
+            "Account login window is already open; close it before retrying.",
+        ));
+    }
+
+    // Same `Login/Index?pSKey=…` URL the GamePass flow uses — beanfun
+    // renders the account/password + reCAPTCHA form here when the page
+    // is not auto-redirected into Gama Pass.
+    let login_url = build_gamepass_login_url(&skey)?;
+
+    // Best-effort autofill of the credentials the user already typed in
+    // `IdPassForm`. JSON-encode each value so it embeds as a safe JS
+    // string literal (quotes / specials escaped). See
+    // [`build_account_autofill_script`] for the script's behaviour and
+    // graceful-degradation guarantees.
+    let account_js = serde_json::to_string(&account).unwrap_or_else(|_| "\"\"".to_owned());
+    let password_js = serde_json::to_string(&password).unwrap_or_else(|_| "\"\"".to_owned());
+    let autofill_js = build_account_autofill_script(&account_js, &password_js);
+
+    let app_for_page_load = app.clone();
+    let app_for_destroyed = app.clone();
+
+    // `about:blank` first so the session cookies are seeded BEFORE the
+    // first real request to `Login/Index` (same rationale as
+    // `open_gamepass_window`'s D5 hotfix).
+    let about_blank: Url = "about:blank".parse().expect("about:blank is a valid URL");
+
+    let window = WebviewWindowBuilder::new(
+        &app,
+        ACCOUNT_LOGIN_WINDOW_LABEL,
+        WebviewUrl::External(about_blank),
+    )
+    .title("帳號登入 / 驗證")
+    .inner_size(900.0, 700.0)
+    .resizable(true)
+    // Best-effort credential autofill (built above). Unlike GamePass we
+    // do NOT auto-click anything — the user must see the form, solve the
+    // reCAPTCHA, and submit themselves.
+    .initialization_script(autofill_js.as_str())
+    .on_page_load(move |window, payload| {
+        if payload.event() != PageLoadEvent::Finished {
+            return;
+        }
+        let app = app_for_page_load.clone();
+        let window = window.clone();
+        let url = payload.url().clone();
+        tauri::async_runtime::spawn(async move {
+            handle_gamepass_page_load(app, window, url).await;
+        });
+    })
+    .build()
+    .map_err(|e| {
+        CommandError::new(
+            "ui.window_create_failed",
+            format!("Failed to create account-login webview window: {e}"),
+        )
+    })?;
+
+    window.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Destroyed) {
+            let app = app_for_destroyed.clone();
+            tauri::async_runtime::spawn(async move {
+                handle_gamepass_window_destroyed(app).await;
+            });
+        }
+    });
+
+    trace_cookie_jar("AccountLoginWebViewSeed.JarDump", &client);
+
+    // Clear + seed the WebView2 cookie store before navigating — the
+    // same two-pass native COM dance as `open_gamepass_window` (issue
+    // #296). The #296-critical mechanics are shared via `cookie_native`.
+    #[cfg(target_os = "windows")]
+    {
+        let cleared = crate::commands::cookie_native::clear_all_cookies_native(&window);
+        tracing::info!(
+            step = "AccountLoginWebViewClear",
+            cleared = cleared,
+            "issued DeleteAllCookies before seeding (issue #296)"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let seeded = crate::commands::cookie_native::seed_cookies_native(&window, &client);
+        tracing::info!(
+            step = "AccountLoginWebViewSeed.Summary",
+            seeded = seeded,
+            "seeded fresh session cookies after clear (native COM)"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut seed_failures = 0usize;
+        let seeded = seed_webview_cookies_from_client(&client, |cookie| {
+            if let Err(err) = window.set_cookie(cookie.clone()) {
+                seed_failures += 1;
+                tracing::warn!(
+                    step = "AccountLoginWebViewSeed.CookieError",
+                    cookie_name = %cookie.name(),
+                    cookie_domain = ?cookie.domain(),
+                    error = ?err,
+                    "failed to seed cookie into account-login WebView; continuing"
+                );
+            }
+            Ok::<(), std::convert::Infallible>(())
+        })
+        .expect("seed closure is infallible");
+
+        tracing::info!(
+            step = "AccountLoginWebViewSeed.Summary",
+            seeded = seeded - seed_failures,
+            failed = seed_failures,
+            "cookie seed summary from BeanfunClient jar into WebView before login navigation"
+        );
+    }
+
+    tracing::info!(
+        step = "AccountLoginWebViewNavigate",
+        url = %redact_url_query(&login_url),
+        "navigating account-login WebView to login URL after cookie seed"
+    );
+    if let Err(err) = window.navigate(login_url.clone()) {
+        // Navigation failed — clear the slot ourselves so the Destroyed
+        // hook doesn't fire a spurious cancel event, then close the
+        // dangling window.
+        *state.pending_gamepass.write().await = None;
+        let _ = window.close();
+        return Err(CommandError::new(
+            "ui.account_login_navigate_failed",
+            format!("Failed to navigate account-login webview to login URL: {err}"),
+        ));
+    }
+
+    tracing::info!(
+        step = "AccountLoginWindowOpened",
+        label = ACCOUNT_LOGIN_WINDOW_LABEL,
+        "account-login webview opened; awaiting completion or cancel"
     );
 
     Ok(())

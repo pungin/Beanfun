@@ -63,6 +63,28 @@ pub enum LoginError {
     #[error("advance verification required")]
     AdvanceCheckRequired { url: Option<String> },
 
+    /// The TW account/password login page now gates the
+    /// `CheckAccountType` / `AccountLogin` POSTs behind a **Google
+    /// reCAPTCHA v2 challenge** for this attempt (server-side anti-bot,
+    /// triggered by IP / connection-fingerprint reputation and surfaced
+    /// via `Login/InitLogin`'s `IsRecaptcha` flag — see
+    /// [`crate::services::beanfun::login::init_login`]).
+    ///
+    /// A reCAPTCHA v2 token cannot be produced headlessly: it needs a
+    /// real browser, a human checkbox click, and a token bound to
+    /// beanfun's own domain. So the TW Regular flow bails here and the
+    /// command layer hands off to an interactive WebView login that
+    /// loads the real `Login/Index?pSKey=…` page. The `skey` is carried
+    /// so the WebView navigates to the **same** session the detection
+    /// ran against (its cookies are already in the client jar).
+    ///
+    /// Semantically a **continuation**, not a hard error — same stance
+    /// as [`TotpRequired`](Self::TotpRequired) and
+    /// [`AdvanceCheckRequired`](Self::AdvanceCheckRequired); it travels
+    /// the `Err` channel only to keep the happy-path return type clean.
+    #[error("reCAPTCHA challenge required; interactive WebView login needed")]
+    RecaptchaRequired { skey: String },
+
     /// WPF `need_totp` — the server response contained a `totpLoginBtn`
     /// form, meaning the account has TOTP 2FA enabled. Carries a
     /// [`TotpChallenge`] with the viewstate + URL the caller must

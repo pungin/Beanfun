@@ -421,6 +421,15 @@ impl From<LoginError> for CommandError {
                 CommandError::new("auth.advance_check_required", message)
                     .with_details(json!({ "url": url }))
             }
+            // The `skey` is deliberately dropped here: this `From` arm is
+            // only the fallback for an un-intercepted `RecaptchaRequired`.
+            // The real flow is `login_regular` catching it explicitly,
+            // stashing `(client, skey)` on a pending slot, and emitting
+            // this same code itself — the skey is a session bearer that
+            // must stay backend-internal (P10.2 Q4=C), never on the wire.
+            LoginError::RecaptchaRequired { .. } => {
+                CommandError::new("auth.recaptcha_required", message)
+            }
             LoginError::TotpRequired(challenge) => {
                 // P10.1 keeps the payload compact (`challenge_display`
                 // only). P10.2 will upgrade `TotpChallenge` to
