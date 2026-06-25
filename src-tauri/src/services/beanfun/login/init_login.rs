@@ -36,7 +36,6 @@
 use reqwest::header;
 use serde::Deserialize;
 
-use super::ensure_success;
 use crate::services::beanfun::{BeanfunClient, LoginError};
 
 /// Subset of the `InitLogin` JSON envelope we care about for
@@ -63,13 +62,27 @@ struct InitLoginResultData {
 /// Ask the server whether the account/password login requires a
 /// reCAPTCHA challenge for this attempt.
 ///
-/// Returns `Ok(true)` when `ResultData.IsRecaptcha` is `true`,
-/// `Ok(false)` otherwise — including when the body is missing the
-/// field, lacks `ResultData`, or is not parseable as JSON. The lenient
-/// fallback is deliberate: a `false` result routes the caller through
-/// the unchanged headless flow, so a server-side response-shape change
-/// can never make us *more* broken than today (it would simply fail
-/// later in `account_login`, exactly as it does now).
+/// Returns `Ok(true)` **only** when the response positively reports
+/// `ResultData.IsRecaptcha == true`. **Every** other outcome —
+/// transport failure, non-2xx status, oversized / unreadable body,
+/// missing field, missing `ResultData`, non-JSON body — degrades to
+/// `Ok(false)`.
+///
+/// # Why fully best-effort (never `Err` on a runtime condition)
+///
+/// reCAPTCHA detection is an **additive pre-check**, not a login step:
+/// `false` simply routes the caller through the unchanged headless flow
+/// (`check_account_type` → `account_login`). Bubbling a transport /
+/// status error up from here would make a transient `InitLogin` blip
+/// fail the *entire* login — strictly worse than today, where the flow
+/// has no `InitLogin` call at all. If the network is genuinely down the
+/// subsequent headless steps surface the real error anyway, so swallowing
+/// it here loses no diagnostic signal. Only a confirmed
+/// `IsRecaptcha == true` diverts to the interactive WebView path.
+///
+/// The signature stays `Result<bool, _>` (rather than `bool`) only so
+/// the `?` on the URL builder — a programming error, not a runtime
+/// condition — can propagate; all runtime paths return `Ok`.
 ///
 /// `index_url` is the `Login/Index?pSKey=…` URL produced by
 /// [`super::get_login_index`]; it is sent verbatim as the `Referer`.
@@ -86,7 +99,7 @@ pub async fn check_recaptcha_required(
         .origin()
         .ascii_serialization();
 
-    let resp = client
+    let resp = match client
         .http()
         .get(init_url)
         .header(header::ACCEPT, "application/json, text/plain, */*")
@@ -94,10 +107,39 @@ pub async fn check_recaptcha_required(
         .header("X-Requested-With", "XMLHttpRequest")
         .header("Origin", origin)
         .send()
-        .await?;
+        .await
+    {
+        Ok(resp) => resp,
+        Err(error) => {
+            tracing::warn!(
+                step = "InitLogin.Recaptcha",
+                error = %error,
+                "InitLogin request failed; assuming reCAPTCHA not required",
+            );
+            return Ok(false);
+        }
+    };
 
-    ensure_success(&resp, "Login/InitLogin")?;
-    let body = client.bounded_text(resp).await?;
+    if !resp.status().is_success() {
+        tracing::warn!(
+            step = "InitLogin.Recaptcha",
+            status = %resp.status(),
+            "InitLogin returned non-success; assuming reCAPTCHA not required",
+        );
+        return Ok(false);
+    }
+
+    let body = match client.bounded_text(resp).await {
+        Ok(body) => body,
+        Err(error) => {
+            tracing::warn!(
+                step = "InitLogin.Recaptcha",
+                error = %error,
+                "InitLogin body read failed; assuming reCAPTCHA not required",
+            );
+            return Ok(false);
+        }
+    };
 
     match serde_json::from_str::<InitLoginResponse>(&body) {
         Ok(parsed) => Ok(parsed.result_data.map(|d| d.is_recaptcha).unwrap_or(false)),
