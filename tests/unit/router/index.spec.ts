@@ -73,7 +73,13 @@ describe('router config', () => {
 
     expect(manageAccount.path).toBe('/manage-account')
     expect(manageAccount.name).toBe(ROUTE_NAMES.ManageAccount)
-    expect(manageAccount.meta?.requiresAuth).toBe(true)
+    /*
+     * Public since #314 — WPF's Settings → ManageAccount navigation
+     * has no login gate (the page is local Users.dat CRUD), and the
+     * SPA entry point (`/settings`) is itself public, so gating this
+     * route bounced pre-login users back to /login.
+     */
+    expect(manageAccount.meta?.requiresAuth).toBeUndefined()
 
     expect(catchAll.path).toBe('/:pathMatch(.*)*')
     expect(catchAll.redirect).toBe('/')
@@ -264,15 +270,14 @@ describe('createAppRouter', () => {
      * (the Settings entry lands in P12.4). Direct hash navigation
      * (`#/manage-account`) is the only path today, so the route
      * resolution itself is the public contract this spec locks in.
-     * `requiresAuth: true` mirrors `/accounts`; the guard-installed
-     * redirect is covered by the integration block below.
+     * Public since #314 (see the route-table spec above).
      */
     const router = createAppRouter()
     await router.push('/manage-account')
     await router.isReady()
     expect(router.currentRoute.value.name).toBe(ROUTE_NAMES.ManageAccount)
     expect(router.currentRoute.value.path).toBe('/manage-account')
-    expect(router.currentRoute.value.meta.requiresAuth).toBe(true)
+    expect(router.currentRoute.value.meta.requiresAuth).toBeUndefined()
   })
 
   it('returns a fresh instance per call (no shared singleton state)', () => {
@@ -337,10 +342,11 @@ describe('installRouterGuards — integration with production /accounts route', 
     expect(router.currentRoute.value.path).toBe('/accounts')
   })
 
-  it('redirects unauthenticated /manage-account visits to /login since the route requires auth', async () => {
+  it('lets unauthenticated /manage-account visits land on the ManageAccount route (#314)', async () => {
     /*
-     * ManageAccount is behind `requiresAuth: true`, so
-     * unauthenticated users are redirected to /login.
+     * #314: the page is local Users.dat CRUD and WPF allowed it
+     * pre-login (Settings → 管理帳號 with no session). The route is
+     * public, so no redirect happens without a session.
      */
     const router = createAppRouter()
     installRouterGuards(router, { isAuthenticated: () => false, clearSession: () => {} })
@@ -348,7 +354,8 @@ describe('installRouterGuards — integration with production /accounts route', 
     await router.push('/manage-account')
     await router.isReady()
 
-    expect(router.currentRoute.value.path).toBe('/login')
+    expect(router.currentRoute.value.name).toBe(ROUTE_NAMES.ManageAccount)
+    expect(router.currentRoute.value.path).toBe('/manage-account')
   })
 
   it('lets authenticated /manage-account visits land on the ManageAccount route', async () => {

@@ -24,7 +24,7 @@
  *   /login/wait                    LoginWait                 (D7 ✓)
  *   /login/verify                  VerifyPage                (D8 ✓)
  * /accounts                        AccountList               (P12.2 D1 ✓, requiresAuth)
- * /manage-account                  ManageAccount             (P12.2 D9 ✓, requiresAuth)
+ * /manage-account                  ManageAccount             (P12.2 D9 ✓, public since #314)
  * /:pathMatch(.*)*                 redirect → /              (D10 catch-all)
  * ```
  *
@@ -322,17 +322,19 @@ export const routes: RouteRecordRaw[] = [
     component: ManageAccount,
     /*
      * P12.2 D9: stored-credential CRUD page (Users.dat add / edit /
-     * delete + plaintext JSON import / export). Reachable today only
-     * via direct hash navigation (`#/manage-account`); the Settings
-     * page entry button lands in P12.4 alongside the other settings
-     * surface — the WPF parent surface is `Setting.xaml` not
-     * `Login.xaml`, so wiring an entry from `AccountList.vue` would
-     * misplace the button. `requiresAuth: true` because the stored
-     * accounts are session-scoped UX (the page only makes sense for
-     * a logged-in user managing the credentials they just used).
+     * delete + plaintext JSON import / export). Entry point is the
+     * Settings page button (P12.4), which is itself public — WPF's
+     * `Settings.xaml.cs::ManageAcc_Click` (L266-269) navigates
+     * unconditionally, with no login gate, and the page only touches
+     * the local DPAPI-encrypted Users.dat via `commands.loadAccounts`
+     * / `saveAccount` / `removeAccount` (no session-scoped backend
+     * call anywhere on the page). D9 originally shipped
+     * `requiresAuth: true` on the "session-scoped UX" theory; issue
+     * #314 showed that guess breaks the WPF pre-login flow (Settings
+     * → 管理帳號 bounced back to `/login`), so the route is public
+     * now, matching `/settings` and `/about`.
      */
     meta: {
-      requiresAuth: true,
       titleKey: 'titleBar.manageAccount',
       titleIcon: 'manage_accounts',
       windowWidth: 880,
