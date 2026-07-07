@@ -234,9 +234,38 @@ export const useAccountStore = defineStore('account', () => {
     return serviceAccounts.value.find((a) => a.sid === selectedSid.value) ?? null
   })
 
+  /**
+   * The most recent explicit display order, remembered for the
+   * lifetime of the session (#317).
+   *
+   * WPF re-applies the saved drag order after **every** fetch —
+   * `BeanfunClient.Account.cs::GetAccounts` L137-139 calls
+   * `AccountList.Current.ApplyAccountOrder()` unconditionally. The
+   * SPA only re-applied it on the `AccountList.vue::loadList` path,
+   * so any store-internal refresh (`changeServiceAccountName` /
+   * `addServiceAccount` / the refresh button) reset the list to
+   * server order and visibly scrambled a user-defined arrangement.
+   *
+   * The store can't read the persisted CSV itself (Config.xml
+   * access is deliberately outside this store — see the
+   * `setServiceAccountOrder` docblock), so it remembers the last
+   * order that flowed through {@link setServiceAccountOrder}
+   * (either a drag or the page's saved-CSV apply) and replays it in
+   * {@link applyAccountListResult}. Replay is safe across game
+   * switches without an explicit reset: sids are per-game, so a
+   * stale order from another game matches nothing and the
+   * "skip unknown / append tail" invariants leave the fresh
+   * server order untouched until the page applies the new game's
+   * CSV.
+   */
+  let sessionOrderedSids: readonly string[] = []
+
   function applyAccountListResult(r: AccountListResult): void {
     serviceAccounts.value = r.accounts
     amountLimitNotice.value = r.amount_limit_notice
+    if (sessionOrderedSids.length > 0) {
+      setServiceAccountOrder(sessionOrderedSids)
+    }
   }
 
   /**
@@ -340,6 +369,14 @@ export const useAccountStore = defineStore('account', () => {
    *   reactive ref for consumers that prefer to watch).
    */
   function setServiceAccountOrder(orderedSids: readonly string[]): ServiceAccount[] {
+    /*
+     * Remember the order before any early return so a replayed
+     * refresh (#317, see `sessionOrderedSids`) still honours an
+     * order that was set while the list happened to be empty
+     * (e.g. saved-CSV apply racing a slow first fetch).
+     */
+    sessionOrderedSids = [...orderedSids]
+
     if (serviceAccounts.value.length === 0) return serviceAccounts.value
 
     const remaining = new Map<string, ServiceAccount>()
@@ -425,6 +462,7 @@ export const useAccountStore = defineStore('account', () => {
   function clearSessionData(): void {
     serviceAccounts.value = []
     amountLimitNotice.value = { kind: 'none' }
+    sessionOrderedSids = []
     selectedSid.value = null
     email.value = null
     remainPoint.value = null

@@ -467,6 +467,96 @@ describe('useAccountStore — service-account ordering (D7)', () => {
   })
 })
 
+/* ------------------------------------------------------------------ */
+/* #317 — session order replay on store-internal refreshes            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * WPF re-applies the saved drag order after **every** fetch
+ * (`BeanfunClient.Account.cs::GetAccounts` L137-139 →
+ * `ApplyAccountOrder`). The SPA only re-applied it on the
+ * `AccountList.vue::loadList` path, so `changeServiceAccountName` /
+ * `addServiceAccount` (which auto-refresh inside the store) reset
+ * the list to server order — issue #317's "帳號清單排序被打亂".
+ * The store now remembers the last order that flowed through
+ * `setServiceAccountOrder` and replays it in
+ * `applyAccountListResult`.
+ */
+describe('useAccountStore — session order replay (#317)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const fn of Object.values(commands) as ReturnType<typeof vi.fn>[]) fn.mockReset()
+  })
+
+  const THIRD_SA: ServiceAccount = {
+    ...SERVICE_ACCOUNT,
+    sid: 'sid-3',
+    ssn: '00003',
+    sname: 'Three',
+  }
+
+  const THREE_LIST: AccountListResult = {
+    accounts: [SERVICE_ACCOUNT, SECOND_SA, THIRD_SA],
+    amount_limit_notice: { kind: 'none' },
+  }
+
+  it('changeServiceAccountName keeps the drag order across its auto-refresh', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(THREE_LIST))
+    vi.mocked(commands.changeDisplayName).mockReturnValueOnce(ok(true))
+    /* Backend refresh returns server (ssn) order — the pre-#317 scramble. */
+    vi.mocked(commands.refresh).mockReturnValueOnce(ok(THREE_LIST))
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+
+    store.setServiceAccountOrder(['sid-3', 'sid-1', 'sid-2'])
+    await store.changeServiceAccountName('Renamed', SERVICE_ACCOUNT)
+
+    expect(store.serviceAccounts.map((a) => a.sid)).toEqual(['sid-3', 'sid-1', 'sid-2'])
+  })
+
+  it('addServiceAccount appends the new row after the remembered order', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(ACCOUNT_LIST))
+    vi.mocked(commands.addServiceAccount).mockReturnValueOnce(ok(true))
+    vi.mocked(commands.refresh).mockReturnValueOnce(ok(THREE_LIST))
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+
+    store.setServiceAccountOrder(['sid-2', 'sid-1'])
+    await store.addServiceAccount('Three')
+
+    /* sid-3 is unknown to the remembered order → appended at the tail. */
+    expect(store.serviceAccounts.map((a) => a.sid)).toEqual(['sid-2', 'sid-1', 'sid-3'])
+  })
+
+  it('explicit refreshServiceAccounts also replays the remembered order', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(THREE_LIST))
+    vi.mocked(commands.refresh).mockReturnValueOnce(ok(THREE_LIST))
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+
+    store.setServiceAccountOrder(['sid-2', 'sid-3', 'sid-1'])
+    await store.refreshServiceAccounts()
+
+    expect(store.serviceAccounts.map((a) => a.sid)).toEqual(['sid-2', 'sid-3', 'sid-1'])
+  })
+
+  it('clearSessionData forgets the remembered order (logout must not leak)', async () => {
+    vi.mocked(commands.getAccounts)
+      .mockReturnValueOnce(ok(THREE_LIST))
+      .mockReturnValueOnce(ok(THREE_LIST))
+    const store = useAccountStore()
+    await store.getServiceAccounts()
+    store.setServiceAccountOrder(['sid-3', 'sid-2', 'sid-1'])
+
+    store.clearSessionData()
+    await store.getServiceAccounts()
+
+    /* Fresh session → server order untouched. */
+    expect(store.serviceAccounts.map((a) => a.sid)).toEqual(['sid-1', 'sid-2', 'sid-3'])
+  })
+})
+
 describe('useAccountStore — session-scoped lookups', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
