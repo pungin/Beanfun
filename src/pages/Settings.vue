@@ -126,6 +126,8 @@ import {
 } from '@element-plus/icons-vue'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 
+import { commands } from '../types/bindings'
+import { safeInvoke } from '../services/invoke'
 import { useAuthStore } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
 import { useGameStore } from '../stores/game'
@@ -310,11 +312,20 @@ const gamePath = ref<string>('')
  * of falling back to a partial key that would silently collide
  * across games. SRP: this helper is the one place the key shape
  * is constructed so a future schema change is a one-line edit.
+ *
+ * An **empty** `dir_value_name` is a legitimate live value (issue
+ * #312: Mabinogi `[600309_A2]` ships `dir_value_name=` in
+ * `get_service_ini.ashx`) — WPF builds the key as `"" + "." +
+ * gameCode` (`.600309_A2`) and so does the Rust side
+ * (`commands/launcher.rs::game_path_config_key`), so we must not
+ * treat it as "no INI". The empty value name also flows through to
+ * the registry probe, where it reads the key's *default* value —
+ * same as WPF's `ModifyRegistry.Read("")`.
  */
 function gamePathConfigKey(): string | null {
   const ini = game.selectedIni
   const code = game.selectedGameCode
-  if (!ini || code === null || ini.dir_value_name === '') return null
+  if (!ini || code === null) return null
   return `${ini.dir_value_name}.${code}`
 }
 
@@ -337,6 +348,44 @@ function gamePathConfigKey(): string | null {
 function refreshGamePathFromConfig(): void {
   const key = gamePathConfigKey()
   gamePath.value = key === null ? '' : (configStore.get(key) ?? '')
+}
+
+/**
+ * Mount-time hydration: Config.xml first, registry fallback.
+ *
+ * WPF `selectedGameChanged` (L576-602) doesn't stop at Config.xml —
+ * when the saved value is empty it probes the INI's `dir_reg`
+ * registry key and seeds both `t_GamePath.Text` and Config.xml from
+ * the hit. Our launcher already ports that probe as the
+ * `detect_game_path` command (config → registry → common install
+ * dirs, with the write-back), so the Settings page reuses it here
+ * instead of re-implementing the registry walk (issue #312: before
+ * this, a freshly-selected game with a registry-discoverable
+ * install showed an empty path field until the first launch
+ * attempt).
+ *
+ * The frontend `configStore` cache is not refreshed after the
+ * backend's write-back — unnecessary, because every later read
+ * either goes through `detect_game_path` again (backend reads
+ * Config.xml directly, hits the now-cached value) or follows a
+ * `configStore.set` from `pickGamePath` (which updates the cache).
+ *
+ * Errors are non-fatal: `safeInvoke` swallows the toast and we
+ * simply leave the field empty — same UX as WPF's silent
+ * `catch { t_GamePath.Text = ""; }` at L597-600.
+ */
+async function hydrateGamePath(): Promise<void> {
+  refreshGamePathFromConfig()
+  if (gamePath.value !== '') return
+
+  const ini = game.selectedIni
+  const code = game.selectedGameCode
+  if (!ini || code === null) return
+
+  const result = await safeInvoke(
+    commands.detectGamePath(code, ini.dir_value_name, ini.dir_reg, ini.exe),
+  )
+  if (result.ok && result.data) gamePath.value = result.data
 }
 
 /**
@@ -594,7 +643,7 @@ function handleBack(): void {
 /* --------------- mount --------------- */
 
 onMounted(() => {
-  refreshGamePathFromConfig()
+  void hydrateGamePath()
 })
 </script>
 
