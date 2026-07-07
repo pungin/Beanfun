@@ -490,14 +490,10 @@ function formatLoginTime(iso: string): string {
  * (the login funnel and `AccountList`), so they fall back to
  * `/login` when history is empty. ManageAccount has exactly one
  * production entry point: `Settings.vue` (`router.push('/manage-account')`).
- * The route is also `requiresAuth: true`, so falling back to
- * `/login` would either kick the user out of their session UX
- * unnecessarily (if still authenticated) or trigger the auth
- * guard's `?redirect=/login` self-loop (if expired). `/settings`
- * is the canonical re-entry surface in both cases — and in the
- * unlikely event of an expired session, the auth guard on
- * `/settings` … wait, `/settings` is `requiresAuth: undefined`,
- * so it's public; the user lands there cleanly either way.
+ * `/settings` is therefore the canonical re-entry surface. Both
+ * routes are public (`requiresAuth` unset — see #314: the page is
+ * local Users.dat CRUD and must work pre-login like WPF), so the
+ * user lands there cleanly whether or not a session exists.
  *
  * # Edge case: direct hash entry
  *
