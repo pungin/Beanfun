@@ -40,8 +40,8 @@ pub mod totp;
 pub mod totp_challenge;
 pub mod tw_regular;
 
-pub use account_login::account_login;
-pub use check_account_type::check_account_type;
+pub use account_login::{account_login, AccountLoginOutcome};
+pub use check_account_type::{check_account_type, CheckAccountOutcome};
 pub use completed::login_completed;
 pub use gamepass::{
     inject_webview_cookies, seed_webview_cookies_from_client, try_complete_gamepass_login,
@@ -61,7 +61,9 @@ pub use send_login::send_login;
 pub use session_key::get_session_key;
 pub use totp::login_totp;
 pub use totp_challenge::TotpChallenge;
-pub use tw_regular::login_tw_regular;
+pub use tw_regular::{
+    login_tw_regular, tw_login_resume, tw_login_start, RecaptchaStep, TwLoginContext, TwStepOutcome,
+};
 
 use std::fmt;
 
@@ -109,6 +111,17 @@ pub(crate) fn apply_json_headers(
         .header(reqwest::header::REFERER, referer)
         .header("X-Requested-With", "XMLHttpRequest")
         .header("RequestVerificationToken", verification_token)
+}
+
+/// `true` when a login-step `Message` string signals that the server
+/// wants a reCAPTCHA token for this attempt.
+///
+/// beanfun surfaces the demand either as a `ResultData.IsRecaptcha`
+/// boolean (checked separately by each step) or as a human message
+/// containing "機器人" (as in "請點選「我不是機器人」"). Matching the
+/// substring keeps us robust to the exact wording the server uses.
+pub(crate) fn message_demands_recaptcha(message: &str) -> bool {
+    message.contains("機器人")
 }
 
 /// Read `bfWebToken` from `client`'s shared cookie jar, scoped to the

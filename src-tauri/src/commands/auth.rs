@@ -83,6 +83,8 @@
 //!
 //! [`AppState::pending_totp`]: super::state::AppState::pending_totp
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
@@ -97,7 +99,10 @@ use url::Url;
 use crate::commands::{
     dto::{encode_png_base64, SessionInfo, TotpChallengeInfo},
     error::CommandError,
-    state::{AppState, AuthContext, PendingGamepass, PendingQr, PendingTotp, PendingVerify},
+    state::{
+        AppState, AuthContext, PendingGamepass, PendingQr, PendingTotp, PendingTwLogin,
+        PendingVerify,
+    },
 };
 use crate::services::beanfun::{
     account::get_accounts as service_get_accounts,
@@ -105,8 +110,8 @@ use crate::services::beanfun::{
     login::{
         finalize_qr_login, get_session_key, init_qr_login, inject_webview_cookies,
         login_registered_device, login_totp as login_totp_service, login_with,
-        logout as logout_service, poll_qr_login_status, try_complete_gamepass_login, LoginMethod,
-        QrPollOutcome,
+        logout as logout_service, poll_qr_login_status, try_complete_gamepass_login,
+        tw_login_resume, tw_login_start, LoginMethod, QrPollOutcome, RecaptchaStep, TwStepOutcome,
     },
     session::Credentials,
     verify::{
@@ -488,11 +493,29 @@ pub async fn login_regular(
 ) -> Result<SessionInfo, CommandError> {
     *state.pending_totp.write().await = None;
     *state.pending_qr.write().await = None;
+    *state.pending_gamepass.write().await = None;
+    *state.pending_tw_login.write().await = None;
 
     let client = BeanfunClient::new(ClientConfig::for_region(region))?;
     let creds = Credentials::new(account, password);
-    let method = default_method_for(region);
     let account_id = creds.account.clone();
+
+    // TW Regular: token-replay flow (issues #313 / #315 / #318). The step
+    // runner tries `CheckAccountType` / `AccountLogin` with empty reCAPTCHA
+    // tokens and pauses (returning a resumable context) only when the
+    // server actually demands a solve.
+    if region == LoginRegion::TW {
+        // Stash the plaintext password for a possible reCAPTCHA resume
+        // before `creds` is dropped (its `Drop` zeroises the buffer).
+        let password_for_resume = creds.password.clone();
+        let started = tw_login_start(&client, &creds).await;
+        drop(creds);
+        return finish_tw_step(&state, client, account_id, password_for_resume, started).await;
+    }
+
+    // HK Regular: unchanged headless flow (TOTP / device-registration
+    // continuations, advance-check, etc.).
+    let method = default_method_for(region);
     let service_code = region.default_service_code().to_owned();
     let service_region = region.default_service_region().to_owned();
 
@@ -528,27 +551,85 @@ pub async fn login_regular(
             let info = install_session_and_start_ping(&state, client, session).await;
             Ok(info)
         }
-        Err(LoginError::RecaptchaRequired { skey }) => {
-            // The TW account/password page now gates this attempt behind a
-            // Google reCAPTCHA v2 challenge that cannot be solved headlessly
-            // (see `services::beanfun::login::init_login`). Hand off to the
-            // interactive WebView login by re-using the GamePass WebView
-            // machinery: park `(client, skey)` on `pending_gamepass` — the
-            // generic "WebView login awaiting bfWebToken harvest" slot — and
-            // signal the frontend to open the account-login window via
-            // `open_account_login_window`. Clearing the sibling continuations
-            // mirrors the top-of-function resets so only one half-finished
-            // login is ever outstanding.
-            *state.pending_totp.write().await = None;
-            *state.pending_qr.write().await = None;
-            *state.pending_gamepass.write().await = Some(PendingGamepass::new(client, skey));
-            Err(CommandError::new(
-                RECAPTCHA_REQUIRED_CODE,
-                "reCAPTCHA verification is required; complete it in the login window.",
-            ))
+        Err(err) => Err(err.into()),
+    }
+}
+
+/// Resume a paused TW-Regular login after the user solved a reCAPTCHA
+/// widget (issues #313 / #315 / #318 — token-replay).
+///
+/// Preconditions: a prior [`login_regular`] (or a prior resume) parked a
+/// [`PendingTwLogin`] on [`AppState::pending_tw_login`] and returned
+/// [`RECAPTCHA_REQUIRED_CODE`]. The `token` is the reCAPTCHA response
+/// harvested from beanfun's own origin by [`open_recaptcha_window`].
+///
+/// The backend replays `token` into whichever step it paused on (the
+/// authoritative [`PendingTwLogin::step`], not a frontend-supplied value)
+/// and continues the *same* HTTP session. Outcomes mirror the empty-first
+/// flow: another reCAPTCHA (e.g. the second step now gates too) re-parks
+/// the slot and returns [`RECAPTCHA_REQUIRED_CODE`] again; success installs
+/// the session; an advance-check / server-message error surfaces verbatim.
+#[tauri::command]
+#[specta::specta]
+pub async fn resume_tw_login_with_recaptcha(
+    state: State<'_, AppState>,
+    token: String,
+) -> Result<SessionInfo, CommandError> {
+    let pending = state.pending_tw_login.write().await.take();
+    let Some(p) = pending else {
+        return Err(CommandError::new(
+            RECAPTCHA_NOT_PENDING_CODE,
+            "No TW reCAPTCHA login is pending; start the login again.",
+        ));
+    };
+
+    let creds = Credentials::new(p.account.clone(), p.password.clone());
+    let resumed = tw_login_resume(&p.client, p.ctx.clone(), &creds, p.step, &token).await;
+    drop(creds);
+
+    finish_tw_step(&state, p.client, p.account, p.password, resumed).await
+}
+
+/// Shared tail for both [`login_regular`]'s TW arm and
+/// [`resume_tw_login_with_recaptcha`]: install the session on success,
+/// (re-)park [`PendingTwLogin`] and signal [`RECAPTCHA_REQUIRED_CODE`] on a
+/// reCAPTCHA demand, or map any other [`LoginError`] to a command error.
+async fn finish_tw_step(
+    state: &State<'_, AppState>,
+    client: BeanfunClient,
+    account: String,
+    password: String,
+    outcome: Result<TwStepOutcome, LoginError>,
+) -> Result<SessionInfo, CommandError> {
+    match outcome {
+        Ok(TwStepOutcome::Complete(session)) => {
+            *state.pending_tw_login.write().await = None;
+            Ok(install_session_and_start_ping(state, client, *session).await)
+        }
+        Ok(TwStepOutcome::RecaptchaRequired { ctx, step }) => {
+            *state.pending_tw_login.write().await = Some(PendingTwLogin {
+                client,
+                ctx,
+                account,
+                password,
+                step,
+            });
+            Err(recaptcha_required_error(step))
         }
         Err(err) => Err(err.into()),
     }
+}
+
+/// Build the `auth.recaptcha_required` command error carrying which
+/// [`RecaptchaStep`] the frontend must solve, so the widget window can
+/// (informationally) tag its handback and the UI can show step-specific
+/// copy.
+fn recaptcha_required_error(step: RecaptchaStep) -> CommandError {
+    CommandError::new(
+        RECAPTCHA_REQUIRED_CODE,
+        "reCAPTCHA verification is required; solve it in the popup window.",
+    )
+    .with_details(serde_json::json!({ "step": step.as_wire() }))
 }
 
 /// Complete an HK TOTP login by submitting the 6-digit code stored
@@ -871,22 +952,28 @@ pub(crate) const GAMEPASS_WINDOW_ALREADY_OPEN_CODE: &str = "auth.gamepass_window
 /// login attempt.
 const GAMEPASS_WINDOW_LABEL: &str = "gamepass-login";
 
-/// Error code surfaced by [`login_regular`] when the TW account/password
-/// login requires a Google reCAPTCHA v2 challenge for this attempt
-/// (server-side anti-bot; see
-/// [`crate::services::beanfun::login::init_login`]). The frontend reacts
-/// by calling [`open_account_login_window`] so the user can solve the
-/// challenge and finish logging in inside the real beanfun page.
+/// Error code surfaced by [`login_regular`] / [`resume_tw_login_with_recaptcha`]
+/// when the TW account/password login requires a Google reCAPTCHA challenge
+/// for this attempt (server-side anti-bot; token-replay, issues
+/// #313 / #315 / #318). The frontend reacts by calling
+/// [`open_recaptcha_window`] to solve the widget on beanfun's origin, then
+/// calls [`resume_tw_login_with_recaptcha`] with the harvested token. The
+/// error `details` carry `{ "step": "check" | "login" }`.
 pub(crate) const RECAPTCHA_REQUIRED_CODE: &str = "auth.recaptcha_required";
 
-/// Fixed Tauri window label for the reCAPTCHA account-login WebView.
+/// Error code surfaced by [`resume_tw_login_with_recaptcha`] when no
+/// [`PendingTwLogin`] is parked (the user never hit the reCAPTCHA gate, or
+/// the continuation was already consumed / cleared). Remediation: restart
+/// the login from [`login_regular`].
+pub(crate) const RECAPTCHA_NOT_PENDING_CODE: &str = "auth.recaptcha_not_pending";
+
+/// Fixed Tauri window label for the reCAPTCHA widget-solve WebView.
 /// Distinct from [`GAMEPASS_WINDOW_LABEL`] so the two windows' double-open
-/// guards are independent, even though both reuse the same
-/// [`AppState::pending_gamepass`] slot + completion handlers (the flows
-/// are mechanically identical — only the landing behaviour differs: the
-/// account-login window does **not** auto-click the Gama Pass button, so
-/// the user sees the normal account/password + reCAPTCHA form).
-const ACCOUNT_LOGIN_WINDOW_LABEL: &str = "account-login";
+/// guards are independent. Unlike the retired #308/#309 account-login
+/// window, this window only hosts beanfun's own `Login/Index` page so the
+/// user solves the reCAPTCHA *widget*; the token is harvested and replayed
+/// over HTTP by the backend (it does not complete the login in-page).
+const RECAPTCHA_WINDOW_LABEL: &str = "recaptcha-solve";
 
 /// Tauri event names emitted by the GamePass flow. Flat dash-case
 /// per the P12.1 D5 event convention.
@@ -975,81 +1062,108 @@ const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
   }
 })();"#;
 
-/// Build the best-effort autofill `initialization_script` for the
-/// reCAPTCHA account-login WebView ([`open_account_login_window`]).
+/// `initialization_script` injected into the reCAPTCHA widget-solve
+/// WebView ([`open_recaptcha_window`]).
 ///
-/// `account_js` / `password_js` must already be **JSON-encoded** string
-/// literals (e.g. via `serde_json::to_string`) so they embed safely as
-/// JS string literals — never interpolate raw user input here.
+/// Runs on beanfun's own `Login/Index?pSKey=…` origin (the only place a
+/// reCAPTCHA token is accepted — the token is origin-locked, task spec §1)
+/// and does three things:
 ///
-/// # Behaviour
+/// 1. **Masks the whole page** with an opaque fixed overlay and lifts only
+///    the reCAPTCHA anchor iframe above it. We deliberately do NOT use
+///    `visibility:hidden` on any ancestor — Chromium suppresses
+///    hit-testing for a cross-origin iframe under a `visibility:hidden`
+///    ancestor, which makes the checkbox unclickable (task spec trap #3).
+/// 2. **Self-heals**: if no `iframe[src*=recaptcha]` appears within ~3s
+///    (Tracking-Prevention race), it reloads once, guarded by
+///    `sessionStorage` so it can't loop.
+/// 3. **Harvests** the solved token via
+///    `grecaptcha.enterprise.getResponse()` and hands it back through the
+///    **URL fragment** (`#mltoken=<step>~<token>`) — beanfun's CSP blocks
+///    app IPC from this origin (task spec trap #5), and reCAPTCHA tokens
+///    are URL-safe base64url so `~` is a safe separator. The backend polls
+///    `window.url()` for that fragment.
 ///
-/// beanfun's `Login/Index` is a Vue SPA that renders its account +
-/// password `<input>`s with `v-show` (both live in the DOM from first
-/// render; the password block is merely `display:none` until the
-/// account step). The script therefore:
-///
-/// - waits for the form to render (`DOMContentLoaded` + a
-///   `MutationObserver`, since Vue mounts after our init script runs),
-/// - fills both inputs via the **native** value setter + an `input`
-///   event so Vue's `v-model` reactivity picks up the change,
-/// - disconnects once both are filled (or after a 5-min safety timeout).
-///
-/// # Graceful degradation & safety
-///
-/// - Missing input (markup changed) or empty value → silent no-op; the
-///   user just types manually. Autofill never throws or blocks login
-///   (every DOM op is wrapped in `try`).
-/// - The IIFE leaks **no** globals, so beanfun's own page scripts cannot
-///   read `ACC` / `PW` back out.
-/// - We never auto-submit or auto-click — the human still solves the
-///   reCAPTCHA and presses the login buttons.
-fn build_account_autofill_script(account_js: &str, password_js: &str) -> String {
-    // Chinese placeholders are written as JS `\u` escapes so the emitted
-    // script is pure ASCII (the password `type` / `name` fallbacks make
-    // it resilient if beanfun re-words the placeholder).
-    format!(
-        r#"(() => {{
-  const ACC = {account_js};
-  const PW = {password_js};
-  const setVal = (el, val) => {{
-    if (!el || !val) return false;
-    try {{
-      const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value");
-      if (desc && desc.set) {{ desc.set.call(el, val); }} else {{ el.value = val; }}
-      el.dispatchEvent(new Event("input", {{ bubbles: true }}));
-      el.dispatchEvent(new Event("change", {{ bubbles: true }}));
-      return true;
-    }} catch (e) {{ return false; }}
-  }};
-  let accDone = false, pwDone = false;
-  const tryFill = () => {{
-    if (!accDone) {{
-      const a = document.querySelector('input[placeholder="\u8acb\u8f38\u5165\u5e33\u865f"]')
-        || document.querySelector('input[name="aaa"]');
-      if (a) accDone = setVal(a, ACC);
-    }}
-    if (!pwDone) {{
-      const p = document.querySelector('input[type="password"]')
-        || document.querySelector('input[placeholder="\u8acb\u8f38\u5165\u5bc6\u78bc"]')
-        || document.querySelector('input[name="inputName"]');
-      if (p) pwDone = setVal(p, PW);
-    }}
-    return accDone && pwDone;
-  }};
-  const start = () => {{
-    if (tryFill()) return;
-    const obs = new MutationObserver(() => {{ if (tryFill()) obs.disconnect(); }});
-    obs.observe(document.documentElement, {{ childList: true, subtree: true }});
-    setTimeout(() => obs.disconnect(), 300000);
-  }};
-  if (document.readyState === "loading") {{
-    document.addEventListener("DOMContentLoaded", start, {{ once: true }});
-  }} else {{
-    start();
-  }}
-}})();"#
-    )
+/// `{STEP}` is replaced with the [`RecaptchaStep::as_wire`] discriminator.
+const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
+  const STEP = "{STEP}";
+  const style = document.createElement("style");
+  style.textContent =
+    "#__bf_mask{position:fixed;inset:0;z-index:2147483000;background:#1c1712;" +
+    "display:flex;align-items:center;justify-content:center;color:#f4ede4;" +
+    "font-family:system-ui,sans-serif;font-size:14px;text-align:center;padding:24px}" +
+    "iframe[src*='recaptcha']{position:relative;z-index:2147483600 !important}" +
+    ".grecaptcha-badge{z-index:2147483600 !important}";
+  const mask = document.createElement("div");
+  mask.id = "__bf_mask";
+  mask.textContent = "請完成「我不是機器人」驗證";
+  const attachMask = () => {
+    if (document.body && !document.getElementById("__bf_mask")) {
+      document.head.appendChild(style);
+      document.body.appendChild(mask);
+    }
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", attachMask, { once: true }); else attachMask();
+
+  // Self-heal: reload once if the widget iframe never renders (Tracking
+  // Prevention race). Guarded so it can't loop.
+  setTimeout(() => {
+    const has = document.querySelector("iframe[src*='recaptcha']");
+    if (!has && !sessionStorage.getItem("__bf_reloaded")) {
+      sessionStorage.setItem("__bf_reloaded", "1");
+      location.reload();
+    }
+  }, 3000);
+
+  // Harvest: poll grecaptcha for a non-empty response, then publish it via
+  // the URL fragment. Only fires once.
+  let sent = false;
+  const readToken = () => {
+    try {
+      const g = window.grecaptcha && window.grecaptcha.enterprise ? window.grecaptcha.enterprise : window.grecaptcha;
+      if (g && typeof g.getResponse === "function") {
+        const t = g.getResponse();
+        if (t) return t;
+      }
+    } catch (e) { /* not ready */ }
+    return "";
+  };
+  const timer = setInterval(() => {
+    if (sent) { clearInterval(timer); return; }
+    const t = readToken();
+    if (t) {
+      sent = true;
+      clearInterval(timer);
+      location.hash = "mltoken=" + STEP + "~" + t;
+    }
+  }, 400);
+})();"##;
+
+/// Build the harvest script with the step discriminator interpolated.
+fn build_recaptcha_harvest_script(step: RecaptchaStep) -> String {
+    RECAPTCHA_HARVEST_JS_TEMPLATE.replace("{STEP}", step.as_wire())
+}
+
+/// Tauri event emitted by [`open_recaptcha_window`] once the solved
+/// reCAPTCHA token is harvested from the URL fragment. Payload:
+/// `{ "step": "check" | "login", "token": "<recaptcha-token>" }`. The
+/// frontend calls `resume_tw_login_with_recaptcha(token)` in response.
+const RECAPTCHA_TOKEN_EVENT: &str = "recaptcha-token";
+
+/// Tauri event emitted by [`open_recaptcha_window`] when the widget window
+/// closes / times out without a token (user gave up). Payload: `null`.
+const RECAPTCHA_CANCELLED_EVENT: &str = "recaptcha-cancelled";
+
+/// Parse a `mltoken=<step>~<token>` URL fragment into `(step, token)`.
+/// Returns `None` for any other fragment shape.
+fn parse_mltoken_fragment(fragment: &str) -> Option<(RecaptchaStep, String)> {
+    let body = fragment.strip_prefix("mltoken=")?;
+    let (step_raw, token) = body.split_once('~')?;
+    let step = RecaptchaStep::from_wire(step_raw)?;
+    if token.is_empty() {
+        return None;
+    }
+    Some((step, token.to_owned()))
 }
 
 /// Strip query parameters from a URL for safe logging.
@@ -1928,218 +2042,191 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
     Ok(())
 }
 
-/// Open the reCAPTCHA account-login WebView window.
+/// Open the reCAPTCHA **widget-solve** WebView (issues #313 / #315 / #318 —
+/// token-replay).
 ///
-/// Triggered by the frontend after [`login_regular`] surfaces
-/// [`RECAPTCHA_REQUIRED_CODE`]: the TW account/password login required a
-/// Google reCAPTCHA v2 challenge for this attempt, which cannot be
-/// solved headlessly (see
-/// [`crate::services::beanfun::login::init_login`]). This opens the real
-/// `Login/Index?pSKey=…` page in a WebView so the user can type their
-/// account + password and solve the "I'm not a robot" challenge inside
-/// beanfun's own page; the resulting `bfWebToken` is harvested by the
-/// shared [`handle_gamepass_page_load`] hook exactly as GamePass does.
+/// Triggered by the frontend after [`login_regular`] /
+/// [`resume_tw_login_with_recaptcha`] surface [`RECAPTCHA_REQUIRED_CODE`].
+/// Unlike the retired #308/#309 window (which tried to complete the whole
+/// login in-page and broke on WebView2 Tracking Prevention), this window
+/// hosts beanfun's own `Login/Index?pSKey=…` page purely so the user solves
+/// the reCAPTCHA **widget**. The solved token is:
 ///
-/// # Reuse of the GamePass machinery (deliberate)
+/// 1. harvested in-page by [`RECAPTCHA_HARVEST_JS_TEMPLATE`] and published
+///    via the URL fragment `#mltoken=<step>~<token>`,
+/// 2. polled off `window.url()` here (app IPC from beanfun's origin is
+///    blocked by its CSP — task spec trap #5),
+/// 3. emitted to the frontend via [`RECAPTCHA_TOKEN_EVENT`], which then
+///    calls [`resume_tw_login_with_recaptcha`] to replay it over HTTP.
 ///
-/// The reCAPTCHA account login and GamePass login are mechanically
-/// identical — both seed the portal session cookies into an
-/// `about:blank` WebView, navigate to the same `Login/Index?pSKey=…`
-/// URL, and harvest `bfWebToken` once beanfun's redirect chain reaches
-/// `return.aspx`. So this command re-uses:
-///
-/// - [`AppState::pending_gamepass`] — parked by [`login_regular`]'s
-///   `RecaptchaRequired` arm (the generic "WebView login awaiting
-///   harvest" slot).
-/// - [`handle_gamepass_page_load`] / [`handle_gamepass_window_destroyed`]
-///   — the completion + cancel hooks.
-/// - The `gamepass-login-success` / `-failed` / `-cancelled` events
-///   (consumed unchanged by the frontend's `applyGamepassSession`).
-///
-/// The difference from [`open_gamepass_window`] is the
-/// `initialization_script`: GamePass auto-clicks the "use Gama Pass"
-/// button, whereas here we inject a **best-effort autofill** (built by
-/// [`build_account_autofill_script`]) that pre-fills the `account` +
-/// `password` the user already typed in `IdPassForm`, so they only need
-/// to solve the "I'm not a robot" challenge and submit. We never
-/// auto-click — the reCAPTCHA must be solved by the human. A distinct
-/// window label ([`ACCOUNT_LOGIN_WINDOW_LABEL`]) keeps the double-open
-/// guard independent of the GamePass window.
-///
-/// `account` / `password` come from the frontend's `loginIntent` (the
-/// same values it passed to `login_regular`); they are used **only** to
-/// pre-fill beanfun's own login form and are not persisted here. Empty
-/// strings (e.g. direct navigation) make the autofill a no-op.
-///
-/// `open_gamepass_window` is left **byte-for-byte untouched** (it was
-/// the subject of the issue #296 stale-cookie fix); the #296-critical
-/// `DeleteAllCookies` / `AddOrUpdateCookie` mechanics live in the shared
-/// [`crate::commands::cookie_native`] module, so only the (trivial)
-/// clear→seed→navigate sequencing is duplicated here.
+/// Windows: WebView2 Tracking Prevention is disabled first
+/// ([`crate::commands::cookie_native::disable_tracking_prevention_native`])
+/// — otherwise google.com/gstatic.com third-party storage is blocked and
+/// the widget renders dead (the direct cause of #318, task spec trap #2).
 #[tauri::command]
 #[specta::specta]
-pub async fn open_account_login_window<R: tauri::Runtime>(
+pub async fn open_recaptcha_window<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
-    account: String,
-    password: String,
 ) -> Result<(), CommandError> {
-    let (client, skey) = {
-        let guard = state.pending_gamepass.read().await;
+    let (client, skey, step) = {
+        let guard = state.pending_tw_login.read().await;
         match guard.as_ref() {
-            Some(pg) => (pg.client.clone(), pg.skey.clone()),
+            Some(p) => (p.client.clone(), p.ctx.skey.clone(), p.step),
             None => {
                 return Err(CommandError::new(
-                    RECAPTCHA_REQUIRED_CODE,
-                    "No reCAPTCHA login is active; submit the account/password form first.",
+                    RECAPTCHA_NOT_PENDING_CODE,
+                    "No TW reCAPTCHA login is pending; start the login again.",
                 ));
             }
         }
     };
 
-    if app.get_webview_window(ACCOUNT_LOGIN_WINDOW_LABEL).is_some() {
+    if app.get_webview_window(RECAPTCHA_WINDOW_LABEL).is_some() {
         return Err(CommandError::new(
             GAMEPASS_WINDOW_ALREADY_OPEN_CODE,
-            "Account login window is already open; close it before retrying.",
+            "reCAPTCHA window is already open; solve or close it before retrying.",
         ));
     }
 
-    // Same `Login/Index?pSKey=…` URL the GamePass flow uses — beanfun
-    // renders the account/password + reCAPTCHA form here when the page
-    // is not auto-redirected into Gama Pass.
+    // Same `Login/Index?pSKey=…` origin the login POSTs ran against — the
+    // reCAPTCHA token is origin-locked to `login.beanfun.com` (task spec §1).
     let login_url = build_gamepass_login_url(&skey)?;
+    let harvest_js = build_recaptcha_harvest_script(step);
 
-    // Best-effort autofill of the credentials the user already typed in
-    // `IdPassForm`. JSON-encode each value so it embeds as a safe JS
-    // string literal (quotes / specials escaped). See
-    // [`build_account_autofill_script`] for the script's behaviour and
-    // graceful-degradation guarantees.
-    let account_js = serde_json::to_string(&account).unwrap_or_else(|_| "\"\"".to_owned());
-    let password_js = serde_json::to_string(&password).unwrap_or_else(|_| "\"\"".to_owned());
-    let autofill_js = build_account_autofill_script(&account_js, &password_js);
-
-    let app_for_page_load = app.clone();
+    // Shared flag: the poll loop sets it once a token is captured so the
+    // window-destroyed hook knows not to emit a spurious "cancelled".
+    let token_captured = Arc::new(AtomicBool::new(false));
+    let captured_for_destroy = token_captured.clone();
     let app_for_destroyed = app.clone();
 
-    // `about:blank` first so the session cookies are seeded BEFORE the
-    // first real request to `Login/Index` (same rationale as
-    // `open_gamepass_window`'s D5 hotfix).
     let about_blank: Url = "about:blank".parse().expect("about:blank is a valid URL");
 
     let window = WebviewWindowBuilder::new(
         &app,
-        ACCOUNT_LOGIN_WINDOW_LABEL,
+        RECAPTCHA_WINDOW_LABEL,
         WebviewUrl::External(about_blank),
     )
-    .title("帳號登入 / 驗證")
-    .inner_size(900.0, 700.0)
+    .title("驗證 / reCAPTCHA")
+    .inner_size(480.0, 640.0)
     .resizable(true)
-    // Best-effort credential autofill (built above). Unlike GamePass we
-    // do NOT auto-click anything — the user must see the form, solve the
-    // reCAPTCHA, and submit themselves.
-    .initialization_script(autofill_js.as_str())
-    .on_page_load(move |window, payload| {
-        if payload.event() != PageLoadEvent::Finished {
-            return;
-        }
-        let app = app_for_page_load.clone();
-        let window = window.clone();
-        let url = payload.url().clone();
-        tauri::async_runtime::spawn(async move {
-            handle_gamepass_page_load(app, window, url).await;
-        });
-    })
+    .initialization_script(harvest_js.as_str())
     .build()
     .map_err(|e| {
         CommandError::new(
             "ui.window_create_failed",
-            format!("Failed to create account-login webview window: {e}"),
+            format!("Failed to create reCAPTCHA webview window: {e}"),
         )
     })?;
 
     window.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) {
-            let app = app_for_destroyed.clone();
-            tauri::async_runtime::spawn(async move {
-                handle_gamepass_window_destroyed(app).await;
-            });
+            // Only a cancel if no token was captured — the success path
+            // closes the window itself after emitting the token event.
+            if !captured_for_destroy.load(Ordering::SeqCst) {
+                let _ = app_for_destroyed.emit(RECAPTCHA_CANCELLED_EVENT, ());
+            }
         }
     });
 
-    trace_cookie_jar("AccountLoginWebViewSeed.JarDump", &client);
-
-    // Clear + seed the WebView2 cookie store before navigating — the
-    // same two-pass native COM dance as `open_gamepass_window` (issue
-    // #296). The #296-critical mechanics are shared via `cookie_native`.
+    // #318 / task spec trap #2: disable Tracking Prevention so the
+    // google.com/gstatic.com storage the reCAPTCHA widget needs isn't blocked.
     #[cfg(target_os = "windows")]
     {
-        let cleared = crate::commands::cookie_native::clear_all_cookies_native(&window);
+        let disabled = crate::commands::cookie_native::disable_tracking_prevention_native(&window);
         tracing::info!(
-            step = "AccountLoginWebViewClear",
-            cleared = cleared,
-            "issued DeleteAllCookies before seeding (issue #296)"
+            step = "RecaptchaWebView.TrackingPrevention",
+            disabled = disabled,
+            "attempted to disable WebView2 tracking prevention (#318)"
         );
-        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
 
+    // Clear + seed the session cookies before navigating (same #296 native
+    // COM dance as the GamePass / account-login windows).
+    #[cfg(target_os = "windows")]
+    {
+        let _ = crate::commands::cookie_native::clear_all_cookies_native(&window);
+        tokio::time::sleep(Duration::from_millis(200)).await;
         let seeded = crate::commands::cookie_native::seed_cookies_native(&window, &client);
         tracing::info!(
-            step = "AccountLoginWebViewSeed.Summary",
+            step = "RecaptchaWebView.Seed",
             seeded = seeded,
-            "seeded fresh session cookies after clear (native COM)"
+            "seeded session cookies into reCAPTCHA WebView"
         );
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let mut seed_failures = 0usize;
-        let seeded = seed_webview_cookies_from_client(&client, |cookie| {
-            if let Err(err) = window.set_cookie(cookie.clone()) {
-                seed_failures += 1;
-                tracing::warn!(
-                    step = "AccountLoginWebViewSeed.CookieError",
-                    cookie_name = %cookie.name(),
-                    cookie_domain = ?cookie.domain(),
-                    error = ?err,
-                    "failed to seed cookie into account-login WebView; continuing"
-                );
-            }
+        let _ = seed_webview_cookies_from_client(&client, |cookie| {
+            let _ = window.set_cookie(cookie.clone());
             Ok::<(), std::convert::Infallible>(())
-        })
-        .expect("seed closure is infallible");
-
-        tracing::info!(
-            step = "AccountLoginWebViewSeed.Summary",
-            seeded = seeded - seed_failures,
-            failed = seed_failures,
-            "cookie seed summary from BeanfunClient jar into WebView before login navigation"
-        );
+        });
     }
 
-    tracing::info!(
-        step = "AccountLoginWebViewNavigate",
-        url = %redact_url_query(&login_url),
-        "navigating account-login WebView to login URL after cookie seed"
-    );
     if let Err(err) = window.navigate(login_url.clone()) {
-        // Navigation failed — clear the slot ourselves so the Destroyed
-        // hook doesn't fire a spurious cancel event, then close the
-        // dangling window.
-        *state.pending_gamepass.write().await = None;
         let _ = window.close();
         return Err(CommandError::new(
-            "ui.account_login_navigate_failed",
-            format!("Failed to navigate account-login webview to login URL: {err}"),
+            "ui.recaptcha_navigate_failed",
+            format!("Failed to navigate reCAPTCHA webview: {err}"),
         ));
     }
 
     tracing::info!(
-        step = "AccountLoginWindowOpened",
-        label = ACCOUNT_LOGIN_WINDOW_LABEL,
-        "account-login webview opened; awaiting completion or cancel"
+        step = "RecaptchaWindowOpened",
+        label = RECAPTCHA_WINDOW_LABEL,
+        recaptcha_step = step.as_wire(),
+        "reCAPTCHA widget window opened; polling URL fragment for token"
     );
 
+    // Poll the live window URL for the `#mltoken=<step>~<token>` fragment
+    // the harvest script publishes. ~3-minute budget mirrors the reCAPTCHA
+    // challenge timeout.
+    let poll_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        const MAX_TICKS: u32 = 360; // 360 * 500ms = 180s
+        for _ in 0..MAX_TICKS {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let Some(win) = poll_app.get_webview_window(RECAPTCHA_WINDOW_LABEL) else {
+                // Window gone (user closed / navigated away). The Destroyed
+                // hook already emitted `cancelled` if no token was captured.
+                return;
+            };
+            let Ok(url) = win.url() else { continue };
+            let Some(fragment) = url.fragment() else {
+                continue;
+            };
+            if let Some((frag_step, token)) = parse_mltoken_fragment(fragment) {
+                token_captured.store(true, Ordering::SeqCst);
+                let _ = poll_app.emit(
+                    RECAPTCHA_TOKEN_EVENT,
+                    RecaptchaTokenPayload {
+                        step: frag_step.as_wire(),
+                        token,
+                    },
+                );
+                let _ = win.close();
+                return;
+            }
+        }
+        // Timed out — treat as cancel so the frontend can offer a retry.
+        if let Some(win) = poll_app.get_webview_window(RECAPTCHA_WINDOW_LABEL) {
+            let _ = win.close();
+        } else {
+            let _ = poll_app.emit(RECAPTCHA_CANCELLED_EVENT, ());
+        }
+    });
+
     Ok(())
+}
+
+/// Payload of [`RECAPTCHA_TOKEN_EVENT`].
+#[derive(Clone, Serialize)]
+struct RecaptchaTokenPayload {
+    /// `RecaptchaStep::as_wire` value (`"check"` / `"login"`).
+    step: &'static str,
+    /// Solved reCAPTCHA response token.
+    token: String,
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2371,6 +2458,7 @@ async fn clear_all_auth_state(state: &AppState) {
     *state.pending_qr.write().await = None;
     *state.pending_verify.write().await = None;
     *state.pending_gamepass.write().await = None;
+    *state.pending_tw_login.write().await = None;
 }
 
 /// Terminate the active Beanfun session and release every
@@ -2444,6 +2532,27 @@ mod tests {
 
     fn empty_state() -> AppState {
         AppState::new(PathBuf::from(r"C:\tmp"))
+    }
+
+    // ── reCAPTCHA URL-fragment token handback (#313/#315/#318) ─────
+
+    #[test]
+    fn parse_mltoken_fragment_extracts_step_and_token() {
+        let (step, token) =
+            parse_mltoken_fragment("mltoken=login~03AFcW.token-VALUE_09").expect("parses");
+        assert_eq!(step, RecaptchaStep::AccountLogin);
+        assert_eq!(token, "03AFcW.token-VALUE_09");
+
+        let (step, _) = parse_mltoken_fragment("mltoken=check~abc").expect("parses");
+        assert_eq!(step, RecaptchaStep::CheckAccount);
+    }
+
+    #[test]
+    fn parse_mltoken_fragment_rejects_malformed_input() {
+        assert!(parse_mltoken_fragment("mltoken=login~").is_none()); // empty token
+        assert!(parse_mltoken_fragment("mltoken=bogus~tok").is_none()); // bad step
+        assert!(parse_mltoken_fragment("login~tok").is_none()); // no prefix
+        assert!(parse_mltoken_fragment("mltoken=logintok").is_none()); // no separator
     }
 
     // ── Session keep-alive (run_ping_loop) ────────────────────────

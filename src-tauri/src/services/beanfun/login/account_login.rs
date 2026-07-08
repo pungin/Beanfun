@@ -32,8 +32,23 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{apply_json_headers, deserialize_jtoken_to_string, ensure_success, parse_step_json};
+use super::{
+    apply_json_headers, deserialize_jtoken_to_string, ensure_success, message_demands_recaptcha,
+    parse_step_json,
+};
 use crate::services::beanfun::{BeanfunClient, Credentials, LoginError};
+
+/// Result of an `AccountLogin` POST on the happy / reCAPTCHA axis. The
+/// advance-check and server-message outcomes still travel the `Err`
+/// channel via [`LoginError`] (see [`classify_outcome`]).
+#[derive(Debug, PartialEq, Eq)]
+pub enum AccountLoginOutcome {
+    /// Credentials accepted — proceed to the completion tail.
+    Success,
+    /// The server demands a reCAPTCHA token for this attempt. The caller
+    /// solves the widget on beanfun's origin and retries with the token.
+    RecaptchaRequired,
+}
 
 #[derive(Serialize)]
 struct AccountLoginRequest<'a> {
@@ -77,12 +92,31 @@ struct AccountLoginResponse {
         deserialize_with = "deserialize_jtoken_to_string"
     )]
     result_message: Option<String>,
+    /// reCAPTCHA demand for this attempt (token-replay, issue #313/#315/#318).
+    /// Absent → `false` (unchanged behaviour). Checked *before*
+    /// [`classify_outcome`] so a reCAPTCHA gate is never mis-read as an
+    /// advance-check / server-message outcome.
+    #[serde(rename = "IsRecaptcha", default)]
+    is_recaptcha: bool,
+    #[serde(rename = "ResultData")]
+    result_data: Option<AccountLoginResultData>,
 }
 
-/// POST credentials to `AccountLogin` and return `Ok(())` on success.
+#[derive(Deserialize, Default)]
+struct AccountLoginResultData {
+    #[serde(rename = "IsRecaptcha", default)]
+    is_recaptcha: bool,
+}
+
+/// POST credentials to `AccountLogin`.
 ///
-/// Maps the four server-side outcomes to:
-/// - `Ok(())` for the happy path,
+/// `captcha` is the reCAPTCHA token to replay — `""` on the empty-first
+/// attempt, or a solved-on-origin token on a reCAPTCHA retry.
+///
+/// Maps the server-side outcomes to:
+/// - `Ok(AccountLoginOutcome::Success)` for the happy path,
+/// - `Ok(AccountLoginOutcome::RecaptchaRequired)` when the server demands a
+///   reCAPTCHA token (checked before the classic truth table),
 /// - [`LoginError::AdvanceCheckRequired`] (with or without an external
 ///   verification URL) for the two advance-check branches,
 /// - [`LoginError::ServerMessage`] for anything else, with the exact
@@ -94,7 +128,7 @@ pub async fn account_login(
     captcha: &str,
     verification_token: &str,
     index_url: &str,
-) -> Result<(), LoginError> {
+) -> Result<AccountLoginOutcome, LoginError> {
     let url = client.login_url_with_skey("Login/AccountLogin", skey)?;
     let body = AccountLoginRequest {
         account: &creds.account,
@@ -111,11 +145,26 @@ pub async fn account_login(
     let text = client.bounded_text(resp).await?;
     let parsed: AccountLoginResponse = parse_step_json(&text, "AccountLogin")?;
 
+    // Empty-first escalation: a reCAPTCHA demand takes precedence over the
+    // ResultCode/Result truth table so it is never mis-classified as an
+    // advance-check or server-message error.
+    let recaptcha = parsed.is_recaptcha
+        || parsed
+            .result_data
+            .as_ref()
+            .map(|d| d.is_recaptcha)
+            .unwrap_or(false)
+        || message_demands_recaptcha(parsed.result_message.as_deref().unwrap_or_default());
+    if recaptcha {
+        return Ok(AccountLoginOutcome::RecaptchaRequired);
+    }
+
     classify_outcome(
         parsed.result_code.as_deref().unwrap_or_default(),
         parsed.result.as_deref().unwrap_or_default(),
         parsed.result_message.unwrap_or_default(),
     )
+    .map(|()| AccountLoginOutcome::Success)
 }
 
 /// Pure mapping from response fields to a `Result`. Kept in its own
@@ -260,5 +309,41 @@ mod tests {
         assert_eq!(parsed.result_code.as_deref(), Some("1"));
         assert_eq!(parsed.result.as_deref(), Some("0"));
         assert_eq!(parsed.result_message.as_deref(), Some(""));
+    }
+
+    /// Re-usable recognition of a reCAPTCHA gate the way `account_login`
+    /// does it at runtime (before `classify_outcome`).
+    fn is_recaptcha_gate(body: &str) -> bool {
+        let p: AccountLoginResponse = serde_json::from_str(body).expect("valid JSON");
+        p.is_recaptcha
+            || p.result_data
+                .as_ref()
+                .map(|d| d.is_recaptcha)
+                .unwrap_or(false)
+            || message_demands_recaptcha(p.result_message.as_deref().unwrap_or_default())
+    }
+
+    #[test]
+    fn top_level_is_recaptcha_flag_is_detected() {
+        assert!(is_recaptcha_gate(
+            r#"{"IsRecaptcha":true,"ResultCode":"1"}"#
+        ));
+    }
+
+    #[test]
+    fn nested_result_data_is_recaptcha_flag_is_detected() {
+        assert!(is_recaptcha_gate(r#"{"ResultData":{"IsRecaptcha":true}}"#));
+    }
+
+    #[test]
+    fn robot_message_is_detected_as_recaptcha_gate() {
+        assert!(is_recaptcha_gate(
+            r#"{"ResultCode":"1","ResultMessage":"請點選「我不是機器人」"}"#
+        ));
+    }
+
+    #[test]
+    fn ordinary_success_is_not_a_recaptcha_gate() {
+        assert!(!is_recaptcha_gate(r#"{"ResultCode":"1","Result":"0"}"#));
     }
 }
