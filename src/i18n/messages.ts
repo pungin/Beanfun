@@ -322,6 +322,16 @@ const zhTW = {
     retry: '重試驗證',
     altHint: '若驗證一直無法通過，可改用 QR Code 或 Gama Pass 登入。',
   },
+  announcement: {
+    title: '📢 開發狀態與雙線更新公告',
+    intro:
+      '本專案目前正進行底層現代化重構（採用 Rust + Vue + Tauri）。為提供社群更具彈性的選擇，本專案將與另一開源啟動器 MapleLink 維持雙線並行開發：',
+    beanfun: '以支援所有橘子旗下遊戲為目標，持續優化並提供高相容性的全生態服務。',
+    maplelink: '專為純《新楓之谷》玩家打造，作為新技術實驗與快速排查登入異常問題的先行區。',
+    moreInfoLink: '關於 Beanfun 與 MapleLink 雙線並行開發的說明 (#294)',
+    reading: '請先閱讀公告（{seconds} 秒）',
+    dismiss: '我已閱讀，下次不再顯示',
+  },
   accountList: {
     serviceAccountsHeading: '遊戲帳號',
     accountCount: '{count} 個帳號',
@@ -543,6 +553,16 @@ const zhCN = {
     windowError: '无法打开验证窗口，请点击重试或返回重新登录。',
     retry: '重试验证',
     altHint: '若验证始终无法通过，可改用 QR Code 或 Gama Pass 登录。',
+  },
+  announcement: {
+    title: '📢 开发状态与双线更新公告',
+    intro:
+      '本项目目前正进行底层现代化重构（采用 Rust + Vue + Tauri）。为提供社群更具弹性的选择，本项目将与另一开源启动器 MapleLink 维持双线并行开发：',
+    beanfun: '以支援所有橘子旗下游戏为目标，持续优化并提供高兼容性的全生态服务。',
+    maplelink: '专为纯《新枫之谷》玩家打造，作为新技术实验与快速排查登录异常问题的先行区。',
+    moreInfoLink: '关于 Beanfun 与 MapleLink 双线并行开发的说明 (#294)',
+    reading: '请先阅读公告（{seconds} 秒）',
+    dismiss: '我已阅读，下次不再显示',
   },
   accountList: {
     serviceAccountsHeading: '游戏账号',
@@ -768,6 +788,18 @@ const enUS = {
     windowError: 'Could not open the verification window. Tap Retry or Back to sign in again.',
     retry: 'Retry verification',
     altHint: 'If verification keeps failing, try QR Code or Gama Pass sign-in instead.',
+  },
+  announcement: {
+    title: '📢 Project Status & Dual-Track Update',
+    intro:
+      'This project is undergoing a ground-up modernisation (Rust + Vue + Tauri). To give the community a more flexible choice, it now runs in parallel with another open-source launcher, MapleLink:',
+    beanfun:
+      'Aims to support every Gamania title — a broad, high-compatibility launcher for the whole ecosystem.',
+    maplelink:
+      'Built purely for MapleStory players — a proving ground for new tech and fast triage of login issues.',
+    moreInfoLink: 'About the Beanfun × MapleLink dual-track development (#294)',
+    reading: 'Please read the notice ({seconds}s)',
+    dismiss: "I've read it — don't show again",
   },
   accountList: {
     serviceAccountsHeading: 'Game Accounts',
