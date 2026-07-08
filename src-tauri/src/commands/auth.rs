@@ -1106,33 +1106,106 @@ const GAMEPASS_COMPLETION_PATH_MARKERS: &[&str] = &["return.aspx", "index.aspx",
 /// `querySelector` returns `null` on those pages and the
 /// conditional keeps us silent. The outer IIFE + no globals keeps
 /// the injection from leaking names into the portal's own JS.
-const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
-  // The "使用 Gama Pass" anchor is rendered ASYNCHRONOUSLY by beanfun's
-  // `initLogin` AJAX, well after DOMContentLoaded. The old "click on
-  // DOMContentLoaded once" approach therefore usually missed the button on
-  // a stable load, so the click only ever landed on one of beanfun's own
-  // Login/Index reloads — i.e. the click relied on the flicker. Instead we
-  // POLL for the anchor and click it the moment it appears, so we leave
-  // Login/Index on the very first load (no reload / flicker needed).
-  //
-  // A sessionStorage guard (persists across same-origin reloads, fresh per
-  // window-open) makes the click fire AT MOST ONCE: if the OAuth round-trip
-  // bounces back to Login/Index, we don't re-click into a loop.
-  const KEY = "__bf_gp_clicked";
-  const seen = () => { try { return !!sessionStorage.getItem(KEY); } catch (e) { return false; } };
-  if (seen()) return;
-  const tryClick = () => {
-    if (seen()) return true;
-    const anchor = document.querySelector("a.use-gama-pass");
-    if (!anchor) return false;
-    try { sessionStorage.setItem(KEY, "1"); } catch (e) { /* ignore */ }
-    anchor.click();
-    return true;
+/// `initialization_script` for the GamePass window. Two behaviours keyed on
+/// the current host:
+///
+/// - **`login.beanfun.com`** — poll for the asynchronously-rendered
+///   `a.use-gama-pass` anchor and click it once (the anchor is injected by
+///   beanfun's `initLogin` AJAX *after* DOMContentLoaded, so the old
+///   click-on-DOMContentLoaded missed it and the click only ever landed on
+///   one of beanfun's own reloads — the flicker). A `sessionStorage` guard
+///   makes the click fire at most once so an OAuth bounce-back doesn't loop.
+/// - **`accounts.gamania.com`** — best-effort prefill + auto-advance of the
+///   Gamania OAuth login (account → 下一步 → 密碼 → 登入 → stop at 2FA)
+///   using the user-supplied credentials. `{ACC}` / `{PW}` are replaced with
+///   **JSON-encoded** literals (so they embed as safe JS strings). The
+///   account accepts a phone or an email (two Gamania account types). Empty
+///   credentials skip prefill (manual login).
+///
+/// The OAuth leg is inherently fragile (a third-party multi-step Vue SPA):
+/// every DOM op is defensive and simply stops on a miss, leaving the user
+/// to finish by hand — it never blocks the login.
+const GAMEPASS_INIT_JS_TEMPLATE: &str = r##"(() => {
+  const ACC = {ACC};
+  const PW = {PW};
+  const host = location.hostname;
+
+  if (host.indexOf("login.beanfun.com") >= 0) {
+    const KEY = "__bf_gp_clicked";
+    const seen = () => { try { return !!sessionStorage.getItem(KEY); } catch (e) { return false; } };
+    if (seen()) return;
+    const tryClick = () => {
+      if (seen()) return true;
+      const a = document.querySelector("a.use-gama-pass");
+      if (!a) return false;
+      try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
+      a.click();
+      return true;
+    };
+    if (tryClick()) return;
+    const t = setInterval(() => { if (tryClick()) clearInterval(t); }, 150);
+    setTimeout(() => clearInterval(t), 15000);
+    return;
+  }
+
+  if (host.indexOf("accounts.gamania.com") < 0) return;
+  if (!ACC && !PW) return;
+
+  const isEmail = ACC.indexOf("@") >= 0;
+  const setVal = (el, v) => {
+    try {
+      const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+      if (desc && desc.set) desc.set.call(el, v); else el.value = v;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    } catch (e) {}
   };
-  if (tryClick()) return;
-  const timer = setInterval(() => { if (tryClick()) clearInterval(timer); }, 150);
-  setTimeout(() => clearInterval(timer), 15000); // give up after ~15s
-})();"#;
+  const clickText = (txt) => {
+    const bs = Array.prototype.slice.call(document.querySelectorAll("button"));
+    const b = bs.find((x) => x.textContent && x.textContent.trim().indexOf(txt) >= 0 && !x.disabled);
+    if (b) { b.click(); return true; }
+    return false;
+  };
+  const mark = (k) => { try { sessionStorage.setItem(k, "1"); } catch (e) {} };
+  const has = (k) => { try { return !!sessionStorage.getItem(k); } catch (e) { return false; } };
+
+  const timer = setInterval(() => {
+    // Step 1 — account: fill then 下一步.
+    if (!has("__gp_acc")) {
+      const acc = isEmail
+        ? (document.querySelector("input[type='email']") || document.querySelector("input.el-input__inner"))
+        : document.querySelector("input.el-input__inner");
+      if (acc && ACC) {
+        setVal(acc, ACC);
+        mark("__gp_acc");
+        setTimeout(() => clickText("下一步"), 250);
+      }
+      return;
+    }
+    // Step 2 — password: fill then 登入.
+    if (!has("__gp_pw")) {
+      const pw = document.querySelector("input[type='password']");
+      if (pw && PW) {
+        setVal(pw, PW);
+        mark("__gp_pw");
+        setTimeout(() => clickText("登入"), 250);
+      }
+      return;
+    }
+    // Step 3 — 2FA reached; the code is emailed / texted, so stop here.
+    clearInterval(timer);
+  }, 300);
+  setTimeout(() => clearInterval(timer), 30000);
+})();"##;
+
+/// Build the GamePass init script with the credentials JSON-encoded in.
+fn build_gamepass_init_script(account: &str, password: &str) -> String {
+    let acc = serde_json::to_string(account).unwrap_or_else(|_| "\"\"".to_owned());
+    let pw = serde_json::to_string(password).unwrap_or_else(|_| "\"\"".to_owned());
+    GAMEPASS_INIT_JS_TEMPLATE
+        .replace("{ACC}", &acc)
+        .replace("{PW}", &pw)
+}
 
 /// `initialization_script` injected into the reCAPTCHA widget-solve
 /// WebView ([`open_recaptcha_window`]).
@@ -1947,6 +2020,8 @@ fn build_gamepass_login_url(skey: &str) -> Result<Url, CommandError> {
 pub async fn open_gamepass_window<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
+    account: String,
+    password: String,
 ) -> Result<(), CommandError> {
     // We need both the skey (for the login URL) AND the BeanfunClient
     // (for the cookie-seeding step below) from the same pending slot,
@@ -2016,7 +2091,7 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
     .title("GamePass 登入")
     .inner_size(900.0, 700.0)
     .resizable(true)
-    .initialization_script(GAMEPASS_AUTOCLICK_JS)
+    .initialization_script(build_gamepass_init_script(&account, &password).as_str())
     .on_page_load(move |window, payload| {
         // Only the `Finished` edge matters — `Started` fires before
         // cookies for the destination URL are actually populated,
@@ -3592,22 +3667,41 @@ mod tests {
         );
     }
 
-    // ── GAMEPASS_AUTOCLICK_JS ─────────────────────────────────────
+    // ── GAMEPASS_INIT_JS_TEMPLATE / build_gamepass_init_script ────
 
-    /// The init script must target the WPF-identical selector
-    /// `a.use-gama-pass` and run after DOMContentLoaded; a drift on
-    /// either axis means the button never gets clicked and the
-    /// flow wedges at the entry page forever.
+    /// The init script must still target the `a.use-gama-pass` anchor
+    /// (the button click that starts the OAuth flow), and — since the
+    /// anchor is rendered asynchronously by beanfun's `initLogin` — must
+    /// poll for it (`setInterval`) rather than fire once on
+    /// DOMContentLoaded, which used to miss the async button.
     #[test]
-    fn autoclick_js_references_wpf_selector_and_domcontentloaded() {
+    fn gamepass_init_targets_anchor_and_polls() {
         assert!(
-            GAMEPASS_AUTOCLICK_JS.contains("a.use-gama-pass"),
-            "selector must mirror WPF GamePassBrowser.xaml.cs L78-90, got:\n{GAMEPASS_AUTOCLICK_JS}",
+            GAMEPASS_INIT_JS_TEMPLATE.contains("a.use-gama-pass"),
+            "must click the Gama Pass anchor"
         );
         assert!(
-            GAMEPASS_AUTOCLICK_JS.contains("DOMContentLoaded"),
-            "must await DOM before clicking, got:\n{GAMEPASS_AUTOCLICK_JS}",
+            GAMEPASS_INIT_JS_TEMPLATE.contains("setInterval"),
+            "must poll for the async-rendered anchor"
         );
+    }
+
+    /// The credential placeholders are replaced with JSON-encoded literals
+    /// so quotes / specials in the account or password can't break out of
+    /// the JS string context.
+    #[test]
+    fn build_gamepass_init_script_json_encodes_credentials() {
+        let js = build_gamepass_init_script("a\"b", "p'w");
+        assert!(
+            js.contains(r#"const ACC = "a\"b";"#),
+            "account must be JSON-encoded"
+        );
+        assert!(
+            js.contains(r#"const PW = "p'w";"#),
+            "password must be JSON-encoded"
+        );
+        // Placeholders fully substituted.
+        assert!(!js.contains("{ACC}") && !js.contains("{PW}"));
     }
 
     // ── redact_url_query ────────────────────────────────────────

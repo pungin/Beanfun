@@ -388,9 +388,9 @@ async loginGamepassStart(region: LoginRegion) : Promise<Result<null, CommandErro
  * off to the tokio executor, which is a different thread from the
  * WebView2 message pump.
  */
-async openGamepassWindow() : Promise<Result<null, CommandError>> {
+async openGamepassWindow(account: string, password: string) : Promise<Result<null, CommandError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("open_gamepass_window") };
+    return { status: "ok", data: await TAURI_INVOKE("open_gamepass_window", { account, password }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
