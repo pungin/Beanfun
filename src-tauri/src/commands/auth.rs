@@ -1128,12 +1128,13 @@ const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
 /// and does three things:
 ///
 /// 1. **Shows a stable loading overlay** (spinner) from first paint, then
-///    removes it once the reCAPTCHA iframe has rendered — revealing
-///    beanfun's own page for the user to solve in place. It does **not**
-///    move / restyle / hide-around the widget: any layout surgery either
-///    reloads the reCAPTCHA iframe (corrupting the token `getResponse()`
-///    returns → replay rejected → endless loop, the #313/#315/#318 symptom)
-///    or shifts the widget off-position.
+///    moves JUST the reCAPTCHA widget into it once rendered — a clean,
+///    centred "我不是機器人" checkbox with no beanfun login/QR chrome.
+///    Moving the widget reloads its iframe, which merely re-renders a fresh
+///    checkbox (the token the user then solves is valid — proven end-to-end
+///    once the modern-fingerprint fix landed). Falls back to revealing the
+///    page if the widget can't be isolated. The image-challenge popup keeps
+///    its own ~2e9 z-index, so it still shows above the overlay.
 /// 2. **Self-heals**: if no `iframe[src*=recaptcha]` appears within ~3.5s,
 ///    it reloads once, guarded by `sessionStorage` so it can't loop.
 /// 3. **Harvests** the solved token via
@@ -1182,19 +1183,45 @@ const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
     document.querySelector("iframe[title='reCAPTCHA']") ||
     document.querySelector("iframe[src*='recaptcha']");
 
-  // Once the reCAPTCHA has rendered, simply REVEAL beanfun's own page by
-  // removing the loading overlay. We deliberately do NOT move, restyle, or
-  // hide-around the widget: any layout surgery either reloads the reCAPTCHA
-  // iframe (corrupting the token getResponse() yields → replay rejected →
-  // loop) or shifts the widget off-position. The user solves it in place on
-  // beanfun's own page; the surrounding login form is harmless.
+  // The reCAPTCHA widget container (the .g-recaptcha box, or the ~304px
+  // wrapper around the anchor iframe).
+  const findWidget = () => {
+    const anchor = recaptchaReady();
+    if (!anchor) return null;
+    let w = anchor.closest(".g-recaptcha");
+    if (!w) {
+      w = anchor;
+      for (let i = 0; i < 5 && w.parentElement && w.parentElement !== document.body; i++) {
+        w = w.parentElement;
+        if (w.offsetWidth >= 280 && w.offsetWidth <= 400) break;
+      }
+    }
+    return w;
+  };
+
+  // Once ready, move JUST the widget into the loading overlay so the user
+  // sees only a centred "我不是機器人" checkbox on a clean backdrop (no
+  // beanfun login form / QR chrome). Moving the widget reloads its iframe,
+  // which merely RE-RENDERS a fresh unchecked checkbox — the token the user
+  // then solves is valid (proven end-to-end once the modern-fingerprint fix
+  // landed). If the widget can't be isolated, fall back to revealing the
+  // page so it's still solvable in place.
   let done = false;
   const finish = () => {
     if (done) return;
+    const w = findWidget();
+    const ov = document.getElementById("__bf_overlay");
     done = true;
     clearInterval(readyTimer);
-    const ov = document.getElementById("__bf_overlay");
-    if (ov) ov.remove();
+    if (w && w !== document.body && w !== document.documentElement && ov) {
+      w.style.position = "relative";
+      w.style.zIndex = String(OVERLAY_Z + 2);
+      if (spin.parentNode) spin.remove();
+      label.textContent = "請完成「我不是機器人」驗證";
+      ov.appendChild(w);
+    } else if (ov) {
+      ov.remove();
+    }
   };
   const readyTimer = setInterval(() => { if (recaptchaReady()) finish(); }, 200);
   // Safety net: never leave the user stuck on the spinner.
