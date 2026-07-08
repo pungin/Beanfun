@@ -236,9 +236,10 @@ async function resumeAfterVerifySuccess(): Promise<void> {
   try {
     const session = await auth.resumeTwLoginAfterVerify()
     if (session) {
+      // TW resumes the login on the same session automatically — no
+      // "請重新輸入帳號密碼" toast (that's only for the HK manual re-login).
       await persistTwCredentials()
       accountStore.clearSessionData()
-      ElMessage.success(t('loginVerify.success'))
       await router.push('/accounts')
       return
     }
