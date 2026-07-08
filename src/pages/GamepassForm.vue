@@ -355,10 +355,12 @@ async function goBack(): Promise<void> {
       <p class="gamepass-form__subtitle">{{ t('loginGamepass.subtitle') }}</p>
     </header>
 
-    <!-- Credential form: shown once the session is armed, before the
-         WebView opens. Empty values → manual login in the window. -->
+    <!-- Credential form: rendered from first paint (before the session
+         arms) so the window sizes to a stable height instead of jumping
+         empty → form. The Open button stays disabled until the session
+         key is ready. Empty values → manual login in the window. -->
     <form
-      v-if="step >= STEP_PREPARED && !windowOpened && !connectionLost"
+      v-if="!windowOpened && !connectionLost"
       class="gamepass-form__creds"
       data-testid="gamepass-creds"
       @submit.prevent="openWindow"
@@ -385,6 +387,8 @@ async function goBack(): Promise<void> {
         size="large"
         native-type="submit"
         class="gamepass-form__open"
+        :loading="isStarting"
+        :disabled="step < STEP_PREPARED"
         data-testid="gamepass-open"
       >
         {{ t('loginGamepass.openWindow') }}
@@ -467,6 +471,30 @@ async function goBack(): Promise<void> {
   margin: 0.375rem 0 0;
   font-size: 0.8125rem;
   color: #54443a;
+}
+
+.gamepass-form__creds {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.gamepass-form__creds-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #54443a;
+  text-align: center;
+}
+
+.gamepass-form__field {
+  width: 100%;
+}
+
+.gamepass-form__open {
+  width: 100%;
+  margin-top: 0.25rem;
+  font-weight: 700;
 }
 
 .gamepass-form__steps {

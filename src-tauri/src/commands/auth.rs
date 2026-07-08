@@ -1151,18 +1151,29 @@ const GAMEPASS_INIT_JS_TEMPLATE: &str = r##"(() => {
   if (host.indexOf("accounts.gamania.com") < 0) return;
   if (!ACC && !PW) return;
 
-  const isEmail = ACC.indexOf("@") >= 0;
   const setVal = (el, v) => {
     try {
       const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
       if (desc && desc.set) desc.set.call(el, v); else el.value = v;
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.dispatchEvent(new Event("blur", { bubbles: true }));
     } catch (e) {}
   };
+  // Visible, user-editable inputs only. The +886 country-code selector
+  // renders its own `input.el-input__inner`, but element-plus marks it
+  // `readonly`; a naive `input.el-input__inner` query would grab THAT
+  // and never touch the real phone/email field, so filter it out.
+  const editable = () => Array.prototype.slice
+    .call(document.querySelectorAll("input"))
+    .filter((x) => !x.readOnly && !x.disabled && x.type !== "hidden" && x.offsetParent !== null);
+  const accountField = () => editable().find((x) => x.type !== "password") || null;
+  const passwordField = () => document.querySelector("input[type='password']");
+  // Match by trimmed text; an enabled button only (element-plus disables
+  // 下一步 / 登入 until its own validation passes, so we simply retry).
   const clickText = (txt) => {
     const bs = Array.prototype.slice.call(document.querySelectorAll("button"));
-    const b = bs.find((x) => x.textContent && x.textContent.trim().indexOf(txt) >= 0 && !x.disabled);
+    const b = bs.find((x) => x.textContent && x.textContent.replace(/\s+/g, "").indexOf(txt) >= 0 && !x.disabled);
     if (b) { b.click(); return true; }
     return false;
   };
@@ -1170,31 +1181,33 @@ const GAMEPASS_INIT_JS_TEMPLATE: &str = r##"(() => {
   const has = (k) => { try { return !!sessionStorage.getItem(k); } catch (e) { return false; } };
 
   const timer = setInterval(() => {
-    // Step 1 — account: fill then 下一步.
-    if (!has("__gp_acc")) {
-      const acc = isEmail
-        ? (document.querySelector("input[type='email']") || document.querySelector("input.el-input__inner"))
-        : document.querySelector("input.el-input__inner");
-      if (acc && ACC) {
-        setVal(acc, ACC);
-        mark("__gp_acc");
-        setTimeout(() => clickText("下一步"), 250);
-      }
+    // Step 1a — fill the account field (phone OR email; same field).
+    if (ACC && !has("__gp_acc")) {
+      const acc = accountField();
+      if (acc && !passwordField()) { setVal(acc, ACC); mark("__gp_acc"); }
       return;
     }
-    // Step 2 — password: fill then 登入.
-    if (!has("__gp_pw")) {
-      const pw = document.querySelector("input[type='password']");
-      if (pw && PW) {
-        setVal(pw, PW);
-        mark("__gp_pw");
-        setTimeout(() => clickText("登入"), 250);
-      }
+    // Step 1b — advance to the password page. Retry until 下一步 is
+    // enabled; treat the password field appearing as "advanced".
+    if (ACC && !has("__gp_next")) {
+      if (passwordField()) { mark("__gp_next"); return; }
+      clickText("下一步");
       return;
     }
-    // Step 3 — 2FA reached; the code is emailed / texted, so stop here.
+    // Step 2a — fill the password.
+    if (PW && !has("__gp_pw")) {
+      const pw = passwordField();
+      if (pw) { setVal(pw, PW); mark("__gp_pw"); }
+      return;
+    }
+    // Step 2b — submit. Retry until 登入 is enabled.
+    if (PW && !has("__gp_login")) {
+      if (clickText("登入")) mark("__gp_login");
+      return;
+    }
+    // 2FA reached; the code is emailed / texted, so stop here.
     clearInterval(timer);
-  }, 300);
+  }, 400);
   setTimeout(() => clearInterval(timer), 30000);
 })();"##;
 
