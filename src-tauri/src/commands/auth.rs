@@ -1127,14 +1127,13 @@ const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
 /// reCAPTCHA token is accepted — the token is origin-locked, task spec §1)
 /// and does three things:
 ///
-/// 1. **Shows a stable loading overlay** (spinner) from first paint; once
-///    the reCAPTCHA has rendered it hides everything OUTSIDE the widget's
-///    container (`display:none` on each ancestor's other children) and
-///    paints an opaque backdrop, so only the "我不是機器人" checkbox shows.
-///    It never moves or restyles the widget subtree itself — touching the
-///    reCAPTCHA DOM reloads its iframe and corrupts the token
-///    `getResponse()` returns (→ replay rejected → endless loop, the
-///    #313/#315/#318 symptom).
+/// 1. **Shows a stable loading overlay** (spinner) from first paint, then
+///    removes it once the reCAPTCHA iframe has rendered — revealing
+///    beanfun's own page for the user to solve in place. It does **not**
+///    move / restyle / hide-around the widget: any layout surgery either
+///    reloads the reCAPTCHA iframe (corrupting the token `getResponse()`
+///    returns → replay rejected → endless loop, the #313/#315/#318 symptom)
+///    or shifts the widget off-position.
 /// 2. **Self-heals**: if no `iframe[src*=recaptcha]` appears within ~3.5s,
 ///    it reloads once, guarded by `sessionStorage` so it can't loop.
 /// 3. **Harvests** the solved token via
@@ -1183,58 +1182,22 @@ const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
     document.querySelector("iframe[title='reCAPTCHA']") ||
     document.querySelector("iframe[src*='recaptcha']");
 
-  // The reCAPTCHA widget container (the .g-recaptcha box, or the ~304px
-  // wrapper). We hide everything OUTSIDE this — never move or restyle the
-  // widget itself: touching the reCAPTCHA subtree reloads its iframe and
-  // corrupts the token getResponse() yields (→ replay rejected → loop).
-  const widgetContainer = () => {
-    const anchor = recaptchaReady();
-    if (!anchor) return null;
-    let w = anchor.closest(".g-recaptcha");
-    if (!w) {
-      w = anchor;
-      for (let i = 0; i < 5 && w.parentElement && w.parentElement !== document.body; i++) {
-        w = w.parentElement;
-        if (w.offsetWidth >= 280 && w.offsetWidth <= 400) break;
-      }
-    }
-    return w;
-  };
-
-  // Once ready, show ONLY the widget: walk up from its container to <body>
-  // and `display:none` every sibling along the way (leaving the widget's
-  // own subtree untouched), then paint an opaque backdrop and centre it.
+  // Once the reCAPTCHA has rendered, simply REVEAL beanfun's own page by
+  // removing the loading overlay. We deliberately do NOT move, restyle, or
+  // hide-around the widget: any layout surgery either reloads the reCAPTCHA
+  // iframe (corrupting the token getResponse() yields → replay rejected →
+  // loop) or shifts the widget off-position. The user solves it in place on
+  // beanfun's own page; the surrounding login form is harmless.
   let done = false;
   const finish = () => {
     if (done) return;
-    const w = widgetContainer();
-    const ov = document.getElementById("__bf_overlay");
     done = true;
     clearInterval(readyTimer);
-    if (w && w !== document.body && w !== document.documentElement) {
-      let el = w;
-      while (el && el.parentElement && el !== document.body) {
-        const parent = el.parentElement;
-        for (const sib of Array.prototype.slice.call(parent.children)) {
-          if (sib !== el && sib.id !== "__bf_overlay") {
-            sib.style.setProperty("display", "none", "important");
-          }
-        }
-        el = parent;
-      }
-      document.documentElement.style.background = "#1c1712";
-      const b = document.body;
-      b.style.background = "#1c1712";
-      b.style.margin = "0";
-      b.style.minHeight = "100vh";
-      b.style.display = "flex";
-      b.style.alignItems = "center";
-      b.style.justifyContent = "center";
-    }
+    const ov = document.getElementById("__bf_overlay");
     if (ov) ov.remove();
   };
   const readyTimer = setInterval(() => { if (recaptchaReady()) finish(); }, 200);
-  // Safety net: never leave the user stuck on the spinner (reveal page).
+  // Safety net: never leave the user stuck on the spinner.
   setTimeout(finish, 6000);
 
   // Self-heal: reload once if the widget iframe never renders at all.
