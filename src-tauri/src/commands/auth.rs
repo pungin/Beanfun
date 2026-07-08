@@ -1107,27 +1107,31 @@ const GAMEPASS_COMPLETION_PATH_MARKERS: &[&str] = &["return.aspx", "index.aspx",
 /// conditional keeps us silent. The outer IIFE + no globals keeps
 /// the injection from leaking names into the portal's own JS.
 const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
-  // Click "use Gama Pass" AT MOST ONCE per window. When the account is
-  // reCAPTCHA-flagged, beanfun bounces the click back to Login/Index; the
-  // init script then re-runs on that reload and re-clicks, which navigates
-  // again → an endless reload loop the user sees as flicker. A
-  // sessionStorage guard (persists across same-origin reloads, fresh per
-  // window-open) fires the click once and stays quiet on every reload.
-  const clickButton = () => {
-    try {
-      if (sessionStorage.getItem("__bf_gp_clicked")) return;
-    } catch (e) { /* storage blocked — fall through, still click once below */ }
+  // The "使用 Gama Pass" anchor is rendered ASYNCHRONOUSLY by beanfun's
+  // `initLogin` AJAX, well after DOMContentLoaded. The old "click on
+  // DOMContentLoaded once" approach therefore usually missed the button on
+  // a stable load, so the click only ever landed on one of beanfun's own
+  // Login/Index reloads — i.e. the click relied on the flicker. Instead we
+  // POLL for the anchor and click it the moment it appears, so we leave
+  // Login/Index on the very first load (no reload / flicker needed).
+  //
+  // A sessionStorage guard (persists across same-origin reloads, fresh per
+  // window-open) makes the click fire AT MOST ONCE: if the OAuth round-trip
+  // bounces back to Login/Index, we don't re-click into a loop.
+  const KEY = "__bf_gp_clicked";
+  const seen = () => { try { return !!sessionStorage.getItem(KEY); } catch (e) { return false; } };
+  if (seen()) return;
+  const tryClick = () => {
+    if (seen()) return true;
     const anchor = document.querySelector("a.use-gama-pass");
-    if (anchor) {
-      try { sessionStorage.setItem("__bf_gp_clicked", "1"); } catch (e) { /* ignore */ }
-      anchor.click();
-    }
+    if (!anchor) return false;
+    try { sessionStorage.setItem(KEY, "1"); } catch (e) { /* ignore */ }
+    anchor.click();
+    return true;
   };
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", clickButton, { once: true });
-  } else {
-    clickButton();
-  }
+  if (tryClick()) return;
+  const timer = setInterval(() => { if (tryClick()) clearInterval(timer); }, 150);
+  setTimeout(() => clearInterval(timer), 15000); // give up after ~15s
 })();"#;
 
 /// `initialization_script` injected into the reCAPTCHA widget-solve
