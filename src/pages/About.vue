@@ -201,6 +201,23 @@ async function handleEmail(to: string): Promise<void> {
   await safeInvoke(commands.openUrl(mailtoUrl))
 }
 
+// 處理複製 QQ 號碼
+async function handleCopyQQ(qqNumber: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(qqNumber)
+    
+    // 如果你有設定多國語言，可以將 '已複製' 換成 t('Copied') 等等
+    ElMessage({
+      message: `QQ ${qqNumber} 已複製`, 
+      type: 'success',
+      duration: 2000
+    })
+  } catch (error) {
+    console.error('Failed to copy text: ', error)
+    ElMessage.error('複製失敗，請手動複製')
+  }
+}
+
 /**
  * Open the maintainer's GitHub issue-template page in the user's
  * default browser. Mirrors WPF `Github_Click` (L72-82) — same
@@ -319,15 +336,28 @@ onMounted(() => {
                 <el-icon><Message /></el-icon>
                 <span>YCC3741</span>
               </a>
-              <a
-                href="#"
-                class="about__contact-link"
-                data-test="about-email-lshw54"
-                @click.prevent="handleEmail('lshw.5454@gmail.com')"
-              >
-                <el-icon><Message /></el-icon>
-                <span>lshw54</span>
-              </a>
+              <div style="display: inline-flex; align-items: center; gap: 8px;">
+                <!-- 原本的 Email 連結 -->
+                <a
+                  href="#"
+                  class="about__contact-link"
+                  data-test="about-email-lshw54"
+                  @click.prevent="handleEmail('lshw.5454@gmail.com')"
+                >
+                  <el-icon><Message /></el-icon>
+                  <span>lshw54</span>
+                </a>
+
+                <!-- QQ 複製連結 -->
+                <a
+                  href="#"
+                  class="about__contact-link"
+                  style="font-size: 0.9em;"
+                  @click.prevent="handleCopyQQ('2157875454')"
+                >
+                  <span>QQ 2157875454</span>
+                </a>
+              </div>
               <a
                 href="#"
                 class="about__contact-link"
