@@ -14,6 +14,7 @@ vi.mock('@tauri-apps/api/window', () => ({
     close: vi.fn(),
     startDragging: vi.fn(),
     setSize: vi.fn(),
+    innerSize: vi.fn(() => Promise.resolve({ width: 420, height: 480 })),
   }),
 }))
 

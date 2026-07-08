@@ -57,12 +57,36 @@ describe('AnnouncementModal', () => {
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
   })
 
-  it('stays hidden when the current version was already acknowledged', async () => {
+  it('does not auto-show when acknowledged, but offers the re-open chip', async () => {
     const config = useConfigStore()
     config.entries[SEEN_KEY] = VERSION.app
     const wrapper = mountModal()
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="announcement-chip"]').exists()).toBe(true)
+  })
+
+  it('re-opens in review mode (no countdown) when the chip is clicked', async () => {
+    const config = useConfigStore()
+    config.entries[SEEN_KEY] = VERSION.app
+    const wrapper = mountModal()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="announcement-chip"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
+    // Review mode: the button is immediately usable (no 60s gate).
+    expect(
+      (wrapper.get('[data-testid="announcement-dismiss"]').element as HTMLButtonElement).disabled,
+    ).toBe(false)
+
+    // Closing returns to the chip, without re-persisting (already seen).
+    await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="announcement-chip"]').exists()).toBe(true)
+    expect(commands.setConfig).not.toHaveBeenCalled()
   })
 
   it('disables dismiss during the forced-read countdown, then enables it', async () => {

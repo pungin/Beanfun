@@ -331,6 +331,8 @@ const zhTW = {
     moreInfoLink: '關於 Beanfun 與 MapleLink 雙線並行開發的說明 (#323)',
     reading: '請先閱讀公告（{seconds} 秒）',
     dismiss: '我已閱讀，下次不再顯示',
+    close: '關閉',
+    reopen: '公告',
   },
   accountList: {
     serviceAccountsHeading: '遊戲帳號',
@@ -563,6 +565,8 @@ const zhCN = {
     moreInfoLink: '关于 Beanfun 与 MapleLink 双线并行开发的说明 (#323)',
     reading: '请先阅读公告（{seconds} 秒）',
     dismiss: '我已阅读，下次不再显示',
+    close: '关闭',
+    reopen: '公告',
   },
   accountList: {
     serviceAccountsHeading: '游戏账号',
@@ -800,6 +804,8 @@ const enUS = {
     moreInfoLink: 'About the Beanfun × MapleLink dual-track development (#323)',
     reading: 'Please read the notice ({seconds}s)',
     dismiss: "I've read it — don't show again",
+    close: 'Close',
+    reopen: 'Notice',
   },
   accountList: {
     serviceAccountsHeading: 'Game Accounts',
