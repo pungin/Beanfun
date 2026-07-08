@@ -198,6 +198,8 @@ async function retry(): Promise<void> {
 
 async function goBack(): Promise<void> {
   disposed = true
+  // Close the widget-solve popup so it doesn't linger after we navigate away.
+  await auth.closeRecaptchaWindow()
   await router.push('/login/id-pass')
 }
 </script>

@@ -1107,9 +1107,19 @@ const GAMEPASS_COMPLETION_PATH_MARKERS: &[&str] = &["return.aspx", "index.aspx",
 /// conditional keeps us silent. The outer IIFE + no globals keeps
 /// the injection from leaking names into the portal's own JS.
 const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
+  // Click "use Gama Pass" AT MOST ONCE per window. When the account is
+  // reCAPTCHA-flagged, beanfun bounces the click back to Login/Index; the
+  // init script then re-runs on that reload and re-clicks, which navigates
+  // again → an endless reload loop the user sees as flicker. A
+  // sessionStorage guard (persists across same-origin reloads, fresh per
+  // window-open) fires the click once and stays quiet on every reload.
   const clickButton = () => {
+    try {
+      if (sessionStorage.getItem("__bf_gp_clicked")) return;
+    } catch (e) { /* storage blocked — fall through, still click once below */ }
     const anchor = document.querySelector("a.use-gama-pass");
     if (anchor) {
+      try { sessionStorage.setItem("__bf_gp_clicked", "1"); } catch (e) { /* ignore */ }
       anchor.click();
     }
   };
@@ -2365,6 +2375,26 @@ struct RecaptchaTokenPayload {
     step: &'static str,
     /// Solved reCAPTCHA response token.
     token: String,
+}
+
+/// Close the reCAPTCHA widget-solve window and drop the paused TW login.
+///
+/// Called when the user backs out of the reСAPTCHA step (`RecaptchaForm`'s
+/// "返回一般登入"): the popup window must not linger after the frontend
+/// navigates away. Idempotent — a missing window / already-cleared slot is
+/// a no-op. The window's `Destroyed` hook may emit `recaptcha-cancelled`,
+/// which the (unmounting) `RecaptchaForm` ignores.
+#[tauri::command]
+#[specta::specta]
+pub async fn close_recaptcha_window<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<(), CommandError> {
+    if let Some(win) = app.get_webview_window(RECAPTCHA_WINDOW_LABEL) {
+        let _ = win.close();
+    }
+    *state.pending_tw_login.write().await = None;
+    Ok(())
 }
 
 // ═══════════════════════════════════════════════════════════════════════
