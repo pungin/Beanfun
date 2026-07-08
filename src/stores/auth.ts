@@ -156,14 +156,14 @@ const FLOW_CONTINUATION_CODES = {
   TotpRequired: 'auth.totp_required',
   AdvanceCheckRequired: 'auth.advance_check_required',
   /**
-   * issue #308 — the TW account/password login required a Google
-   * reCAPTCHA v2 challenge for this attempt, which cannot be solved
-   * headlessly. The backend has parked the session on `pending_gamepass`
-   * (the generic "WebView login awaiting harvest" slot) and expects the
-   * UI to open the interactive account-login WebView via
-   * {@link useAuthStore.openAccountLoginWindow}. Swallowed like the other
-   * continuation codes (no toast) so `IdPassForm` can route to
-   * `/login/recaptcha` instead of surfacing it as an error.
+   * issues #313 / #315 / #318 — the TW account/password login needs a
+   * Google reCAPTCHA token for this step (token-replay). The backend
+   * parked a resumable `pending_tw_login` continuation and expects the UI
+   * to open the widget-solve popup via
+   * {@link useAuthStore.openRecaptchaWindow}, then replay the harvested
+   * token via {@link useAuthStore.resumeTwLoginWithRecaptcha}. Swallowed
+   * like the other continuation codes (no toast) so `IdPassForm` can route
+   * to `/login/recaptcha` instead of surfacing it as an error.
    */
   RecaptchaRequired: 'auth.recaptcha_required',
 } as const
@@ -200,7 +200,8 @@ export const AUTH_ACTIONS = {
   LoginQrStart: 'login.qr_start',
   LoginQrCheck: 'login.qr_check',
   LoginGamepassStart: 'login.gamepass_start',
-  OpenAccountLoginWindow: 'login.open_account_login_window',
+  OpenRecaptchaWindow: 'login.open_recaptcha_window',
+  ResumeTwLogin: 'login.resume_tw_recaptcha',
   GetVerifyPageInfo: 'verify.page_info',
   GetVerifyCaptcha: 'verify.captcha',
   SubmitVerify: 'verify.submit',
@@ -469,25 +470,60 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * Open the interactive account-login WebView used by the issue #308
-   * reCAPTCHA flow. The backend has already parked `(client, skey)` on
-   * its `pending_gamepass` slot (via {@link loginRegular}'s
-   * `auth.recaptcha_required` branch), so this just pops the WebView.
+   * Open the reCAPTCHA **widget-solve** popup (issues #313 / #315 / #318 —
+   * token-replay). The backend already parked a resumable
+   * `pending_tw_login` continuation (via {@link loginRegular} /
+   * {@link resumeTwLoginWithRecaptcha}'s `auth.recaptcha_required` branch),
+   * so this just pops the window that hosts beanfun's own `Login/Index`
+   * page.
    *
-   * `account` / `password` are the values the user already typed in
-   * `IdPassForm` (read from {@link loginIntent}); the backend uses them
-   * only to best-effort autofill beanfun's own login form so the user
-   * just solves the reCAPTCHA + submits. Pass empty strings to skip
-   * autofill.
-   *
-   * The terminal outcome arrives via the same `gamepass-login-success` /
-   * `-failed` / `-cancelled` Tauri events the GamePass flow uses, which
-   * `RecaptchaForm.vue` listens for and routes through
-   * {@link applyGamepassSession}.
+   * The window is a pure token harvester: it does NOT complete the login
+   * in-page. The solved token arrives via the `recaptcha-token` Tauri
+   * event (`RecaptchaForm.vue` listens), which then calls
+   * {@link resumeTwLoginWithRecaptcha} to replay it over HTTP.
    */
-  async function openAccountLoginWindow(account: string, password: string): Promise<void> {
-    return withGuard(AUTH_ACTIONS.OpenAccountLoginWindow, async () => {
-      await wrapCommand(commands.openAccountLoginWindow(account, password))
+  async function openRecaptchaWindow(): Promise<void> {
+    return withGuard(AUTH_ACTIONS.OpenRecaptchaWindow, async () => {
+      await wrapCommand(commands.openRecaptchaWindow())
+    })
+  }
+
+  /**
+   * Replay a solved reCAPTCHA token into the paused TW login and continue
+   * the same HTTP session (issues #313 / #315 / #318).
+   *
+   * Outcomes mirror {@link loginRegular}: a `SessionInfo` on full success;
+   * `null` when the server now gates the **next** step behind another
+   * reCAPTCHA ({@link pendingRecaptcha} stays `true` so the caller
+   * re-opens the widget) or demands advance-check ({@link pendingVerify}).
+   * Any other error is toasted + thrown.
+   */
+  async function resumeTwLoginWithRecaptcha(token: string): Promise<SessionInfo | null> {
+    return withGuard(AUTH_ACTIONS.ResumeTwLogin, async () => {
+      const result = await safeInvoke(commands.resumeTwLoginWithRecaptcha(token))
+      if (result.ok) {
+        session.value = result.data
+        pendingTotp.value = false
+        pendingVerify.value = false
+        pendingRecaptcha.value = false
+        qrChallenge.value = null
+        advanceCheckUrl.value = null
+        return result.data
+      }
+      if (result.error.code === FLOW_CONTINUATION_CODES.RecaptchaRequired) {
+        // The next step now also needs a token — keep the flag set so
+        // `RecaptchaForm` re-opens the widget for the new step.
+        pendingRecaptcha.value = true
+        return null
+      }
+      if (result.error.code === FLOW_CONTINUATION_CODES.AdvanceCheckRequired) {
+        pendingRecaptcha.value = false
+        pendingVerify.value = true
+        advanceCheckUrl.value = readAdvanceCheckUrl(result.error.details)
+        return null
+      }
+      surfaceCommandError(result.error)
+      throw new CommandInvocationError(result.error)
     })
   }
 
@@ -644,7 +680,8 @@ export const useAuthStore = defineStore('auth', () => {
     loginQrStart,
     loginQrCheck,
     loginGamepassStart,
-    openAccountLoginWindow,
+    openRecaptchaWindow,
+    resumeTwLoginWithRecaptcha,
     applyGamepassSession,
     getVerifyPageInfo,
     getVerifyCaptcha,

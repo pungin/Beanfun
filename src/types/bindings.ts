@@ -397,58 +397,55 @@ async openGamepassWindow() : Promise<Result<null, CommandError>> {
 }
 },
 /**
- * Open the reCAPTCHA account-login WebView window.
+ * Resume a paused TW-Regular login after the user solved a reCAPTCHA
+ * widget (issues #313 / #315 / #318 — token-replay).
  * 
- * Triggered by the frontend after [`login_regular`] surfaces
- * [`RECAPTCHA_REQUIRED_CODE`]: the TW account/password login required a
- * Google reCAPTCHA v2 challenge for this attempt, which cannot be
- * solved headlessly (see
- * [`crate::services::beanfun::login::init_login`]). This opens the real
- * `Login/Index?pSKey=…` page in a WebView so the user can type their
- * account + password and solve the "I'm not a robot" challenge inside
- * beanfun's own page; the resulting `bfWebToken` is harvested by the
- * shared [`handle_gamepass_page_load`] hook exactly as GamePass does.
+ * Preconditions: a prior [`login_regular`] (or a prior resume) parked a
+ * [`PendingTwLogin`] on [`AppState::pending_tw_login`] and returned
+ * [`RECAPTCHA_REQUIRED_CODE`]. The `token` is the reCAPTCHA response
+ * harvested from beanfun's own origin by [`open_recaptcha_window`].
  * 
- * # Reuse of the GamePass machinery (deliberate)
- * 
- * The reCAPTCHA account login and GamePass login are mechanically
- * identical — both seed the portal session cookies into an
- * `about:blank` WebView, navigate to the same `Login/Index?pSKey=…`
- * URL, and harvest `bfWebToken` once beanfun's redirect chain reaches
- * `return.aspx`. So this command re-uses:
- * 
- * - [`AppState::pending_gamepass`] — parked by [`login_regular`]'s
- * `RecaptchaRequired` arm (the generic "WebView login awaiting
- * harvest" slot).
- * - [`handle_gamepass_page_load`] / [`handle_gamepass_window_destroyed`]
- * — the completion + cancel hooks.
- * - The `gamepass-login-success` / `-failed` / `-cancelled` events
- * (consumed unchanged by the frontend's `applyGamepassSession`).
- * 
- * The difference from [`open_gamepass_window`] is the
- * `initialization_script`: GamePass auto-clicks the "use Gama Pass"
- * button, whereas here we inject a **best-effort autofill** (built by
- * [`build_account_autofill_script`]) that pre-fills the `account` +
- * `password` the user already typed in `IdPassForm`, so they only need
- * to solve the "I'm not a robot" challenge and submit. We never
- * auto-click — the reCAPTCHA must be solved by the human. A distinct
- * window label ([`ACCOUNT_LOGIN_WINDOW_LABEL`]) keeps the double-open
- * guard independent of the GamePass window.
- * 
- * `account` / `password` come from the frontend's `loginIntent` (the
- * same values it passed to `login_regular`); they are used **only** to
- * pre-fill beanfun's own login form and are not persisted here. Empty
- * strings (e.g. direct navigation) make the autofill a no-op.
- * 
- * `open_gamepass_window` is left **byte-for-byte untouched** (it was
- * the subject of the issue #296 stale-cookie fix); the #296-critical
- * `DeleteAllCookies` / `AddOrUpdateCookie` mechanics live in the shared
- * [`crate::commands::cookie_native`] module, so only the (trivial)
- * clear→seed→navigate sequencing is duplicated here.
+ * The backend replays `token` into whichever step it paused on (the
+ * authoritative [`PendingTwLogin::step`], not a frontend-supplied value)
+ * and continues the *same* HTTP session. Outcomes mirror the empty-first
+ * flow: another reCAPTCHA (e.g. the second step now gates too) re-parks
+ * the slot and returns [`RECAPTCHA_REQUIRED_CODE`] again; success installs
+ * the session; an advance-check / server-message error surfaces verbatim.
  */
-async openAccountLoginWindow(account: string, password: string) : Promise<Result<null, CommandError>> {
+async resumeTwLoginWithRecaptcha(token: string) : Promise<Result<SessionInfo, CommandError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("open_account_login_window", { account, password }) };
+    return { status: "ok", data: await TAURI_INVOKE("resume_tw_login_with_recaptcha", { token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Open the reCAPTCHA **widget-solve** WebView (issues #313 / #315 / #318 —
+ * token-replay).
+ * 
+ * Triggered by the frontend after [`login_regular`] /
+ * [`resume_tw_login_with_recaptcha`] surface [`RECAPTCHA_REQUIRED_CODE`].
+ * Unlike the retired #308/#309 window (which tried to complete the whole
+ * login in-page and broke on WebView2 Tracking Prevention), this window
+ * hosts beanfun's own `Login/Index?pSKey=…` page purely so the user solves
+ * the reCAPTCHA **widget**. The solved token is:
+ * 
+ * 1. harvested in-page by [`RECAPTCHA_HARVEST_JS_TEMPLATE`] and published
+ * via the URL fragment `#mltoken=<step>~<token>`,
+ * 2. polled off `window.url()` here (app IPC from beanfun's origin is
+ * blocked by its CSP — task spec trap #5),
+ * 3. emitted to the frontend via [`RECAPTCHA_TOKEN_EVENT`], which then
+ * calls [`resume_tw_login_with_recaptcha`] to replay it over HTTP.
+ * 
+ * Windows: WebView2 Tracking Prevention is disabled first
+ * ([`crate::commands::cookie_native::disable_tracking_prevention_native`])
+ * — otherwise google.com/gstatic.com third-party storage is blocked and
+ * the widget renders dead (the direct cause of #318, task spec trap #2).
+ */
+async openRecaptchaWindow() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_recaptcha_window") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

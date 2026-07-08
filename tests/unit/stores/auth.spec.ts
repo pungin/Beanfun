@@ -19,6 +19,8 @@ vi.mock('../../../src/types/bindings', () => ({
     loginQrStart: vi.fn(),
     loginQrCheck: vi.fn(),
     loginGamepassStart: vi.fn(),
+    openRecaptchaWindow: vi.fn(),
+    resumeTwLoginWithRecaptcha: vi.fn(),
     getVerifyPageInfo: vi.fn(),
     getVerifyCaptcha: vi.fn(),
     submitVerify: vi.fn(),
@@ -38,6 +40,7 @@ const mockLoginTotp = vi.mocked(commands.loginTotp)
 const mockLoginQrStart = vi.mocked(commands.loginQrStart)
 const mockLoginQrCheck = vi.mocked(commands.loginQrCheck)
 const mockLoginGamepassStart = vi.mocked(commands.loginGamepassStart)
+const mockResumeTwLogin = vi.mocked(commands.resumeTwLoginWithRecaptcha)
 const mockSubmitVerify = vi.mocked(commands.submitVerify)
 const mockLogout = vi.mocked(commands.logout)
 
@@ -163,6 +166,70 @@ describe('useAuthStore', () => {
       )
       expect(auth.pendingTotp).toBe(false)
       expect(auth.pendingVerify).toBe(false)
+    })
+
+    it('returns null + sets pendingRecaptcha on auth.recaptcha_required (token-replay)', async () => {
+      mockLoginRegular.mockReturnValueOnce(
+        err({ code: 'auth.recaptcha_required', message: 'solve it', details: { step: 'check' } }),
+      )
+      const auth = useAuthStore()
+      const result = await auth.loginRegular('TW', 'alice', 'pw')
+      expect(result).toBeNull()
+      expect(auth.pendingRecaptcha).toBe(true)
+      expect(auth.session).toBeNull()
+    })
+  })
+
+  describe('resumeTwLoginWithRecaptcha (#313/#315/#318)', () => {
+    it('installs the session on full success and clears pendingRecaptcha', async () => {
+      const auth = useAuthStore()
+      auth.pendingRecaptcha = true
+      mockResumeTwLogin.mockReturnValueOnce(ok(SESSION))
+      const result = await auth.resumeTwLoginWithRecaptcha('tok-1')
+      expect(result).toEqual(SESSION)
+      expect(commands.resumeTwLoginWithRecaptcha).toHaveBeenCalledWith('tok-1')
+      expect(auth.session).toEqual(SESSION)
+      expect(auth.pendingRecaptcha).toBe(false)
+      expect(auth.isLoggedIn).toBe(true)
+    })
+
+    it('keeps pendingRecaptcha true when the next step also needs a token', async () => {
+      const auth = useAuthStore()
+      auth.pendingRecaptcha = true
+      mockResumeTwLogin.mockReturnValueOnce(
+        err({ code: 'auth.recaptcha_required', message: 'again', details: { step: 'login' } }),
+      )
+      const result = await auth.resumeTwLoginWithRecaptcha('tok-1')
+      expect(result).toBeNull()
+      expect(auth.pendingRecaptcha).toBe(true)
+      expect(auth.session).toBeNull()
+    })
+
+    it('routes to advance-check when the submit demands it', async () => {
+      const auth = useAuthStore()
+      auth.pendingRecaptcha = true
+      mockResumeTwLogin.mockReturnValueOnce(
+        err({
+          code: 'auth.advance_check_required',
+          message: 'verify',
+          details: { url: 'https://verify.example/c' },
+        }),
+      )
+      const result = await auth.resumeTwLoginWithRecaptcha('tok-2')
+      expect(result).toBeNull()
+      expect(auth.pendingRecaptcha).toBe(false)
+      expect(auth.pendingVerify).toBe(true)
+      expect(auth.advanceCheckUrl).toBe('https://verify.example/c')
+    })
+
+    it('throws CommandInvocationError for other error codes', async () => {
+      const auth = useAuthStore()
+      mockResumeTwLogin.mockReturnValueOnce(
+        err({ code: 'auth.recaptcha_not_pending', message: 'stale', details: null }),
+      )
+      await expect(auth.resumeTwLoginWithRecaptcha('tok')).rejects.toBeInstanceOf(
+        CommandInvocationError,
+      )
     })
   })
 
