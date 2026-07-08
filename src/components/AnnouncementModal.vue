@@ -14,10 +14,10 @@
  *   the OS window so the announcement isn't crammed, and restores the
  *   previous size on close.
  * - **Re-openable afterwards.** Once acknowledged (or on any later launch of
- *   the same version) a small "📢 公告" chip stays available so the user can
- *   re-open and re-read the notice at will — this time without the forced
- *   countdown. It is not a persistent full-width banner and never blocks a
- *   page.
+ *   the same version) a slim full-width banner sits just under the title bar
+ *   so the user can re-open and re-read the notice at will — this time
+ *   without the forced countdown. The banner's × hides it for the session
+ *   (it returns next launch).
  *
  * Mounted once at the app root ({@link App.vue}) so it overlays whatever
  * route is active.
@@ -48,8 +48,10 @@ defineOptions({ name: 'AnnouncementModal' })
 const { t } = useI18n()
 const config = useConfigStore()
 
-/** Version loaded → the re-open chip may render. */
+/** Version loaded → the re-open banner may render. */
 const ready = ref(false)
+/** Session-only: user hid the re-open banner (comes back next launch). */
+const bannerHidden = ref(false)
 const visible = ref(false)
 /** `true` = the auto-shown, countdown-gated first read; `false` = review. */
 const forced = ref(false)
@@ -200,15 +202,26 @@ async function open(url: string): Promise<void> {
     </div>
   </div>
 
-  <button
-    v-else-if="ready"
-    class="ann-chip"
-    type="button"
-    data-testid="announcement-chip"
-    @click="reopen"
-  >
-    <span aria-hidden="true">📢</span> {{ t('announcement.reopen') }}
-  </button>
+  <div v-else-if="ready && !bannerHidden" class="ann-banner" data-testid="announcement-banner">
+    <button
+      class="ann-banner__open"
+      type="button"
+      data-testid="announcement-banner-open"
+      @click="reopen"
+    >
+      <span class="ann-banner__text">{{ t('announcement.title') }}</span>
+      <span class="ann-banner__cta">{{ t('announcement.reopen') }} ›</span>
+    </button>
+    <button
+      class="ann-banner__x"
+      type="button"
+      :aria-label="t('announcement.close')"
+      data-testid="announcement-banner-hide"
+      @click="bannerHidden = true"
+    >
+      ×
+    </button>
+  </div>
 </template>
 
 <style scoped>
@@ -349,28 +362,70 @@ async function open(url: string): Promise<void> {
   cursor: not-allowed;
 }
 
-/* Small, unobtrusive re-open affordance (bottom-left corner). */
-.ann-chip {
+/* Full-width re-open banner, pinned just under the 40px custom title bar. */
+.ann-banner {
   position: fixed;
-  left: 12px;
-  bottom: 12px;
+  top: 40px;
+  left: 0;
+  right: 0;
   z-index: 2000;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border: 1px solid var(--bf-outline-variant, rgba(128, 128, 128, 0.25));
-  border-radius: var(--bf-radius-pill, 999px);
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--bf-primary, #954a00);
-  background: var(--bf-surface-container, rgba(255, 255, 255, 0.92));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-  cursor: pointer;
-  opacity: 0.9;
+  height: 30px;
+  padding: 0 4px 0 12px;
+  background: color-mix(
+    in srgb,
+    var(--el-color-primary, #ff8201) 16%,
+    var(--bf-surface-container, #eee)
+  );
+  border-bottom: 1px solid var(--bf-outline-variant, rgba(128, 128, 128, 0.25));
+  color: var(--bf-on-surface, #221a11);
+  font-size: 0.75rem;
 }
 
-.ann-chip:hover {
-  opacity: 1;
+.ann-banner__open {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ann-banner__text {
+  min-width: 0;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ann-banner__cta {
+  flex: 0 0 auto;
+  font-weight: 800;
+  color: var(--bf-primary, #954a00);
+}
+
+.ann-banner__x {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--bf-on-surface-variant, #54443a);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ann-banner__x:hover {
+  background: color-mix(in srgb, var(--bf-on-surface, #000) 12%, transparent);
 }
 </style>

@@ -332,7 +332,7 @@ const zhTW = {
     reading: '請先閱讀公告（{seconds} 秒）',
     dismiss: '我已閱讀，下次不再顯示',
     close: '關閉',
-    reopen: '公告',
+    reopen: '查看',
   },
   accountList: {
     serviceAccountsHeading: '遊戲帳號',
@@ -566,7 +566,7 @@ const zhCN = {
     reading: '请先阅读公告（{seconds} 秒）',
     dismiss: '我已阅读，下次不再显示',
     close: '关闭',
-    reopen: '公告',
+    reopen: '查看',
   },
   accountList: {
     serviceAccountsHeading: '游戏账号',
@@ -805,7 +805,7 @@ const enUS = {
     reading: 'Please read the notice ({seconds}s)',
     dismiss: "I've read it — don't show again",
     close: 'Close',
-    reopen: 'Notice',
+    reopen: 'View',
   },
   accountList: {
     serviceAccountsHeading: 'Game Accounts',

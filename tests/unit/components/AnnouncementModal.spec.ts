@@ -63,7 +63,7 @@ describe('AnnouncementModal', () => {
     const wrapper = mountModal()
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="announcement-chip"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="announcement-banner-open"]').exists()).toBe(true)
   })
 
   it('re-opens in review mode (no countdown) when the chip is clicked', async () => {
@@ -72,7 +72,7 @@ describe('AnnouncementModal', () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    await wrapper.get('[data-testid="announcement-chip"]').trigger('click')
+    await wrapper.get('[data-testid="announcement-banner-open"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
@@ -85,8 +85,20 @@ describe('AnnouncementModal', () => {
     await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="announcement-chip"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="announcement-banner-open"]').exists()).toBe(true)
     expect(commands.setConfig).not.toHaveBeenCalled()
+  })
+
+  it('hides the re-open banner for the session when its × is clicked', async () => {
+    const config = useConfigStore()
+    config.entries[SEEN_KEY] = VERSION.app
+    const wrapper = mountModal()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="announcement-banner-hide"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(false)
   })
 
   it('disables dismiss during the forced-read countdown, then enables it', async () => {
