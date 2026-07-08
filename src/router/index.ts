@@ -85,6 +85,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { PhysicalSize } from '@tauri-apps/api/dpi'
 
 import { registerSessionExpiredHandler } from '../services/invoke'
+import { isWindowFitSuspended } from '../services/windowFit'
 
 let cachedWindowZoom = 1
 
@@ -617,6 +618,9 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
    * the rate low enough that this isn't a hot path.
    */
   function fitWindow(): void {
+    // A full-window overlay (AnnouncementModal) may be holding the window
+    // at a fixed larger size; don't snap it back to content height.
+    if (isWindowFitSuspended()) return
     const root = document.querySelector('[data-window-root]') as HTMLElement | null
     if (!root) return
     // Temporarily disable overflow clipping so scrollHeight reflects

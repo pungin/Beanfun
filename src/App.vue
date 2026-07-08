@@ -47,6 +47,7 @@ import enLocale from 'element-plus/dist/locale/en.mjs'
 import zhCnLocale from 'element-plus/dist/locale/zh-cn.mjs'
 import zhTwLocale from 'element-plus/dist/locale/zh-tw.mjs'
 
+import AnnouncementModal from './components/AnnouncementModal.vue'
 import { useAccountStore } from './stores/account'
 import { useConfigStore } from './stores/config'
 import { useUiStore, type AppLocale } from './stores/ui'
@@ -100,6 +101,7 @@ onMounted(async () => {
 <template>
   <el-config-provider :locale="elpLocale">
     <RouterView />
+    <AnnouncementModal />
   </el-config-provider>
 </template>
 
