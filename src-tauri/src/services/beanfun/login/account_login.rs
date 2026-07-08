@@ -155,6 +155,26 @@ pub async fn account_login(
             .map(|d| d.is_recaptcha)
             .unwrap_or(false)
         || message_demands_recaptcha(parsed.result_message.as_deref().unwrap_or_default());
+
+    // Diagnostic (issues #313/#315/#318): the exact server verdict is the
+    // only way to tell "token rejected → re-challenge" apart from a real
+    // advance-check when the reCAPTCHA loop persists on a live account.
+    // `account_id` is non-secret; the captcha token itself is never logged.
+    tracing::info!(
+        step = "AccountLogin.Verdict",
+        result_code = parsed.result_code.as_deref().unwrap_or(""),
+        result = parsed.result.as_deref().unwrap_or(""),
+        is_recaptcha_top = parsed.is_recaptcha,
+        is_recaptcha_nested = parsed
+            .result_data
+            .as_ref()
+            .map(|d| d.is_recaptcha)
+            .unwrap_or(false),
+        captcha_sent = !captcha.is_empty(),
+        message = %truncate_for_log(parsed.result_message.as_deref().unwrap_or("")),
+        "AccountLogin server response classified"
+    );
+
     if recaptcha {
         return Ok(AccountLoginOutcome::RecaptchaRequired);
     }
@@ -165,6 +185,15 @@ pub async fn account_login(
         parsed.result_message.unwrap_or_default(),
     )
     .map(|()| AccountLoginOutcome::Success)
+}
+
+/// Borrow at most ~120 chars of a server message for a log line (avoids
+/// dumping a full HTML error page; won't split a CJK codepoint).
+fn truncate_for_log(s: &str) -> &str {
+    match s.char_indices().nth(120) {
+        Some((idx, _)) => &s[..idx],
+        None => s,
+    }
 }
 
 /// Pure mapping from response fields to a `Result`. Kept in its own

@@ -1127,14 +1127,14 @@ const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
 /// reCAPTCHA token is accepted — the token is origin-locked, task spec §1)
 /// and does three things:
 ///
-/// 1. **Masks the whole page** with an opaque fixed overlay and lifts only
-///    the reCAPTCHA anchor iframe above it. We deliberately do NOT use
-///    `visibility:hidden` on any ancestor — Chromium suppresses
-///    hit-testing for a cross-origin iframe under a `visibility:hidden`
-///    ancestor, which makes the checkbox unclickable (task spec trap #3).
-/// 2. **Self-heals**: if no `iframe[src*=recaptcha]` appears within ~3s
-///    (Tracking-Prevention race), it reloads once, guarded by
-///    `sessionStorage` so it can't loop.
+/// 1. **Shows a stable loading overlay** (spinner) from first paint, then
+///    removes it once the reCAPTCHA iframe has rendered — revealing
+///    beanfun's own page. It does **not** reparent or restyle the widget:
+///    touching the reCAPTCHA DOM reloads its iframe and corrupts the token
+///    `getResponse()` returns, which then gets rejected on replay → an
+///    endless reCAPTCHA loop (the #313/#315/#318 symptom).
+/// 2. **Self-heals**: if no `iframe[src*=recaptcha]` appears within ~3.5s,
+///    it reloads once, guarded by `sessionStorage` so it can't loop.
 /// 3. **Harvests** the solved token via
 ///    `grecaptcha.enterprise.getResponse()` and hands it back through the
 ///    **URL fragment** (`#mltoken=<step>~<token>`) — beanfun's CSP blocks
@@ -1176,47 +1176,27 @@ const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", attach, { once: true }); else attach();
 
-  const findWidget = () => {
-    const anchor =
-      document.querySelector("iframe[src*='recaptcha'][src*='anchor']") ||
-      document.querySelector("iframe[title='reCAPTCHA']") ||
-      document.querySelector("iframe[src*='recaptcha']");
-    if (!anchor) return null;
-    let w = anchor.closest(".g-recaptcha");
-    if (!w) {
-      w = anchor;
-      for (let i = 0; i < 5 && w.parentElement && w.parentElement !== document.body; i++) {
-        w = w.parentElement;
-        if (w.offsetWidth >= 280 && w.offsetWidth <= 400) break;
-      }
-    }
-    return w;
-  };
+  const recaptchaReady = () =>
+    document.querySelector("iframe[src*='recaptcha'][src*='anchor']") ||
+    document.querySelector("iframe[title='reCAPTCHA']") ||
+    document.querySelector("iframe[src*='recaptcha']");
 
-  // Ready = the checkbox anchor iframe has rendered. Do the one-time
-  // transition then.
+  // Once the reCAPTCHA has rendered, simply REVEAL beanfun's own page by
+  // removing the loading overlay. We deliberately do NOT reparent / restyle
+  // the widget: touching the reCAPTCHA DOM reloads its iframe and corrupts
+  // the token `grecaptcha.getResponse()` returns (the token then gets
+  // rejected on replay → an endless reCAPTCHA loop, #313/#315/#318). The
+  // user solves it in place; only the login form is visible behind, which
+  // they can ignore.
   let done = false;
   const finish = () => {
     if (done) return;
     done = true;
     clearInterval(readyTimer);
-    const w = findWidget();
     const ov = document.getElementById("__bf_overlay");
-    if (w && w !== document.body && w !== document.documentElement && ov) {
-      // Reparent just the widget into the overlay (z-index alone can't
-      // lift a nested cross-origin iframe above a body-level overlay).
-      w.style.position = "relative";
-      w.style.zIndex = String(OVERLAY_Z + 2);
-      spin.remove();
-      label.textContent = "請完成「我不是機器人」驗證";
-      overlay.appendChild(w);
-    } else if (ov) {
-      // Couldn't isolate the widget — reveal beanfun's own page so it's
-      // still clickable there. Degraded, but functional.
-      ov.remove();
-    }
+    if (ov) ov.remove();
   };
-  const readyTimer = setInterval(() => { if (findWidget()) finish(); }, 200);
+  const readyTimer = setInterval(() => { if (recaptchaReady()) finish(); }, 200);
   // Safety net: never leave the user stuck on the spinner.
   setTimeout(finish, 6000);
 
@@ -2283,6 +2263,24 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
             "ui.recaptcha_navigate_failed",
             format!("Failed to navigate reCAPTCHA webview: {err}"),
         ));
+    }
+
+    // Re-attempt the Tracking-Prevention disable after navigation. The
+    // pre-navigate call above can run before CoreWebView2's profile is fully
+    // initialised (→ `disabled=false`); by now the profile exists, and the
+    // setting is per-profile so it still applies to the reCAPTCHA challenge
+    // the user opens a moment later.
+    #[cfg(target_os = "windows")]
+    {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        if let Some(win) = app.get_webview_window(RECAPTCHA_WINDOW_LABEL) {
+            let disabled = crate::commands::cookie_native::disable_tracking_prevention_native(&win);
+            tracing::info!(
+                step = "RecaptchaWebView.TrackingPrevention.PostNav",
+                disabled = disabled,
+                "re-attempted tracking-prevention disable after navigation (#318)"
+            );
+        }
     }
 
     tracing::info!(

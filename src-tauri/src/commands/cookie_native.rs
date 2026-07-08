@@ -35,7 +35,7 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
         let core = match webview.controller().CoreWebView2() {
             Ok(c) => c,
             Err(e) => {
-                tracing::warn!(step = "TrackingPrevention", error = ?e, "CoreWebView2");
+                tracing::info!(step = "TrackingPrevention", error = ?e, "CoreWebView2");
                 return;
             }
         };
@@ -43,7 +43,7 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
         let core13: ICoreWebView2_13 = match Interface::cast(&core) {
             Ok(c) => c,
             Err(e) => {
-                tracing::warn!(step = "TrackingPrevention", error = ?e, "cast v13");
+                tracing::info!(step = "TrackingPrevention", error = ?e, "cast v13");
                 return;
             }
         };
@@ -51,7 +51,7 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
         let profile = match core13.Profile() {
             Ok(p) => p,
             Err(e) => {
-                tracing::warn!(step = "TrackingPrevention", error = ?e, "Profile");
+                tracing::info!(step = "TrackingPrevention", error = ?e, "Profile");
                 return;
             }
         };
@@ -59,7 +59,7 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
         let profile3: ICoreWebView2Profile3 = match Interface::cast(&profile) {
             Ok(p) => p,
             Err(e) => {
-                tracing::warn!(step = "TrackingPrevention", error = ?e, "cast profile3");
+                tracing::info!(step = "TrackingPrevention", error = ?e, "cast profile3");
                 return;
             }
         };
@@ -69,13 +69,13 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
         {
             Ok(()) => done_inner.store(true, Ordering::SeqCst),
             Err(e) => {
-                tracing::warn!(step = "TrackingPrevention", error = ?e, "SetLevel");
+                tracing::info!(step = "TrackingPrevention", error = ?e, "SetLevel");
             }
         }
     });
 
     if let Err(e) = result {
-        tracing::warn!(step = "TrackingPrevention", error = ?e, "with_webview");
+        tracing::info!(step = "TrackingPrevention", error = ?e, "with_webview");
         return false;
     }
     done.load(Ordering::SeqCst)
