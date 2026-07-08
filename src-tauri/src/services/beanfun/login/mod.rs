@@ -114,19 +114,26 @@ pub(crate) fn apply_json_headers(
         // Modern browser fingerprint (issues #313/#315/#318, task spec §8).
         // A reCAPTCHA token is solved in a real WebView, but replayed on this
         // reqwest POST; if the POST doesn't *look* like the same modern
-        // browser (Client Hints + Sec-Fetch + Accept-Language), beanfun
-        // bot-flags it and rejects the token — eventually locking the IP for
-        // ~15 min ("資料驗證錯誤次數已達上限"). The `sec-ch-ua` version MUST
-        // match `client::DEFAULT_USER_AGENT`'s Chrome major (149).
+        // browser, beanfun bot-flags it and rejects the token — eventually
+        // locking the IP for ~15 min ("資料驗證錯誤次數已達上限"). Values
+        // are matched byte-for-byte to a live Chrome 150 capture (2026-07-08)
+        // of a beanfun `login.beanfun.com` POST. The `sec-ch-ua` version MUST
+        // track `client::DEFAULT_USER_AGENT`'s Chrome major (150).
         .header(
             "sec-ch-ua",
-            "\"Google Chrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not_A Brand\";v=\"24\"",
+            "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"",
         )
         .header("sec-ch-ua-mobile", "?0")
         .header("sec-ch-ua-platform", "\"Windows\"")
         .header("Sec-Fetch-Site", "same-origin")
         .header("Sec-Fetch-Mode", "cors")
         .header("Sec-Fetch-Dest", "empty")
+        // A same-origin browser fetch always carries an `Origin` header on a
+        // POST; reqwest does not add one, and its absence is a bot tell.
+        // These login steps are TW-only, so the host is fixed.
+        .header(reqwest::header::ORIGIN, "https://login.beanfun.com")
+        .header(reqwest::header::CACHE_CONTROL, "no-cache")
+        .header("Pragma", "no-cache")
         .header(
             reqwest::header::ACCEPT_LANGUAGE,
             "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
