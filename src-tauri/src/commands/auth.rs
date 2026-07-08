@@ -1087,16 +1087,21 @@ const GAMEPASS_AUTOCLICK_JS: &str = r#"(() => {
 /// `{STEP}` is replaced with the [`RecaptchaStep::as_wire`] discriminator.
 const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
   const STEP = "{STEP}";
+  // Backdrop z-index sits BELOW reCAPTCHA's image-challenge overlay
+  // (~2e9) so, once the checkbox is ticked, the grid popup still shows
+  // and is clickable, but ABOVE the ordinary page.
+  const MASK_Z = 999999;
   const style = document.createElement("style");
   style.textContent =
-    "#__bf_mask{position:fixed;inset:0;z-index:2147483000;background:#1c1712;" +
-    "display:flex;align-items:center;justify-content:center;color:#f4ede4;" +
-    "font-family:system-ui,sans-serif;font-size:14px;text-align:center;padding:24px}" +
-    "iframe[src*='recaptcha']{position:relative;z-index:2147483600 !important}" +
-    ".grecaptcha-badge{z-index:2147483600 !important}";
+    "#__bf_mask{position:fixed;inset:0;z-index:" + MASK_Z + ";background:#1c1712;" +
+    "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;" +
+    "color:#f4ede4;font-family:system-ui,sans-serif;font-size:14px;text-align:center;padding:24px}" +
+    ".grecaptcha-badge{z-index:" + (MASK_Z + 1) + " !important}";
   const mask = document.createElement("div");
   mask.id = "__bf_mask";
-  mask.textContent = "請完成「我不是機器人」驗證";
+  const label = document.createElement("div");
+  label.textContent = "請完成「我不是機器人」驗證";
+  mask.appendChild(label);
   const attachMask = () => {
     if (document.body && !document.getElementById("__bf_mask")) {
       document.head.appendChild(style);
@@ -1104,6 +1109,52 @@ const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
     }
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", attachMask, { once: true }); else attachMask();
+
+  // Move the reCAPTCHA checkbox widget INTO the mask so it's actually
+  // clickable above the opaque backdrop. Lifting a nested cross-origin
+  // iframe purely by z-index is unreliable — an ancestor's stacking
+  // context traps it below a body-level mask (#318 follow-up: the widget
+  // rendered but was unclickable). Reparenting the widget's own container
+  // (which carries the g-recaptcha-response textarea too) sidesteps that.
+  let moved = false;
+  const findWidget = () => {
+    const anchor =
+      document.querySelector("iframe[src*='recaptcha'][src*='anchor']") ||
+      document.querySelector("iframe[title='reCAPTCHA']") ||
+      document.querySelector("iframe[src*='recaptcha']");
+    if (!anchor) return null;
+    let w = anchor.closest(".g-recaptcha");
+    if (!w) {
+      w = anchor;
+      for (let i = 0; i < 5 && w.parentElement && w.parentElement !== document.body; i++) {
+        w = w.parentElement;
+        if (w.offsetWidth >= 280 && w.offsetWidth <= 400) break;
+      }
+    }
+    return w;
+  };
+  const moveTimer = setInterval(() => {
+    if (moved) { clearInterval(moveTimer); return; }
+    const w = findWidget();
+    if (w && w !== document.body && w !== document.documentElement) {
+      moved = true;
+      clearInterval(moveTimer);
+      w.style.position = "relative";
+      w.style.zIndex = String(MASK_Z + 2);
+      mask.appendChild(w);
+      if (label.parentNode) label.remove();
+    }
+  }, 300);
+
+  // Fallback: if the widget can't be found / moved within ~2.5s, drop the
+  // opaque backdrop entirely so the user can at least click the reCAPTCHA
+  // in beanfun's own (now fully visible) page. Degraded, but functional.
+  setTimeout(() => {
+    if (!moved) {
+      const m = document.getElementById("__bf_mask");
+      if (m) m.remove();
+    }
+  }, 2500);
 
   // Self-heal: reload once if the widget iframe never renders (Tracking
   // Prevention race). Guarded so it can't loop.
