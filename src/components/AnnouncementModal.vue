@@ -30,6 +30,7 @@ import { LogicalSize } from '@tauri-apps/api/dpi'
 
 import { commands } from '../types/bindings'
 import { safeInvoke } from '../services/invoke'
+import { setWindowFitSuspended } from '../services/windowFit'
 import { useConfigStore } from '../stores/config'
 
 /** Seconds the user must wait before the dismiss button enables. */
@@ -70,6 +71,9 @@ async function growWindow(): Promise<void> {
   try {
     const win = getCurrentWindow()
     savedSize = await win.innerSize()
+    // Hold the window at a fixed larger size — suspend the router's
+    // content-fit resizer first, or it snaps straight back.
+    setWindowFitSuspended(true)
     await win.setSize(new LogicalSize(BIG_W, BIG_H))
   } catch {
     savedSize = null
@@ -83,6 +87,7 @@ async function restoreWindow(): Promise<void> {
     /* best-effort */
   }
   savedSize = null
+  setWindowFitSuspended(false)
 }
 
 function isSeen(): boolean {
@@ -141,28 +146,43 @@ async function open(url: string): Promise<void> {
 </script>
 
 <template>
-  <div v-if="visible" class="announcement" data-testid="announcement">
-    <div class="announcement__card" role="dialog" aria-modal="true">
-      <h2 class="announcement__title">{{ t('announcement.title') }}</h2>
-      <p class="announcement__intro">{{ t('announcement.intro') }}</p>
-      <ul class="announcement__list">
-        <li><strong>Beanfun</strong>：{{ t('announcement.beanfun') }}</li>
-        <li><strong>MapleLink</strong>：{{ t('announcement.maplelink') }}</li>
-      </ul>
-      <div class="announcement__links">
-        <a
-          class="announcement__link"
-          data-testid="announcement-maplelink"
-          @click="open(MAPLELINK_URL)"
-        >
+  <div v-if="visible" class="ann" data-testid="announcement">
+    <div class="ann__card" role="dialog" aria-modal="true">
+      <header class="ann__head">
+        <span class="ann__badge" aria-hidden="true">📢</span>
+        <h2 class="ann__title">{{ t('announcement.title') }}</h2>
+      </header>
+
+      <p class="ann__intro">{{ t('announcement.intro') }}</p>
+
+      <div class="ann__tracks">
+        <div class="ann__track">
+          <span class="ann__dot ann__dot--beanfun" aria-hidden="true"></span>
+          <div class="ann__track-body">
+            <div class="ann__track-name">Beanfun</div>
+            <div class="ann__track-desc">{{ t('announcement.beanfun') }}</div>
+          </div>
+        </div>
+        <div class="ann__track">
+          <span class="ann__dot ann__dot--maple" aria-hidden="true"></span>
+          <div class="ann__track-body">
+            <div class="ann__track-name">MapleLink</div>
+            <div class="ann__track-desc">{{ t('announcement.maplelink') }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ann__links">
+        <a class="ann__link" data-testid="announcement-maplelink" @click="open(MAPLELINK_URL)">
           MapleLink ↗
         </a>
-        <a class="announcement__link" data-testid="announcement-issue" @click="open(ISSUE_323_URL)">
+        <a class="ann__link" data-testid="announcement-issue" @click="open(ISSUE_323_URL)">
           {{ t('announcement.moreInfoLink') }} ↗
         </a>
       </div>
+
       <button
-        class="announcement__btn"
+        class="ann__btn"
         type="button"
         :disabled="forced && remaining > 0"
         data-testid="announcement-dismiss"
@@ -182,17 +202,19 @@ async function open(url: string): Promise<void> {
 
   <button
     v-else-if="ready"
-    class="announcement-chip"
+    class="ann-chip"
     type="button"
     data-testid="announcement-chip"
     @click="reopen"
   >
-    📢 {{ t('announcement.reopen') }}
+    <span aria-hidden="true">📢</span> {{ t('announcement.reopen') }}
   </button>
 </template>
 
 <style scoped>
-.announcement {
+/* Theme-aware via the app's --bf-* design tokens (redefined under
+   [data-theme="dark"]), so the card follows light / dark automatically. */
+.ann {
   position: fixed;
   inset: 0;
   z-index: 3000;
@@ -200,102 +222,155 @@ async function open(url: string): Promise<void> {
   align-items: center;
   justify-content: center;
   padding: 28px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
 }
 
-.announcement__card {
+.ann__card {
   width: 100%;
   max-width: 520px;
   max-height: calc(100vh - 56px);
   overflow-y: auto;
-  padding: 28px 28px 22px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  background: #fffdfa;
-  color: #1f1a16;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  padding: 26px 28px 22px;
+  border-radius: var(--bf-radius-panel, 14px);
+  border: 1px solid var(--bf-outline-variant, rgba(128, 128, 128, 0.25));
+  background: var(--bf-surface-container, #f4f4f4);
+  color: var(--bf-on-surface, #1f1a16);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.4);
 }
 
-.announcement__title {
-  margin: 0 0 14px;
-  font-size: 1.125rem;
+.ann__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ann__badge {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.ann__title {
+  margin: 0;
+  font-size: 1.15rem;
   font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
-.announcement__intro {
-  margin: 0 0 14px;
-  font-size: 0.9375rem;
+.ann__intro {
+  margin: 0 0 18px;
+  font-size: 0.9rem;
   line-height: 1.7;
-  color: #40342b;
+  color: var(--bf-on-surface-variant, var(--bf-on-surface, #54443a));
 }
 
-.announcement__list {
-  margin: 0 0 16px;
-  padding-left: 1.15rem;
+.ann__tracks {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  font-size: 0.9375rem;
-  line-height: 1.65;
-  color: #40342b;
+  margin-bottom: 20px;
 }
 
-.announcement__links {
+.ann__track {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--bf-radius-card, 10px);
+  background: color-mix(in srgb, var(--bf-on-surface, #000) 6%, transparent);
+}
+
+.ann__dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+
+.ann__dot--beanfun {
+  background: #ff8201;
+}
+
+.ann__dot--maple {
+  background: #3aa0ff;
+}
+
+.ann__track-name {
+  font-size: 0.9rem;
+  font-weight: 800;
+  margin-bottom: 3px;
+}
+
+.ann__track-desc {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--bf-on-surface-variant, var(--bf-on-surface, #54443a));
+}
+
+.ann__links {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 18px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
 
-.announcement__link {
+.ann__link {
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: var(--bf-primary, #954a00);
   text-decoration: none;
 }
 
-.announcement__link:hover {
+.ann__link:hover {
   text-decoration: underline;
 }
 
-.announcement__btn {
+.ann__btn {
   width: 100%;
-  padding: 0.7rem 1rem;
+  padding: 0.72rem 1rem;
   border: none;
-  border-radius: 10px;
-  font-size: 0.9375rem;
+  border-radius: var(--bf-radius-button, 10px);
+  font-size: 0.92rem;
   font-weight: 700;
   color: #fff;
   background: var(--el-color-primary, #ff8201);
   cursor: pointer;
+  transition: filter 0.15s ease;
 }
 
-.announcement__btn:disabled {
-  opacity: 0.55;
+.ann__btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.ann__btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 /* Small, unobtrusive re-open affordance (bottom-left corner). */
-.announcement-chip {
+.ann-chip {
   position: fixed;
   left: 12px;
   bottom: 12px;
   z-index: 2000;
-  padding: 5px 11px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 999px;
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: 1px solid var(--bf-outline-variant, rgba(128, 128, 128, 0.25));
+  border-radius: var(--bf-radius-pill, 999px);
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--bf-primary, #954a00);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  background: var(--bf-surface-container, rgba(255, 255, 255, 0.92));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   cursor: pointer;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
-.announcement-chip:hover {
+.ann-chip:hover {
   opacity: 1;
 }
 </style>
