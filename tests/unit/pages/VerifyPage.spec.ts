@@ -175,6 +175,7 @@ vi.mock('../../../src/types/bindings', () => ({
     getVerifyPageInfo: vi.fn(),
     getVerifyCaptcha: vi.fn(),
     submitVerify: vi.fn(),
+    resumeTwLoginAfterVerify: vi.fn(),
     logout: vi.fn(),
     loadAccounts: vi.fn(),
     saveAccount: vi.fn(),
@@ -191,6 +192,8 @@ import type { Account } from '../../../src/types/bindings'
 const mockGetVerifyPageInfo = vi.mocked(commands.getVerifyPageInfo)
 const mockGetVerifyCaptcha = vi.mocked(commands.getVerifyCaptcha)
 const mockSubmitVerify = vi.mocked(commands.submitVerify)
+const mockResumeTwLoginAfterVerify = vi.mocked(commands.resumeTwLoginAfterVerify)
+const mockSaveAccount = vi.mocked(commands.saveAccount)
 
 const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ status: 'ok', data })
 
@@ -232,6 +235,16 @@ function mountForm(initialAdvanceCheckUrl: string | null = null) {
         name: 'login-id-pass',
         component: defineComponent({ name: 'IdPassStub', render: () => h('div') }),
       },
+      {
+        path: '/login/recaptcha',
+        name: 'login-recaptcha',
+        component: defineComponent({ name: 'RecaptchaStub', render: () => h('div') }),
+      },
+      {
+        path: '/accounts',
+        name: 'accounts',
+        component: defineComponent({ name: 'AccountsStub', render: () => h('div') }),
+      },
     ],
   })
 
@@ -268,6 +281,8 @@ describe('VerifyPage', () => {
     mockGetVerifyPageInfo.mockReset()
     mockGetVerifyCaptcha.mockReset()
     mockSubmitVerify.mockReset()
+    mockResumeTwLoginAfterVerify.mockReset()
+    mockSaveAccount.mockReset()
     elMessageError.mockReset()
     elMessageSuccess.mockReset()
   })
@@ -560,6 +575,8 @@ describe('VerifyPage — P12.2 D2 prefill + verifyIntent stash', () => {
     mockGetVerifyPageInfo.mockReset()
     mockGetVerifyCaptcha.mockReset()
     mockSubmitVerify.mockReset()
+    mockResumeTwLoginAfterVerify.mockReset()
+    mockSaveAccount.mockReset()
     elMessageError.mockReset()
     elMessageSuccess.mockReset()
   })
@@ -630,14 +647,68 @@ describe('VerifyPage — P12.2 D2 prefill + verifyIntent stash', () => {
     expect((wrapper.get('[data-test="verify-input"]').element as HTMLInputElement).value).toBe('')
   })
 
-  it('on success stashes the submitted verify code + remember flag into auth.verifyIntent', async () => {
+  it('on TW success resumes the same session and lands on the account list (#313/#315/#318)', async () => {
+    mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
+    mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
+    mockSubmitVerify.mockReturnValueOnce(ok(SUCCESS))
+    // Same-session AccountLogin resubmit (token-replay §4) — must NOT go
+    // through a fresh loginRegular.
+    mockResumeTwLoginAfterVerify.mockReturnValueOnce(
+      ok({ region: 'TW', account_id: 'alice', service_code: '610074', service_region: 'T9' }),
+    )
+    mockSaveAccount.mockReturnValueOnce(ok([]))
+
+    const ctx = mountForm()
+    seedLoginIntent()
+    const auth = useAuthStore()
+
+    const wrapper = await ctx.mountIt()
+    await fillVerifyAndCaptcha(wrapper, '4321', 'CAPX')
+    await wrapper.get('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(commands.resumeTwLoginAfterVerify).toHaveBeenCalledTimes(1)
+    // Credentials persisted, then intents cleared, and we land on /accounts.
+    expect(commands.saveAccount).toHaveBeenCalledTimes(1)
+    expect(auth.loginIntent).toBeNull()
+    expect(ctx.router.currentRoute.value.path).toBe('/accounts')
+  })
+
+  it('on TW success that still needs a reCAPTCHA routes to the widget page', async () => {
+    mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
+    mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
+    mockSubmitVerify.mockReturnValueOnce(ok(SUCCESS))
+    mockResumeTwLoginAfterVerify.mockReturnValueOnce(
+      err({ code: 'auth.recaptcha_required', message: 'again', details: { step: 'login' } }),
+    )
+
+    const ctx = mountForm()
+    seedLoginIntent()
+    const auth = useAuthStore()
+
+    const wrapper = await ctx.mountIt()
+    await fillVerifyAndCaptcha(wrapper, '4321', 'CAPX')
+    await wrapper.get('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(auth.pendingRecaptcha).toBe(true)
+    expect(ctx.router.currentRoute.value.path).toBe('/login/recaptcha')
+  })
+
+  it('on HK (non-TW) success stashes verifyIntent + routes to id-pass for manual re-login', async () => {
     mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
     mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
     mockSubmitVerify.mockReturnValueOnce(ok(SUCCESS))
 
     const ctx = mountForm()
-    seedLoginIntent()
     const auth = useAuthStore()
+    auth.setLoginIntent({
+      region: 'HK',
+      accountId: 'bob',
+      password: 'pw',
+      rememberPassword: true,
+      autoLogin: false,
+    })
 
     const wrapper = await ctx.mountIt()
     await fillVerifyAndCaptcha(wrapper, '4321', 'CAPX')
@@ -646,25 +717,9 @@ describe('VerifyPage — P12.2 D2 prefill + verifyIntent stash', () => {
     await wrapper.get('.el-form-stub').trigger('submit')
     await flushPromises()
 
+    expect(commands.resumeTwLoginAfterVerify).not.toHaveBeenCalled()
     expect(auth.verifyIntent).toEqual({ code: '4321', remember: true })
+    expect(auth.loginIntent?.accountId).toBe('bob')
     expect(ctx.router.currentRoute.value.path).toBe('/login/id-pass')
-  })
-
-  it('on success leaves loginIntent intact for IdPassForm to retry from', async () => {
-    mockGetVerifyPageInfo.mockReturnValueOnce(ok(FAKE_PAGE))
-    mockGetVerifyCaptcha.mockReturnValueOnce(ok(FAKE_CAPTCHA))
-    mockSubmitVerify.mockReturnValueOnce(ok(SUCCESS))
-
-    const ctx = mountForm()
-    seedLoginIntent()
-    const auth = useAuthStore()
-
-    const wrapper = await ctx.mountIt()
-    await fillVerifyAndCaptcha(wrapper, '4321', 'CAPX')
-    await wrapper.get('.el-form-stub').trigger('submit')
-    await flushPromises()
-
-    expect(auth.loginIntent?.accountId).toBe('alice')
-    void ctx
   })
 })

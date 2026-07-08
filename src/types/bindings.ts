@@ -421,6 +421,32 @@ async resumeTwLoginWithRecaptcha(token: string) : Promise<Result<SessionInfo, Co
 }
 },
 /**
+ * Resume a paused TW login after the user cleared an advance-check
+ * (進階驗證) challenge (issues #313 / #315 / #318 — token-replay §4).
+ * 
+ * Preconditions: a prior TW `login_regular` / `resume_tw_login_with_recaptcha`
+ * hit `AccountLogin ResultCode==2` and parked a [`PendingTwLogin`] (step
+ * `AccountLogin`); the frontend then drove the verify flow
+ * (`get_verify_page_info` → `submit_verify` == success) on its own cookie
+ * jar, and now calls this to finish.
+ * 
+ * This re-submits **AccountLogin on the same session** (reusing the stashed
+ * skey / antiforgery token) with an empty reCAPTCHA token — it must NOT
+ * re-run `CheckAccountType`, which loops the challenge and trips an IP lock
+ * (task spec §4; the exact `帳號 → reCAPTCHA → 無限 reCAPTCHA` symptom
+ * reported for #313/#315/#318). On success the session installs; if the
+ * server now demands a fresh reCAPTCHA for the submit, the slot re-parks and
+ * [`RECAPTCHA_REQUIRED_CODE`] surfaces so the widget re-opens.
+ */
+async resumeTwLoginAfterVerify() : Promise<Result<SessionInfo, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("resume_tw_login_after_verify") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Open the reCAPTCHA **widget-solve** WebView (issues #313 / #315 / #318 —
  * token-replay).
  * 

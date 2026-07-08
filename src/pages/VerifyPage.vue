@@ -87,6 +87,7 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 
 import { useAccountStore } from '../stores/account'
 import { AUTH_ACTIONS, useAuthStore } from '../stores/auth'
+import { LOGIN_METHOD } from '../constants/login'
 import { CommandInvocationError } from '../services/invoke'
 
 defineOptions({ name: 'VerifyPage' })
@@ -211,6 +212,81 @@ async function retryBootstrap(): Promise<void> {
   await bootstrap()
 }
 
+/**
+ * After `submit_verify` clears the AdvanceCheck challenge, resume the
+ * login.
+ *
+ * TW (token-replay §4): re-submit `AccountLogin` on the **same** session
+ * via `resumeTwLoginAfterVerify`, never a fresh `loginRegular` — restarting
+ * re-runs `CheckAccountType` and loops reCAPTCHA endlessly
+ * (`帳號 → reCAPTCHA → 無限 reCAPTCHA`, #313/#315/#318). On success persist
+ * credentials + land on the account list; if the submit now needs a
+ * reCAPTCHA, hop to the widget page; on failure fall back to manual login.
+ *
+ * HK / other: unchanged — route back to `/login/id-pass` for the WPF
+ * `do_Login` re-run.
+ */
+async function resumeAfterVerifySuccess(): Promise<void> {
+  if (auth.loginIntent?.region !== 'TW') {
+    ElMessage.success(t('loginVerify.success'))
+    await router.push('/login/id-pass')
+    return
+  }
+
+  try {
+    const session = await auth.resumeTwLoginAfterVerify()
+    if (session) {
+      await persistTwCredentials()
+      accountStore.clearSessionData()
+      ElMessage.success(t('loginVerify.success'))
+      await router.push('/accounts')
+      return
+    }
+    if (auth.pendingRecaptcha) {
+      await router.push('/login/recaptcha')
+      return
+    }
+    if (auth.pendingVerify) {
+      // Server asked for another verify round — refresh and stay.
+      await refreshCaptcha()
+      return
+    }
+  } catch (e) {
+    if (e instanceof CommandInvocationError) {
+      // Resume failed — fall back to manual re-login.
+      await router.push('/login/id-pass')
+      return
+    }
+    throw e
+  }
+}
+
+/**
+ * Persist the just-used TW credentials after a same-session resume
+ * success, mirroring `IdPassForm::persistAfterFullSuccess`. Best-effort.
+ */
+async function persistTwCredentials(): Promise<void> {
+  const intent = auth.loginIntent
+  if (!intent) return
+  try {
+    await accountStore.saveLoginCredentials({
+      region: intent.region,
+      accountId: intent.accountId,
+      password: intent.password,
+      rememberPassword: intent.rememberPassword,
+      verify: auth.verifyIntent?.code ?? '',
+      rememberVerify: auth.verifyIntent?.remember ?? false,
+      method: LOGIN_METHOD.Regular,
+      autoLogin: intent.autoLogin,
+    })
+  } catch (e) {
+    console.error('[VerifyPage] persistTwCredentials failed', e)
+  } finally {
+    auth.clearLoginIntent()
+    auth.clearVerifyIntent()
+  }
+}
+
 async function submit(): Promise<void> {
   /*
    * WPF `Button_Click` (`VerifyPage.xaml.cs` L26-35) hard-stops on
@@ -234,18 +310,12 @@ async function submit(): Promise<void> {
     switch (outcome.result) {
       case 'success':
         /*
-         * Stash the verify code + remember flag so the next
-         * IdPassForm second-pass success can fold them into the
-         * persistent record. WPF holds the same data inside
-         * `verifyPage.t_Verify.Text` / `checkBoxRememberVerify`
-         * because the page control stays alive across the
-         * subsequent `do_Login` retry; the SPA navigates away,
-         * so the auth store carries the values across the page
-         * boundary instead. See `auth.ts::VerifyIntent`.
+         * Stash the verify code + remember flag so the resume /
+         * second-pass success can fold them into the persistent
+         * record. See `auth.ts::VerifyIntent`.
          */
         auth.setVerifyIntent({ code: submittedVerify, remember: remember.value })
-        ElMessage.success(t('loginVerify.success'))
-        await router.push('/login/id-pass')
+        await resumeAfterVerifySuccess()
         return
       case 'wrong_captcha':
         ElMessage.error(t('WrongCaptcha'))

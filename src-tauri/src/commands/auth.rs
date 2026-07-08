@@ -590,6 +590,50 @@ pub async fn resume_tw_login_with_recaptcha(
     finish_tw_step(&state, p.client, p.account, p.password, resumed).await
 }
 
+/// Resume a paused TW login after the user cleared an advance-check
+/// (進階驗證) challenge (issues #313 / #315 / #318 — token-replay §4).
+///
+/// Preconditions: a prior TW `login_regular` / `resume_tw_login_with_recaptcha`
+/// hit `AccountLogin ResultCode==2` and parked a [`PendingTwLogin`] (step
+/// `AccountLogin`); the frontend then drove the verify flow
+/// (`get_verify_page_info` → `submit_verify` == success) on its own cookie
+/// jar, and now calls this to finish.
+///
+/// This re-submits **AccountLogin on the same session** (reusing the stashed
+/// skey / antiforgery token) with an empty reCAPTCHA token — it must NOT
+/// re-run `CheckAccountType`, which loops the challenge and trips an IP lock
+/// (task spec §4; the exact `帳號 → reCAPTCHA → 無限 reCAPTCHA` symptom
+/// reported for #313/#315/#318). On success the session installs; if the
+/// server now demands a fresh reCAPTCHA for the submit, the slot re-parks and
+/// [`RECAPTCHA_REQUIRED_CODE`] surfaces so the widget re-opens.
+#[tauri::command]
+#[specta::specta]
+pub async fn resume_tw_login_after_verify(
+    state: State<'_, AppState>,
+) -> Result<SessionInfo, CommandError> {
+    let pending = state.pending_tw_login.write().await.take();
+    let Some(p) = pending else {
+        return Err(CommandError::new(
+            RECAPTCHA_NOT_PENDING_CODE,
+            "No TW login is pending post-verify; start the login again.",
+        ));
+    };
+
+    let creds = Credentials::new(p.account.clone(), p.password.clone());
+    // Re-submit phase 2 (AccountLogin) on the SAME session, empty captcha.
+    let resumed = tw_login_resume(
+        &p.client,
+        p.ctx.clone(),
+        &creds,
+        RecaptchaStep::AccountLogin,
+        "",
+    )
+    .await;
+    drop(creds);
+
+    finish_tw_step(&state, p.client, p.account, p.password, resumed).await
+}
+
 /// Shared tail for both [`login_regular`]'s TW arm and
 /// [`resume_tw_login_with_recaptcha`]: install the session on success,
 /// (re-)park [`PendingTwLogin`] and signal [`RECAPTCHA_REQUIRED_CODE`] on a
@@ -615,6 +659,20 @@ async fn finish_tw_step(
                 step,
             });
             Err(recaptcha_required_error(step))
+        }
+        Ok(TwStepOutcome::AdvanceCheckRequired { ctx, url }) => {
+            // Park the session so `resume_tw_login_after_verify` can
+            // re-submit AccountLogin on it once the user clears the verify
+            // challenge — never a fresh CheckAccountType (which loops the
+            // challenge / trips an IP lock, task spec §4).
+            *state.pending_tw_login.write().await = Some(PendingTwLogin {
+                client,
+                ctx,
+                account,
+                password,
+                step: RecaptchaStep::AccountLogin,
+            });
+            Err(LoginError::AdvanceCheckRequired { url }.into())
         }
         Err(err) => Err(err.into()),
     }

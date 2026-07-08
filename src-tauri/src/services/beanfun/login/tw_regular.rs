@@ -101,6 +101,15 @@ pub enum TwStepOutcome {
         ctx: TwLoginContext,
         step: RecaptchaStep,
     },
+    /// `AccountLogin` returned advance-check (進階驗證, `ResultCode==2`).
+    /// The command layer keeps `ctx` parked so that, once the user clears
+    /// the verify challenge, phase 2 can be **re-submitted on the same
+    /// session** — re-running `CheckAccountType` from scratch loops the
+    /// challenge and trips an IP lock (task spec §4).
+    AdvanceCheckRequired {
+        ctx: TwLoginContext,
+        url: Option<String>,
+    },
 }
 
 /// Begin a fresh TW-Regular login: acquire the session key + antiforgery
@@ -189,7 +198,7 @@ async fn run_from_login(
     creds: &Credentials,
     account_captcha: &str,
 ) -> Result<TwStepOutcome, LoginError> {
-    match account_login(
+    let outcome = match account_login(
         client,
         &ctx.skey,
         creds,
@@ -197,8 +206,24 @@ async fn run_from_login(
         &ctx.verification_token,
         &ctx.index_url,
     )
-    .await?
+    .await
     {
+        Ok(outcome) => outcome,
+        // Advance-check must carry `ctx` up so the command layer can park it
+        // and re-submit phase 2 on the SAME session after verify (task spec
+        // §4). The `?` would drop `ctx`, forcing a session-losing restart.
+        Err(LoginError::AdvanceCheckRequired { url }) => {
+            tracing::info!(
+                step = "TwRegular.AccountLogin",
+                account_id = %creds.account,
+                "advance-check required; parking session for post-verify resume"
+            );
+            return Ok(TwStepOutcome::AdvanceCheckRequired { ctx, url });
+        }
+        Err(e) => return Err(e),
+    };
+
+    match outcome {
         AccountLoginOutcome::RecaptchaRequired => {
             tracing::info!(
                 step = "TwRegular.AccountLogin",
@@ -255,6 +280,9 @@ pub async fn login_tw_regular(
         TwStepOutcome::Complete(session) => Ok(*session),
         TwStepOutcome::RecaptchaRequired { ctx, .. } => {
             Err(LoginError::RecaptchaRequired { skey: ctx.skey })
+        }
+        TwStepOutcome::AdvanceCheckRequired { url, .. } => {
+            Err(LoginError::AdvanceCheckRequired { url })
         }
     }
 }

@@ -237,6 +237,7 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         // (generic over `R`; same `::<tauri::Wry>` turbofish rationale as
         // the GamePass commands above).
         auth::resume_tw_login_with_recaptcha,
+        auth::resume_tw_login_after_verify,
         auth::open_recaptcha_window::<tauri::Wry>,
         // auth (P10.2 — verify family)
         auth::get_verify_page_info,

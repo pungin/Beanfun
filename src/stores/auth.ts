@@ -527,6 +527,47 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
+  /**
+   * Resume a paused TW login after the user cleared an advance-check
+   * (進階驗證) challenge, re-submitting `AccountLogin` on the **same**
+   * session (issues #313 / #315 / #318 — token-replay §4).
+   *
+   * Critically NOT a fresh {@link loginRegular}: restarting the flow
+   * re-runs `CheckAccountType`, which re-triggers reCAPTCHA endlessly
+   * (`帳號 → reCAPTCHA → 無限 reCAPTCHA`) and can trip an IP lock.
+   *
+   * Outcomes mirror {@link resumeTwLoginWithRecaptcha}: a `SessionInfo`
+   * on success; `null` when the submit now needs a reCAPTCHA
+   * ({@link pendingRecaptcha}) or another advance-check
+   * ({@link pendingVerify}).
+   */
+  async function resumeTwLoginAfterVerify(): Promise<SessionInfo | null> {
+    return withGuard(AUTH_ACTIONS.ResumeTwLogin, async () => {
+      const result = await safeInvoke(commands.resumeTwLoginAfterVerify())
+      if (result.ok) {
+        session.value = result.data
+        pendingTotp.value = false
+        pendingVerify.value = false
+        pendingRecaptcha.value = false
+        qrChallenge.value = null
+        advanceCheckUrl.value = null
+        return result.data
+      }
+      if (result.error.code === FLOW_CONTINUATION_CODES.RecaptchaRequired) {
+        pendingVerify.value = false
+        pendingRecaptcha.value = true
+        return null
+      }
+      if (result.error.code === FLOW_CONTINUATION_CODES.AdvanceCheckRequired) {
+        pendingVerify.value = true
+        advanceCheckUrl.value = readAdvanceCheckUrl(result.error.details)
+        return null
+      }
+      surfaceCommandError(result.error)
+      throw new CommandInvocationError(result.error)
+    })
+  }
+
   async function getVerifyPageInfo(advanceCheckUrl: string | null): Promise<VerifyPage> {
     return withGuard(AUTH_ACTIONS.GetVerifyPageInfo, () =>
       wrapCommand(commands.getVerifyPageInfo(advanceCheckUrl)),
@@ -682,6 +723,7 @@ export const useAuthStore = defineStore('auth', () => {
     loginGamepassStart,
     openRecaptchaWindow,
     resumeTwLoginWithRecaptcha,
+    resumeTwLoginAfterVerify,
     applyGamepassSession,
     getVerifyPageInfo,
     getVerifyCaptcha,
