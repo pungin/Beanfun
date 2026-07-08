@@ -80,28 +80,30 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 
 import { nextTick } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { currentMonitor } from '@tauri-apps/api/window'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
-import { PhysicalSize } from '@tauri-apps/api/dpi'
+import { LogicalSize } from '@tauri-apps/api/dpi'
 
 import { registerSessionExpiredHandler } from '../services/invoke'
 import { isWindowFitSuspended } from '../services/windowFit'
 
-let cachedWindowZoom = 1
-
-function physicalWindowSize(width: number, height: number): PhysicalSize {
-  const zoom = Math.max(1, cachedWindowZoom)
-  return new PhysicalSize(Math.ceil(width * zoom), Math.ceil(height * zoom))
-}
-
 /**
- * Resize the Tauri window to the given logical dimensions.
- * Exported so individual pages can call it on mount when their
- * content height differs from the route meta default (e.g.
- * Settings page without the Game section when unauthenticated).
+ * Resize the Tauri window to the given **logical** (DPI-independent)
+ * dimensions.
+ *
+ * Sizing with {@link LogicalSize} (not `PhysicalSize`) is what keeps the
+ * window proportional on every display: Tauri multiplies logical px by
+ * the window's OS scale factor internally, so `420` logical px is `420`
+ * device px at 100% scaling, `525` at 125%, `630` at 150% — the same
+ * visual size everywhere. The old `PhysicalSize` path baked device
+ * pixels and only compensated on ≥4K monitors, so at 125–150% Windows
+ * scaling the window came out physically too small and the whole UI was
+ * squeezed.
+ *
+ * Exported so individual pages can call it on mount when their content
+ * height differs from the route meta default.
  */
 export function resizeWindow(width: number, height: number): void {
-  void getCurrentWindow().setSize(physicalWindowSize(width, height))
+  void getCurrentWindow().setSize(new LogicalSize(Math.ceil(width), Math.ceil(height)))
 }
 
 import LoginPage from '../pages/LoginPage.vue'
@@ -562,60 +564,42 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   let pendingFrame: number | null = null
 
   /**
-   * Upper bound applied to the auto-fit height.
+   * Available work area (screen minus taskbar) in **logical / CSS px**.
    *
-   * Previously hard-coded to `900` which was narrower than several
-   * pages (Settings with the Game section expanded, AccountList with
-   * a populated service-account list) — the cap forced the inner
-   * `__scroll` container to paint its own scrollbar and was the root
-   * cause of issue #236 "returning from Settings still has a scroll
-   * bar". Scaling to the actual display instead fits the content
-   * naturally on any desktop without letting the window eat the
-   * taskbar (50px safety margin keeps the window draggable on
-   * Windows's default 40px taskbar).
+   * Read live from `window.screen` on every fit, so it reflects whichever
+   * monitor the window is currently on, the current OS scaling, and the
+   * monitor's orientation — no cached per-monitor zoom, no hard-coded
+   * resolution thresholds, no "only compensate on 4K" special-case. The
+   * old approach keyed off `currentMonitor().size` (physical px) plus a
+   * `≥3840` UHD test, which mis-classified e.g. a 1440×2560 **portrait**
+   * panel as UHD and left every other scaled display sizing wrong.
    *
-   * Falls back to 900 when `window.screen` is unavailable (jsdom /
-   * headless CI) so the spec harness keeps working.
+   * `availWidth` / `availHeight` are already CSS px (the browser divides
+   * out the scale factor), so they compare directly against
+   * `scrollHeight` and feed straight into `LogicalSize`. Falls back to a
+   * roomy default when `window.screen` is unavailable (jsdom / CI).
    */
-  async function refreshMonitorMetrics(): Promise<void> {
-    try {
-      const monitor = await currentMonitor()
-      if (monitor) {
-        const isUhdMonitor = monitor.size.width >= 3840 || monitor.size.height >= 2160
-        cachedWindowZoom = isUhdMonitor ? Math.max(1, monitor.scaleFactor || 1) : 1
-        monitorHeight = Math.floor(monitor.size.height)
-        return
-      }
-    } catch {
-      // fall through to CSS fallback
+  function workArea(): { w: number; h: number } {
+    const s = typeof window !== 'undefined' ? window.screen : undefined
+    return {
+      w: s && s.availWidth > 0 ? s.availWidth : 1280,
+      h: s && s.availHeight > 0 ? s.availHeight : 900,
     }
-    // CSS fallback — may be inaccurate on some WebView2 configs
-    const avail = typeof window !== 'undefined' ? window.screen?.availHeight : undefined
-    cachedWindowZoom = 1
-    monitorHeight = typeof avail === 'number' && avail > 0 ? avail : 900
-  }
-
-  let monitorHeight = 900
-
-  // Fetch monitor height/scale once on init and refresh on DPI change.
-  void refreshMonitorMetrics()
-
-  function maxFitHeight(): number {
-    // Leave 5% for taskbar + breathing room.
-    return Math.max(300, Math.floor(monitorHeight * 0.95))
   }
 
   /**
-   * Measure the current `[data-window-root]`'s natural content
-   * height and resize the OS window to match. Both the
-   * `height: auto` measurement flip and the `height: 100vh` restore
-   * land inside a single synchronous block so the browser never
-   * paints the intermediate "unclipped" state — only one frame is
-   * ever rendered per fit regardless of how long the IPC takes.
+   * Measure `[data-window-root]`'s natural content size and resize the
+   * OS window to match, shrinking (webview zoom < 1) only when the
+   * content would overflow the screen's work area on **either** axis.
+   * Both the `height: auto` measurement flip and the `height: 100vh`
+   * restore land inside one synchronous block so the browser never
+   * paints the intermediate "unclipped" state.
    *
-   * Safe to call concurrently: successive invocations just re-run
-   * the measurement cycle. The `pendingFrame` guard upstream keeps
-   * the rate low enough that this isn't a hot path.
+   * Everything is computed in logical / CSS px and the window is sized
+   * with `LogicalSize`, so the result keeps the same proportion at any
+   * DPI / OS scaling and on landscape *or* portrait monitors. Safe to
+   * call concurrently; the `pendingFrame` guard upstream keeps the rate
+   * low enough that this isn't a hot path.
    */
   function fitWindow(): void {
     // A full-window overlay (AnnouncementModal) may be holding the window
@@ -630,17 +614,26 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     root.style.height = 'auto'
     const scrollH = root.scrollHeight
     if (scroll) scroll.style.overflow = ''
-    const cap = maxFitHeight()
-    const nativeZoom = Math.max(1, cachedWindowZoom)
-    let zoom = nativeZoom
-    if (scrollH * zoom > cap) {
-      zoom = cap / scrollH
-    }
-    const contentH = Math.ceil(scrollH * zoom)
-    const h = Math.max(300, Math.min(contentH, cap))
+
+    // Natural (design) size in logical px: width from the route meta,
+    // height from the measured content.
+    const naturalW = currentWidth
+    const naturalH = Math.max(1, scrollH)
+
+    // Cap to 95% of the work area on both axes (the 5% margin keeps the
+    // window off the taskbar and draggable). A single uniform zoom keeps
+    // the aspect ratio when the content is bigger than the screen — the
+    // case that actually bites on small laptops and portrait panels.
+    const area = workArea()
+    const capW = Math.max(320, Math.floor(area.w * 0.95))
+    const capH = Math.max(300, Math.floor(area.h * 0.95))
+    const zoom = Math.min(1, capW / naturalW, capH / naturalH)
+
+    const wLogical = Math.max(320, Math.round(naturalW * zoom))
+    const hLogical = Math.max(300, Math.round(naturalH * zoom))
     root.style.height = '100vh'
     void getCurrentWebview().setZoom(zoom)
-    void appWindow.setSize(new PhysicalSize(Math.ceil(currentWidth * zoom), h))
+    void appWindow.setSize(new LogicalSize(wLogical, hLogical))
   }
 
   /**
@@ -722,7 +715,9 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     // A 1rem sentinel element detects font-size changes.
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', () => scheduleOnNextPaint(fitWindow), { passive: true })
-      void refreshMonitorMetrics().then(() => scheduleOnNextPaint(fitWindow))
+      // `workArea()` is read live inside `fitWindow`, so a moved window /
+      // changed DPI just needs a re-fit — no cached metrics to refresh.
+      scheduleOnNextPaint(fitWindow)
 
       // Sentinel: a 0-size element whose width is 1rem. When the
       // system font size changes, its pixel width changes and
