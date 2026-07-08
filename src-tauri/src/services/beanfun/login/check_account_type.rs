@@ -135,6 +135,7 @@ pub async fn check_account_type(
             .map(|d| d.is_recaptcha)
             .unwrap_or(false),
         parsed.message.as_deref().unwrap_or_default(),
+        captcha_token.is_empty(),
         parsed
             .result_data
             .and_then(|d| d.captcha)
@@ -145,12 +146,19 @@ pub async fn check_account_type(
 /// Pure mapping from the parsed response fields to a [`CheckAccountOutcome`].
 /// Kept separate so the reCAPTCHA-detection table is unit-testable without
 /// a mock HTTP server.
+///
+/// Escalates to a reCAPTCHA solve only when the server asks for the
+/// "我不是機器人" check, or sets `IsRecaptcha` on an empty-first probe
+/// (`captcha_empty`). A flag lingering alongside a real error after a token
+/// was already replayed surfaces as the error instead of looping (see
+/// `account_login` for the same rule / the #313/#315/#318 rationale).
 fn classify_check_response(
     is_recaptcha: bool,
     message: &str,
+    captcha_empty: bool,
     server_captcha: String,
 ) -> CheckAccountOutcome {
-    if is_recaptcha || message_demands_recaptcha(message) {
+    if message_demands_recaptcha(message) || (is_recaptcha && captcha_empty) {
         CheckAccountOutcome::RecaptchaRequired
     } else {
         CheckAccountOutcome::Proceed { server_captcha }
@@ -162,6 +170,11 @@ mod tests {
     use super::*;
 
     fn parse(body: &str) -> CheckAccountOutcome {
+        // Empty-first probe (no token yet) — the common escalation path.
+        parse_with(body, true)
+    }
+
+    fn parse_with(body: &str, captcha_empty: bool) -> CheckAccountOutcome {
         let r: CheckAccountTypeResponse = serde_json::from_str(body).expect("valid JSON");
         classify_check_response(
             r.result_data
@@ -169,6 +182,7 @@ mod tests {
                 .map(|d| d.is_recaptcha)
                 .unwrap_or(false),
             r.message.as_deref().unwrap_or_default(),
+            captcha_empty,
             r.result_data.and_then(|d| d.captcha).unwrap_or_default(),
         )
     }
@@ -230,6 +244,22 @@ mod tests {
         assert_eq!(
             parse(r#"{"Message":"請點選「我不是機器人」","ResultData":{"Captcha":""}}"#),
             CheckAccountOutcome::RecaptchaRequired
+        );
+    }
+
+    #[test]
+    fn lingering_flag_after_token_does_not_loop() {
+        // IsRecaptcha still set but a token was already replayed
+        // (captcha_empty=false) and the message isn't a robot prompt →
+        // proceed instead of re-opening the widget (#313/#315/#318).
+        assert_eq!(
+            parse_with(
+                r#"{"Message":"資料驗證錯誤","ResultData":{"IsRecaptcha":true,"Captcha":"X"}}"#,
+                false,
+            ),
+            CheckAccountOutcome::Proceed {
+                server_captcha: "X".to_owned()
+            }
         );
     }
 }

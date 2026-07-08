@@ -145,16 +145,22 @@ pub async fn account_login(
     let text = client.bounded_text(resp).await?;
     let parsed: AccountLoginResponse = parse_step_json(&text, "AccountLogin")?;
 
-    // Empty-first escalation: a reCAPTCHA demand takes precedence over the
-    // ResultCode/Result truth table so it is never mis-classified as an
-    // advance-check or server-message error.
-    let recaptcha = parsed.is_recaptcha
+    // Empty-first escalation. A reCAPTCHA demand takes precedence over the
+    // ResultCode/Result truth table — BUT only when the server actually
+    // asks for the "我不是機器人" check, or sets the `IsRecaptcha` flag on
+    // an empty-first probe (no token sent yet). The flag can also linger
+    // alongside a real error message *after* we already replayed a token
+    // (e.g. `資料驗證錯誤次數已達上限` — the ~15-min IP lock, task spec §8);
+    // treating that as "needs reCAPTCHA" is exactly what looped #313/#315/#318,
+    // so we fall through to surface the error message instead.
+    let msg = parsed.result_message.as_deref().unwrap_or_default();
+    let flag = parsed.is_recaptcha
         || parsed
             .result_data
             .as_ref()
             .map(|d| d.is_recaptcha)
-            .unwrap_or(false)
-        || message_demands_recaptcha(parsed.result_message.as_deref().unwrap_or_default());
+            .unwrap_or(false);
+    let recaptcha = message_demands_recaptcha(msg) || (flag && captcha.is_empty());
 
     // Diagnostic (issues #313/#315/#318): the exact server verdict is the
     // only way to tell "token rejected → re-challenge" apart from a real
@@ -340,39 +346,67 @@ mod tests {
         assert_eq!(parsed.result_message.as_deref(), Some(""));
     }
 
-    /// Re-usable recognition of a reCAPTCHA gate the way `account_login`
-    /// does it at runtime (before `classify_outcome`).
-    fn is_recaptcha_gate(body: &str) -> bool {
+    /// Recognition of a reCAPTCHA gate the way `account_login` does it at
+    /// runtime (before `classify_outcome`): the robot prompt always
+    /// escalates; the bare `IsRecaptcha` flag only escalates on an
+    /// empty-first probe (`captcha_empty`).
+    fn is_recaptcha_gate(body: &str, captcha_empty: bool) -> bool {
         let p: AccountLoginResponse = serde_json::from_str(body).expect("valid JSON");
-        p.is_recaptcha
+        let msg = p.result_message.as_deref().unwrap_or_default();
+        let flag = p.is_recaptcha
             || p.result_data
                 .as_ref()
                 .map(|d| d.is_recaptcha)
-                .unwrap_or(false)
-            || message_demands_recaptcha(p.result_message.as_deref().unwrap_or_default())
+                .unwrap_or(false);
+        message_demands_recaptcha(msg) || (flag && captcha_empty)
     }
 
     #[test]
-    fn top_level_is_recaptcha_flag_is_detected() {
+    fn empty_first_is_recaptcha_flag_escalates() {
+        // No token yet + IsRecaptcha → open the widget.
         assert!(is_recaptcha_gate(
-            r#"{"IsRecaptcha":true,"ResultCode":"1"}"#
+            r#"{"IsRecaptcha":true,"ResultCode":"1"}"#,
+            true
+        ));
+        assert!(is_recaptcha_gate(
+            r#"{"ResultData":{"IsRecaptcha":true}}"#,
+            true
         ));
     }
 
     #[test]
-    fn nested_result_data_is_recaptcha_flag_is_detected() {
-        assert!(is_recaptcha_gate(r#"{"ResultData":{"IsRecaptcha":true}}"#));
+    fn robot_message_always_escalates() {
+        assert!(is_recaptcha_gate(
+            r#"{"ResultCode":"1","ResultMessage":"請點選「我不是機器人」"}"#,
+            false
+        ));
     }
 
+    /// The #313/#315/#318 loop fix: a lingering `IsRecaptcha` flag next to a
+    /// real error (the ~15-min IP lock) AFTER a token was already replayed
+    /// must NOT re-trigger reCAPTCHA — it surfaces as a server message.
     #[test]
-    fn robot_message_is_detected_as_recaptcha_gate() {
-        assert!(is_recaptcha_gate(
-            r#"{"ResultCode":"1","ResultMessage":"請點選「我不是機器人」"}"#
-        ));
+    fn lock_message_with_flag_after_token_is_not_a_recaptcha_gate() {
+        let body = r#"{"ResultCode":"0","Result":"0","ResultData":{"IsRecaptcha":true},"ResultMessage":"資料驗證錯誤次數已達上限，請於15分鐘後再重新登入驗證。"}"#;
+        // captcha_empty = false (we already sent a solved token).
+        assert!(!is_recaptcha_gate(body, false));
+        // And the classic table surfaces the lock text to the user.
+        let p: AccountLoginResponse = serde_json::from_str(body).expect("valid JSON");
+        assert_matches!(
+            classify_outcome(
+                p.result_code.as_deref().unwrap_or_default(),
+                p.result.as_deref().unwrap_or_default(),
+                p.result_message.unwrap_or_default(),
+            ),
+            Err(LoginError::ServerMessage(m)) if m.contains("已達上限")
+        );
     }
 
     #[test]
     fn ordinary_success_is_not_a_recaptcha_gate() {
-        assert!(!is_recaptcha_gate(r#"{"ResultCode":"1","Result":"0"}"#));
+        assert!(!is_recaptcha_gate(
+            r#"{"ResultCode":"1","Result":"0"}"#,
+            true
+        ));
     }
 }
