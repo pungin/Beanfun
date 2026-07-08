@@ -32,8 +32,23 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{apply_json_headers, deserialize_jtoken_to_string, ensure_success, parse_step_json};
+use super::{
+    apply_json_headers, deserialize_jtoken_to_string, ensure_success, message_demands_recaptcha,
+    parse_step_json,
+};
 use crate::services::beanfun::{BeanfunClient, Credentials, LoginError};
+
+/// Result of an `AccountLogin` POST on the happy / reCAPTCHA axis. The
+/// advance-check and server-message outcomes still travel the `Err`
+/// channel via [`LoginError`] (see [`classify_outcome`]).
+#[derive(Debug, PartialEq, Eq)]
+pub enum AccountLoginOutcome {
+    /// Credentials accepted — proceed to the completion tail.
+    Success,
+    /// The server demands a reCAPTCHA token for this attempt. The caller
+    /// solves the widget on beanfun's origin and retries with the token.
+    RecaptchaRequired,
+}
 
 #[derive(Serialize)]
 struct AccountLoginRequest<'a> {
@@ -77,12 +92,31 @@ struct AccountLoginResponse {
         deserialize_with = "deserialize_jtoken_to_string"
     )]
     result_message: Option<String>,
+    /// reCAPTCHA demand for this attempt (token-replay, issue #313/#315/#318).
+    /// Absent → `false` (unchanged behaviour). Checked *before*
+    /// [`classify_outcome`] so a reCAPTCHA gate is never mis-read as an
+    /// advance-check / server-message outcome.
+    #[serde(rename = "IsRecaptcha", default)]
+    is_recaptcha: bool,
+    #[serde(rename = "ResultData")]
+    result_data: Option<AccountLoginResultData>,
 }
 
-/// POST credentials to `AccountLogin` and return `Ok(())` on success.
+#[derive(Deserialize, Default)]
+struct AccountLoginResultData {
+    #[serde(rename = "IsRecaptcha", default)]
+    is_recaptcha: bool,
+}
+
+/// POST credentials to `AccountLogin`.
 ///
-/// Maps the four server-side outcomes to:
-/// - `Ok(())` for the happy path,
+/// `captcha` is the reCAPTCHA token to replay — `""` on the empty-first
+/// attempt, or a solved-on-origin token on a reCAPTCHA retry.
+///
+/// Maps the server-side outcomes to:
+/// - `Ok(AccountLoginOutcome::Success)` for the happy path,
+/// - `Ok(AccountLoginOutcome::RecaptchaRequired)` when the server demands a
+///   reCAPTCHA token (checked before the classic truth table),
 /// - [`LoginError::AdvanceCheckRequired`] (with or without an external
 ///   verification URL) for the two advance-check branches,
 /// - [`LoginError::ServerMessage`] for anything else, with the exact
@@ -94,7 +128,7 @@ pub async fn account_login(
     captcha: &str,
     verification_token: &str,
     index_url: &str,
-) -> Result<(), LoginError> {
+) -> Result<AccountLoginOutcome, LoginError> {
     let url = client.login_url_with_skey("Login/AccountLogin", skey)?;
     let body = AccountLoginRequest {
         account: &creds.account,
@@ -111,11 +145,61 @@ pub async fn account_login(
     let text = client.bounded_text(resp).await?;
     let parsed: AccountLoginResponse = parse_step_json(&text, "AccountLogin")?;
 
+    // Empty-first escalation. A reCAPTCHA demand takes precedence over the
+    // ResultCode/Result truth table — BUT only when the server actually
+    // asks for the "我不是機器人" check, or sets the `IsRecaptcha` flag on
+    // an empty-first probe (no token sent yet). The flag can also linger
+    // alongside a real error message *after* we already replayed a token
+    // (e.g. `資料驗證錯誤次數已達上限` — the ~15-min IP lock, task spec §8);
+    // treating that as "needs reCAPTCHA" is exactly what looped #313/#315/#318,
+    // so we fall through to surface the error message instead.
+    let msg = parsed.result_message.as_deref().unwrap_or_default();
+    let flag = parsed.is_recaptcha
+        || parsed
+            .result_data
+            .as_ref()
+            .map(|d| d.is_recaptcha)
+            .unwrap_or(false);
+    let recaptcha = message_demands_recaptcha(msg) || (flag && captcha.is_empty());
+
+    // Diagnostic (issues #313/#315/#318): the exact server verdict is the
+    // only way to tell "token rejected → re-challenge" apart from a real
+    // advance-check when the reCAPTCHA loop persists on a live account.
+    // `account_id` is non-secret; the captcha token itself is never logged.
+    tracing::info!(
+        step = "AccountLogin.Verdict",
+        result_code = parsed.result_code.as_deref().unwrap_or(""),
+        result = parsed.result.as_deref().unwrap_or(""),
+        is_recaptcha_top = parsed.is_recaptcha,
+        is_recaptcha_nested = parsed
+            .result_data
+            .as_ref()
+            .map(|d| d.is_recaptcha)
+            .unwrap_or(false),
+        captcha_sent = !captcha.is_empty(),
+        message = %truncate_for_log(parsed.result_message.as_deref().unwrap_or("")),
+        "AccountLogin server response classified"
+    );
+
+    if recaptcha {
+        return Ok(AccountLoginOutcome::RecaptchaRequired);
+    }
+
     classify_outcome(
         parsed.result_code.as_deref().unwrap_or_default(),
         parsed.result.as_deref().unwrap_or_default(),
         parsed.result_message.unwrap_or_default(),
     )
+    .map(|()| AccountLoginOutcome::Success)
+}
+
+/// Borrow at most ~120 chars of a server message for a log line (avoids
+/// dumping a full HTML error page; won't split a CJK codepoint).
+fn truncate_for_log(s: &str) -> &str {
+    match s.char_indices().nth(120) {
+        Some((idx, _)) => &s[..idx],
+        None => s,
+    }
 }
 
 /// Pure mapping from response fields to a `Result`. Kept in its own
@@ -260,5 +344,69 @@ mod tests {
         assert_eq!(parsed.result_code.as_deref(), Some("1"));
         assert_eq!(parsed.result.as_deref(), Some("0"));
         assert_eq!(parsed.result_message.as_deref(), Some(""));
+    }
+
+    /// Recognition of a reCAPTCHA gate the way `account_login` does it at
+    /// runtime (before `classify_outcome`): the robot prompt always
+    /// escalates; the bare `IsRecaptcha` flag only escalates on an
+    /// empty-first probe (`captcha_empty`).
+    fn is_recaptcha_gate(body: &str, captcha_empty: bool) -> bool {
+        let p: AccountLoginResponse = serde_json::from_str(body).expect("valid JSON");
+        let msg = p.result_message.as_deref().unwrap_or_default();
+        let flag = p.is_recaptcha
+            || p.result_data
+                .as_ref()
+                .map(|d| d.is_recaptcha)
+                .unwrap_or(false);
+        message_demands_recaptcha(msg) || (flag && captcha_empty)
+    }
+
+    #[test]
+    fn empty_first_is_recaptcha_flag_escalates() {
+        // No token yet + IsRecaptcha → open the widget.
+        assert!(is_recaptcha_gate(
+            r#"{"IsRecaptcha":true,"ResultCode":"1"}"#,
+            true
+        ));
+        assert!(is_recaptcha_gate(
+            r#"{"ResultData":{"IsRecaptcha":true}}"#,
+            true
+        ));
+    }
+
+    #[test]
+    fn robot_message_always_escalates() {
+        assert!(is_recaptcha_gate(
+            r#"{"ResultCode":"1","ResultMessage":"請點選「我不是機器人」"}"#,
+            false
+        ));
+    }
+
+    /// The #313/#315/#318 loop fix: a lingering `IsRecaptcha` flag next to a
+    /// real error (the ~15-min IP lock) AFTER a token was already replayed
+    /// must NOT re-trigger reCAPTCHA — it surfaces as a server message.
+    #[test]
+    fn lock_message_with_flag_after_token_is_not_a_recaptcha_gate() {
+        let body = r#"{"ResultCode":"0","Result":"0","ResultData":{"IsRecaptcha":true},"ResultMessage":"資料驗證錯誤次數已達上限，請於15分鐘後再重新登入驗證。"}"#;
+        // captcha_empty = false (we already sent a solved token).
+        assert!(!is_recaptcha_gate(body, false));
+        // And the classic table surfaces the lock text to the user.
+        let p: AccountLoginResponse = serde_json::from_str(body).expect("valid JSON");
+        assert_matches!(
+            classify_outcome(
+                p.result_code.as_deref().unwrap_or_default(),
+                p.result.as_deref().unwrap_or_default(),
+                p.result_message.unwrap_or_default(),
+            ),
+            Err(LoginError::ServerMessage(m)) if m.contains("已達上限")
+        );
+    }
+
+    #[test]
+    fn ordinary_success_is_not_a_recaptcha_gate() {
+        assert!(!is_recaptcha_gate(
+            r#"{"ResultCode":"1","Result":"0"}"#,
+            true
+        ));
     }
 }

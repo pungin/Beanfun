@@ -2,12 +2,84 @@
 //! strips the leading dot from cookie domains.
 
 use std::ops::Deref;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use tauri::WebviewWindow;
-use webview2_com_sys::Microsoft::Web::WebView2::Win32::ICoreWebView2_2;
+use webview2_com_sys::Microsoft::Web::WebView2::Win32::{
+    ICoreWebView2Profile3, ICoreWebView2_13, ICoreWebView2_2,
+    COREWEBVIEW2_TRACKING_PREVENTION_LEVEL_NONE,
+};
 use wv2_windows_core::{Interface, PCWSTR};
 
 use crate::services::beanfun::BeanfunClient;
+
+/// Disable WebView2 **Tracking Prevention** for `window`'s profile.
+///
+/// reCAPTCHA (issues #313 / #315 / #318, task spec trap #2) needs
+/// third-party storage on google.com / gstatic.com. WebView2's default
+/// Tracking Prevention blocks it, so the widget renders but is dead
+/// (unclickable) — the direct cause of #318. There is no Chromium
+/// command-line flag for this; it must be set through the COM profile API:
+/// `ICoreWebView2_13::Profile()` → `ICoreWebView2Profile3::
+/// SetPreferredTrackingPreventionLevel(NONE)`.
+///
+/// Best-effort: returns `true` when the level was set, `false` on any COM
+/// hiccup (older runtime without `ICoreWebView2Profile3`, etc.). A `false`
+/// only means the reCAPTCHA may fail to render — never a hard error.
+pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWindow<R>) -> bool {
+    let done = Arc::new(AtomicBool::new(false));
+    let done_inner = done.clone();
+
+    let result = window.with_webview(move |webview| unsafe {
+        let core = match webview.controller().CoreWebView2() {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::info!(step = "TrackingPrevention", error = ?e, "CoreWebView2");
+                return;
+            }
+        };
+
+        let core13: ICoreWebView2_13 = match Interface::cast(&core) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::info!(step = "TrackingPrevention", error = ?e, "cast v13");
+                return;
+            }
+        };
+
+        let profile = match core13.Profile() {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::info!(step = "TrackingPrevention", error = ?e, "Profile");
+                return;
+            }
+        };
+
+        let profile3: ICoreWebView2Profile3 = match Interface::cast(&profile) {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::info!(step = "TrackingPrevention", error = ?e, "cast profile3");
+                return;
+            }
+        };
+
+        match profile3
+            .SetPreferredTrackingPreventionLevel(COREWEBVIEW2_TRACKING_PREVENTION_LEVEL_NONE)
+        {
+            Ok(()) => done_inner.store(true, Ordering::SeqCst),
+            Err(e) => {
+                tracing::info!(step = "TrackingPrevention", error = ?e, "SetLevel");
+            }
+        }
+    });
+
+    if let Err(e) = result {
+        tracing::info!(step = "TrackingPrevention", error = ?e, "with_webview");
+        return false;
+    }
+    done.load(Ordering::SeqCst)
+}
 
 /// Seed every unexpired cookie from `client`'s reqwest jar into the
 /// WebView2 cookie manager of `window` using the native COM API.

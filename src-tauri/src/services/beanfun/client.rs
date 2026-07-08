@@ -47,7 +47,12 @@ use super::error::LoginError;
 /// redirects to a "browser not supported" page if the UA doesn't look
 /// like a modern browser. The WPF client used a truncated UA that
 /// happened to work, but the HK server has since tightened its check.
-pub const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+///
+/// Keep the Chrome major version in sync with the `sec-ch-ua` client-hint
+/// in `login::apply_json_headers` — a UA-vs-`sec-ch-ua` version mismatch is
+/// itself a bot signal (issues #313/#315/#318, task spec §8). Verified
+/// against a live Chrome 150 capture 2026-07-08.
+pub const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
 
 /// Default per-request timeout. 30 s matches what a human expects before
 /// they give up and hit the button again; long enough for the occasional

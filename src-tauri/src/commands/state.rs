@@ -72,7 +72,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::services::beanfun::{
     client::BeanfunClient,
-    login::{QrLoginInit, TotpChallenge},
+    login::{QrLoginInit, RecaptchaStep, TotpChallenge, TwLoginContext},
     session::Session,
     verify::VerifyPageInfo,
 };
@@ -434,6 +434,40 @@ impl PendingGamepass {
     }
 }
 
+/// Backend-held TW-Regular reCAPTCHA continuation (issues
+/// #313 / #315 / #318 — token-replay).
+///
+/// Parked on [`AppState::pending_tw_login`] when [`login_regular`] pauses
+/// the TW headless flow to solve a reCAPTCHA widget. Holds everything
+/// needed to resume the **same** HTTP session once the solved token comes
+/// back:
+///
+/// - `client` — the [`BeanfunClient`] whose cookie jar the reCAPTCHA
+///   WebView is seeded from (same portal session the `CheckAccountType` /
+///   `AccountLogin` POSTs ran against). Clone is cheap (Arc internals).
+/// - `ctx` — the resumable [`TwLoginContext`] (`skey`, antiforgery token,
+///   `Login/Index` URL). Reusing `skey` is load-bearing: re-fetching it or
+///   re-running `CheckAccountType` against a fresh key loops the challenge
+///   and can trip a ~5-minute IP lock (task spec §4).
+/// - `account` / `password` — replayed into the resumed step. Held in
+///   plaintext only for the solve duration (mirrors how the frontend's
+///   `loginIntent` already holds them), and dropped when the slot clears.
+/// - `step` — which POST is currently gated, so the resume replays the
+///   solved token into the right request.
+///
+/// Sibling slot to `pending_totp` / `pending_qr` / `pending_gamepass`:
+/// `login_regular` (and `login_qr_start` / `login_gamepass_start`) clear
+/// the others at their top so at most one continuation is outstanding, and
+/// `logout` clears all of them.
+#[derive(Debug, Clone)]
+pub struct PendingTwLogin {
+    pub client: BeanfunClient,
+    pub ctx: TwLoginContext,
+    pub account: String,
+    pub password: String,
+    pub step: RecaptchaStep,
+}
+
 /// Shared application state injected into every Tauri command.
 ///
 /// See the [module-level documentation][self] for the lifecycle and
@@ -518,6 +552,12 @@ pub struct AppState {
     /// their top to guarantee at most one continuation is
     /// outstanding at a time.
     pub pending_gamepass: RwLock<Option<PendingGamepass>>,
+
+    /// Backend-held TW-Regular reCAPTCHA continuation — see
+    /// [`PendingTwLogin`] for the full lifecycle. `None` whenever no TW
+    /// login is paused awaiting a solved reCAPTCHA token. Sibling to the
+    /// other `pending_*` slots; cleared alongside them.
+    pub pending_tw_login: RwLock<Option<PendingTwLogin>>,
 }
 
 impl AppState {
@@ -537,6 +577,7 @@ impl AppState {
             pending_qr: RwLock::new(None),
             pending_verify: RwLock::new(None),
             pending_gamepass: RwLock::new(None),
+            pending_tw_login: RwLock::new(None),
         }
     }
 }
