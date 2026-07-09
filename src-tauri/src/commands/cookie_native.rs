@@ -31,11 +31,16 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
     let done = Arc::new(AtomicBool::new(false));
     let done_inner = done.clone();
 
+    // Each failure path names its `stage` at WARN so the exact COM step that
+    // fails on a given WebView2 runtime is visible in the log (e.g.
+    // `cast_v13` / `cast_profile3` = runtime too old for the interface;
+    // `set_level` = interface present but the call was rejected). Grep
+    // `stage=` under `step="TrackingPrevention"` to pinpoint it.
     let result = window.with_webview(move |webview| unsafe {
         let core = match webview.controller().CoreWebView2() {
             Ok(c) => c,
             Err(e) => {
-                tracing::info!(step = "TrackingPrevention", error = ?e, "CoreWebView2");
+                tracing::warn!(step = "TrackingPrevention", stage = "core_webview2", error = ?e, "tracking-prevention disable failed");
                 return;
             }
         };
@@ -43,7 +48,7 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
         let core13: ICoreWebView2_13 = match Interface::cast(&core) {
             Ok(c) => c,
             Err(e) => {
-                tracing::info!(step = "TrackingPrevention", error = ?e, "cast v13");
+                tracing::warn!(step = "TrackingPrevention", stage = "cast_v13", error = ?e, "tracking-prevention disable failed (runtime lacks ICoreWebView2_13)");
                 return;
             }
         };
@@ -51,7 +56,7 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
         let profile = match core13.Profile() {
             Ok(p) => p,
             Err(e) => {
-                tracing::info!(step = "TrackingPrevention", error = ?e, "Profile");
+                tracing::warn!(step = "TrackingPrevention", stage = "profile", error = ?e, "tracking-prevention disable failed");
                 return;
             }
         };
@@ -59,7 +64,7 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
         let profile3: ICoreWebView2Profile3 = match Interface::cast(&profile) {
             Ok(p) => p,
             Err(e) => {
-                tracing::info!(step = "TrackingPrevention", error = ?e, "cast profile3");
+                tracing::warn!(step = "TrackingPrevention", stage = "cast_profile3", error = ?e, "tracking-prevention disable failed (runtime lacks ICoreWebView2Profile3)");
                 return;
             }
         };
@@ -69,13 +74,13 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
         {
             Ok(()) => done_inner.store(true, Ordering::SeqCst),
             Err(e) => {
-                tracing::info!(step = "TrackingPrevention", error = ?e, "SetLevel");
+                tracing::warn!(step = "TrackingPrevention", stage = "set_level", error = ?e, "tracking-prevention disable failed");
             }
         }
     });
 
     if let Err(e) = result {
-        tracing::info!(step = "TrackingPrevention", error = ?e, "with_webview");
+        tracing::warn!(step = "TrackingPrevention", stage = "with_webview", error = ?e, "tracking-prevention disable failed");
         return false;
     }
     done.load(Ordering::SeqCst)
