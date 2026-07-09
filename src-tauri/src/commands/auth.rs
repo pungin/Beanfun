@@ -2346,6 +2346,23 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
 
     let about_blank: Url = "about:blank".parse().expect("about:blank is a valid URL");
 
+    // Own data_directory (fresh per open) so the custom `additional_browser_args`
+    // below don't clash with the main app window's WebView2 environment.
+    // WebView2 shares ONE environment per user-data-folder, and creating a
+    // second webview in that folder with DIFFERENT browser args fails with
+    // `0x8007139F` ("group or resource not in the correct state"). A separate
+    // folder gives this window its own environment. Fresh each time keeps the
+    // clear+seed cookie dance below starting from a clean store.
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let data_dir = std::env::temp_dir()
+        .join("Beanfun")
+        .join("recaptcha")
+        .join(nanos.to_string());
+    let _ = std::fs::create_dir_all(&data_dir);
+
     let window = WebviewWindowBuilder::new(
         &app,
         RECAPTCHA_WINDOW_LABEL,
@@ -2354,6 +2371,7 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
     .title("驗證 / reCAPTCHA")
     .inner_size(480.0, 640.0)
     .resizable(true)
+    .data_directory(data_dir)
     // The reCAPTCHA iframe (google.com) is third-party to beanfun and needs
     // its own storage. The profile-level Tracking-Prevention COM below
     // returns `disabled=false` on some WebView2 runtimes (the call doesn't
