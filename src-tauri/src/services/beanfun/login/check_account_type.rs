@@ -110,8 +110,17 @@ pub async fn check_account_type(
         verification_token,
     };
 
-    let rb = apply_json_headers(client.http().post(url), verification_token, index_url);
-    let resp = rb.json(&body).send().await?;
+    // `Content-Type: application/json; charset=utf-8` to match beanfun's own
+    // login page + MapleLink (reqwest's `.json()` omits the charset — a
+    // bot-tell). See `account_login` for the full rationale.
+    let body_bytes = serde_json::to_vec(&body).expect("CheckAccountTypeRequest serializes");
+    let rb = apply_json_headers(client.http().post(url), verification_token, index_url)
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/json; charset=utf-8",
+        )
+        .body(body_bytes);
+    let resp = rb.send().await?;
 
     ensure_success(&resp, "CheckAccountType")?;
     let text = client.bounded_text(resp).await?;

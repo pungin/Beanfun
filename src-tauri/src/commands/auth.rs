@@ -1247,6 +1247,9 @@ fn build_gamepass_init_script(account: &str, password: &str) -> String {
 /// `{STEP}` is replaced with the [`RecaptchaStep::as_wire`] discriminator.
 const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
   const STEP = "{STEP}";
+  // Hide the automation flag so Google's reCAPTCHA doesn't hard-challenge us
+  // (parity with the browser arg + the other webviews / MapleLink).
+  try { Object.defineProperty(navigator, "webdriver", { get: () => false }); } catch (e) {}
   // A STABLE opaque loading overlay is shown from the very first paint and
   // stays up (no flicker / reflow) until the reCAPTCHA is actually ready.
   // Then we do a SINGLE transition: reparent just the widget into the
@@ -1327,12 +1330,17 @@ const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
   // Safety net: never leave the user stuck on the spinner.
   setTimeout(finish, 6000);
 
-  // Self-heal: reload once if the widget iframe never renders at all.
+  // Self-heal: reload once if the widget iframe never renders at all. Every
+  // `sessionStorage` access is wrapped — when reCAPTCHA's storage is blocked,
+  // an unguarded read throws an *uncaught* SecurityError that aborts the whole
+  // init script (so the overlay / reparent above never runs).
   setTimeout(() => {
-    if (!document.querySelector("iframe[src*='recaptcha']") && !sessionStorage.getItem("__bf_reloaded")) {
+    try {
+      if (document.querySelector("iframe[src*='recaptcha']")) return;
+      if (sessionStorage.getItem("__bf_reloaded")) return;
       sessionStorage.setItem("__bf_reloaded", "1");
       location.reload();
-    }
+    } catch (e) {}
   }, 3500);
 
   // Harvest: poll grecaptcha for a non-empty response, then publish it via
@@ -2346,14 +2354,48 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
 
     let about_blank: Url = "about:blank".parse().expect("about:blank is a valid URL");
 
+    // Own data_directory (fresh per open) so the custom `additional_browser_args`
+    // below don't clash with the main app window's WebView2 environment.
+    // WebView2 shares ONE environment per user-data-folder, and creating a
+    // second webview in that folder with DIFFERENT browser args fails with
+    // `0x8007139F` ("group or resource not in the correct state"). A separate
+    // folder gives this window its own environment. Fresh each time keeps the
+    // clear+seed cookie dance below starting from a clean store.
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let data_dir = std::env::temp_dir()
+        .join("Beanfun")
+        .join("recaptcha")
+        .join(nanos.to_string());
+    let _ = std::fs::create_dir_all(&data_dir);
+
     let window = WebviewWindowBuilder::new(
         &app,
         RECAPTCHA_WINDOW_LABEL,
         WebviewUrl::External(about_blank),
     )
     .title("驗證 / reCAPTCHA")
-    .inner_size(480.0, 640.0)
+    // Wide/tall enough that reCAPTCHA's image-challenge popup (bframe, up to
+    // ~400px wide but offset from the anchor) isn't clipped on the right/
+    // bottom. Min size keeps it usable if the user shrinks it.
+    .inner_size(600.0, 720.0)
+    .min_inner_size(520.0, 600.0)
     .resizable(true)
+    .data_directory(data_dir)
+    // Match the MapleLink reCAPTCHA-window fingerprint exactly — a clean
+    // Chrome UA (not the default Edge/WebView2 UA) plus
+    // `--disable-blink-features=AutomationControlled` (hides
+    // `navigator.webdriver`) and `--no-sandbox`. Without this the widget
+    // treats the WebView as automated → permanent hard challenge, slow load,
+    // and denied storage. `ThirdPartyStoragePartitioning` is kept off too so
+    // the third-party google.com iframe can use its storage.
+    .user_agent(crate::services::beanfun::client::DEFAULT_USER_AGENT)
+    .additional_browser_args(
+        "--disable-blink-features=AutomationControlled --no-sandbox \
+         --disable-features=ThirdPartyStoragePartitioning,PartitionedCookies,msEdgeTrackingPrevention",
+    )
     .initialization_script(harvest_js.as_str())
     .build()
     .map_err(|e| {

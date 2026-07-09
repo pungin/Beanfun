@@ -138,8 +138,19 @@ pub async fn account_login(
         verification_token,
     };
 
-    let rb = apply_json_headers(client.http().post(url), verification_token, index_url);
-    let resp = rb.json(&body).send().await?;
+    // Send the body with `Content-Type: application/json; charset=utf-8`
+    // (matching beanfun's own login page + the MapleLink client). reqwest's
+    // `.json()` emits a bare `application/json` (no charset); that mismatch
+    // from the real page's fetch is a bot-tell that bumps the reCAPTCHA score.
+    // Build + serialize manually so the charset sticks.
+    let body_bytes = serde_json::to_vec(&body).expect("AccountLoginRequest serializes");
+    let rb = apply_json_headers(client.http().post(url), verification_token, index_url)
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/json; charset=utf-8",
+        )
+        .body(body_bytes);
+    let resp = rb.send().await?;
 
     ensure_success(&resp, "AccountLogin")?;
     let text = client.bounded_text(resp).await?;
