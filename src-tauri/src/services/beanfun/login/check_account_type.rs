@@ -128,37 +128,38 @@ pub async fn check_account_type(
     }
 
     let parsed: CheckAccountTypeResponse = parse_step_json(&text, "CheckAccountType")?;
-    Ok(classify_check_response(
-        parsed
-            .result_data
-            .as_ref()
-            .map(|d| d.is_recaptcha)
-            .unwrap_or(false),
-        parsed.message.as_deref().unwrap_or_default(),
-        captcha_token.is_empty(),
-        parsed
-            .result_data
-            .and_then(|d| d.captcha)
-            .unwrap_or_default(),
-    ))
+
+    let message = parsed.message.clone().unwrap_or_default();
+    let (is_recaptcha, server_captcha) = match parsed.result_data {
+        Some(d) => (d.is_recaptcha, d.captcha.unwrap_or_default()),
+        None => (false, String::new()),
+    };
+
+    // Diagnostic parity with `AccountLogin.Verdict` (#313/#315/#318). The
+    // `IsRecaptcha` flag is logged but deliberately NOT acted on — only the
+    // robot message gates reCAPTCHA (see `classify_check_response`).
+    tracing::info!(
+        step = "CheckAccountType.Verdict",
+        is_recaptcha = is_recaptcha,
+        captcha_sent = !captcha_token.is_empty(),
+        message = %message,
+        "CheckAccountType server response classified"
+    );
+
+    Ok(classify_check_response(&message, server_captcha))
 }
 
 /// Pure mapping from the parsed response fields to a [`CheckAccountOutcome`].
 /// Kept separate so the reCAPTCHA-detection table is unit-testable without
 /// a mock HTTP server.
 ///
-/// Escalates to a reCAPTCHA solve only when the server asks for the
-/// "我不是機器人" check, or sets `IsRecaptcha` on an empty-first probe
-/// (`captcha_empty`). A flag lingering alongside a real error after a token
-/// was already replayed surfaces as the error instead of looping (see
-/// `account_login` for the same rule / the #313/#315/#318 rationale).
-fn classify_check_response(
-    is_recaptcha: bool,
-    message: &str,
-    captcha_empty: bool,
-    server_captcha: String,
-) -> CheckAccountOutcome {
-    if message_demands_recaptcha(message) || (is_recaptcha && captcha_empty) {
+/// Escalates to a reCAPTCHA solve **only** when the server asks for the
+/// "我不是機器人" check in the message. The bare `IsRecaptcha` flag is not a
+/// trigger — live traffic sets it even on advance-check responses that log
+/// in fine without a token (see `account_login` for the same rule and the
+/// #313/#315/#318 rationale).
+fn classify_check_response(message: &str, server_captcha: String) -> CheckAccountOutcome {
+    if message_demands_recaptcha(message) {
         CheckAccountOutcome::RecaptchaRequired
     } else {
         CheckAccountOutcome::Proceed { server_captcha }
@@ -170,21 +171,10 @@ mod tests {
     use super::*;
 
     fn parse(body: &str) -> CheckAccountOutcome {
-        // Empty-first probe (no token yet) — the common escalation path.
-        parse_with(body, true)
-    }
-
-    fn parse_with(body: &str, captcha_empty: bool) -> CheckAccountOutcome {
         let r: CheckAccountTypeResponse = serde_json::from_str(body).expect("valid JSON");
-        classify_check_response(
-            r.result_data
-                .as_ref()
-                .map(|d| d.is_recaptcha)
-                .unwrap_or(false),
-            r.message.as_deref().unwrap_or_default(),
-            captcha_empty,
-            r.result_data.and_then(|d| d.captcha).unwrap_or_default(),
-        )
+        let message = r.message.clone().unwrap_or_default();
+        let server_captcha = r.result_data.and_then(|d| d.captcha).unwrap_or_default();
+        classify_check_response(&message, server_captcha)
     }
 
     /// Reach into the private DTO to assert the JToken coercion
@@ -231,16 +221,20 @@ mod tests {
     }
 
     #[test]
-    fn is_recaptcha_flag_demands_recaptcha() {
+    fn bare_is_recaptcha_flag_does_not_demand() {
+        // The flag alone (no robot message) must NOT escalate — it is set
+        // even on advance-check responses that log in without a token.
         assert_eq!(
             parse(r#"{"ResultData":{"IsRecaptcha":true}}"#),
-            CheckAccountOutcome::RecaptchaRequired
+            CheckAccountOutcome::Proceed {
+                server_captcha: String::new()
+            }
         );
     }
 
     #[test]
     fn robot_message_demands_recaptcha() {
-        // Even without the flag, a 機器人 message escalates.
+        // The 機器人 message is the only thing that escalates.
         assert_eq!(
             parse(r#"{"Message":"請點選「我不是機器人」","ResultData":{"Captcha":""}}"#),
             CheckAccountOutcome::RecaptchaRequired
@@ -248,15 +242,11 @@ mod tests {
     }
 
     #[test]
-    fn lingering_flag_after_token_does_not_loop() {
-        // IsRecaptcha still set but a token was already replayed
-        // (captcha_empty=false) and the message isn't a robot prompt →
-        // proceed instead of re-opening the widget (#313/#315/#318).
+    fn flag_with_non_robot_message_proceeds() {
+        // IsRecaptcha set but the message isn't a robot prompt → proceed
+        // instead of opening the widget (#313/#315/#318 loop guard).
         assert_eq!(
-            parse_with(
-                r#"{"Message":"資料驗證錯誤","ResultData":{"IsRecaptcha":true,"Captcha":"X"}}"#,
-                false,
-            ),
+            parse(r#"{"Message":"資料驗證錯誤","ResultData":{"IsRecaptcha":true,"Captcha":"X"}}"#),
             CheckAccountOutcome::Proceed {
                 server_captcha: "X".to_owned()
             }

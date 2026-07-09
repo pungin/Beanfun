@@ -198,17 +198,19 @@ async fn tw_regular_happy_path_returns_session() {
 
 #[tokio::test]
 async fn recaptcha_required_diverts_to_webview_login() {
-    // Token-replay (#313/#315/#318): reCAPTCHA is detected empty-first
-    // from the CheckAccountType response (IsRecaptcha=true), not from a
-    // separate InitLogin probe. The single-shot `login_tw_regular` has no
-    // interactive surface, so it surfaces `RecaptchaRequired`.
-    // AccountLogin is intentionally left unmounted: escalating at the
-    // check step must NOT touch it.
+    // Token-replay (#313/#315/#318): reCAPTCHA is detected empty-first from
+    // the CheckAccountType response, gated on the server's "我不是機器人"
+    // message (the `IsRecaptcha` flag alone is not a trigger — it is set even
+    // on advance-check responses). The single-shot `login_tw_regular` has no
+    // interactive surface, so it surfaces `RecaptchaRequired`. AccountLogin
+    // is intentionally left unmounted: escalating at the check step must NOT
+    // touch it.
     let server = MockServer::start().await;
     mount_session_key(&server).await;
     mount_index_with_token(&server, FORM_TOKEN).await;
     let body = serde_json::json!({
         "ResultCode": "1",
+        "Message": "請點選「我不是機器人」",
         "ResultData": { "IsRecaptcha": true }
     });
     Mock::given(method("POST"))
@@ -251,14 +253,19 @@ async fn recaptcha_false_continues_headless_flow() {
 #[tokio::test]
 async fn recaptcha_required_at_account_login_step_diverts() {
     // reCAPTCHA can also gate the *second* POST (AccountLogin) even when
-    // CheckAccountType passed clean — empty-first must escalate there too.
+    // CheckAccountType passed clean — the "我不是機器人" message must escalate
+    // there too.
     let server = MockServer::start().await;
     mount_session_key(&server).await;
     mount_index_with_token(&server, FORM_TOKEN).await;
     mount_check_account_type(&server, "").await;
     mount_account_login_with_body(
         &server,
-        serde_json::json!({ "IsRecaptcha": true, "ResultCode": "1" }),
+        serde_json::json!({
+            "IsRecaptcha": true,
+            "ResultCode": "1",
+            "ResultMessage": "請點選「我不是機器人」"
+        }),
     )
     .await;
 
@@ -267,6 +274,34 @@ async fn recaptcha_required_at_account_login_step_diverts() {
         .await
         .expect_err("AccountLogin reCAPTCHA must divert");
     assert!(matches!(err, LoginError::RecaptchaRequired { .. }));
+}
+
+#[tokio::test]
+async fn bare_is_recaptcha_flag_does_not_divert() {
+    // Regression guard: a CheckAccountType response carrying `IsRecaptcha:true`
+    // WITHOUT a "我不是機器人" message must NOT open the widget — the flag is
+    // set even on responses that log in fine. The headless flow continues to
+    // a session.
+    let server = MockServer::start().await;
+    mount_session_key(&server).await;
+    mount_index_with_token(&server, FORM_TOKEN).await;
+    Mock::given(method("POST"))
+        .and(path("/Login/CheckAccountType"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "ResultCode": "1",
+            "ResultData": { "IsRecaptcha": true }
+        })))
+        .mount(&server)
+        .await;
+    mount_account_login_success(&server).await;
+    mount_send_login_happy(&server).await;
+    mount_return_aspx_with_token(&server, WEB_TOKEN).await;
+
+    let client = client_for(&server);
+    let session = login_tw_regular(&client, &creds())
+        .await
+        .expect("bare IsRecaptcha flag must not divert");
+    assert_eq!(session.web_token, WEB_TOKEN);
 }
 
 #[tokio::test]
