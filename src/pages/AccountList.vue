@@ -2019,21 +2019,34 @@ function handleDragEnd(event: Sortable.SortableEvent): void {
   if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
 
   /*
-   * SortableJS physically moved the DOM element during drag.
-   * Revert that manipulation so Vue's reactivity system is the
-   * sole owner of the DOM — otherwise the subsequent array
-   * splice triggers a Vue re-render that conflicts with the
-   * already-moved element, producing incorrect final positions.
+   * SortableJS physically moved the DOM element during drag. Revert that
+   * manipulation so Vue's reactivity system is the sole owner of the DOM —
+   * otherwise the reactive reorder below triggers a Vue re-render that
+   * conflicts with the already-moved element, producing wrong positions.
+   *
+   * Best-effort: in the real WebView `item` can already be detached (Vue
+   * re-rendered the row — a hover/refresh tick mid-drag — replacing the
+   * node SortableJS is holding), so `removeChild` throws `NotFoundError`.
+   * That MUST NOT abort the handler: the reactive reorder + Config.xml
+   * persist below are the source of truth, and skipping them was silently
+   * dropping the user's order on disk (it only survived in-session because
+   * SortableJS had already moved the DOM). Swallow the revert failure;
+   * Vue reconciles the DOM from the reordered array on the next paint.
    */
-  from.removeChild(item)
-  from.insertBefore(item, from.children[oldIndex] ?? null)
+  try {
+    from.removeChild(item)
+    from.insertBefore(item, from.children[oldIndex] ?? null)
+  } catch {
+    /* node already reconciled by Vue — reactive reorder below wins */
+  }
 
-  const list = account.serviceAccounts
+  const list = [...account.serviceAccounts]
   const [moved] = list.splice(oldIndex, 1)
   list.splice(newIndex, 0, moved)
+  const orderedSids = list.map((a) => a.sid)
 
-  account.setServiceAccountOrder(list.map((a) => a.sid))
-  void persistAccountOrder(key, list.map((a) => a.sid).join(','))
+  account.setServiceAccountOrder(orderedSids)
+  void persistAccountOrder(key, orderedSids.join(','))
 }
 
 /* SortableJS instance lifecycle */
