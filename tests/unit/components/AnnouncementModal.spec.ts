@@ -42,6 +42,11 @@ describe('AnnouncementModal', () => {
   beforeEach(() => {
     pinia = createPinia()
     setActivePinia(pinia)
+    // The modal defers its seen-check until the config store has loaded
+    // Config.xml (see `waitForConfigLoaded`). Boot has completed by the
+    // time it mounts in the app, so model that here; the dedicated race
+    // test below flips this back to `false`.
+    useConfigStore().loaded = true
     vi.useFakeTimers()
     // The "seen" flag is now also mirrored into localStorage, which is a
     // shared global across tests in this file — wipe it so each test
@@ -163,6 +168,27 @@ describe('AnnouncementModal', () => {
 
     expect(commands.setConfig).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
+  })
+
+  it('waits for Config.xml to load before the seen-check (no premature forced read)', async () => {
+    // Regression: the seen-check used to run on mount before the config
+    // cache was populated, so an already-acknowledged version read as
+    // unseen and re-forced the 30s read on every launch.
+    const config = useConfigStore()
+    config.loaded = false // still booting; cache is empty
+    const wrapper = mountModal()
+    await flushPromises()
+    // Must not force the read while the cache is still loading.
+    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
+
+    // loadAll() resolves — the acknowledged version lands in the cache.
+    config.entries[SEEN_KEY] = VERSION.app
+    config.loaded = true
+    await flushPromises()
+
+    // Seen → stays closed (and the re-open banner is available).
+    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
   })
 
   it('opens external links via openUrl', async () => {
