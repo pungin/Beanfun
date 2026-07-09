@@ -84,7 +84,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ElButton, ElMessage, ElStep, ElSteps } from 'element-plus'
+import { ElButton, ElInput, ElMessage, ElStep, ElSteps } from 'element-plus'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { AUTH_ACTIONS, useAuthStore } from '../stores/auth'
@@ -140,6 +140,18 @@ const config = useConfigStore()
  * above for the legal values.
  */
 const step = ref<number>(STEP_INITIAL)
+
+/**
+ * Gama Pass (Gamania OAuth) credentials — a **separate** account from the
+ * beanfun email login: a phone number OR an email, plus its password. The
+ * user fills these in the form before the WebView opens, and the backend
+ * prefills + auto-advances the OAuth pages with them. Prefilled from the
+ * beanfun `loginIntent` as a convenience when the two happen to match.
+ */
+const gpAccount = ref<string>(auth.loginIntent?.accountId ?? '')
+const gpPassword = ref<string>(auth.loginIntent?.password ?? '')
+/** `true` once the WebView window has been opened — swaps form → tracker. */
+const windowOpened = ref(false)
 
 /**
  * Inline "connection lost" banner flag — step 0 only. Flipped true
@@ -219,23 +231,30 @@ async function registerEventListeners(): Promise<void> {
     // log is the one authoritative trail an operator has.
     console.error(`[gamepass-form] ${GAMEPASS_FAILED_EVENT}`, event.payload)
     windowError.value = true
+    windowOpened.value = false
     step.value = STEP_PREPARED
   })
   const cancelledUnlisten = await listen<null>(GAMEPASS_CANCELLED_EVENT, () => {
     if (disposed) return
-    // WPF parity: silent cancel. Reset to the fresh-start state so
-    // Refresh re-mints a session key rather than re-opening a
-    // window on a stale one.
-    step.value = STEP_INITIAL
+    // User closed the WebView. Re-arm a fresh session key and show the
+    // credential form again so they can retry.
+    windowOpened.value = false
     windowError.value = false
+    void doStart()
   })
   unlistenFns.push(successUnlisten, failedUnlisten, cancelledUnlisten)
 }
 
+/**
+ * Arm the GamePass session key. Does NOT open the window — the user first
+ * fills the credential form, then {@link openWindow} pops the WebView with
+ * those values for prefill + auto-advance.
+ */
 async function doStart(): Promise<void> {
   if (disposed) return
   connectionLost.value = false
   windowError.value = false
+  windowOpened.value = false
   step.value = STEP_INITIAL
   try {
     await auth.loginGamepassStart(readRegion())
@@ -249,23 +268,28 @@ async function doStart(): Promise<void> {
     // Non-CommandInvocationError throws (e.g. withGuard "already in
     // progress" on double-click) are benign — fall through without
     // setting a banner.
-    return
   }
-  // `loginGamepassStart` succeeded → pending_gamepass slot is armed.
-  // Now pop the WebView window; the rest of the flow advances via
-  // `gamepass-login-*` events handled by `registerEventListeners`.
+}
+
+/**
+ * Open the GamePass WebView with the entered credentials for prefill +
+ * auto-advance to the 2FA step. Empty credentials are allowed (manual login
+ * in the window). The rest of the flow advances via `gamepass-login-*`.
+ */
+async function openWindow(): Promise<void> {
+  if (disposed || step.value < STEP_PREPARED) return
+  windowError.value = false
   try {
-    await wrapCommand(commands.openGamepassWindow())
+    await wrapCommand(commands.openGamepassWindow(gpAccount.value.trim(), gpPassword.value))
     if (disposed) return
+    windowOpened.value = true
     step.value = STEP_WINDOW_OPENED
   } catch (e) {
     if (disposed) return
     if (e instanceof CommandInvocationError) {
       windowError.value = true
     }
-    // Leave step at STEP_PREPARED so the user sees "prepared but
-    // window open failed"; Refresh re-runs `loginGamepassStart`
-    // which also clears `pending_gamepass` backend-side.
+    // Leave the form up so the user can retry.
   }
 }
 
@@ -331,7 +355,48 @@ async function goBack(): Promise<void> {
       <p class="gamepass-form__subtitle">{{ t('loginGamepass.subtitle') }}</p>
     </header>
 
+    <!-- Credential form: rendered from first paint (before the session
+         arms) so the window sizes to a stable height instead of jumping
+         empty → form. The Open button stays disabled until the session
+         key is ready. Empty values → manual login in the window. -->
+    <form
+      v-if="!windowOpened && !connectionLost"
+      class="gamepass-form__creds"
+      data-testid="gamepass-creds"
+      @submit.prevent="openWindow"
+    >
+      <p class="gamepass-form__creds-hint">{{ t('loginGamepass.credsHint') }}</p>
+      <el-input
+        v-model="gpAccount"
+        class="gamepass-form__field"
+        :placeholder="t('loginGamepass.accountPlaceholder')"
+        data-testid="gamepass-account"
+        autocomplete="off"
+      />
+      <el-input
+        v-model="gpPassword"
+        type="password"
+        class="gamepass-form__field"
+        :placeholder="t('loginGamepass.passwordPlaceholder')"
+        show-password
+        data-testid="gamepass-password"
+        autocomplete="off"
+      />
+      <el-button
+        type="primary"
+        size="large"
+        native-type="submit"
+        class="gamepass-form__open"
+        :loading="isStarting"
+        :disabled="step < STEP_PREPARED"
+        data-testid="gamepass-open"
+      >
+        {{ t('loginGamepass.openWindow') }}
+      </el-button>
+    </form>
+
     <el-steps
+      v-if="windowOpened"
       class="gamepass-form__steps"
       :active="step"
       align-center
@@ -345,11 +410,11 @@ async function goBack(): Promise<void> {
     </el-steps>
 
     <p
-      v-if="step === STEP_PREPARED && !connectionLost && !windowError"
+      v-if="windowOpened && !connectionLost && !windowError"
       class="gamepass-form__status"
       data-testid="gamepass-status"
     >
-      {{ t('loginGamepass.prepareDone') }}
+      {{ t('loginGamepass.windowOpenedHint') }}
     </p>
 
     <p v-if="connectionLost" class="gamepass-form__error" data-testid="gamepass-connection-lost">
@@ -406,6 +471,30 @@ async function goBack(): Promise<void> {
   margin: 0.375rem 0 0;
   font-size: 0.8125rem;
   color: #54443a;
+}
+
+.gamepass-form__creds {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.gamepass-form__creds-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #54443a;
+  text-align: center;
+}
+
+.gamepass-form__field {
+  width: 100%;
+}
+
+.gamepass-form__open {
+  width: 100%;
+  margin-top: 0.25rem;
+  font-weight: 700;
 }
 
 .gamepass-form__steps {

@@ -388,9 +388,9 @@ async loginGamepassStart(region: LoginRegion) : Promise<Result<null, CommandErro
  * off to the tokio executor, which is a different thread from the
  * WebView2 message pump.
  */
-async openGamepassWindow() : Promise<Result<null, CommandError>> {
+async openGamepassWindow(account: string, password: string) : Promise<Result<null, CommandError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("open_gamepass_window") };
+    return { status: "ok", data: await TAURI_INVOKE("open_gamepass_window", { account, password }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -472,6 +472,23 @@ async resumeTwLoginAfterVerify() : Promise<Result<SessionInfo, CommandError>> {
 async openRecaptchaWindow() : Promise<Result<null, CommandError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("open_recaptcha_window") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Close the reCAPTCHA widget-solve window and drop the paused TW login.
+ * 
+ * Called when the user backs out of the reСAPTCHA step (`RecaptchaForm`'s
+ * "返回一般登入"): the popup window must not linger after the frontend
+ * navigates away. Idempotent — a missing window / already-cleared slot is
+ * a no-op. The window's `Destroyed` hook may emit `recaptcha-cancelled`,
+ * which the (unmounting) `RecaptchaForm` ignores.
+ */
+async closeRecaptchaWindow() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_recaptcha_window") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

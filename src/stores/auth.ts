@@ -489,6 +489,16 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
+   * Close the reCAPTCHA widget-solve popup and drop the paused TW login.
+   * Called when the user backs out of the reCAPTCHA step so the window
+   * doesn't linger. Best-effort (swallows errors) and not guarded — it's a
+   * teardown that can run while another action is technically in flight.
+   */
+  async function closeRecaptchaWindow(): Promise<void> {
+    await safeInvoke(commands.closeRecaptchaWindow())
+  }
+
+  /**
    * Replay a solved reCAPTCHA token into the paused TW login and continue
    * the same HTTP session (issues #313 / #315 / #318).
    *
@@ -722,6 +732,7 @@ export const useAuthStore = defineStore('auth', () => {
     loginQrCheck,
     loginGamepassStart,
     openRecaptchaWindow,
+    closeRecaptchaWindow,
     resumeTwLoginWithRecaptcha,
     resumeTwLoginAfterVerify,
     applyGamepassSession,

@@ -1813,6 +1813,50 @@ describe('AccountList page', () => {
     expect(configStore.get('AccountOrder_610074_T9')).toBe('sid-2,sid-3,sid-1')
   })
 
+  it('D7: drag end still persists the full order when the DOM revert throws (live-WebView node desync)', async () => {
+    /*
+     * Regression for the "order resets after restart / re-login" bug.
+     *
+     * In the real WebView the `<li>` node SortableJS is holding can be
+     * detached by a Vue re-render that lands mid-drag (a hover/refresh
+     * tick replaces the keyed row), so `from.removeChild(item)` throws
+     * `NotFoundError`. The old handler let that abort the whole function,
+     * so the reactive reorder + `setConfig` persist never ran — the order
+     * only *looked* applied in-session (SortableJS had moved the DOM) and
+     * silently never reached Config.xml, reverting on the next login.
+     *
+     * The handler must treat the DOM revert as best-effort and still
+     * persist. We reproduce the throw by handing `onEnd` an `item` that is
+     * not a child of `from`.
+     */
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(structuredClone(POPULATED_LIST)))
+
+    const ctx = buildHarness()
+    useAuthStore().session = FAKE_SESSION
+    await ctx.mountIt()
+    await flushPromises()
+
+    expect(capturedOnEnd).not.toBeNull()
+    const detachedItem = document.createElement('li') // NOT a child of `from`
+    const from = document.createElement('ul')
+    for (let i = 0; i < 3; i++) from.appendChild(document.createElement('li'))
+
+    // Would throw NotFoundError inside the handler on `from.removeChild`.
+    expect(() =>
+      capturedOnEnd!({
+        oldIndex: 0,
+        newIndex: 2,
+        item: detachedItem,
+        from,
+      }),
+    ).not.toThrow()
+    await flushPromises()
+
+    // The full reordered CSV still reached disk despite the revert throwing.
+    expect(commands.setConfig).toHaveBeenCalledWith('AccountOrder_610074_T9', 'sid-2,sid-3,sid-1')
+    expect(useConfigStore().get('AccountOrder_610074_T9')).toBe('sid-2,sid-3,sid-1')
+  })
+
   it('D7: persist failure on drag end is silent (no toast, mirrors WPF SetValue)', async () => {
     /*
      * Mirrors WPF L482-487 `ConfigAppSettings.SetValue` which
