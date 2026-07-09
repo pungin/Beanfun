@@ -2137,6 +2137,28 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
         }
     });
 
+    // The Gama Pass OAuth page also offers Google / Facebook / Apple
+    // social login. Those SDKs (`connect.facebook.net`, `apis.google.com`)
+    // need third-party storage and open an OAuth popup via `window.open`.
+    // Under WebView2's default settings both are blocked — Tracking
+    // Prevention kills the SDK storage and the popup is swallowed
+    // (`POPUP_MAYBE_BLOCKED_OAUTH`), so the social buttons do nothing.
+    //
+    // Fix, mirroring the reCAPTCHA window (#318):
+    //  * disable Tracking Prevention (same `ICoreWebView2Profile3` COM path)
+    //  * redirect popup `window.open`s into this same window so the OAuth
+    //    round-trip navigates + redirects back instead of being blocked.
+    #[cfg(target_os = "windows")]
+    {
+        let disabled = crate::commands::cookie_native::disable_tracking_prevention_native(&window);
+        tracing::info!(
+            step = "GamepassWebView.TrackingPrevention",
+            disabled = disabled,
+            "disabled WebView2 tracking prevention for social-login SDKs"
+        );
+        crate::commands::cookie_native::register_new_window_handler(&window);
+    }
+
     // Live-test diagnostic (2026-04-18) — dump the jar state a
     // second time, right before we iterate it to seed the WebView.
     // See [`trace_cookie_jar`] docblock for the rationale; between
