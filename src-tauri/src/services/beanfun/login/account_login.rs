@@ -139,7 +139,16 @@ pub async fn account_login(
     };
 
     let rb = apply_json_headers(client.http().post(url), verification_token, index_url);
-    let resp = rb.json(&body).send().await?;
+    // Diagnostic: dump the EXACT header set reqwest will send (including the
+    // ones it auto-adds — Content-Type, Accept-Encoding, Host, …) so we can
+    // byte-diff it against a client that doesn't trip reCAPTCHA (MapleLink).
+    let req = rb.json(&body).build()?;
+    tracing::info!(
+        step = "AccountLogin.RequestHeaders",
+        headers = ?req.headers(),
+        "outgoing AccountLogin request headers"
+    );
+    let resp = client.http().execute(req).await?;
 
     ensure_success(&resp, "AccountLogin")?;
     let text = client.bounded_text(resp).await?;
