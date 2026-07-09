@@ -2354,6 +2354,17 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
     .title("驗證 / reCAPTCHA")
     .inner_size(480.0, 640.0)
     .resizable(true)
+    // The reCAPTCHA iframe (google.com) is third-party to beanfun and needs
+    // its own storage. The profile-level Tracking-Prevention COM below
+    // returns `disabled=false` on some WebView2 runtimes (the call doesn't
+    // take effect), and the widget's `requestStorageAccess()` is then denied
+    // — that block is Chromium's **third-party storage partitioning**, which
+    // the Profile3 API doesn't govern. Disabling it via a browser arg applies
+    // at window creation, before the widget inits, so the "I'm not a robot"
+    // checkbox is actually clickable.
+    .additional_browser_args(
+        "--disable-features=ThirdPartyStoragePartitioning,PartitionedCookies,msEdgeTrackingPrevention",
+    )
     .initialization_script(harvest_js.as_str())
     .build()
     .map_err(|e| {
