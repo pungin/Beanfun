@@ -132,8 +132,13 @@ pub(crate) fn apply_json_headers(
         // POST; reqwest does not add one, and its absence is a bot tell.
         // These login steps are TW-only, so the host is fixed.
         .header(reqwest::header::ORIGIN, "https://login.beanfun.com")
-        .header(reqwest::header::CACHE_CONTROL, "no-cache")
-        .header("Pragma", "no-cache")
+        // NOTE: deliberately NOT sending `Cache-Control`/`Pragma: no-cache`.
+        // beanfun's own login page issues a plain `fetch()` for
+        // CheckAccountType / AccountLogin, and a plain fetch does NOT add
+        // those headers — so sending them makes the request look scripted
+        // rather than browser-issued, feeding the bot-risk score that pops
+        // reCAPTCHA on the app even when the same login succeeds without it
+        // in a real browser (and in the maplelink client, which omits them).
         .header(
             reqwest::header::ACCEPT_LANGUAGE,
             "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
