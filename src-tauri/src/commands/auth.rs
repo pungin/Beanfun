@@ -2377,7 +2377,11 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
         WebviewUrl::External(about_blank),
     )
     .title("驗證 / reCAPTCHA")
-    .inner_size(480.0, 640.0)
+    // Wide/tall enough that reCAPTCHA's image-challenge popup (bframe, up to
+    // ~400px wide but offset from the anchor) isn't clipped on the right/
+    // bottom. Min size keeps it usable if the user shrinks it.
+    .inner_size(600.0, 720.0)
+    .min_inner_size(520.0, 600.0)
     .resizable(true)
     .data_directory(data_dir)
     // Match the MapleLink reCAPTCHA-window fingerprint exactly — a clean
