@@ -2372,16 +2372,17 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
     .inner_size(480.0, 640.0)
     .resizable(true)
     .data_directory(data_dir)
-    // The reCAPTCHA iframe (google.com) is third-party to beanfun and needs
-    // its own storage. The profile-level Tracking-Prevention COM below
-    // returns `disabled=false` on some WebView2 runtimes (the call doesn't
-    // take effect), and the widget's `requestStorageAccess()` is then denied
-    // — that block is Chromium's **third-party storage partitioning**, which
-    // the Profile3 API doesn't govern. Disabling it via a browser arg applies
-    // at window creation, before the widget inits, so the "I'm not a robot"
-    // checkbox is actually clickable.
+    // Match the MapleLink reCAPTCHA-window fingerprint exactly — a clean
+    // Chrome UA (not the default Edge/WebView2 UA) plus
+    // `--disable-blink-features=AutomationControlled` (hides
+    // `navigator.webdriver`) and `--no-sandbox`. Without this the widget
+    // treats the WebView as automated → permanent hard challenge, slow load,
+    // and denied storage. `ThirdPartyStoragePartitioning` is kept off too so
+    // the third-party google.com iframe can use its storage.
+    .user_agent(crate::services::beanfun::client::DEFAULT_USER_AGENT)
     .additional_browser_args(
-        "--disable-features=ThirdPartyStoragePartitioning,PartitionedCookies,msEdgeTrackingPrevention",
+        "--disable-blink-features=AutomationControlled --no-sandbox \
+         --disable-features=ThirdPartyStoragePartitioning,PartitionedCookies,msEdgeTrackingPrevention",
     )
     .initialization_script(harvest_js.as_str())
     .build()
