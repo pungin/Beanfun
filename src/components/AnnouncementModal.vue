@@ -13,17 +13,20 @@
  *   single form (e.g. the login page); showing the notice temporarily grows
  *   the OS window so the announcement isn't crammed, and restores the
  *   previous size on close.
- * - **Re-openable afterwards.** Once acknowledged (or on any later launch of
- *   the same version) a slim full-width banner sits just under the title bar
- *   so the user can re-open and re-read the notice at will — this time
- *   without the forced countdown. The banner's × hides it for the session
- *   (it returns next launch).
+ * - **Re-openable afterwards, permanently.** Once acknowledged (or on any
+ *   later launch of the same version) a slim full-width banner sits just
+ *   under the title bar so the user can re-open and re-read the notice at
+ *   will — always without the forced countdown. The banner is permanent
+ *   (no dismiss) and reserves its own strip so it never overlaps the page.
+ * - **Robust "seen" state.** The acknowledged version is stored in both
+ *   Config.xml and WebView localStorage; either one counts as seen, so
+ *   hand-wiping one store doesn't re-trigger the forced read.
  *
  * Mounted once at the app root ({@link App.vue}) so it overlays whatever
  * route is active.
  */
 
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { LogicalSize } from '@tauri-apps/api/dpi'
@@ -34,8 +37,13 @@ import { setWindowFitSuspended } from '../services/windowFit'
 import { useConfigStore } from '../stores/config'
 
 /** Seconds the user must wait before the dismiss button enables. */
-const READ_SECONDS = 60
-/** Config.xml key holding the last app version the user acknowledged. */
+const READ_SECONDS = 30
+/**
+ * Key holding the last app version the user acknowledged. Written to
+ * BOTH Config.xml and WebView localStorage; "seen" if *either* matches
+ * (see {@link isSeen}). Two independent stores means hand-deleting one
+ * (e.g. editing Config.xml) doesn't silently force the forced-read again.
+ */
 const SEEN_KEY = 'announcementSeenVersion'
 /** Logical size the window grows to while the notice is shown. */
 const BIG_W = 640
@@ -50,9 +58,32 @@ const config = useConfigStore()
 
 /** Version loaded → the re-open banner may render. */
 const ready = ref(false)
-/** Session-only: user hid the re-open banner (comes back next launch). */
-const bannerHidden = ref(false)
 const visible = ref(false)
+
+/**
+ * The slim re-open banner is **permanent**: whenever the notice card
+ * itself is closed it sits under the title bar so the announcement is
+ * always one click away (no session-dismiss). It never triggers the
+ * countdown — {@link reopen} is review mode.
+ */
+const bannerVisible = computed(() => ready.value && !visible.value)
+
+/**
+ * Reserve a strip under the title bar while the banner is up so the
+ * `position: fixed` banner never overlaps the page content (it used to
+ * cover the top of the login form). Toggles a global body class picked
+ * up by the unscoped style block below; the router's content-fit
+ * resizer then re-measures and grows the window to include the strip.
+ */
+watch(
+  bannerVisible,
+  (open) => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.toggle('bf-ann-banner-open', open)
+    }
+  },
+  { immediate: true },
+)
 /** `true` = the auto-shown, countdown-gated first read; `false` = review. */
 const forced = ref(false)
 const remaining = ref(READ_SECONDS)
@@ -93,7 +124,27 @@ async function restoreWindow(): Promise<void> {
 }
 
 function isSeen(): boolean {
-  return config.get(SEEN_KEY) === appVersion
+  if (config.get(SEEN_KEY) === appVersion) return true
+  try {
+    return localStorage.getItem(SEEN_KEY) === appVersion
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Record the current version as acknowledged in BOTH stores so the
+ * forced read is never repeated for this version — and stays that way
+ * even if one store is later wiped by hand. Only the next app *update*
+ * (a new {@link appVersion}) brings the notice back.
+ */
+async function markSeen(): Promise<void> {
+  try {
+    localStorage.setItem(SEEN_KEY, appVersion)
+  } catch {
+    /* localStorage unavailable — Config.xml below still records it */
+  }
+  await config.set(SEEN_KEY, appVersion)
 }
 
 async function openForced(): Promise<void> {
@@ -122,8 +173,9 @@ async function close(): Promise<void> {
   stopTimer()
   await restoreWindow()
   // Persist on the first (forced) acknowledgement so it won't auto-pop
-  // again until the next version. Idempotent for review closes.
-  if (!isSeen()) await config.set(SEEN_KEY, appVersion)
+  // — nor count down — again until the next version. Idempotent for
+  // review closes.
+  if (!isSeen()) await markSeen()
 }
 
 onMounted(async () => {
@@ -140,7 +192,12 @@ onMounted(async () => {
   if (!isSeen()) await openForced()
 })
 
-onBeforeUnmount(stopTimer)
+onBeforeUnmount(() => {
+  stopTimer()
+  if (typeof document !== 'undefined') {
+    document.body.classList.remove('bf-ann-banner-open')
+  }
+})
 
 async function open(url: string): Promise<void> {
   await safeInvoke(commands.openUrl(url))
@@ -151,7 +208,6 @@ async function open(url: string): Promise<void> {
   <div v-if="visible" class="ann" data-testid="announcement">
     <div class="ann__card" role="dialog" aria-modal="true">
       <header class="ann__head">
-        <span class="ann__badge" aria-hidden="true">📢</span>
         <h2 class="ann__title">{{ t('announcement.title') }}</h2>
       </header>
 
@@ -202,7 +258,7 @@ async function open(url: string): Promise<void> {
     </div>
   </div>
 
-  <div v-else-if="ready && !bannerHidden" class="ann-banner" data-testid="announcement-banner">
+  <div v-else-if="bannerVisible" class="ann-banner" data-testid="announcement-banner">
     <button
       class="ann-banner__open"
       type="button"
@@ -211,15 +267,6 @@ async function open(url: string): Promise<void> {
     >
       <span class="ann-banner__text">{{ t('announcement.title') }}</span>
       <span class="ann-banner__cta">{{ t('announcement.reopen') }} ›</span>
-    </button>
-    <button
-      class="ann-banner__x"
-      type="button"
-      :aria-label="t('announcement.close')"
-      data-testid="announcement-banner-hide"
-      @click="bannerHidden = true"
-    >
-      ×
     </button>
   </div>
 </template>
@@ -257,11 +304,6 @@ async function open(url: string): Promise<void> {
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
-}
-
-.ann__badge {
-  font-size: 1.35rem;
-  line-height: 1;
 }
 
 .ann__title {
@@ -372,7 +414,7 @@ async function open(url: string): Promise<void> {
   display: flex;
   align-items: center;
   height: 30px;
-  padding: 0 4px 0 12px;
+  padding: 0 12px;
   background: color-mix(
     in srgb,
     var(--el-color-primary, #ff8201) 16%,
@@ -411,21 +453,20 @@ async function open(url: string): Promise<void> {
   font-weight: 800;
   color: var(--bf-primary, #954a00);
 }
+</style>
 
-.ann-banner__x {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--bf-on-surface-variant, #54443a);
-  font-size: 1.05rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.ann-banner__x:hover {
-  background: color-mix(in srgb, var(--bf-on-surface, #000) 12%, transparent);
+<!--
+  Global (unscoped) offset. The banner is `position: fixed` under the 40px
+  title bar, so on its own it floats over the page content (it used to
+  cover the top of the login form). Every page roots at
+  `[data-window-root]` with `<TitleBar class="bf-titlebar">` as its first
+  child, so reserving a banner-height strip below the title bar pushes the
+  content down exactly under the banner. Scoped styles can't reach
+  TitleBar in other components, hence the global rule gated by the body
+  class toggled in script.
+-->
+<style>
+body.bf-ann-banner-open [data-window-root] > .bf-titlebar {
+  margin-bottom: 30px;
 }
 </style>

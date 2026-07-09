@@ -28,6 +28,8 @@ const mockOpenUrl = vi.mocked(commands.openUrl)
 const mockSetConfig = vi.mocked(commands.setConfig)
 
 const SEEN_KEY = 'announcementSeenVersion'
+/** Forced-read countdown in ms — mirrors READ_SECONDS (30) in the SUT. */
+const READ_MS = 30_000
 const VERSION = { app: '6.0.3', tauri: '2.0.0' } as Awaited<ReturnType<typeof commands.version>>
 
 let pinia: ReturnType<typeof createPinia>
@@ -41,6 +43,10 @@ describe('AnnouncementModal', () => {
     pinia = createPinia()
     setActivePinia(pinia)
     vi.useFakeTimers()
+    // The "seen" flag is now also mirrored into localStorage, which is a
+    // shared global across tests in this file — wipe it so each test
+    // starts from an unacknowledged state.
+    localStorage.clear()
     for (const fn of Object.values(commands) as ReturnType<typeof vi.fn>[]) fn.mockReset()
     mockVersion.mockResolvedValue(VERSION)
     mockOpenUrl.mockReturnValue(ok(null))
@@ -89,16 +95,39 @@ describe('AnnouncementModal', () => {
     expect(commands.setConfig).not.toHaveBeenCalled()
   })
 
-  it('hides the re-open banner for the session when its × is clicked', async () => {
+  it('keeps the re-open banner permanent (no session-hide control)', async () => {
     const config = useConfigStore()
     config.entries[SEEN_KEY] = VERSION.app
     const wrapper = mountModal()
     await flushPromises()
 
     expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
-    await wrapper.get('[data-testid="announcement-banner-hide"]').trigger('click')
+    // The banner is permanent — there is no × / hide affordance.
+    expect(wrapper.find('[data-testid="announcement-banner-hide"]').exists()).toBe(false)
+  })
+
+  it('treats the version as seen when only localStorage records it (Config.xml wiped)', async () => {
+    // Config.xml has no seen entry, but localStorage does — either store
+    // alone must suppress the forced read so hand-editing one file can't
+    // re-trigger the countdown on the next launch.
+    localStorage.setItem(SEEN_KEY, VERSION.app)
+    const wrapper = mountModal()
     await flushPromises()
-    expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(false)
+
+    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
+  })
+
+  it('mirrors the acknowledged version into localStorage on forced dismiss', async () => {
+    const wrapper = mountModal()
+    await flushPromises()
+
+    vi.advanceTimersByTime(READ_MS)
+    await nextTick()
+    await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
+    await flushPromises()
+
+    expect(localStorage.getItem(SEEN_KEY)).toBe(VERSION.app)
   })
 
   it('disables dismiss during the forced-read countdown, then enables it', async () => {
@@ -107,7 +136,7 @@ describe('AnnouncementModal', () => {
     const btn = () => wrapper.get('[data-testid="announcement-dismiss"]')
     expect((btn().element as HTMLButtonElement).disabled).toBe(true)
 
-    vi.advanceTimersByTime(60_000)
+    vi.advanceTimersByTime(READ_MS)
     await nextTick()
     expect((btn().element as HTMLButtonElement).disabled).toBe(false)
   })
@@ -116,7 +145,7 @@ describe('AnnouncementModal', () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    vi.advanceTimersByTime(60_000)
+    vi.advanceTimersByTime(READ_MS)
     await nextTick()
     await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
     await flushPromises()
