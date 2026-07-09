@@ -138,17 +138,19 @@ pub async fn account_login(
         verification_token,
     };
 
-    let rb = apply_json_headers(client.http().post(url), verification_token, index_url);
-    // Diagnostic: dump the EXACT header set reqwest will send (including the
-    // ones it auto-adds — Content-Type, Accept-Encoding, Host, …) so we can
-    // byte-diff it against a client that doesn't trip reCAPTCHA (MapleLink).
-    let req = rb.json(&body).build()?;
-    tracing::info!(
-        step = "AccountLogin.RequestHeaders",
-        headers = ?req.headers(),
-        "outgoing AccountLogin request headers"
-    );
-    let resp = client.http().execute(req).await?;
+    // Send the body with `Content-Type: application/json; charset=utf-8`
+    // (matching beanfun's own login page + the MapleLink client). reqwest's
+    // `.json()` emits a bare `application/json` (no charset); that mismatch
+    // from the real page's fetch is a bot-tell that bumps the reCAPTCHA score.
+    // Build + serialize manually so the charset sticks.
+    let body_bytes = serde_json::to_vec(&body).expect("AccountLoginRequest serializes");
+    let rb = apply_json_headers(client.http().post(url), verification_token, index_url)
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/json; charset=utf-8",
+        )
+        .body(body_bytes);
+    let resp = rb.send().await?;
 
     ensure_success(&resp, "AccountLogin")?;
     let text = client.bounded_text(resp).await?;
