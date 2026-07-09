@@ -208,7 +208,6 @@ async function open(url: string): Promise<void> {
   <div v-if="visible" class="ann" data-testid="announcement">
     <div class="ann__card" role="dialog" aria-modal="true">
       <header class="ann__head">
-        <span class="ann__badge" aria-hidden="true">📢</span>
         <h2 class="ann__title">{{ t('announcement.title') }}</h2>
       </header>
 
@@ -305,11 +304,6 @@ async function open(url: string): Promise<void> {
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
-}
-
-.ann__badge {
-  font-size: 1.35rem;
-  line-height: 1;
 }
 
 .ann__title {
