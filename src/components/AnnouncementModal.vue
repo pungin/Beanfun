@@ -178,6 +178,37 @@ async function close(): Promise<void> {
   if (!isSeen()) await markSeen()
 }
 
+/**
+ * Resolve once the config store has finished loading Config.xml into its
+ * cache (or after a safety timeout). Checking {@link isSeen} before this
+ * reads an *empty* cache — so a previously-acknowledged version looks
+ * unseen and the forced read re-fires on every launch. The localStorage
+ * fallback in {@link isSeen} isn't enough: some WebView2 profiles don't
+ * persist it across restarts, so Config.xml is the store that actually
+ * survives and it must be loaded first. Mirrors the `watch(config.loaded)`
+ * idiom already used in `LoginRegionSelection.vue`.
+ */
+function waitForConfigLoaded(timeoutMs = 5000): Promise<void> {
+  if (config.loaded) return Promise.resolve()
+  return new Promise((resolve) => {
+    let stop = () => {}
+    const timer = setTimeout(() => {
+      stop()
+      resolve()
+    }, timeoutMs)
+    stop = watch(
+      () => config.loaded,
+      (isLoaded) => {
+        if (isLoaded) {
+          stop()
+          clearTimeout(timer)
+          resolve()
+        }
+      },
+    )
+  })
+}
+
 onMounted(async () => {
   // `commands.version` never returns a Result — a throw is an IPC-bridge
   // failure, in which case we simply don't show anything (non-critical).
@@ -188,6 +219,10 @@ onMounted(async () => {
     return
   }
   if (!appVersion) return
+  // Wait for Config.xml before the seen-check, or a still-empty cache
+  // makes an already-acknowledged version look unseen and re-forces the
+  // 30-second read every launch. See {@link waitForConfigLoaded}.
+  await waitForConfigLoaded()
   ready.value = true
   if (!isSeen()) await openForced()
 })
