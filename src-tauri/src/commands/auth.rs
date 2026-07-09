@@ -1247,6 +1247,9 @@ fn build_gamepass_init_script(account: &str, password: &str) -> String {
 /// `{STEP}` is replaced with the [`RecaptchaStep::as_wire`] discriminator.
 const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
   const STEP = "{STEP}";
+  // Hide the automation flag so Google's reCAPTCHA doesn't hard-challenge us
+  // (parity with the browser arg + the other webviews / MapleLink).
+  try { Object.defineProperty(navigator, "webdriver", { get: () => false }); } catch (e) {}
   // A STABLE opaque loading overlay is shown from the very first paint and
   // stays up (no flicker / reflow) until the reCAPTCHA is actually ready.
   // Then we do a SINGLE transition: reparent just the widget into the
@@ -1327,12 +1330,17 @@ const RECAPTCHA_HARVEST_JS_TEMPLATE: &str = r##"(() => {
   // Safety net: never leave the user stuck on the spinner.
   setTimeout(finish, 6000);
 
-  // Self-heal: reload once if the widget iframe never renders at all.
+  // Self-heal: reload once if the widget iframe never renders at all. Every
+  // `sessionStorage` access is wrapped — when reCAPTCHA's storage is blocked,
+  // an unguarded read throws an *uncaught* SecurityError that aborts the whole
+  // init script (so the overlay / reparent above never runs).
   setTimeout(() => {
-    if (!document.querySelector("iframe[src*='recaptcha']") && !sessionStorage.getItem("__bf_reloaded")) {
+    try {
+      if (document.querySelector("iframe[src*='recaptcha']")) return;
+      if (sessionStorage.getItem("__bf_reloaded")) return;
       sessionStorage.setItem("__bf_reloaded", "1");
       location.reload();
-    }
+    } catch (e) {}
   }, 3500);
 
   // Harvest: poll grecaptcha for a non-empty response, then publish it via
