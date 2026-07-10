@@ -53,6 +53,16 @@ import 'element-plus/theme-chalk/dark/css-vars.css'
  */
 import './styles/design-tokens.css'
 import './styles/utilities.css'
+/*
+ * Material Symbols icon font, bundled locally (not the Google Fonts CDN).
+ * The `.material-symbols-outlined` spans across the login/QR/region pages
+ * render via font ligatures; loading the font from `fonts.googleapis.com`
+ * meant the icons fell back to raw ligature text (`qr_code_2`, `passkey`, …)
+ * whenever the machine was offline or Google Fonts was slow/blocked (common
+ * on the TW/HK networks this launcher targets). Importing the package's
+ * `outlined.css` ships the woff2 in-bundle so the icons always resolve.
+ */
+import 'material-symbols/outlined.css'
 
 import App from './App.vue'
 import { createAppI18n, wireI18n } from './i18n'
