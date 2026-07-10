@@ -78,10 +78,16 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # HTTP client (rustls — avoid OpenSSL dependency)
+# native-tls (SChannel on Windows), NOT rustls: reCAPTCHA Enterprise fingerprints
+# the TLS ClientHello (JA3/JA4). rustls has a distinct, automation-associated
+# fingerprint that — paired with our Chrome UA — bumps beanfun's bot-risk score
+# and pops a reCAPTCHA the SChannel-based MapleLink / original WPF client never
+# saw on the same IP. SChannel presents the Windows system fingerprint beanfun
+# historically accepts. See `build_http_client`.
 reqwest = { version = "0.12", default-features = false, features = [
   "json",
   "cookies",
-  "rustls-tls",
+  "native-tls",
   "gzip",
   "deflate",
 ] }

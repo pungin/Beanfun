@@ -54,6 +54,27 @@ use super::error::LoginError;
 /// against a live Chrome 150 capture 2026-07-08.
 pub const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
 
+/// Chrome client-hint brand string, sent on **every** request via the
+/// client-level default headers (see [`build_http_client`]).
+///
+/// The Chrome major MUST match [`DEFAULT_USER_AGENT`] — a UA-vs-`sec-ch-ua`
+/// version mismatch is itself a bot signal (issues #313/#315/#318, task
+/// spec §8). Verified against a live Chrome 150 capture 2026-07-08.
+///
+/// Why client-level and not just on the login POSTs: MapleLink sends the
+/// client hints + `Accept-Language` on **all** requests, including the
+/// page-fetch GETs (`bflogin/default.aspx` → `Login/Index`). Our GETs used
+/// to go out bare (UA only), so beanfun's risk engine saw a non-browser
+/// page fetch and flagged the session — the downstream `AccountLogin`
+/// reCAPTCHA that MapleLink never triggered on the same account/IP. Making
+/// every request carry the same hints closes that fingerprint gap.
+pub const SEC_CH_UA: &str =
+    "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"";
+
+/// `Accept-Language` sent on every request (client-level), matching a
+/// zh-TW-primary Chrome and MapleLink's default header.
+pub const DEFAULT_ACCEPT_LANGUAGE: &str = "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7";
+
 /// Default per-request timeout. 30 s matches what a human expects before
 /// they give up and hit the button again; long enough for the occasional
 /// slow redirect, short enough that a stuck socket does not freeze the
@@ -473,9 +494,48 @@ fn build_http_client(
         .cookie_provider(cookie_store)
         .timeout(config.timeout)
         .user_agent(&config.user_agent)
+        .default_headers(browser_default_headers())
         .redirect(redirect_policy)
+        // Pin HTTP/1.1. The `http2` reqwest feature is off today (so ALPN never
+        // offers h2), but enabling it elsewhere in the app would silently let
+        // this client negotiate HTTP/2 — whose reqwest `h2` fingerprint is not
+        // Chrome's and, paired with our Chrome UA, is a bot tell that pops a
+        // reCAPTCHA. MapleLink talks HTTP/1.1 for the same reason. Belt-and-
+        // braces so a future feature flip can't regress the login fingerprint.
+        .http1_only()
         .build()
         .map_err(LoginError::Http)
+}
+
+/// Constant browser headers sent on **every** request (client-level), so the
+/// page-fetch GETs (`bflogin/default.aspx`, `Login/Index`, `SendLogin`) carry
+/// the same `sec-ch-ua*` / `Accept-Language` fingerprint as the login POSTs —
+/// matching MapleLink and keeping beanfun's risk engine from flagging the
+/// session on a bare GET. The variable, per-request headers (`Accept`,
+/// `Referer`, `Origin`, `Sec-Fetch-*`, `RequestVerificationToken`, …) are still
+/// added at each call site (see `login::apply_json_headers`), since they differ
+/// by request kind. The User-Agent is set separately via `.user_agent(...)`.
+fn browser_default_headers() -> reqwest::header::HeaderMap {
+    use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT_LANGUAGE};
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        HeaderName::from_static("sec-ch-ua"),
+        HeaderValue::from_static(SEC_CH_UA),
+    );
+    headers.insert(
+        HeaderName::from_static("sec-ch-ua-mobile"),
+        HeaderValue::from_static("?0"),
+    );
+    headers.insert(
+        HeaderName::from_static("sec-ch-ua-platform"),
+        HeaderValue::from_static("\"Windows\""),
+    );
+    headers.insert(
+        ACCEPT_LANGUAGE,
+        HeaderValue::from_static(DEFAULT_ACCEPT_LANGUAGE),
+    );
+    headers
 }
 
 // -----------------------------------------------------------------------------

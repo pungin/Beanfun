@@ -157,13 +157,21 @@ pub async fn account_login(
     let parsed: AccountLoginResponse = parse_step_json(&text, "AccountLogin")?;
 
     // Empty-first escalation. A reCAPTCHA demand takes precedence over the
-    // ResultCode/Result truth table — BUT only when the server actually
-    // asks for the "我不是機器人" check, or sets the `IsRecaptcha` flag on
-    // an empty-first probe (no token sent yet). The flag can also linger
-    // alongside a real error message *after* we already replayed a token
-    // (e.g. `資料驗證錯誤次數已達上限` — the ~15-min IP lock, task spec §8);
-    // treating that as "needs reCAPTCHA" is exactly what looped #313/#315/#318,
-    // so we fall through to surface the error message instead.
+    // ResultCode/Result truth table — BUT only when the login actually
+    // FAILED, and the server either asks for the "我不是機器人" check or sets
+    // the `IsRecaptcha` flag on an empty-first probe (no token sent yet).
+    //
+    // The `step_failed` gate removes the useless pre-password reCAPTCHA: on
+    // `ResultCode` 1 (success / advance-check) or 2 (lock / advance-check-with-
+    // URL) the server accepted the attempt, and a lingering `IsRecaptcha` flag
+    // there is only the
+    // session-level advisory (mirroring `InitLogin`). Popping a widget for it
+    // is the useless pre-password reCAPTCHA. MapleLink guards this the same
+    // way — it only considers reCAPTCHA in its `ResultCode` `_ =>` (non-1/2)
+    // arm. The flag can also linger alongside a real error message *after* we
+    // already replayed a token (e.g. `資料驗證錯誤次數已達上限` — the ~15-min
+    // IP lock, task spec §8); treating that as "needs reCAPTCHA" is exactly
+    // what looped #313/#315/#318, so we fall through to surface the error.
     let msg = parsed.result_message.as_deref().unwrap_or_default();
     let flag = parsed.is_recaptcha
         || parsed
@@ -171,7 +179,8 @@ pub async fn account_login(
             .as_ref()
             .map(|d| d.is_recaptcha)
             .unwrap_or(false);
-    let recaptcha = message_demands_recaptcha(msg) || (flag && captcha.is_empty());
+    let step_failed = !matches!(parsed.result_code.as_deref(), Some("1") | Some("2"));
+    let recaptcha = step_failed && (message_demands_recaptcha(msg) || (flag && captcha.is_empty()));
 
     // Diagnostic (issues #313/#315/#318): the exact server verdict is the
     // only way to tell "token rejected → re-challenge" apart from a real
@@ -358,9 +367,9 @@ mod tests {
     }
 
     /// Recognition of a reCAPTCHA gate the way `account_login` does it at
-    /// runtime (before `classify_outcome`): the robot prompt always
-    /// escalates; the bare `IsRecaptcha` flag only escalates on an
-    /// empty-first probe (`captcha_empty`).
+    /// runtime: only when the login FAILED (`ResultCode` not 1/2) *and* the
+    /// server asks for the "我不是機器人" check, or sets the `IsRecaptcha`
+    /// flag on an empty-first probe (`captcha_empty`).
     fn is_recaptcha_gate(body: &str, captcha_empty: bool) -> bool {
         let p: AccountLoginResponse = serde_json::from_str(body).expect("valid JSON");
         let msg = p.result_message.as_deref().unwrap_or_default();
@@ -369,25 +378,39 @@ mod tests {
                 .as_ref()
                 .map(|d| d.is_recaptcha)
                 .unwrap_or(false);
-        message_demands_recaptcha(msg) || (flag && captcha_empty)
+        let step_failed = !matches!(p.result_code.as_deref(), Some("1") | Some("2"));
+        step_failed && (message_demands_recaptcha(msg) || (flag && captcha_empty))
     }
 
     #[test]
-    fn empty_first_is_recaptcha_flag_escalates() {
-        // No token yet + IsRecaptcha → open the widget.
+    fn empty_first_is_recaptcha_flag_escalates_only_on_failure() {
+        // No token yet + IsRecaptcha on a FAILED login (ResultCode 0) →
+        // open the widget.
         assert!(is_recaptcha_gate(
+            r#"{"IsRecaptcha":true,"ResultCode":"0"}"#,
+            true
+        ));
+        assert!(is_recaptcha_gate(
+            r#"{"ResultData":{"IsRecaptcha":true},"ResultCode":"0"}"#,
+            true
+        ));
+        // The SAME flag on a ResultCode 1 success must NOT escalate —
+        // that is the useless pre-password reCAPTCHA.
+        assert!(!is_recaptcha_gate(
             r#"{"IsRecaptcha":true,"ResultCode":"1"}"#,
             true
         ));
-        assert!(is_recaptcha_gate(
-            r#"{"ResultData":{"IsRecaptcha":true}}"#,
-            true
-        ));
     }
 
     #[test]
-    fn robot_message_always_escalates() {
+    fn robot_message_escalates_only_on_failure() {
+        // A 機器人 prompt on a failed login escalates …
         assert!(is_recaptcha_gate(
+            r#"{"ResultCode":"0","ResultMessage":"請點選「我不是機器人」"}"#,
+            false
+        ));
+        // … but not when ResultCode says the server accepted the attempt.
+        assert!(!is_recaptcha_gate(
             r#"{"ResultCode":"1","ResultMessage":"請點選「我不是機器人」"}"#,
             false
         ));
