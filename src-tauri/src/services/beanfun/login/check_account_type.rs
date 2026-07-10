@@ -334,7 +334,9 @@ mod tests {
     fn robot_message_on_failure_demands_recaptcha() {
         // Even without the flag, a 機器人 message on a failed check escalates.
         assert_eq!(
-            parse(r#"{"ResultCode":0,"Message":"請點選「我不是機器人」","ResultData":{"Captcha":""}}"#),
+            parse(
+                r#"{"ResultCode":0,"Message":"請點選「我不是機器人」","ResultData":{"Captcha":""}}"#
+            ),
             CheckAccountOutcome::RecaptchaRequired
         );
     }

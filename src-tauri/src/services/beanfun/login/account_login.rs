@@ -180,8 +180,7 @@ pub async fn account_login(
             .map(|d| d.is_recaptcha)
             .unwrap_or(false);
     let step_failed = !matches!(parsed.result_code.as_deref(), Some("1") | Some("2"));
-    let recaptcha =
-        step_failed && (message_demands_recaptcha(msg) || (flag && captcha.is_empty()));
+    let recaptcha = step_failed && (message_demands_recaptcha(msg) || (flag && captcha.is_empty()));
 
     // Diagnostic (issues #313/#315/#318): the exact server verdict is the
     // only way to tell "token rejected → re-challenge" apart from a real
