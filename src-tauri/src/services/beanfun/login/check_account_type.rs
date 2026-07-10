@@ -11,12 +11,22 @@
 //! As of 2026-06 the server can gate this POST behind a Google reCAPTCHA
 //! Enterprise challenge. Rather than probing `Login/InitLogin` up front,
 //! we follow an **empty-first** strategy (task spec §1): send an empty
-//! `Captcha` token and inspect the response. When the server signals that
-//! a token is required — `ResultData.IsRecaptcha == true` or a
-//! "機器人"/"我不是機器人" message — we surface
-//! [`CheckAccountOutcome::RecaptchaRequired`] so the caller can solve the
-//! widget on beanfun's own origin and **retry this same step** with the
-//! solved token (which is passed back in via `captcha_token`).
+//! `Captcha` token and inspect the response.
+//!
+//! A reCAPTCHA demand only counts when the step **actually failed**
+//! (`ResultCode != 1`). beanfun echoes `ResultData.IsRecaptcha == true` as
+//! a *session-level advisory* (mirroring `InitLogin`'s risk verdict) even on
+//! a `ResultCode == 1` success — its own login page never reads that field
+//! on `CheckAccountType`, it only checks `ResultCode`. Popping a widget on
+//! that advisory is the "useless pre-password reCAPTCHA": the account
+//! check already succeeded, so we forward the server captcha and proceed.
+//! MapleLink guards this the same way with its `result_code != 1` check.
+//!
+//! When the step *fails* and the server signals a token is required —
+//! `ResultData.IsRecaptcha == true` or a "機器人"/"我不是機器人" message —
+//! we surface [`CheckAccountOutcome::RecaptchaRequired`] so the caller can
+//! solve the widget on beanfun's own origin and **retry this same step**
+//! with the solved token (which is passed back in via `captcha_token`).
 
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +57,17 @@ struct CheckAccountTypeRequest<'a> {
 /// (server-provided passthrough token) and the reCAPTCHA signals.
 #[derive(Deserialize)]
 struct CheckAccountTypeResponse {
+    /// beanfun's success/failure code. `"1"` == success (the account check
+    /// passed); anything else is a failure. Read via the shared JToken-style
+    /// coercion because the server sends it as either an integer or a string.
+    /// Absent → treated as success (matches MapleLink's `.unwrap_or(1)`), so a
+    /// response-shape change never spuriously pops a widget.
+    #[serde(
+        rename = "ResultCode",
+        default,
+        deserialize_with = "deserialize_jtoken_to_string"
+    )]
+    result_code: Option<String>,
     #[serde(
         rename = "Message",
         default,
@@ -137,12 +158,33 @@ pub async fn check_account_type(
     }
 
     let parsed: CheckAccountTypeResponse = parse_step_json(&text, "CheckAccountType")?;
+
+    let succeeded = result_code_is_success(parsed.result_code.as_deref());
+    let is_recaptcha = parsed
+        .result_data
+        .as_ref()
+        .map(|d| d.is_recaptcha)
+        .unwrap_or(false);
+
+    // Diagnostic: the exact server verdict for this step. Parity with
+    // `AccountLogin.Verdict` — it's the only way to see whether beanfun is
+    // genuinely gating the *account* step behind reCAPTCHA (a risk verdict on
+    // our request fingerprint) vs. sailing through like MapleLink on the same
+    // IP. `account` is non-secret; the captcha token itself is never logged.
+    tracing::info!(
+        step = "CheckAccountType.Verdict",
+        account_id = %account,
+        result_code = parsed.result_code.as_deref().unwrap_or(""),
+        succeeded,
+        is_recaptcha,
+        captcha_sent = !captcha_token.is_empty(),
+        message = %truncate_for_log(parsed.message.as_deref().unwrap_or("")),
+        "CheckAccountType server response classified"
+    );
+
     Ok(classify_check_response(
-        parsed
-            .result_data
-            .as_ref()
-            .map(|d| d.is_recaptcha)
-            .unwrap_or(false),
+        succeeded,
+        is_recaptcha,
         parsed.message.as_deref().unwrap_or_default(),
         captcha_token.is_empty(),
         parsed
@@ -152,22 +194,47 @@ pub async fn check_account_type(
     ))
 }
 
+/// Borrow at most ~120 chars of a server message for a log line (won't split
+/// a CJK codepoint). Mirrors the helper in [`super::account_login`].
+fn truncate_for_log(s: &str) -> &str {
+    match s.char_indices().nth(120) {
+        Some((idx, _)) => &s[..idx],
+        None => s,
+    }
+}
+
+/// Whether `CheckAccountType` accepted the account check. `"1"` is beanfun's
+/// success code; a missing code defaults to success (MapleLink's
+/// `.unwrap_or(1)` semantics) so a response-shape change degrades to "proceed"
+/// rather than a spurious reCAPTCHA pop.
+fn result_code_is_success(result_code: Option<&str>) -> bool {
+    match result_code {
+        Some(code) => code == "1",
+        None => true,
+    }
+}
+
 /// Pure mapping from the parsed response fields to a [`CheckAccountOutcome`].
 /// Kept separate so the reCAPTCHA-detection table is unit-testable without
 /// a mock HTTP server.
 ///
-/// Escalates to a reCAPTCHA solve only when the server asks for the
-/// "我不是機器人" check, or sets `IsRecaptcha` on an empty-first probe
-/// (`captcha_empty`). A flag lingering alongside a real error after a token
-/// was already replayed surfaces as the error instead of looping (see
-/// `account_login` for the same rule / the #313/#315/#318 rationale).
+/// A reCAPTCHA solve is only demanded when the step **failed** (`!succeeded`)
+/// *and* the server either asks for the "我不是機器人" check or sets
+/// `IsRecaptcha` on an empty-first probe (`captcha_empty`). On a `ResultCode`
+/// success the server accepted the account check — a lingering `IsRecaptcha`
+/// advisory there is the useless pre-password reCAPTCHA, so we forward
+/// the server captcha and proceed. A flag lingering alongside a real error
+/// after a token was already replayed likewise surfaces as the error instead
+/// of looping (see `account_login` for the same rule / the #313/#315/#318
+/// rationale).
 fn classify_check_response(
+    succeeded: bool,
     is_recaptcha: bool,
     message: &str,
     captcha_empty: bool,
     server_captcha: String,
 ) -> CheckAccountOutcome {
-    if message_demands_recaptcha(message) || (is_recaptcha && captcha_empty) {
+    if !succeeded && (message_demands_recaptcha(message) || (is_recaptcha && captcha_empty)) {
         CheckAccountOutcome::RecaptchaRequired
     } else {
         CheckAccountOutcome::Proceed { server_captcha }
@@ -186,6 +253,7 @@ mod tests {
     fn parse_with(body: &str, captcha_empty: bool) -> CheckAccountOutcome {
         let r: CheckAccountTypeResponse = serde_json::from_str(body).expect("valid JSON");
         classify_check_response(
+            result_code_is_success(r.result_code.as_deref()),
             r.result_data
                 .as_ref()
                 .map(|d| d.is_recaptcha)
@@ -240,18 +308,33 @@ mod tests {
     }
 
     #[test]
-    fn is_recaptcha_flag_demands_recaptcha() {
+    fn is_recaptcha_flag_on_failure_demands_recaptcha() {
+        // The genuine gate: the account check FAILED (ResultCode 0) and the
+        // server flagged IsRecaptcha on our empty-first probe.
         assert_eq!(
-            parse(r#"{"ResultData":{"IsRecaptcha":true}}"#),
+            parse(r#"{"ResultCode":0,"ResultData":{"IsRecaptcha":true}}"#),
             CheckAccountOutcome::RecaptchaRequired
         );
     }
 
     #[test]
-    fn robot_message_demands_recaptcha() {
-        // Even without the flag, a 機器人 message escalates.
+    fn is_recaptcha_flag_on_success_is_the_useless_pre_password_widget() {
+        // ResultCode 1 means the account check succeeded. A lingering
+        // IsRecaptcha advisory must NOT pop a widget — we forward the (here
+        // empty) server captcha and proceed straight to AccountLogin.
         assert_eq!(
-            parse(r#"{"Message":"請點選「我不是機器人」","ResultData":{"Captcha":""}}"#),
+            parse(r#"{"ResultCode":1,"ResultData":{"IsRecaptcha":true,"Captcha":"srv"}}"#),
+            CheckAccountOutcome::Proceed {
+                server_captcha: "srv".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn robot_message_on_failure_demands_recaptcha() {
+        // Even without the flag, a 機器人 message on a failed check escalates.
+        assert_eq!(
+            parse(r#"{"ResultCode":0,"Message":"請點選「我不是機器人」","ResultData":{"Captcha":""}}"#),
             CheckAccountOutcome::RecaptchaRequired
         );
     }
@@ -263,7 +346,7 @@ mod tests {
         // proceed instead of re-opening the widget (#313/#315/#318).
         assert_eq!(
             parse_with(
-                r#"{"Message":"資料驗證錯誤","ResultData":{"IsRecaptcha":true,"Captcha":"X"}}"#,
+                r#"{"ResultCode":0,"Message":"資料驗證錯誤","ResultData":{"IsRecaptcha":true,"Captcha":"X"}}"#,
                 false,
             ),
             CheckAccountOutcome::Proceed {

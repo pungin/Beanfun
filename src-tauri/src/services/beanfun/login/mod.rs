@@ -111,20 +111,18 @@ pub(crate) fn apply_json_headers(
         .header(reqwest::header::REFERER, referer)
         .header("X-Requested-With", "XMLHttpRequest")
         .header("RequestVerificationToken", verification_token)
-        // Modern browser fingerprint (issues #313/#315/#318, task spec §8).
-        // A reCAPTCHA token is solved in a real WebView, but replayed on this
-        // reqwest POST; if the POST doesn't *look* like the same modern
-        // browser, beanfun bot-flags it and rejects the token — eventually
-        // locking the IP for ~15 min ("資料驗證錯誤次數已達上限"). Values
-        // are matched byte-for-byte to a live Chrome 150 capture (2026-07-08)
-        // of a beanfun `login.beanfun.com` POST. The `sec-ch-ua` version MUST
-        // track `client::DEFAULT_USER_AGENT`'s Chrome major (150).
-        .header(
-            "sec-ch-ua",
-            "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"",
-        )
-        .header("sec-ch-ua-mobile", "?0")
-        .header("sec-ch-ua-platform", "\"Windows\"")
+        // Fetch-context headers describing a same-origin `fetch()`/XHR (issues
+        // #313/#315/#318, task spec §8). A reCAPTCHA token is solved in a real
+        // WebView but replayed on this reqwest POST; if the POST doesn't look
+        // like the page's own fetch, beanfun bot-flags it and rejects the token
+        // — eventually locking the IP for ~15 min ("資料驗證錯誤次數已達上限").
+        //
+        // The constant browser fingerprint — `sec-ch-ua*` + `Accept-Language`
+        // — is NOT set here anymore: it moved to the client-level default
+        // headers (`client::browser_default_headers`) so the page-fetch GETs
+        // carry it too, matching MapleLink. Only the per-request-kind headers
+        // live here. The `sec-ch-ua` value still tracks
+        // `client::DEFAULT_USER_AGENT`'s Chrome major (150) via that constant.
         .header("Sec-Fetch-Site", "same-origin")
         .header("Sec-Fetch-Mode", "cors")
         .header("Sec-Fetch-Dest", "empty")
@@ -137,12 +135,7 @@ pub(crate) fn apply_json_headers(
         // AccountLogin, and a plain fetch does NOT add those headers — sending
         // them makes the POST look scripted (curl-like) and bumps the bot-risk
         // score that pops reCAPTCHA. The MapleLink client omits them and logs
-        // in clean on the same IP; this is the one header difference that made
-        // beanfun get reCAPTCHA while MapleLink didn't.
-        .header(
-            reqwest::header::ACCEPT_LANGUAGE,
-            "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-        )
+        // in clean on the same IP.
 }
 
 /// `true` when a login-step `Message` string signals that the server
