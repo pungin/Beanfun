@@ -347,16 +347,28 @@ pub fn run() {
                 .unwrap_or_default()
                 .eq_ignore_ascii_case("true");
 
+        // NOTE: we deliberately do NOT pass `--force-device-scale-factor=1`.
+        //
+        // That flag (from #257's physical-px "DPI-immune" layout) pinned the
+        // webview to 1:1 physical pixels. But #326 switched the router's
+        // `fitWindow` to size the OS window with `LogicalSize`, which Tauri
+        // multiplies by the window's OS scale factor. With the webview still
+        // rendering 1:1, at >100% Windows scaling the window came out
+        // `scale`× larger than the 1:1 content → the reported "window too big,
+        // empty space around the content" bug. Letting the webview's
+        // `devicePixelRatio` follow the OS scale makes `LogicalSize` and the
+        // CSS-px measurements in `fitWindow` (which already assume
+        // `screen.availWidth` is CSS px) consistent, so the window matches the
+        // content at every scaling.
+        //
+        // `--force-text-scale-factor=1` stays: it's an orthogonal accessibility
+        // guard (Windows "Text size") and does not touch device scaling.
         let mut args = vec![
-            // Keep the existing DPI/resolution behaviour: render at
-            // 1:1 physical pixels and let the router's fitWindow
-            // compensate the logical window size.
-            "--force-device-scale-factor=1".to_string(),
-            // Treat Windows Accessibility "Text size" as 100% so
-            // user text-size changes do not inflate app content.
+            // Treat Windows Accessibility "Text size" as 100% so a user's
+            // text-size setting does not inflate the app layout.
             "--force-text-scale-factor=1".to_string(),
         ];
-        tracing::info!("forcing WebView2 device scale and text scale factors");
+        tracing::info!("forcing WebView2 text scale factor to 1 (device scale left to the OS)");
 
         if disable_hw_accel {
             args.push("--disable-gpu".to_string());
