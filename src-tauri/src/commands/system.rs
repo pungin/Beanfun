@@ -241,6 +241,95 @@ pub async fn minimize_main_window<R: tauri::Runtime>(
     Ok(())
 }
 
+/// Filename the `tauri-plugin-window-state` plugin persists the window
+/// position into, under `app_config_dir()` (Windows:
+/// `%APPDATA%\tw.beanfun.app\.window-state.json`). The plugin's documented
+/// default; kept as a named constant so [`reset_window_position`] and the
+/// plugin stay in sync if it is ever customised in `lib.rs`.
+const WINDOW_STATE_FILENAME: &str = ".window-state.json";
+
+/// Reset the main window to a safe, on-screen position.
+///
+/// `tauri-plugin-window-state` persists the window **position** (see
+/// `lib.rs`), so a window dragged off-screen — or stranded by a disconnected
+/// monitor — restores to that bad spot on the next launch. This re-centers the
+/// live window and deletes the saved state file so the next launch also starts
+/// centered.
+///
+/// # Errors
+///
+/// - `system.window_not_found` — the `main` window is not registered.
+/// - `system.reset_window_failed` — `window.center()` returned an OS error.
+#[tauri::command]
+#[specta::specta]
+pub async fn reset_window_position<R: tauri::Runtime>(
+    app_handle: AppHandle<R>,
+) -> Result<(), CommandError> {
+    let win = app_handle.get_webview_window("main").ok_or_else(|| {
+        CommandError::new(
+            "system.window_not_found",
+            "main webview window is not currently registered",
+        )
+    })?;
+    win.center().map_err(|err| {
+        CommandError::new(
+            "system.reset_window_failed",
+            format!("failed to center main window: {err}"),
+        )
+    })?;
+
+    // Best-effort: drop the persisted position so a future launch starts from
+    // the centered spot rather than restoring the old (possibly off-screen)
+    // one. Non-fatal — the live window is already centered, and the plugin
+    // re-saves the good position on the next clean exit.
+    if let Ok(config_dir) = app_handle.path().app_config_dir() {
+        let state_file = config_dir.join(WINDOW_STATE_FILENAME);
+        match std::fs::remove_file(&state_file) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => tracing::warn!(
+                step = "ResetWindow.RemoveState",
+                error = %err,
+                "could not delete persisted window-state file (non-fatal)"
+            ),
+        }
+    }
+    Ok(())
+}
+
+/// Clear the main webview's browsing data (the WebView2 cache on Windows).
+///
+/// WebView2 persists its cache — including the page **zoom factor** — in the
+/// user-data folder (`%APPDATA%\tw.beanfun.app\EBWebView`). A stale/corrupt
+/// cache can leave the UI mis-rendered; this clears it. The app's login
+/// session lives in the backend HTTP client's cookie jar (not the webview), so
+/// this does **not** sign the user out. A restart is recommended so the cleared
+/// state fully takes effect.
+///
+/// # Errors
+///
+/// - `system.window_not_found` — the `main` window is not registered.
+/// - `system.clear_cache_failed` — the WebView2 clear call returned an error.
+#[tauri::command]
+#[specta::specta]
+pub async fn clear_webview2_cache<R: tauri::Runtime>(
+    app_handle: AppHandle<R>,
+) -> Result<(), CommandError> {
+    let win = app_handle.get_webview_window("main").ok_or_else(|| {
+        CommandError::new(
+            "system.window_not_found",
+            "main webview window is not currently registered",
+        )
+    })?;
+    win.clear_all_browsing_data().map_err(|err| {
+        CommandError::new(
+            "system.clear_cache_failed",
+            format!("failed to clear webview browsing data: {err}"),
+        )
+    })?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

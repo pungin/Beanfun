@@ -275,6 +275,10 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         // see the `auth::login_gamepass_start` comment for the full
         // E0401 / runtime-agnostic bindings rationale.
         system::minimize_main_window::<tauri::Wry>,
+        // system (Settings → Maintenance: window/cache recovery). Generic over
+        // `R` for the same `AppHandle<R>` reason as `minimize_main_window`.
+        system::reset_window_position::<tauri::Wry>,
+        system::clear_webview2_cache::<tauri::Wry>,
         // config (P10.3 — D2)
         config::get_config_value,
         config::get_all_config,

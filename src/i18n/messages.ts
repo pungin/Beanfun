@@ -436,6 +436,15 @@ const zhTW = {
     tradLoginTip: '使用傳統登入流程（多次跳轉），\n適合自動登入失敗或無法跳出登入視窗時使用。',
     killPatcherTip: '阻止 beanfun! 啟動的更新程式 (Patcher.aspx) 自動執行。',
     skipPlayWindowTip: '直接啟動遊戲，跳過 Play 視窗確認步驟。',
+    maintenance: '維護',
+    maintenanceTip: '視窗顯示異常（過大、四周空白、位置跑掉）時可嘗試。',
+    resetWindowPosition: '重設視窗位置',
+    resetWindowPositionDone: '視窗位置已重設並置中。',
+    clearWebviewCache: '清理 WebView2 快取',
+    clearWebviewCacheTitle: '清理 WebView2 快取',
+    clearWebviewCacheConfirm:
+      '這會清除 WebView2 的快取與縮放狀態，不會登出你的帳號。清理後建議重新啟動 Beanfun。要繼續嗎？',
+    clearWebviewCacheDone: 'WebView2 快取已清理，建議重新啟動 Beanfun。',
   },
   inAppBrowser: {
     fallbackToSystem: '此網址不在 Beanfun 內建瀏覽器允許清單，將改以系統預設瀏覽器開啟。',
@@ -675,6 +684,15 @@ const zhCN = {
     tradLoginTip: '使用传统登录流程（多次跳转），\n适合自动登录失败或无法跳出登录窗口时使用。',
     killPatcherTip: '阻止 beanfun! 启动的更新程序 (Patcher.aspx) 自动执行。',
     skipPlayWindowTip: '直接启动游戏，跳过 Play 窗口确认步骤。',
+    maintenance: '维护',
+    maintenanceTip: '窗口显示异常（过大、四周空白、位置跑掉）时可尝试。',
+    resetWindowPosition: '重置窗口位置',
+    resetWindowPositionDone: '窗口位置已重置并居中。',
+    clearWebviewCache: '清理 WebView2 缓存',
+    clearWebviewCacheTitle: '清理 WebView2 缓存',
+    clearWebviewCacheConfirm:
+      '这会清除 WebView2 的缓存与缩放状态，不会登出你的账号。清理后建议重新启动 Beanfun。要继续吗？',
+    clearWebviewCacheDone: 'WebView2 缓存已清理，建议重新启动 Beanfun。',
   },
   inAppBrowser: {
     fallbackToSystem: '此网址不在 Beanfun 内建浏览器允许列表，将改以系统默认浏览器开启。',
@@ -926,6 +944,15 @@ const enUS = {
       'Use the traditional multi-redirect login flow.\nHandy when auto-login fails or the login window does not appear.',
     killPatcherTip: 'Prevent the beanfun! launcher (Patcher.aspx) from auto-running.',
     skipPlayWindowTip: 'Launch the game directly, skipping the Play window confirmation step.',
+    maintenance: 'Maintenance',
+    maintenanceTip: 'Try these if the window looks wrong (too large, empty space, off-screen).',
+    resetWindowPosition: 'Reset window position',
+    resetWindowPositionDone: 'Window position reset and centered.',
+    clearWebviewCache: 'Clear WebView2 cache',
+    clearWebviewCacheTitle: 'Clear WebView2 cache',
+    clearWebviewCacheConfirm:
+      'This clears the WebView2 cache and zoom state. It will not sign you out. A Beanfun restart is recommended afterwards. Continue?',
+    clearWebviewCacheDone: 'WebView2 cache cleared. Restarting Beanfun is recommended.',
   },
   inAppBrowser: {
     fallbackToSystem:

@@ -1325,6 +1325,51 @@ async minimizeMainWindow() : Promise<Result<null, CommandError>> {
 }
 },
 /**
+ * Reset the main window to a safe, on-screen position.
+ * 
+ * `tauri-plugin-window-state` persists the window **position** (see
+ * `lib.rs`), so a window dragged off-screen — or stranded by a disconnected
+ * monitor — restores to that bad spot on the next launch. This re-centers the
+ * live window and deletes the saved state file so the next launch also starts
+ * centered.
+ * 
+ * # Errors
+ * 
+ * - `system.window_not_found` — the `main` window is not registered.
+ * - `system.reset_window_failed` — `window.center()` returned an OS error.
+ */
+async resetWindowPosition() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reset_window_position") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Clear the main webview's browsing data (the WebView2 cache on Windows).
+ * 
+ * WebView2 persists its cache — including the page **zoom factor** — in the
+ * user-data folder (`%APPDATA%\tw.beanfun.app\EBWebView`). A stale/corrupt
+ * cache can leave the UI mis-rendered; this clears it. The app's login
+ * session lives in the backend HTTP client's cookie jar (not the webview), so
+ * this does **not** sign the user out. A restart is recommended so the cleared
+ * state fully takes effect.
+ * 
+ * # Errors
+ * 
+ * - `system.window_not_found` — the `main` window is not registered.
+ * - `system.clear_cache_failed` — the WebView2 clear call returned an error.
+ */
+async clearWebview2Cache() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_webview2_cache") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Read a single config value by `key`, falling back to `""` when
  * the file is missing / unreadable / the key is absent.
  * 

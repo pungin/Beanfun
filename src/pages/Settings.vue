@@ -118,10 +118,13 @@ import {
 } from 'element-plus'
 import {
   ArrowLeft,
+  Delete,
   FolderOpened,
   InfoFilled,
   Operation,
+  Refresh,
   Setting as SettingIcon,
+  Tools,
   User,
 } from '@element-plus/icons-vue'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
@@ -640,6 +643,41 @@ function handleBack(): void {
   void router.push('/login')
 }
 
+/* --------------- Maintenance — window / cache recovery --------------- */
+
+/**
+ * Re-center the OS window and clear the persisted position. Recovery for a
+ * window that restored off-screen or at a bad spot (the `POSITION`-only
+ * `tauri-plugin-window-state` can strand it there). `safeInvoke` toasts on
+ * failure; we add a success toast so the click has visible feedback even
+ * though the window jump is usually obvious.
+ */
+async function handleResetWindowPosition(): Promise<void> {
+  const result = await safeInvoke(commands.resetWindowPosition())
+  if (result.ok) ElMessage.success(t('settings.resetWindowPositionDone'))
+}
+
+/**
+ * Clear the WebView2 cache (incl. the persisted zoom that could mis-size the
+ * window). Confirmed first because a restart is recommended afterwards. Does
+ * not sign the user out — the login session lives in the backend HTTP client,
+ * not the webview.
+ */
+async function handleClearWebviewCache(): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      t('settings.clearWebviewCacheConfirm'),
+      t('settings.clearWebviewCacheTitle'),
+      { type: 'warning' },
+    )
+  } catch {
+    // User dismissed the confirm dialog — no-op.
+    return
+  }
+  const result = await safeInvoke(commands.clearWebview2Cache())
+  if (result.ok) ElMessage.success(t('settings.clearWebviewCacheDone'))
+}
+
 /* --------------- mount --------------- */
 
 onMounted(() => {
@@ -930,6 +968,35 @@ onMounted(() => {
           <p class="settings__empty-text">{{ t('settings.gameSectionEmpty') }}</p>
         </section>
 
+        <!-- Maintenance section — window / cache recovery. Not a WPF-parity
+             section: new troubleshooting controls for the "window too big /
+             empty space / off-screen" reports. -->
+        <section class="settings__section bf-glass-panel" data-test="settings-maintenance-section">
+          <header class="settings__section-header">
+            <el-icon><Tools /></el-icon>
+            <span>{{ t('settings.maintenance') }}</span>
+          </header>
+          <p class="settings__empty-text">{{ t('settings.maintenanceTip') }}</p>
+          <div class="settings__maintenance-actions">
+            <el-button
+              class="bf-btn-secondary"
+              data-test="settings-reset-window"
+              @click="handleResetWindowPosition"
+            >
+              <el-icon><Refresh /></el-icon>
+              <span>{{ t('settings.resetWindowPosition') }}</span>
+            </el-button>
+            <el-button
+              class="bf-btn-secondary"
+              data-test="settings-clear-webview-cache"
+              @click="handleClearWebviewCache"
+            >
+              <el-icon><Delete /></el-icon>
+              <span>{{ t('settings.clearWebviewCache') }}</span>
+            </el-button>
+          </div>
+        </section>
+
         <!-- Footer: Back button -->
         <footer class="settings__footer">
           <el-button
@@ -1117,6 +1184,19 @@ onMounted(() => {
 
 .settings__inline-btn {
   align-self: flex-start;
+}
+
+.settings__maintenance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.settings__maintenance-actions .el-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-left: 0;
 }
 
 .settings__game-path-input :deep(.el-input__inner) {
