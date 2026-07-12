@@ -84,7 +84,12 @@ import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { LogicalSize } from '@tauri-apps/api/dpi'
 
 import { registerSessionExpiredHandler } from '../services/invoke'
-import { isWindowFitSuspended } from '../services/windowFit'
+import {
+  isWindowFitSuspended,
+  setWindowScaleFactor,
+  setAppliedWebviewZoom,
+  textScaleFactor,
+} from '../services/windowFit'
 
 /**
  * Resize the Tauri window to the given **logical** (DPI-independent)
@@ -101,9 +106,16 @@ import { isWindowFitSuspended } from '../services/windowFit'
  *
  * Exported so individual pages can call it on mount when their content
  * height differs from the route meta default.
+ *
+ * The dimensions are treated as **CSS px** and multiplied by the system
+ * text scale (see {@link textScaleFactor}) so the window still contains
+ * its content when Windows Accessibility "Text size" is above 100%.
  */
 export function resizeWindow(width: number, height: number): void {
-  void getCurrentWindow().setSize(new LogicalSize(Math.ceil(width), Math.ceil(height)))
+  const scale = textScaleFactor(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
+  void getCurrentWindow().setSize(
+    new LogicalSize(Math.ceil(width * scale), Math.ceil(height * scale)),
+  )
 }
 
 import LoginPage from '../pages/LoginPage.vue'
@@ -563,6 +575,29 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   let observer: ResizeObserver | null = null
   let pendingFrame: number | null = null
 
+  /*
+   * Track the OS window scale factor so `textScaleFactor()` can split
+   * `devicePixelRatio` (= DPI scale × text scale × zoom) into its parts.
+   * A text-scale change re-fits without extra wiring: it changes the
+   * webview's rasterization scale, which shrinks the CSS-px viewport,
+   * which fires the `resize` listener below. `typeof` guards keep the
+   * jsdom window mock (no scaleFactor/onScaleChanged) working.
+   */
+  if (typeof appWindow.scaleFactor === 'function') {
+    void appWindow
+      .scaleFactor()
+      .then(setWindowScaleFactor)
+      .catch(() => {})
+  }
+  if (typeof appWindow.onScaleChanged === 'function') {
+    void appWindow
+      .onScaleChanged((event) => {
+        setWindowScaleFactor(event.payload.scaleFactor)
+        scheduleOnNextPaint(fitWindow)
+      })
+      .catch(() => {})
+  }
+
   /**
    * Available work area (screen minus taskbar) in **logical / CSS px**.
    *
@@ -629,10 +664,17 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     const capH = Math.max(300, Math.floor(area.h * 0.95))
     const zoom = Math.min(1, capW / naturalW, capH / naturalH)
 
-    const wLogical = Math.max(320, Math.round(naturalW * zoom))
-    const hLogical = Math.max(300, Math.round(naturalH * zoom))
+    // CSS px → Tauri logical px. At text size 100% this is 1 and the
+    // sizes pass through unchanged; at 130% the window grows 1.3× so the
+    // text-scaled content still fits (the accessibility regression from
+    // dropping #257's --force-device-scale-factor in #337).
+    const cssToLogical = textScaleFactor(window.devicePixelRatio || 1)
+
+    const wLogical = Math.max(320, Math.round(naturalW * zoom * cssToLogical))
+    const hLogical = Math.max(300, Math.round(naturalH * zoom * cssToLogical))
     root.style.height = '100vh'
     void getCurrentWebview().setZoom(zoom)
+    setAppliedWebviewZoom(zoom)
     void appWindow.setSize(new LogicalSize(wLogical, hLogical))
   }
 

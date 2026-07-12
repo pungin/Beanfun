@@ -347,28 +347,30 @@ pub fn run() {
                 .unwrap_or_default()
                 .eq_ignore_ascii_case("true");
 
-        // NOTE: we deliberately do NOT pass `--force-device-scale-factor=1`.
+        // NOTE: we deliberately do NOT pass any scale-related browser flags.
         //
-        // That flag (from #257's physical-px "DPI-immune" layout) pinned the
-        // webview to 1:1 physical pixels. But #326 switched the router's
-        // `fitWindow` to size the OS window with `LogicalSize`, which Tauri
-        // multiplies by the window's OS scale factor. With the webview still
-        // rendering 1:1, at >100% Windows scaling the window came out
-        // `scale`× larger than the 1:1 content → the reported "window too big,
-        // empty space around the content" bug. Letting the webview's
-        // `devicePixelRatio` follow the OS scale makes `LogicalSize` and the
-        // CSS-px measurements in `fitWindow` (which already assume
-        // `screen.availWidth` is CSS px) consistent, so the window matches the
-        // content at every scaling.
+        // `--force-device-scale-factor=1` (from #257's physical-px
+        // "DPI-immune" layout) pinned the webview to 1:1 physical pixels.
+        // But #326 switched the router's `fitWindow` to size the OS window
+        // with `LogicalSize`, which Tauri multiplies by the window's OS
+        // scale factor. With the webview still rendering 1:1, at >100%
+        // Windows scaling the window came out `scale`× larger than the 1:1
+        // content → the reported "window too big, empty space around the
+        // content" bug (#337). Letting the webview's `devicePixelRatio`
+        // follow the OS scale makes `LogicalSize` and the CSS-px
+        // measurements in `fitWindow` consistent at every display scaling.
         //
-        // `--force-text-scale-factor=1` stays: it's an orthogonal accessibility
-        // guard (Windows "Text size") and does not touch device scaling.
-        let mut args = vec![
-            // Treat Windows Accessibility "Text size" as 100% so a user's
-            // text-size setting does not inflate the app layout.
-            "--force-text-scale-factor=1".to_string(),
-        ];
-        tracing::info!("forcing WebView2 text scale factor to 1 (device scale left to the OS)");
+        // `--force-text-scale-factor=1` (which #337 kept as a "Text size"
+        // guard) is NOT a real Chromium switch — it matches nothing in the
+        // Chromium source and was silently ignored, so Windows
+        // Accessibility "Text size" ≥ 130% clipped the app again. The text
+        // scale reaches the webview via WebView2's rasterization scale
+        // (monitor DPI × text scale, surfaced as `devicePixelRatio`) and is
+        // now compensated in the frontend resizer instead: `fitWindow`
+        // multiplies its `LogicalSize` by the measured text-scale ratio so
+        // the window grows to fit the enlarged text rather than fighting it
+        // (see src/services/windowFit.ts).
+        let mut args: Vec<String> = Vec::new();
 
         if disable_hw_accel {
             args.push("--disable-gpu".to_string());
@@ -376,7 +378,9 @@ pub fn run() {
             tracing::info!("hardware acceleration disabled via Config.xml");
         }
 
-        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args.join(" "));
+        if !args.is_empty() {
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args.join(" "));
+        }
     }
 
     let app_state = AppState::new(storage_root);
