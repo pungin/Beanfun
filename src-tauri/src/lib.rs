@@ -632,7 +632,7 @@ pub fn run() {
 mod webview_dir_tests {
     use super::sweep_stale_webview_dirs;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     /// Fresh, empty base directory unique to one test (parallel-safe).
     fn temp_base(tag: &str) -> PathBuf {
@@ -644,7 +644,7 @@ mod webview_dir_tests {
         base
     }
 
-    fn make_profile(base: &PathBuf, name: &str) -> PathBuf {
+    fn make_profile(base: &Path, name: &str) -> PathBuf {
         let dir = base.join(name);
         fs::create_dir_all(&dir).expect("create profile dir");
         fs::write(dir.join("data.bin"), b"x").expect("write profile file");
