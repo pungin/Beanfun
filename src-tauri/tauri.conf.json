@@ -10,16 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Beanfun",
-        "width": 560,
-        "height": 480,
-        "decorations": false,
-        "transparent": true,
-        "resizable": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
