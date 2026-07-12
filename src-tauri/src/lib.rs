@@ -120,6 +120,142 @@ fn resolve_storage_root() -> Result<PathBuf, CommandError> {
     Ok(std::env::temp_dir().join("Beanfun"))
 }
 
+/// Per-instance WebView2 user data folders (issue #340).
+///
+/// # Why not the Tauri default (one shared folder)
+///
+/// Tauri's default puts every instance's webview in the same user data
+/// folder (`%LOCALAPPDATA%\tw.beanfun.app\EBWebView`). All WebView2
+/// instances sharing a user data folder share **one** browser process,
+/// and creating a `CoreWebView2Environment` against a folder whose
+/// browser process is already running fails with
+/// `HRESULT_FROM_WIN32(ERROR_INVALID_STATE)` whenever the new
+/// environment doesn't match the running one exactly — different
+/// environment options *or* a different WebView2 Runtime version.
+///
+/// That mismatch is exactly what multi-instance users hit (#340): with
+/// several launchers left running, the Evergreen WebView2 Runtime
+/// auto-updates in the background (or the user updates Beanfun and
+/// launches a build with different browser args), and every launcher
+/// started *after* that fails webview creation. Because the main window
+/// is `transparent: true` + `decorations: false`, a window with no
+/// webview paints nothing — the process shows up in Task Manager but no
+/// UI ever appears. Cross-process sharing is fragile even without a
+/// version skew (MicrosoftEdge/WebView2Feedback#4751, closed
+/// "not planned").
+///
+/// Nothing in this app needs webview persistence: settings live in
+/// `Config.xml` via the backend (`pinia-plugin-persistedstate` is
+/// deliberately not installed), and login cookies live in the backend
+/// HTTP client's jar and are re-seeded into in-app browser windows per
+/// launch. So each instance gets its own throwaway folder —
+/// `%LOCALAPPDATA%\tw.beanfun.app\webview-instances\<pid>` — and no two
+/// Beanfun processes ever negotiate over a shared browser process.
+///
+/// # Cleanup protocol
+///
+/// Folders are reclaimed on the next boot by [`sweep_stale_webview_dirs`]
+/// rather than on exit (an exiting instance can't reliably delete its
+/// own folder while its browser subprocesses are still shutting down).
+/// Liveness is detected with the filesystem, not the PID table (PIDs
+/// get reused): a directory is only deleted after it has been
+/// **renamed** away, and Windows refuses to rename a directory while
+/// any file inside is open. A live instance always holds an open handle
+/// inside its folder — the `.instance-lock` file created by
+/// [`prepare_webview_data_dir`] the moment the folder exists, before
+/// WebView2 opens its own files — so the rename test can never claim a
+/// running instance's profile. If a rename succeeds but the delete then
+/// fails halfway, the leftover keeps its `.stale` name and the delete
+/// is simply retried on every subsequent boot.
+#[cfg(target_os = "windows")]
+fn webview_instance_base_dir() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA")
+        .filter(|s| !s.is_empty())
+        .map(|d| {
+            PathBuf::from(d)
+                .join("tw.beanfun.app")
+                .join("webview-instances")
+        })
+}
+
+/// Create (and lock) this process's WebView2 user data folder.
+///
+/// Returns `None` — falling back to Tauri's shared default folder — if
+/// `%LOCALAPPDATA%` is unresolvable or the directory can't be created;
+/// a launcher that boots like 6.0.5 did is better than one that
+/// doesn't boot at all. See [`webview_instance_base_dir`] for the full
+/// rationale.
+#[cfg(target_os = "windows")]
+fn prepare_webview_data_dir() -> Option<PathBuf> {
+    let dir = webview_instance_base_dir()?.join(std::process::id().to_string());
+    if let Err(err) = std::fs::create_dir_all(&dir) {
+        tracing::warn!(
+            "could not create per-instance webview dir {}: {err}; falling back to the shared default",
+            dir.display()
+        );
+        return None;
+    }
+    // Hold an open handle inside the folder for the whole process
+    // lifetime so a concurrently booting instance's sweep can never
+    // rename this folder out from under us (Windows fails a directory
+    // rename while any file within is open). Leaked deliberately — the
+    // OS closes it at process exit, which is exactly the lock's scope.
+    match std::fs::File::create(dir.join(".instance-lock")) {
+        Ok(guard) => {
+            Box::leak(Box::new(guard));
+        }
+        Err(err) => tracing::warn!(
+            "could not create .instance-lock in {}: {err} (sweep may race a cold boot)",
+            dir.display()
+        ),
+    }
+    Some(dir)
+}
+
+/// Best-effort removal of webview folders left behind by dead instances.
+///
+/// Every directory under `base` other than `own_pid`'s is renamed to
+/// `<name>.stale` first; only when the rename succeeds (= no file inside
+/// is open ⇒ no live instance) is it deleted. Directories already
+/// carrying a `.stale` suffix are leftovers from a previously
+/// interrupted delete and are retried directly. Runs on a background
+/// thread at boot — see [`webview_instance_base_dir`] for the protocol.
+#[cfg(target_os = "windows")]
+fn sweep_stale_webview_dirs(base: &Path, own_pid: u32) {
+    let Ok(entries) = std::fs::read_dir(base) else {
+        return;
+    };
+    let own_name = own_pid.to_string();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name == own_name {
+            continue;
+        }
+        let doomed = if name.ends_with(".stale") {
+            path
+        } else {
+            let renamed = base.join(format!("{name}.stale"));
+            match std::fs::rename(&path, &renamed) {
+                Ok(()) => renamed,
+                // Rename refused ⇒ some file inside is open ⇒ a live
+                // instance owns this folder (or a previous `.stale`
+                // target still exists — retried after that's gone).
+                Err(_) => continue,
+            }
+        };
+        if let Err(err) = std::fs::remove_dir_all(&doomed) {
+            tracing::debug!(
+                "webview dir sweep: could not remove {}: {err} (will retry next boot)",
+                doomed.display()
+            );
+        }
+    }
+}
+
 /// Detects whether the host is running Windows 10 (build number < 22000).
 ///
 /// Used by [`run`] as a gate for the `set_shadow(false)` workaround for
@@ -383,6 +519,20 @@ pub fn run() {
         }
     }
 
+    // Per-instance WebView2 profile (issue #340) — see
+    // `webview_instance_base_dir` for why instances must not share one.
+    // The sweep of dead instances' folders runs off the boot path; it
+    // never touches live folders (rename-guard) or our own (pid guard).
+    #[cfg(target_os = "windows")]
+    let webview_data_dir = prepare_webview_data_dir();
+    #[cfg(target_os = "windows")]
+    if let Some(base) = webview_instance_base_dir() {
+        let own_pid = std::process::id();
+        std::thread::spawn(move || sweep_stale_webview_dirs(&base, own_pid));
+    }
+    #[cfg(not(target_os = "windows"))]
+    let webview_data_dir: Option<PathBuf> = None;
+
     let app_state = AppState::new(storage_root);
     let specta_builder = commands::build_specta_builder::<tauri::Wry>();
     export_specta_bindings(&specta_builder);
@@ -421,6 +571,23 @@ pub fn run() {
         .manage(tray::TrayState(tray_state_arc))
         .invoke_handler(invoke_handler)
         .setup(move |app| {
+            // The main window is built here instead of `tauri.conf.json`
+            // so the per-instance WebView2 data directory (issue #340)
+            // can be injected — the static config can't carry a
+            // PID-dependent path. Everything else mirrors the old
+            // config entry verbatim (label defaults to "main" there).
+            let mut win_builder =
+                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+                    .title("Beanfun")
+                    .inner_size(560.0, 480.0)
+                    .decorations(false)
+                    .transparent(true)
+                    .resizable(false);
+            if let Some(dir) = webview_data_dir.clone() {
+                win_builder = win_builder.data_directory(dir);
+            }
+            win_builder.build()?;
+
             if let Some(tray_id) = tray::build_tray(app) {
                 *tray_state_for_setup.lock().unwrap() = Some(tray_id);
             }
@@ -459,4 +626,95 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod webview_dir_tests {
+    use super::sweep_stale_webview_dirs;
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// Fresh, empty base directory unique to one test (parallel-safe).
+    fn temp_base(tag: &str) -> PathBuf {
+        let base = std::env::temp_dir()
+            .join("beanfun-webview-sweep-tests")
+            .join(format!("{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).expect("create temp base");
+        base
+    }
+
+    fn make_profile(base: &PathBuf, name: &str) -> PathBuf {
+        let dir = base.join(name);
+        fs::create_dir_all(&dir).expect("create profile dir");
+        fs::write(dir.join("data.bin"), b"x").expect("write profile file");
+        dir
+    }
+
+    #[test]
+    fn removes_unlocked_stale_profile() {
+        let base = temp_base("unlocked");
+        let dead = make_profile(&base, "12345");
+
+        sweep_stale_webview_dirs(&base, 99999);
+
+        assert!(!dead.exists(), "dead instance profile must be removed");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn keeps_own_profile() {
+        let base = temp_base("own");
+        let own_pid = std::process::id();
+        let own = make_profile(&base, &own_pid.to_string());
+
+        sweep_stale_webview_dirs(&base, own_pid);
+
+        assert!(own.exists(), "own profile must never be swept");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn keeps_profile_with_open_file() {
+        // A live instance always holds an open handle inside its folder
+        // (the `.instance-lock`); Windows then refuses the rename that
+        // gates deletion, so the sweep must leave the folder alone.
+        let base = temp_base("locked");
+        let live = make_profile(&base, "23456");
+        let _guard = fs::File::create(live.join(".instance-lock")).expect("lock");
+
+        sweep_stale_webview_dirs(&base, 99999);
+
+        assert!(live.exists(), "profile with an open handle must survive");
+        drop(_guard);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn retries_leftover_stale_dirs() {
+        // A previous sweep renamed the folder but died before deleting
+        // it; the next sweep must pick the `.stale` leftover up directly.
+        let base = temp_base("leftover");
+        let leftover = make_profile(&base, "34567.stale");
+
+        sweep_stale_webview_dirs(&base, 99999);
+
+        assert!(!leftover.exists(), "renamed leftovers must be retried");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn ignores_plain_files_in_base() {
+        let base = temp_base("files");
+        let file = base.join("not-a-dir.txt");
+        fs::write(&file, b"x").expect("write");
+
+        sweep_stale_webview_dirs(&base, 99999);
+
+        assert!(
+            file.exists(),
+            "non-directory entries are not the sweep's business"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
 }
