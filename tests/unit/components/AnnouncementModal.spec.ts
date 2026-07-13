@@ -19,18 +19,17 @@ vi.mock('../../../src/types/bindings', () => ({
 import { commands } from '../../../src/types/bindings'
 import { createAppI18n } from '../../../src/i18n'
 import { useConfigStore } from '../../../src/stores/config'
+import { ANNOUNCEMENT_ID, ANNOUNCEMENT_FORCED_SECONDS } from '../../../src/constants/announcement'
 import AnnouncementModal from '../../../src/components/AnnouncementModal.vue'
 
 const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ status: 'ok', data })
 
-const mockVersion = vi.mocked(commands.version)
 const mockOpenUrl = vi.mocked(commands.openUrl)
 const mockSetConfig = vi.mocked(commands.setConfig)
 
 const SEEN_KEY = 'announcementSeenVersion'
-/** Forced-read countdown in ms — mirrors READ_SECONDS (30) in the SUT. */
-const READ_MS = 30_000
-const VERSION = { app: '6.0.3', tauri: '2.0.0' } as Awaited<ReturnType<typeof commands.version>>
+/** Forced-read countdown in ms. */
+const READ_MS = ANNOUNCEMENT_FORCED_SECONDS * 1000
 
 let pinia: ReturnType<typeof createPinia>
 
@@ -53,7 +52,6 @@ describe('AnnouncementModal', () => {
     // starts from an unacknowledged state.
     localStorage.clear()
     for (const fn of Object.values(commands) as ReturnType<typeof vi.fn>[]) fn.mockReset()
-    mockVersion.mockResolvedValue(VERSION)
     mockOpenUrl.mockReturnValue(ok(null))
     mockSetConfig.mockReturnValue(ok(null))
   })
@@ -62,7 +60,7 @@ describe('AnnouncementModal', () => {
     vi.useRealTimers()
   })
 
-  it('shows on first launch when the version has not been acknowledged', async () => {
+  it('shows on first launch when the announcement has not been acknowledged', async () => {
     const wrapper = mountModal()
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
@@ -70,7 +68,7 @@ describe('AnnouncementModal', () => {
 
   it('does not auto-show when acknowledged, but offers the re-open chip', async () => {
     const config = useConfigStore()
-    config.entries[SEEN_KEY] = VERSION.app
+    config.entries[SEEN_KEY] = ANNOUNCEMENT_ID
     const wrapper = mountModal()
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
@@ -79,7 +77,7 @@ describe('AnnouncementModal', () => {
 
   it('re-opens in review mode (no countdown) when the chip is clicked', async () => {
     const config = useConfigStore()
-    config.entries[SEEN_KEY] = VERSION.app
+    config.entries[SEEN_KEY] = ANNOUNCEMENT_ID
     const wrapper = mountModal()
     await flushPromises()
 
@@ -102,7 +100,7 @@ describe('AnnouncementModal', () => {
 
   it('keeps the re-open banner permanent (no session-hide control)', async () => {
     const config = useConfigStore()
-    config.entries[SEEN_KEY] = VERSION.app
+    config.entries[SEEN_KEY] = ANNOUNCEMENT_ID
     const wrapper = mountModal()
     await flushPromises()
 
@@ -111,11 +109,33 @@ describe('AnnouncementModal', () => {
     expect(wrapper.find('[data-testid="announcement-banner-hide"]').exists()).toBe(false)
   })
 
-  it('treats the version as seen when only localStorage records it (Config.xml wiped)', async () => {
+  it('treats a legacy app-version value as seen (pre-ID builds, no re-force on update)', async () => {
+    // Builds before the ID mechanism stored the acknowledged APP VERSION.
+    // Everyone who acknowledged any of those versions read the current
+    // (issue #323) notice, so upgrading must not force them again.
+    const config = useConfigStore()
+    config.entries[SEEN_KEY] = '6.0.5'
+    const wrapper = mountModal()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
+  })
+
+  it('forces the read when the stored value is a different announcement ID', async () => {
+    // A previously published (hypothetical) announcement was read, but
+    // the shipped ID has since been bumped — the new notice must force.
+    const config = useConfigStore()
+    config.entries[SEEN_KEY] = '2020-01-some-older-announcement'
+    const wrapper = mountModal()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
+  })
+
+  it('treats the announcement as seen when only localStorage records it (Config.xml wiped)', async () => {
     // Config.xml has no seen entry, but localStorage does — either store
     // alone must suppress the forced read so hand-editing one file can't
     // re-trigger the countdown on the next launch.
-    localStorage.setItem(SEEN_KEY, VERSION.app)
+    localStorage.setItem(SEEN_KEY, ANNOUNCEMENT_ID)
     const wrapper = mountModal()
     await flushPromises()
 
@@ -123,7 +143,7 @@ describe('AnnouncementModal', () => {
     expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
   })
 
-  it('mirrors the acknowledged version into localStorage on forced dismiss', async () => {
+  it('mirrors the acknowledged ID into localStorage on forced dismiss', async () => {
     const wrapper = mountModal()
     await flushPromises()
 
@@ -132,7 +152,7 @@ describe('AnnouncementModal', () => {
     await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
     await flushPromises()
 
-    expect(localStorage.getItem(SEEN_KEY)).toBe(VERSION.app)
+    expect(localStorage.getItem(SEEN_KEY)).toBe(ANNOUNCEMENT_ID)
   })
 
   it('disables dismiss during the forced-read countdown, then enables it', async () => {
@@ -146,7 +166,7 @@ describe('AnnouncementModal', () => {
     expect((btn().element as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('persists the version and hides on dismiss (after the countdown)', async () => {
+  it('persists the ID and hides on dismiss (after the countdown)', async () => {
     const wrapper = mountModal()
     await flushPromises()
 
@@ -155,7 +175,7 @@ describe('AnnouncementModal', () => {
     await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
     await flushPromises()
 
-    expect(commands.setConfig).toHaveBeenCalledWith(SEEN_KEY, VERSION.app)
+    expect(commands.setConfig).toHaveBeenCalledWith(SEEN_KEY, ANNOUNCEMENT_ID)
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
   })
 
@@ -172,8 +192,8 @@ describe('AnnouncementModal', () => {
 
   it('waits for Config.xml to load before the seen-check (no premature forced read)', async () => {
     // Regression: the seen-check used to run on mount before the config
-    // cache was populated, so an already-acknowledged version read as
-    // unseen and re-forced the 30s read on every launch.
+    // cache was populated, so an already-acknowledged announcement read
+    // as unseen and re-forced the 30s read on every launch.
     const config = useConfigStore()
     config.loaded = false // still booting; cache is empty
     const wrapper = mountModal()
@@ -181,8 +201,8 @@ describe('AnnouncementModal', () => {
     // Must not force the read while the cache is still loading.
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
 
-    // loadAll() resolves — the acknowledged version lands in the cache.
-    config.entries[SEEN_KEY] = VERSION.app
+    // loadAll() resolves — the acknowledged ID lands in the cache.
+    config.entries[SEEN_KEY] = ANNOUNCEMENT_ID
     config.loaded = true
     await flushPromises()
 

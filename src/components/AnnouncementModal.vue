@@ -4,23 +4,31 @@
  *
  * # Behaviour (per the request)
  *
- * - **Per-update, first-launch forced read.** On first launch after an
- *   update (current app version ≠ the version stored in Config.xml under
- *   {@link SEEN_KEY}) the notice pops automatically and its only button is
- *   disabled for a {@link READ_SECONDS}-second countdown, after which it
- *   becomes "read + don't show again" and persists the version.
+ * - **Per-announcement forced read.** On first launch where the stored
+ *   acknowledgement differs from {@link ANNOUNCEMENT_ID} (a content
+ *   revision string, NOT the app version — see
+ *   `src/constants/announcement.ts`) the notice pops automatically and
+ *   its only button is disabled for an
+ *   {@link ANNOUNCEMENT_FORCED_SECONDS}-second countdown, after which it
+ *   becomes "read + don't show again" and persists the ID. Updating the
+ *   app without bumping the ID therefore never re-forces the read;
+ *   publishing a new announcement (bumping the ID) forces it exactly
+ *   once for everyone.
  * - **Bigger window while shown.** The app's window is normally sized for a
  *   single form (e.g. the login page); showing the notice temporarily grows
  *   the OS window so the announcement isn't crammed, and restores the
  *   previous size on close.
  * - **Re-openable afterwards, permanently.** Once acknowledged (or on any
- *   later launch of the same version) a slim full-width banner sits just
- *   under the title bar so the user can re-open and re-read the notice at
- *   will — always without the forced countdown. The banner is permanent
- *   (no dismiss) and reserves its own strip so it never overlaps the page.
- * - **Robust "seen" state.** The acknowledged version is stored in both
+ *   later launch of the same announcement) a slim full-width banner sits
+ *   just under the title bar so the user can re-open and re-read the
+ *   notice at will — always without the forced countdown. The banner is
+ *   permanent (no dismiss) and reserves its own strip so it never
+ *   overlaps the page.
+ * - **Robust "seen" state.** The acknowledged ID is stored in both
  *   Config.xml and WebView localStorage; either one counts as seen, so
- *   hand-wiping one store doesn't re-trigger the forced read.
+ *   hand-wiping one store doesn't re-trigger the forced read. Values
+ *   written by pre-ID builds (app versions like `"6.0.5"`) still count
+ *   as seen for the current notice — see `isAnnouncementSeenValue`.
  *
  * Mounted once at the app root ({@link App.vue}) so it overlays whatever
  * route is active.
@@ -35,21 +43,26 @@ import { commands } from '../types/bindings'
 import { safeInvoke } from '../services/invoke'
 import { setWindowFitSuspended } from '../services/windowFit'
 import { useConfigStore } from '../stores/config'
+import {
+  ANNOUNCEMENT_FORCED_SECONDS,
+  ANNOUNCEMENT_ID,
+  ANNOUNCEMENT_MAPLELINK_URL,
+  ANNOUNCEMENT_MORE_INFO_URL,
+  isAnnouncementSeenValue,
+} from '../constants/announcement'
 
-/** Seconds the user must wait before the dismiss button enables. */
-const READ_SECONDS = 30
 /**
- * Key holding the last app version the user acknowledged. Written to
- * BOTH Config.xml and WebView localStorage; "seen" if *either* matches
- * (see {@link isSeen}). Two independent stores means hand-deleting one
- * (e.g. editing Config.xml) doesn't silently force the forced-read again.
+ * Key holding the acknowledged announcement ID. Written to BOTH
+ * Config.xml and WebView localStorage; "seen" if *either* matches (see
+ * {@link isSeen}). Two independent stores means hand-deleting one
+ * (e.g. editing Config.xml) doesn't silently force the forced-read
+ * again. The key name predates the ID mechanism (it used to hold the
+ * app version) and is kept so legacy acknowledgements stay readable.
  */
 const SEEN_KEY = 'announcementSeenVersion'
 /** Logical size the window grows to while the notice is shown. */
 const BIG_W = 640
 const BIG_H = 720
-const MAPLELINK_URL = 'https://github.com/lshw54/maplelink'
-const ISSUE_323_URL = 'https://github.com/pungin/Beanfun/issues/323'
 
 defineOptions({ name: 'AnnouncementModal' })
 
@@ -86,9 +99,8 @@ watch(
 )
 /** `true` = the auto-shown, countdown-gated first read; `false` = review. */
 const forced = ref(false)
-const remaining = ref(READ_SECONDS)
+const remaining = ref(ANNOUNCEMENT_FORCED_SECONDS)
 let timer: ReturnType<typeof setInterval> | null = null
-let appVersion = ''
 // Window size captured before growing, restored on close.
 let savedSize: Awaited<ReturnType<ReturnType<typeof getCurrentWindow>['innerSize']>> | null = null
 
@@ -124,33 +136,34 @@ async function restoreWindow(): Promise<void> {
 }
 
 function isSeen(): boolean {
-  if (config.get(SEEN_KEY) === appVersion) return true
+  if (isAnnouncementSeenValue(config.get(SEEN_KEY))) return true
   try {
-    return localStorage.getItem(SEEN_KEY) === appVersion
+    return isAnnouncementSeenValue(localStorage.getItem(SEEN_KEY))
   } catch {
     return false
   }
 }
 
 /**
- * Record the current version as acknowledged in BOTH stores so the
- * forced read is never repeated for this version — and stays that way
- * even if one store is later wiped by hand. Only the next app *update*
- * (a new {@link appVersion}) brings the notice back.
+ * Record the current announcement as acknowledged in BOTH stores so the
+ * forced read is never repeated for this notice — and stays that way
+ * even if one store is later wiped by hand. Only publishing a *new*
+ * announcement (bumping {@link ANNOUNCEMENT_ID}) brings it back; app
+ * updates alone never do.
  */
 async function markSeen(): Promise<void> {
   try {
-    localStorage.setItem(SEEN_KEY, appVersion)
+    localStorage.setItem(SEEN_KEY, ANNOUNCEMENT_ID)
   } catch {
     /* localStorage unavailable — Config.xml below still records it */
   }
-  await config.set(SEEN_KEY, appVersion)
+  await config.set(SEEN_KEY, ANNOUNCEMENT_ID)
 }
 
 async function openForced(): Promise<void> {
   visible.value = true
   forced.value = true
-  remaining.value = READ_SECONDS
+  remaining.value = ANNOUNCEMENT_FORCED_SECONDS
   await growWindow()
   stopTimer()
   timer = setInterval(() => {
@@ -210,18 +223,9 @@ function waitForConfigLoaded(timeoutMs = 5000): Promise<void> {
 }
 
 onMounted(async () => {
-  // `commands.version` never returns a Result — a throw is an IPC-bridge
-  // failure, in which case we simply don't show anything (non-critical).
-  try {
-    const info = await commands.version()
-    appVersion = info.app
-  } catch {
-    return
-  }
-  if (!appVersion) return
   // Wait for Config.xml before the seen-check, or a still-empty cache
-  // makes an already-acknowledged version look unseen and re-forces the
-  // 30-second read every launch. See {@link waitForConfigLoaded}.
+  // makes an already-acknowledged announcement look unseen and re-forces
+  // the 30-second read every launch. See {@link waitForConfigLoaded}.
   await waitForConfigLoaded()
   ready.value = true
   if (!isSeen()) await openForced()
@@ -266,10 +270,18 @@ async function open(url: string): Promise<void> {
       </div>
 
       <div class="ann__links">
-        <a class="ann__link" data-testid="announcement-maplelink" @click="open(MAPLELINK_URL)">
+        <a
+          class="ann__link"
+          data-testid="announcement-maplelink"
+          @click="open(ANNOUNCEMENT_MAPLELINK_URL)"
+        >
           MapleLink ↗
         </a>
-        <a class="ann__link" data-testid="announcement-issue" @click="open(ISSUE_323_URL)">
+        <a
+          class="ann__link"
+          data-testid="announcement-issue"
+          @click="open(ANNOUNCEMENT_MORE_INFO_URL)"
+        >
           {{ t('announcement.moreInfoLink') }} ↗
         </a>
       </div>
