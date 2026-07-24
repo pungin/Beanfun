@@ -171,7 +171,7 @@ fn embedded_bytes_length_matches_wpf_tree_files() {
     let expected_lengths: &[(&str, usize)] = &[
         ("LRConfig.xml", 462),
         ("LRHookx32.dll", 57344),
-        ("LRHookx64.dll", 76288),
+        ("LRHookx64.dll", 77312),
         ("LRProc.exe", 91648),
         ("LRSubMenus.dll", 16384),
     ];
