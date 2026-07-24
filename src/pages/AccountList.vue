@@ -2237,6 +2237,13 @@ function handleGlobalEnter(event: KeyboardEvent): void {
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalEnter)
   void registerClassicListeners()
+  // One-shot: the login form armed an immediate Classic launch
+  // (「登入後啟動經典版」). Consume before firing so a later manual
+  // navigation back here can never re-trigger it.
+  if (ui.pendingClassicLaunch) {
+    ui.pendingClassicLaunch = false
+    void handleStartClassic()
+  }
 })
 
 onBeforeUnmount(() => {

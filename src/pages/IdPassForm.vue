@@ -118,6 +118,7 @@ import { Lock } from '@element-plus/icons-vue'
 import { useAccountStore } from '../stores/account'
 import { useAuthStore, AUTH_ACTIONS, type LoginIntent } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
+import { useUiStore } from '../stores/ui'
 import { LOGIN_EXTERNAL_URLS, LOGIN_METHOD, type LoginExternalUrlKind } from '../constants/login'
 import type { LoginRegion } from '../types/bindings'
 import { useGameLauncher } from '../composables/useGameLauncher'
@@ -184,6 +185,27 @@ const account = ref('')
 const password = ref('')
 const remember = ref(false)
 const autoLogin = ref(false)
+
+/* --------------- MapleStory Classic (懷舊服) after-login launch --------------- */
+
+const ui = useUiStore()
+
+/** Config.xml key persisting the 「登入後啟動經典版」 preference. */
+const CLASSIC_AFTER_LOGIN_KEY = 'classicAfterLogin'
+
+/**
+ * 「登入後啟動經典版」 checkbox. HK-only in the template: the classic
+ * galaxy SSO can only be driven by an HK (account/password) session —
+ * a TW account/password session has no portal-side identity (TW users
+ * launch Classic via GamaPass login instead). Sticky across launches
+ * via Config.xml; the actual one-shot trigger is
+ * `ui.pendingClassicLaunch`, set per submission.
+ */
+const classicAfterLogin = ref(config.get(CLASSIC_AFTER_LOGIN_KEY) === '1')
+
+watch(classicAfterLogin, (next) => {
+  void config.set(CLASSIC_AFTER_LOGIN_KEY, next ? '1' : '0')
+})
 
 /*
  * WPF coupling (`id-pass_form.xaml.cs` L29-37): toggling AutoLogin
@@ -409,6 +431,16 @@ async function submit(): Promise<void> {
   }
   auth.setLoginIntent(intent)
 
+  /*
+   * Arm (or disarm) the after-login Classic launch for THIS attempt.
+   * Set before the IPC — not on the success branch — so the flag
+   * survives the TOTP / verify detours, whose success paths land on
+   * AccountList without coming back through this function. AccountList
+   * consumes + resets it on mount. Overwriting on every submission
+   * clears any stale value from an abandoned earlier attempt.
+   */
+  ui.pendingClassicLaunch = classicAfterLogin.value && intent.region === 'HK'
+
   try {
     const session = await auth.loginRegular(intent.region, intent.accountId, intent.password)
     if (session) {
@@ -456,6 +488,8 @@ async function submit(): Promise<void> {
     // `loginIntent` populated — a retry submission overwrites it
     // anyway, and clearing here would erase the user's password
     // before they can see the error toast.
+    // A failed attempt must not leave the Classic launch armed.
+    ui.pendingClassicLaunch = false
   }
 }
 
@@ -564,6 +598,12 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
       <div class="id-pass-form__checkboxes">
         <el-checkbox v-model="remember" :label="t('RememberPassword')" />
         <el-checkbox v-model="autoLogin" :label="t('AutoLogin')" />
+        <el-checkbox
+          v-if="currentRegion === 'HK'"
+          v-model="classicAfterLogin"
+          :label="t('classic.afterLogin')"
+          data-test="id-pass-classic-after-login"
+        />
       </div>
       <div class="id-pass-form__inline-links">
         <button

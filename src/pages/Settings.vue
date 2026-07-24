@@ -1038,7 +1038,7 @@ onMounted(() => {
                reads the ngm:// registry handler; this override is only for
                machines where that registration is broken. -->
           <div class="settings__classic-ngm">
-            <span class="settings__classic-ngm-label">{{ t('settings.classicNgmPath') }}</span>
+            <label class="settings__label">{{ t('settings.classicNgmPath') }}</label>
             <el-input
               v-model="classicNgmPath"
               class="settings__classic-ngm-input"
@@ -1265,12 +1265,6 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.75rem;
-}
-
-.settings__classic-ngm-label {
-  font-size: 0.82rem;
-  font-weight: 600;
-  flex-shrink: 0;
 }
 
 .settings__classic-ngm-input {

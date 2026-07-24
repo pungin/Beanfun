@@ -368,6 +368,7 @@ const zhTW = {
   },
   classic: {
     button: '經典版',
+    afterLogin: '登入後啟動經典版',
     buttonTitle: '啟動新楓之谷經典版（懷舊服）',
     launching: '正在啟動經典版，請稍候…',
     launched: '已啟動經典版，請切換至遊戲視窗。',
@@ -629,6 +630,7 @@ const zhCN = {
   },
   classic: {
     button: '经典版',
+    afterLogin: '登录后启动经典版',
     buttonTitle: '启动新枫之谷经典版（怀旧服）',
     launching: '正在启动经典版，请稍候…',
     launched: '已启动经典版，请切换至游戏窗口。',
@@ -896,6 +898,7 @@ const enUS = {
   },
   classic: {
     button: 'Classic',
+    afterLogin: 'Launch Classic after sign-in',
     buttonTitle: 'Launch MapleStory Classic',
     launching: 'Launching MapleStory Classic…',
     launched: 'MapleStory Classic launched — switch to the game window.',

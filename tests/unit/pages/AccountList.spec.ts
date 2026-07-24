@@ -326,6 +326,7 @@ import { useAccountStore } from '../../../src/stores/account'
 import { useAuthStore } from '../../../src/stores/auth'
 import { useConfigStore } from '../../../src/stores/config'
 import { useGameStore } from '../../../src/stores/game'
+import { useUiStore } from '../../../src/stores/ui'
 import { createAppI18n, i18nMessages } from '../../../src/i18n'
 
 const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ status: 'ok', data })
@@ -1394,6 +1395,22 @@ describe('AccountList page', () => {
 
     expect(commands.openClassicLogin).toHaveBeenCalledTimes(1)
     expect(ElMessage.info).toHaveBeenCalled()
+  })
+
+  it('classic: consumes pendingClassicLaunch on mount and fires the launch once', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+    const ctx = buildHarness()
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    useAuthStore().session = { ...FAKE_SESSION, region: 'HK' }
+    const ui = useUiStore()
+    ui.pendingClassicLaunch = true
+
+    await ctx.mountIt()
+    await flushPromises()
+
+    expect(commands.openClassicLogin).toHaveBeenCalledTimes(1)
+    // One-shot: the flag is consumed so re-mounts can't re-trigger.
+    expect(ui.pendingClassicLaunch).toBe(false)
   })
 
   it('classic: launch-failed event resets the guard and warns', async () => {

@@ -206,6 +206,7 @@ import IdPassForm from '../../../src/pages/IdPassForm.vue'
 import { useAccountStore } from '../../../src/stores/account'
 import { useAuthStore } from '../../../src/stores/auth'
 import { useConfigStore } from '../../../src/stores/config'
+import { useUiStore } from '../../../src/stores/ui'
 import { createAppI18n, i18nMessages, setLocale } from '../../../src/i18n'
 import type { Account } from '../../../src/types/bindings'
 
@@ -397,6 +398,55 @@ describe('IdPassForm', () => {
     await flushPromises()
 
     expect(mockLoginRegular).toHaveBeenCalledWith('HK', 'hk-user', 'hk-pass')
+  })
+
+  it('classic: after-login checkbox renders for HK only', async () => {
+    const hk = mountForm('HK')
+    const hkWrapper = await hk.mountIt()
+    expect(hkWrapper.find('[data-test="id-pass-classic-after-login"]').exists()).toBe(true)
+
+    setActivePinia(createPinia())
+    const tw = mountForm('TW')
+    const twWrapper = await tw.mountIt()
+    expect(twWrapper.find('[data-test="id-pass-classic-after-login"]').exists()).toBe(false)
+  })
+
+  it('classic: ticked checkbox arms pendingClassicLaunch on an HK submit', async () => {
+    const ctx = mountForm('HK')
+    const wrapper = await ctx.mountIt()
+    mockLoginRegular.mockReturnValueOnce(ok({ ...FAKE_SESSION, region: 'HK' }))
+
+    const classicBox = wrapper.find(
+      '[data-test="id-pass-classic-after-login"] .el-checkbox-stub__input',
+    )
+    await classicBox.setValue(true)
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('hk-user')
+    await inputs[1].setValue('hk-pass')
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(useUiStore().pendingClassicLaunch).toBe(true)
+  })
+
+  it('classic: a failed login disarms pendingClassicLaunch', async () => {
+    const ctx = mountForm('HK')
+    const wrapper = await ctx.mountIt()
+    mockLoginRegular.mockRejectedValueOnce(new Error('bad credentials'))
+
+    const classicBox = wrapper.find(
+      '[data-test="id-pass-classic-after-login"] .el-checkbox-stub__input',
+    )
+    await classicBox.setValue(true)
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('hk-user')
+    await inputs[1].setValue('wrong')
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(useUiStore().pendingClassicLaunch).toBe(false)
   })
 
   it('navigates to /login/totp when the server requires TOTP', async () => {

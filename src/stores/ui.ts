@@ -164,6 +164,15 @@ export const useUiStore = defineStore('ui', () => {
   const globalLoading = ref(false)
   const currentDialog = ref<string | null>(null)
 
+  /**
+   * One-shot handoff from the login form to AccountList: `true` when
+   * the just-completed login should immediately fire the MapleStory
+   * Classic launch (the 「登入後啟動經典版」 checkbox on IdPassForm).
+   * AccountList consumes and resets it on mount, so a later manual
+   * navigation back to the page can never re-trigger the launch.
+   */
+  const pendingClassicLaunch = ref(false)
+
   /* ---------- reactive getters bound to config.entries ---------- */
 
   const themeColor = computed<string>(
@@ -309,6 +318,7 @@ export const useUiStore = defineStore('ui', () => {
   return {
     globalLoading,
     currentDialog,
+    pendingClassicLaunch,
 
     themeColor,
     darkMode,
