@@ -201,6 +201,7 @@ import { commands } from '../../../src/types/bindings'
 import GamepassForm from '../../../src/pages/GamepassForm.vue'
 import { useAuthStore } from '../../../src/stores/auth'
 import { useAccountStore } from '../../../src/stores/account'
+import { useUiStore } from '../../../src/stores/ui'
 import { useConfigStore } from '../../../src/stores/config'
 import { createAppI18n, i18nMessages, setLocale } from '../../../src/i18n'
 
@@ -486,6 +487,32 @@ describe('GamepassForm', () => {
     expect(account.serviceAccounts).toEqual([])
     expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('4')
     expect(ctx.router.currentRoute.value.path).toBe('/accounts')
+  })
+
+  it('classic mode: success event arms pendingClassicLaunch (TW GamaPass can drive Classic)', async () => {
+    const ctx = mountForm()
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+    await wrapper.find('[data-testid="gamepass-creds"]').trigger('submit')
+    await flushPromises()
+
+    await fireEvent('gamepass-login-success', SAMPLE_SESSION)
+
+    expect(useUiStore().pendingClassicLaunch).toBe(true)
+    expect(ctx.router.currentRoute.value.path).toBe('/accounts')
+  })
+
+  it('classic mode off: success event leaves pendingClassicLaunch unarmed', async () => {
+    const ctx = mountForm()
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+    await wrapper.find('[data-testid="gamepass-creds"]').trigger('submit')
+    await flushPromises()
+
+    await fireEvent('gamepass-login-success', SAMPLE_SESSION)
+
+    expect(useUiStore().pendingClassicLaunch).toBe(false)
   })
 
   it('failed event surfaces the window-error banner and re-shows the form', async () => {

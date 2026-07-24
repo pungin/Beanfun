@@ -118,8 +118,11 @@ import { Lock } from '@element-plus/icons-vue'
 import { useAccountStore } from '../stores/account'
 import { useAuthStore, AUTH_ACTIONS, type LoginIntent } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
+import { useUiStore } from '../stores/ui'
 import { LOGIN_EXTERNAL_URLS, LOGIN_METHOD, type LoginExternalUrlKind } from '../constants/login'
-import type { LoginRegion } from '../types/bindings'
+import { commands, type ClassicCheck, type LoginRegion } from '../types/bindings'
+import { NGM_DOWNLOAD_URL } from '../constants/classic'
+import { safeInvoke } from '../services/invoke'
 import { useGameLauncher } from '../composables/useGameLauncher'
 import { useInAppBrowser } from '../composables/useInAppBrowser'
 
@@ -184,6 +187,62 @@ const account = ref('')
 const password = ref('')
 const remember = ref(false)
 const autoLogin = ref(false)
+
+/* --------------- MapleStory Classic (懷舊服) login mode --------------- */
+
+const ui = useUiStore()
+
+/**
+ * The title-bar Classic toggle (`LoginPage.vue`) is on but the form is
+ * in TW — a TW account/password session can't drive the classic
+ * galaxy SSO (no portal-side identity), so surface a hint pointing at
+ * the GamaPass login instead of silently launching nothing.
+ */
+const classicNeedsGamapass = computed(() => ui.classicLoginMode && currentRegion.value === 'TW')
+
+/**
+ * Classic environment self-check (MapleLink parity): reports whether
+ * Nexon Game Manager's `ngm://` handler is registered so the user
+ * finds out BEFORE logging in, not from a stalled hidden launch.
+ * Runs whenever the 懷舊服 toggle turns on; re-runnable via the
+ * 重新檢測 link.
+ */
+const classicCheck = ref<ClassicCheck | null>(null)
+const classicChecking = ref(false)
+
+const classicNgmReady = computed(
+  () =>
+    classicCheck.value !== null &&
+    classicCheck.value.ngmRegistered &&
+    classicCheck.value.ngmExeExists,
+)
+
+async function runClassicSelfCheck(): Promise<void> {
+  if (classicChecking.value) return
+  classicChecking.value = true
+  classicCheck.value = null
+  try {
+    const result = await commands.classicSelfCheck()
+    if (result.status === 'ok') classicCheck.value = result.data
+  } catch {
+    /* leave classicCheck null — status row keeps showing "checking" state */
+  } finally {
+    classicChecking.value = false
+  }
+}
+
+watch(
+  () => ui.classicLoginMode,
+  (on) => {
+    if (on) void runClassicSelfCheck()
+  },
+  { immediate: true },
+)
+
+/** Open the official NGM installer download in the system browser. */
+async function handleDownloadNgm(): Promise<void> {
+  await safeInvoke(commands.openUrl(NGM_DOWNLOAD_URL))
+}
 
 /*
  * WPF coupling (`id-pass_form.xaml.cs` L29-37): toggling AutoLogin
@@ -409,6 +468,16 @@ async function submit(): Promise<void> {
   }
   auth.setLoginIntent(intent)
 
+  /*
+   * Arm (or disarm) the after-login Classic launch for THIS attempt.
+   * Set before the IPC — not on the success branch — so the flag
+   * survives the TOTP / verify detours, whose success paths land on
+   * AccountList without coming back through this function. AccountList
+   * consumes + resets it on mount. Overwriting on every submission
+   * clears any stale value from an abandoned earlier attempt.
+   */
+  ui.pendingClassicLaunch = ui.classicLoginMode && intent.region === 'HK'
+
   try {
     const session = await auth.loginRegular(intent.region, intent.accountId, intent.password)
     if (session) {
@@ -456,6 +525,8 @@ async function submit(): Promise<void> {
     // `loginIntent` populated — a retry submission overwrites it
     // anyway, and clearing here would erase the user's password
     // before they can see the error toast.
+    // A failed attempt must not leave the Classic launch armed.
+    ui.pendingClassicLaunch = false
   }
 }
 
@@ -512,116 +583,199 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
 
 <template>
   <el-form class="id-pass-form" label-position="top" @submit.prevent="submit">
-    <div class="id-pass-form__field">
-      <label class="id-pass-form__label">{{ t('AcountOrEmail') }}</label>
-      <div class="id-pass-form__account-wrap">
-        <el-input
-          v-model="account"
-          size="default"
-          autocomplete="username"
-          :placeholder="t('AcountOrEmail')"
-          @keydown="handleAccountKeydown"
-          @wheel.prevent="handleAccountWheel"
-        />
-        <button
-          v-if="savedAccountsForRegion.length > 0"
-          type="button"
-          class="id-pass-form__dropdown-btn"
-          @click="showAccountDropdown = !showAccountDropdown"
-        >
-          <span class="material-symbols-outlined">expand_more</span>
-        </button>
-        <ul v-if="showAccountDropdown" class="id-pass-form__dropdown">
-          <li
-            v-for="sa in savedAccountsForRegion"
-            :key="sa.account_id"
-            class="id-pass-form__dropdown-item"
-            @mousedown.prevent="selectAccount(sa.account_id)"
-          >
-            {{ sa.account_id }}
-          </li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="id-pass-form__field">
-      <label class="id-pass-form__label">{{ t('Password_') }}</label>
-      <el-input
-        v-model="password"
-        type="password"
-        size="default"
-        autocomplete="current-password"
-        :placeholder="t('Password_')"
-        show-password
-      >
-        <template #prefix>
-          <el-icon><Lock /></el-icon>
-        </template>
-      </el-input>
-    </div>
-
-    <div class="id-pass-form__options">
-      <div class="id-pass-form__checkboxes">
-        <el-checkbox v-model="remember" :label="t('RememberPassword')" />
-        <el-checkbox v-model="autoLogin" :label="t('AutoLogin')" />
-      </div>
-      <div class="id-pass-form__inline-links">
-        <button
-          type="button"
-          class="id-pass-form__inline-link"
-          data-test="id-pass-register"
-          @click="handleRegisterAccount"
-        >
-          {{ t('RegisterAccount') }}
-        </button>
-        <button
-          type="button"
-          class="id-pass-form__inline-link"
-          data-test="id-pass-forgot-password"
-          @click="handleForgotPassword"
-        >
-          {{ t('ForgotPassword') }}
-        </button>
-      </div>
-    </div>
-
-    <div class="id-pass-form__actions">
+    <!--
+      懷舊服 mode + TW: a TW account/password session cannot drive the
+      classic galaxy SSO, so the entire regular form (inputs, QR, game
+      start, …) is hidden and the only path offered is GamaPass login.
+    -->
+    <div
+      v-if="classicNeedsGamapass"
+      class="id-pass-form__classic-only"
+      data-test="id-pass-classic-only"
+    >
+      <p class="id-pass-form__classic-hint" data-test="id-pass-classic-hint">
+        {{ t('classic.needGamapass') }}
+      </p>
       <el-button
         type="primary"
         class="id-pass-form__submit"
-        native-type="submit"
-        :loading="submitting"
-      >
-        {{ t('Login') }}
-      </el-button>
-      <el-button
-        class="id-pass-form__game-start"
-        data-test="id-pass-game-start"
-        @click="handleGameStart"
-      >
-        {{ t('GameStart') }}
-      </el-button>
-      <button
-        v-if="currentRegion === 'TW'"
-        type="button"
-        class="id-pass-form__icon-switch"
-        :title="t('QRCodeLogin')"
-        data-test="id-pass-switch-qr"
-        @click="switchToQr"
-      >
-        <span class="material-symbols-outlined">qr_code_2</span>
-      </button>
-      <button
-        v-if="currentRegion === 'TW'"
-        type="button"
-        class="id-pass-form__icon-switch"
-        :title="t('GamePassLogin')"
-        data-test="id-pass-switch-gamepass"
+        data-test="id-pass-classic-gamapass"
         @click="switchToGamepass"
       >
-        <span class="material-symbols-outlined">passkey</span>
-      </button>
+        {{ t('classic.gamapassButton') }}
+      </el-button>
+      <div class="id-pass-form__classic-status" data-test="id-pass-classic-status">
+        <span v-if="classicChecking || classicCheck === null">{{ t('classic.checking') }}</span>
+        <span v-else-if="classicNgmReady" class="id-pass-form__classic-status-ok">
+          ✓ {{ t('classic.ready') }}
+        </span>
+        <template v-else>
+          <span class="id-pass-form__classic-status-bad">⚠ {{ t('classic.ngmMissing') }}</span>
+          <button
+            type="button"
+            class="id-pass-form__inline-link"
+            data-test="id-pass-classic-download"
+            @click="handleDownloadNgm"
+          >
+            {{ t('classic.download') }}
+          </button>
+        </template>
+        <button
+          type="button"
+          class="id-pass-form__inline-link"
+          data-test="id-pass-classic-recheck"
+          @click="runClassicSelfCheck"
+        >
+          {{ t('classic.recheck') }}
+        </button>
+      </div>
     </div>
+
+    <template v-else>
+      <div class="id-pass-form__field">
+        <label class="id-pass-form__label">{{ t('AcountOrEmail') }}</label>
+        <div class="id-pass-form__account-wrap">
+          <el-input
+            v-model="account"
+            size="default"
+            autocomplete="username"
+            :placeholder="t('AcountOrEmail')"
+            @keydown="handleAccountKeydown"
+            @wheel.prevent="handleAccountWheel"
+          />
+          <button
+            v-if="savedAccountsForRegion.length > 0"
+            type="button"
+            class="id-pass-form__dropdown-btn"
+            @click="showAccountDropdown = !showAccountDropdown"
+          >
+            <span class="material-symbols-outlined">expand_more</span>
+          </button>
+          <ul v-if="showAccountDropdown" class="id-pass-form__dropdown">
+            <li
+              v-for="sa in savedAccountsForRegion"
+              :key="sa.account_id"
+              class="id-pass-form__dropdown-item"
+              @mousedown.prevent="selectAccount(sa.account_id)"
+            >
+              {{ sa.account_id }}
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="id-pass-form__field">
+        <label class="id-pass-form__label">{{ t('Password_') }}</label>
+        <el-input
+          v-model="password"
+          type="password"
+          size="default"
+          autocomplete="current-password"
+          :placeholder="t('Password_')"
+          show-password
+        >
+          <template #prefix>
+            <el-icon><Lock /></el-icon>
+          </template>
+        </el-input>
+      </div>
+
+      <div class="id-pass-form__options">
+        <div class="id-pass-form__checkboxes">
+          <el-checkbox v-model="remember" :label="t('RememberPassword')" />
+          <el-checkbox v-model="autoLogin" :label="t('AutoLogin')" />
+        </div>
+        <div class="id-pass-form__inline-links">
+          <button
+            type="button"
+            class="id-pass-form__inline-link"
+            data-test="id-pass-register"
+            @click="handleRegisterAccount"
+          >
+            {{ t('RegisterAccount') }}
+          </button>
+          <button
+            type="button"
+            class="id-pass-form__inline-link"
+            data-test="id-pass-forgot-password"
+            @click="handleForgotPassword"
+          >
+            {{ t('ForgotPassword') }}
+          </button>
+        </div>
+      </div>
+
+      <div
+        v-if="ui.classicLoginMode && currentRegion === 'HK'"
+        class="id-pass-form__classic-status"
+        data-test="id-pass-classic-status-hk"
+      >
+        <span v-if="classicChecking || classicCheck === null">{{ t('classic.checking') }}</span>
+        <span v-else-if="classicNgmReady" class="id-pass-form__classic-status-ok">
+          ✓ {{ t('classic.ready') }}
+        </span>
+        <template v-else>
+          <span class="id-pass-form__classic-status-bad">⚠ {{ t('classic.ngmMissing') }}</span>
+          <button
+            type="button"
+            class="id-pass-form__inline-link"
+            data-test="id-pass-classic-download"
+            @click="handleDownloadNgm"
+          >
+            {{ t('classic.download') }}
+          </button>
+        </template>
+        <button
+          type="button"
+          class="id-pass-form__inline-link"
+          data-test="id-pass-classic-recheck"
+          @click="runClassicSelfCheck"
+        >
+          {{ t('classic.recheck') }}
+        </button>
+        <p class="id-pass-form__classic-nocn" data-test="id-pass-classic-nocn">
+          {{ t('classic.noCn') }}
+        </p>
+      </div>
+
+      <div class="id-pass-form__actions">
+        <el-button
+          type="primary"
+          class="id-pass-form__submit"
+          native-type="submit"
+          :loading="submitting"
+        >
+          {{ t('Login') }}
+        </el-button>
+        <el-button
+          class="id-pass-form__game-start"
+          data-test="id-pass-game-start"
+          @click="handleGameStart"
+        >
+          {{ t('GameStart') }}
+        </el-button>
+        <button
+          v-if="currentRegion === 'TW'"
+          type="button"
+          class="id-pass-form__icon-switch"
+          :title="t('QRCodeLogin')"
+          data-test="id-pass-switch-qr"
+          @click="switchToQr"
+        >
+          <span class="material-symbols-outlined">qr_code_2</span>
+        </button>
+        <button
+          v-if="currentRegion === 'TW'"
+          type="button"
+          class="id-pass-form__icon-switch"
+          :title="t('GamePassLogin')"
+          data-test="id-pass-switch-gamepass"
+          @click="switchToGamepass"
+        >
+          <span class="material-symbols-outlined">passkey</span>
+        </button>
+      </div>
+    </template>
   </el-form>
 </template>
 
@@ -714,6 +868,47 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.id-pass-form__classic-only {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.id-pass-form__classic-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--bf-primary, #954a00);
+}
+
+.id-pass-form__classic-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--bf-on-surface-variant, #54443a);
+}
+
+.id-pass-form__classic-status-ok {
+  color: var(--el-color-success, #4f8a3d);
+  font-weight: 600;
+}
+
+.id-pass-form__classic-status-bad {
+  color: var(--el-color-danger, #c04851);
+  font-weight: 600;
+}
+
+.id-pass-form__classic-nocn {
+  flex-basis: 100%;
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--bf-on-surface-variant, #54443a);
 }
 
 .id-pass-form__inline-links {

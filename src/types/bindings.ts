@@ -2204,6 +2204,37 @@ async openGashRechargeBrowser() : Promise<Result<null, CommandError>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Open the classic portal for the already-authenticated beanfun
+ * session and auto-launch the game once the SSO lands.
+ * 
+ * Beanfun is single-session, so unlike MapleLink there is no session
+ * id to resolve — the one `AppState.auth` context is the session, and
+ * its cookie jar (with `bfWebToken`) is seeded straight into the
+ * portal webview. Works for HK (account/password) and TW GamaPass
+ * sessions; the frontend gates the button accordingly (a TW
+ * account/password or QR session can't drive the galaxy SSO).
+ */
+async openClassicLogin() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_classic_login") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Check the local prerequisites for the classic launch. A non-empty,
+ * existing `classicNgmPath` from Config.xml counts as NGM available.
+ */
+async classicSelfCheck() : Promise<Result<ClassicCheck, null>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("classic_self_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -2602,6 +2633,23 @@ session: AddAccountSession;
  * the server text verbatim (no i18n / classification).
  */
 error_message: string }
+/**
+ * Result of the classic-readiness self-check (Settings → Classic).
+ */
+export type ClassicCheck = { 
+/**
+ * Nexon Game Manager's `ngm://` protocol handler is registered
+ * (or a valid manual path is configured).
+ */
+ngmRegistered: boolean; 
+/**
+ * The handler's executable path, if readable.
+ */
+ngmExe: string | null; 
+/**
+ * That executable actually exists on disk.
+ */
+ngmExeExists: boolean }
 /**
  * Outcome of a single [`clean_maple_game_cache`] run.
  * 

@@ -552,7 +552,7 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
    *    (region picker empty child) → `/login/id-pass` (via
    *    `LoginRegionSelection.vue::watch(config.loaded)`). Both
    *    `setTimeout` s fired, the earlier one measuring the picker
-   *    DOM just as it was being replaced. `scheduleOnNextPaint`
+   *    DOM just as it was being replaced. The paint scheduler
    *    auto-cancels the previous pending callback so only the final
    *    destination's DOM gets measured.
    * 3. **`setSize` → layout-restore race** — the old code ran
@@ -573,7 +573,6 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   const appWindow = getCurrentWindow()
   let currentWidth = 560
   let observer: ResizeObserver | null = null
-  let pendingFrame: number | null = null
 
   /*
    * Track the OS window scale factor so `textScaleFactor()` can split
@@ -593,7 +592,7 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     void appWindow
       .onScaleChanged((event) => {
         setWindowScaleFactor(event.payload.scaleFactor)
-        scheduleOnNextPaint(fitWindow)
+        scheduleFit(fitWindow)
       })
       .catch(() => {})
   }
@@ -670,8 +669,13 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     // dropping #257's --force-device-scale-factor in #337).
     const cssToLogical = textScaleFactor(window.devicePixelRatio || 1)
 
+    // Height floor is a glitch guard (a transiently-empty DOM must not
+    // collapse the window to nothing), NOT a design minimum — short
+    // views are real (e.g. the 懷舊服-mode login shows a single button,
+    // ~210px) and a higher floor leaves a hollow strip of glass below
+    // the content (the "window taller than content" report).
     const wLogical = Math.max(320, Math.round(naturalW * zoom * cssToLogical))
-    const hLogical = Math.max(300, Math.round(naturalH * zoom * cssToLogical))
+    const hLogical = Math.max(160, Math.round(naturalH * zoom * cssToLogical))
     root.style.height = '100vh'
     void getCurrentWebview().setZoom(zoom)
     setAppliedWebviewZoom(zoom)
@@ -691,21 +695,70 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
    * Cancels any previously pending callback so an `afterEach` storm
    * collapses to a single fit on the final settled destination.
    */
-  function scheduleOnNextPaint(cb: () => void): void {
-    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
-      // jsdom / SSR path — just run immediately so specs don't need
-      // a rAF polyfill.
-      cb()
-      return
+  /**
+   * Build an independent "after the next paint (or soon anyway)"
+   * scheduler.
+   *
+   * # Why a timeout backstop (懷舊服-toggle debugging, CDP trace)
+   *
+   * The original implementation was double-rAF only. rAF callbacks run
+   * just before a *paint* — and WebView2 simply doesn't paint an idle
+   * or occluded window, so on a covered/unfocused window the two rAFs
+   * never elapsed and the scheduled callback sat pending forever. The
+   * observed symptom: `attachObserver` scheduled at boot never ran, so
+   * no ResizeObserver / resize-listener was ever armed and the window
+   * never re-fit (stuck oversized, the "hollow strip below the content"
+   * report). The `setTimeout` backstop guarantees progress without a
+   * paint; when paints DO happen the rAF path usually wins and keeps
+   * the measurement paint-aligned. Layout reads (`scrollHeight`) are
+   * synchronous, so running off-paint is still correct.
+   *
+   * # Why per-purpose instances (not one shared slot)
+   *
+   * `attachObserver` scheduling (router `afterEach`) and `fitWindow`
+   * scheduling (observer / resize events) used to share one pending
+   * slot; a resize event landing between a navigation and its
+   * double-rAF could cancel the pending `attachObserver` and replace
+   * it with a plain `fitWindow` — leaving the new page with no
+   * observers at all. Separate instances only coalesce within their
+   * own purpose (the #236 storm-collapse behaviour each purpose
+   * actually wants).
+   */
+  function makePaintScheduler(): (cb: () => void) => void {
+    let frame: number | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+    function cancelPending(): void {
+      if (frame !== null && typeof window !== 'undefined') window.cancelAnimationFrame(frame)
+      if (timer !== null) clearTimeout(timer)
+      frame = null
+      timer = null
     }
-    if (pendingFrame !== null) window.cancelAnimationFrame(pendingFrame)
-    pendingFrame = window.requestAnimationFrame(() => {
-      pendingFrame = window.requestAnimationFrame(() => {
-        pendingFrame = null
+    return function schedule(cb: () => void): void {
+      if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+        // jsdom / SSR path — just run immediately so specs don't need
+        // a rAF polyfill.
         cb()
+        return
+      }
+      cancelPending()
+      const run = (): void => {
+        cancelPending()
+        cb()
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = window.requestAnimationFrame(() => {
+          frame = null
+          run()
+        })
       })
-    })
+      timer = setTimeout(run, 150)
+    }
   }
+
+  /** Coalescing slot for re-fit requests (observers / resize events). */
+  const scheduleFit = makePaintScheduler()
+  /** Coalescing slot for navigation-driven observer re-attachment. */
+  const scheduleAttach = makePaintScheduler()
 
   /**
    * Tear down the previous route's observer, attach a fresh one to
@@ -746,7 +799,7 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     let initialNotificationsIgnored = false
     observer = new ResizeObserver(() => {
       if (!initialNotificationsIgnored) return
-      scheduleOnNextPaint(fitWindow)
+      scheduleFit(fitWindow)
     })
     observer.observe(root)
     if (content) observer.observe(content)
@@ -756,10 +809,10 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     // which ResizeObserver may not catch if the root stays 100vh).
     // A 1rem sentinel element detects font-size changes.
     if (typeof window !== 'undefined') {
-      window.addEventListener('resize', () => scheduleOnNextPaint(fitWindow), { passive: true })
+      window.addEventListener('resize', () => scheduleFit(fitWindow), { passive: true })
       // `workArea()` is read live inside `fitWindow`, so a moved window /
       // changed DPI just needs a re-fit — no cached metrics to refresh.
-      scheduleOnNextPaint(fitWindow)
+      scheduleFit(fitWindow)
 
       // Sentinel: a 0-size element whose width is 1rem. When the
       // system font size changes, its pixel width changes and
@@ -791,6 +844,6 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   router.afterEach((to) => {
     const w = to.meta.windowWidth as number | undefined
     if (w) currentWidth = w
-    scheduleOnNextPaint(attachObserver)
+    scheduleAttach(attachObserver)
   })
 }

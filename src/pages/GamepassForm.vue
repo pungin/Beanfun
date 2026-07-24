@@ -89,6 +89,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { AUTH_ACTIONS, useAuthStore } from '../stores/auth'
 import { useAccountStore } from '../stores/account'
+import { useUiStore } from '../stores/ui'
 import { useConfigStore } from '../stores/config'
 import { CommandInvocationError, wrapCommand } from '../services/invoke'
 import { commands } from '../types/bindings'
@@ -133,6 +134,7 @@ const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 const account = useAccountStore()
+const ui = useUiStore()
 const config = useConfigStore()
 
 /**
@@ -219,6 +221,11 @@ async function registerEventListeners(): Promise<void> {
     step.value = STEP_COMPLETE
     account.clearSessionData()
     auth.applyGamepassSession(event.payload)
+    // Classic (懷舊服) login mode: a TW GamaPass session CAN drive the
+    // classic galaxy SSO, so arm the one-shot launch — AccountList
+    // consumes it on mount, fires the Classic launch first, then runs
+    // the regular post-login machinery as usual.
+    ui.pendingClassicLaunch = ui.classicLoginMode
     disposed = true
     await router.push('/accounts')
   })

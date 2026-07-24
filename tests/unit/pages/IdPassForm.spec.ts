@@ -173,6 +173,7 @@ vi.mock('../../../src/types/bindings', () => ({
     killGameProcesses: vi.fn(),
     openUrl: vi.fn(),
     launchGame: vi.fn(),
+    classicSelfCheck: vi.fn(),
   },
 }))
 
@@ -206,6 +207,7 @@ import IdPassForm from '../../../src/pages/IdPassForm.vue'
 import { useAccountStore } from '../../../src/stores/account'
 import { useAuthStore } from '../../../src/stores/auth'
 import { useConfigStore } from '../../../src/stores/config'
+import { useUiStore } from '../../../src/stores/ui'
 import { createAppI18n, i18nMessages, setLocale } from '../../../src/i18n'
 import type { Account } from '../../../src/types/bindings'
 
@@ -293,6 +295,13 @@ describe('IdPassForm', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockLoginRegular.mockReset()
+    vi.mocked(commands.openUrl).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openUrl>
+    >)
+    vi.mocked(commands.classicSelfCheck).mockResolvedValue({
+      status: 'ok',
+      data: { ngmRegistered: true, ngmExe: 'C:/NGM/NGM64.exe', ngmExeExists: true },
+    } as Awaited<ReturnType<typeof commands.classicSelfCheck>>)
     mockSaveAccount.mockReset()
     mockSetConfig.mockReset()
     elMessageError.mockReset()
@@ -397,6 +406,106 @@ describe('IdPassForm', () => {
     await flushPromises()
 
     expect(mockLoginRegular).toHaveBeenCalledWith('HK', 'hk-user', 'hk-pass')
+  })
+
+  it('classic: GamaPass hint shows only for TW with classic mode on', async () => {
+    const hk = mountForm('HK')
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    const hkWrapper = await hk.mountIt()
+    expect(hkWrapper.find('[data-test="id-pass-classic-hint"]').exists()).toBe(false)
+
+    setActivePinia(createPinia())
+    const tw = mountForm('TW')
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    const twWrapper = await tw.mountIt()
+    expect(twWrapper.find('[data-test="id-pass-classic-hint"]').exists()).toBe(true)
+  })
+
+  it('classic: HK submit with classic mode on arms pendingClassicLaunch', async () => {
+    const ctx = mountForm('HK')
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    const wrapper = await ctx.mountIt()
+    mockLoginRegular.mockReturnValueOnce(ok({ ...FAKE_SESSION, region: 'HK' }))
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('hk-user')
+    await inputs[1].setValue('hk-pass')
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(useUiStore().pendingClassicLaunch).toBe(true)
+  })
+
+  it('classic: self-check runs when the mode is on and shows ready state', async () => {
+    const ctx = mountForm('HK')
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(commands.classicSelfCheck).toHaveBeenCalled()
+    const strip = wrapper.get('[data-test="id-pass-classic-status-hk"]')
+    expect(strip.text()).toContain('經典版環境已就緒')
+    // HK also carries the +86 notice.
+    expect(wrapper.find('[data-test="id-pass-classic-nocn"]').exists()).toBe(true)
+  })
+
+  it('classic: NGM-missing state offers the download link', async () => {
+    vi.mocked(commands.classicSelfCheck).mockResolvedValue({
+      status: 'ok',
+      data: { ngmRegistered: false, ngmExe: null, ngmExeExists: false },
+    } as Awaited<ReturnType<typeof commands.classicSelfCheck>>)
+    const ctx = mountForm('TW')
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    const dl = wrapper.get('[data-test="id-pass-classic-download"]')
+    await dl.trigger('click')
+    await flushPromises()
+    expect(commands.openUrl).toHaveBeenCalledWith(
+      'https://platform.nexon.com/NGM/Bin/Install_NGM.exe',
+    )
+  })
+
+  it('classic: no status strip when the mode is off', async () => {
+    vi.mocked(commands.classicSelfCheck).mockClear()
+    const ctx = mountForm('HK')
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+    expect(wrapper.find('[data-test="id-pass-classic-status-hk"]').exists()).toBe(false)
+    expect(commands.classicSelfCheck).not.toHaveBeenCalled()
+  })
+
+  it('classic: TW with classic mode on shows ONLY the GamaPass path', async () => {
+    const ctx = mountForm('TW')
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    const wrapper = await ctx.mountIt()
+
+    // The whole regular form is hidden — no inputs, no QR switch, no
+    // game start; the GamaPass button is the only affordance.
+    expect(wrapper.find('[data-test="id-pass-classic-only"]').exists()).toBe(true)
+    expect(wrapper.findAll('.el-input-stub').length).toBe(0)
+    expect(wrapper.find('[data-test="id-pass-switch-qr"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="id-pass-game-start"]').exists()).toBe(false)
+
+    await wrapper.get('[data-test="id-pass-classic-gamapass"]').trigger('click')
+    await flushPromises()
+    expect(ctx.router.currentRoute.value.path).toBe('/login/gamepass')
+  })
+
+  it('classic: a failed login disarms pendingClassicLaunch', async () => {
+    const ctx = mountForm('HK')
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    const wrapper = await ctx.mountIt()
+    mockLoginRegular.mockRejectedValueOnce(new Error('bad credentials'))
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('hk-user')
+    await inputs[1].setValue('wrong')
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(useUiStore().pendingClassicLaunch).toBe(false)
   })
 
   it('navigates to /login/totp when the server requires TOTP', async () => {
@@ -513,6 +622,13 @@ describe('IdPassForm — P12.2 D2 credential persistence', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockLoginRegular.mockReset()
+    vi.mocked(commands.openUrl).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openUrl>
+    >)
+    vi.mocked(commands.classicSelfCheck).mockResolvedValue({
+      status: 'ok',
+      data: { ngmRegistered: true, ngmExe: 'C:/NGM/NGM64.exe', ngmExeExists: true },
+    } as Awaited<ReturnType<typeof commands.classicSelfCheck>>)
     mockSaveAccount.mockReset()
     mockSetConfig.mockReset()
     elMessageError.mockReset()
@@ -720,6 +836,13 @@ describe('IdPassForm — P12.4 followup-A/B (Register / Forgot / GameStart)', ()
   beforeEach(() => {
     setActivePinia(createPinia())
     mockLoginRegular.mockReset()
+    vi.mocked(commands.openUrl).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openUrl>
+    >)
+    vi.mocked(commands.classicSelfCheck).mockResolvedValue({
+      status: 'ok',
+      data: { ngmRegistered: true, ngmExe: 'C:/NGM/NGM64.exe', ngmExeExists: true },
+    } as Awaited<ReturnType<typeof commands.classicSelfCheck>>)
     mockSaveAccount.mockReset()
     mockSetConfig.mockReset()
     elMessageError.mockReset()

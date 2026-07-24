@@ -16,6 +16,9 @@ import { createPinia } from 'pinia'
 
 import LoginPage from '../../../src/pages/LoginPage.vue'
 import { createAppI18n } from '../../../src/i18n'
+import { setActivePinia } from 'pinia'
+import { useUiStore } from '../../../src/stores/ui'
+import { useConfigStore } from '../../../src/stores/config'
 
 const ChildStub = defineComponent({
   name: 'ChildStub',
@@ -36,6 +39,9 @@ function mountLoginPage(initialPath = '/login/_test') {
 
   const i18n = createAppI18n()
   const pinia = createPinia()
+  // Make the harness pinia the active one so specs can reach the same
+  // stores the mounted component uses.
+  setActivePinia(pinia)
 
   return {
     router,
@@ -68,6 +74,23 @@ describe('LoginPage shell', () => {
     expect(titleBarText).not.toContain('info')
     expect(titleBarText).not.toContain('minimize')
     expect(titleBarText).not.toContain('close')
+  })
+
+  it('classic mode toggle renders and flips classicLoginMode', async () => {
+    const ctx = mountLoginPage()
+    const wrapper = await ctx.mount()
+
+    const toggle = wrapper.get('[data-test="login-classic-mode"]')
+    expect(toggle.classes()).not.toContain('login-shell__classic-btn--active')
+
+    // setConfig IPC is unmocked in this spec's slim harness — seed the
+    // cache directly and assert the active class follows the store.
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    await wrapper.vm.$nextTick()
+    expect(useUiStore().classicLoginMode).toBe(true)
+    expect(wrapper.get('[data-test="login-classic-mode"]').classes()).toContain(
+      'login-shell__classic-btn--active',
+    )
   })
 
   it('exposes a <RouterView /> slot for child routes', async () => {

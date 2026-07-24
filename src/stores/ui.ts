@@ -123,6 +123,7 @@ export const UI_CONFIG_KEYS = {
   AutoKillPatcher: 'autoKillPatcher',
   SkipPlayWnd: 'skipPlayWnd',
   LoginMethod: 'loginMethod',
+  ClassicLoginMode: 'classicLoginMode',
 } as const
 
 type LocaleApplier = (locale: AppLocale) => void
@@ -164,6 +165,16 @@ export const useUiStore = defineStore('ui', () => {
   const globalLoading = ref(false)
   const currentDialog = ref<string | null>(null)
 
+  /**
+   * One-shot handoff from the login flow to AccountList: `true` when
+   * the just-completed login should immediately fire the MapleStory
+   * Classic launch. Armed by IdPassForm (HK) / GamepassForm (TW
+   * GamaPass) while {@link classicLoginMode} is on; AccountList
+   * consumes and resets it on mount, so a later manual navigation
+   * back to the page can never re-trigger the launch.
+   */
+  const pendingClassicLaunch = ref(false)
+
   /* ---------- reactive getters bound to config.entries ---------- */
 
   const themeColor = computed<string>(
@@ -179,6 +190,17 @@ export const useUiStore = defineStore('ui', () => {
 
   const minimizeToTray = computed<boolean>(() =>
     parseBool(config.get(UI_CONFIG_KEYS.MinimizeToTray), false),
+  )
+
+  /**
+   * MapleStory Classic (懷舊服) login mode — toggled from the login
+   * shell's title bar. While on, a successful HK account/password or
+   * TW GamaPass login arms {@link pendingClassicLaunch} so AccountList
+   * fires the Classic launch first, then carries on with the regular
+   * post-login machinery (account list, ping loop, …). Not a WPF key.
+   */
+  const classicLoginMode = computed<boolean>(() =>
+    parseBool(config.get(UI_CONFIG_KEYS.ClassicLoginMode), false),
   )
 
   const disableHwAccel = computed<boolean>(() =>
@@ -230,6 +252,10 @@ export const useUiStore = defineStore('ui', () => {
 
   async function setMinimizeToTray(value: boolean): Promise<void> {
     await config.set(UI_CONFIG_KEYS.MinimizeToTray, stringifyBool(value))
+  }
+
+  async function setClassicLoginMode(value: boolean): Promise<void> {
+    await config.set(UI_CONFIG_KEYS.ClassicLoginMode, stringifyBool(value))
   }
 
   async function setDisableHwAccel(value: boolean): Promise<void> {
@@ -309,11 +335,13 @@ export const useUiStore = defineStore('ui', () => {
   return {
     globalLoading,
     currentDialog,
+    pendingClassicLaunch,
 
     themeColor,
     darkMode,
     language,
     minimizeToTray,
+    classicLoginMode,
     disableHwAccel,
     updateChannel,
     autoStartGame,
@@ -327,6 +355,7 @@ export const useUiStore = defineStore('ui', () => {
     setDarkMode,
     setLanguage,
     setMinimizeToTray,
+    setClassicLoginMode,
     setDisableHwAccel,
     setUpdateChannel,
     setAutoStartGame,

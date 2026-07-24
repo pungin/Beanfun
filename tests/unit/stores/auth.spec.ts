@@ -392,6 +392,41 @@ describe('useAuthStore', () => {
     })
   })
 
+  describe('viaGamepass (MapleStory Classic SSO gate)', () => {
+    it('turns on only via applyGamepassSession and off on clearSession', () => {
+      const store = useAuthStore()
+      expect(store.viaGamepass).toBe(false)
+
+      store.applyGamepassSession({
+        region: 'TW',
+        account_id: 'alice',
+        service_code: '610074',
+        service_region: 'T9',
+      })
+      expect(store.viaGamepass).toBe(true)
+
+      store.clearSession()
+      expect(store.viaGamepass).toBe(false)
+    })
+
+    it('is reset by a regular (non-GamePass) login', async () => {
+      const store = useAuthStore()
+      store.applyGamepassSession({
+        region: 'TW',
+        account_id: 'alice',
+        service_code: '610074',
+        service_region: 'T9',
+      })
+      expect(store.viaGamepass).toBe(true)
+
+      vi.mocked(commands.loginRegular).mockReturnValue(
+        ok({ region: 'TW', account_id: 'bob', service_code: '610074', service_region: 'T9' }),
+      )
+      await store.loginRegular('TW', 'bob', 'pw')
+      expect(store.viaGamepass).toBe(false)
+    })
+  })
+
   describe('clearSession', () => {
     it('wipes session, pendingTotp, pendingVerify, qrChallenge, advanceCheckUrl and intent slots synchronously', () => {
       const auth = useAuthStore()

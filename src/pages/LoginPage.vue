@@ -8,19 +8,34 @@
  */
 
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { ElIcon } from 'element-plus'
-import { InfoFilled, Promotion, Setting } from '@element-plus/icons-vue'
+import { Clock, InfoFilled, Promotion, Setting } from '@element-plus/icons-vue'
 import TitleBar from '../components/TitleBar.vue'
 import { useConfigStore } from '../stores/config'
+import { useUiStore } from '../stores/ui'
 import type { LoginRegion } from '../types/bindings'
 
 defineOptions({ name: 'LoginPage' })
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const config = useConfigStore()
+const ui = useUiStore()
+
+/**
+ * MapleStory Classic (懷舊服) login mode toggle — mirrors MapleLink's
+ * login-page game switcher. While on, a successful HK
+ * account/password or TW GamaPass login launches Classic first, then
+ * proceeds to the account list as usual. Persisted via
+ * `Config.xml::classicLoginMode` (see `stores/ui.ts`).
+ */
+function toggleClassicMode(): void {
+  void ui.setClassicLoginMode(!ui.classicLoginMode)
+}
 
 const currentRegion = computed(() => (config.get('loginRegion') as LoginRegion | undefined) ?? 'TW')
 
@@ -57,6 +72,18 @@ function handleOpenAbout(): void {
 <template>
   <section class="login-shell bf-glass-window" data-window-root>
     <TitleBar>
+      <button
+        v-if="!isRegionPage"
+        type="button"
+        class="login-shell__region-btn login-shell__classic-btn"
+        :class="{ 'login-shell__classic-btn--active': ui.classicLoginMode }"
+        :title="t('classic.modeToggleTitle')"
+        data-test="login-classic-mode"
+        @click="toggleClassicMode"
+      >
+        <el-icon class="login-shell__region-icon" aria-hidden="true"><Clock /></el-icon>
+        <span class="login-shell__region-label">{{ t('classic.modeToggle') }}</span>
+      </button>
       <button
         v-if="!isRegionPage"
         type="button"
@@ -150,5 +177,24 @@ function handleOpenAbout(): void {
 }
 .login-shell__region-btn:hover {
   background: color-mix(in srgb, var(--bf-primary-container, #ff8201) 25%, transparent);
+}
+
+/* Classic (懷舊服) mode toggle: muted until switched on, then it
+   adopts the same filled-orange look as the region chip. */
+.login-shell__classic-btn {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--bf-on-surface-variant, #54443a) 30%, transparent);
+  color: var(--bf-on-surface-variant, #54443a);
+}
+
+.login-shell__classic-btn:hover {
+  background: color-mix(in srgb, var(--bf-on-surface-variant, #54443a) 12%, transparent);
+}
+
+.login-shell__classic-btn--active,
+.login-shell__classic-btn--active:hover {
+  background: color-mix(in srgb, var(--bf-primary-container, #ff8201) 25%, transparent);
+  border-color: color-mix(in srgb, var(--bf-primary-container, #ff8201) 45%, transparent);
+  color: var(--bf-primary, #954a00);
 }
 </style>
