@@ -265,6 +265,38 @@ const savedAccountsForRegion = computed(() => {
 
 const showAccountDropdown = ref(false)
 
+/* --------------- issue #344 — dropdown double-scrollbar --------------- */
+
+/**
+ * The account dropdown used to be a fixed `max-height: 200px`. The
+ * window is content-fit and often shorter than "field bottom + 200px",
+ * so with 11+ saved accounts the absolutely-positioned list poked past
+ * the window bottom — `login-shell__body` (overflow auto) then grew a
+ * SECOND scrollbar, and the inner list's own scrollbar could never
+ * reach the last account (issue #344). Fix: measure the space actually
+ * available below the field when the dropdown opens and cap the list
+ * to it, so the list always ends inside the window and only ONE
+ * scrollbar (its own) exists.
+ */
+const accountWrapRef = ref<HTMLElement | null>(null)
+const dropdownMaxHeight = ref(200)
+
+/** Bottom margin (px) kept between the dropdown and the window edge. */
+const DROPDOWN_VIEWPORT_MARGIN = 12
+/** Never cap below ~3 rows — a sliver of a list is unusable. */
+const DROPDOWN_MIN_HEIGHT = 96
+
+function toggleAccountDropdown(): void {
+  if (!showAccountDropdown.value && typeof window !== 'undefined') {
+    const rect = accountWrapRef.value?.getBoundingClientRect()
+    if (rect) {
+      const available = Math.floor(window.innerHeight - rect.bottom - DROPDOWN_VIEWPORT_MARGIN)
+      dropdownMaxHeight.value = Math.max(DROPDOWN_MIN_HEIGHT, Math.min(200, available))
+    }
+  }
+  showAccountDropdown.value = !showAccountDropdown.value
+}
+
 /** Reactive current region for template bindings. */
 const currentRegion = computed(() => readRegion())
 
@@ -634,7 +666,7 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
     <template v-else>
       <div class="id-pass-form__field">
         <label class="id-pass-form__label">{{ t('AcountOrEmail') }}</label>
-        <div class="id-pass-form__account-wrap">
+        <div ref="accountWrapRef" class="id-pass-form__account-wrap">
           <el-input
             v-model="account"
             size="default"
@@ -647,11 +679,16 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
             v-if="savedAccountsForRegion.length > 0"
             type="button"
             class="id-pass-form__dropdown-btn"
-            @click="showAccountDropdown = !showAccountDropdown"
+            @click="toggleAccountDropdown"
           >
             <span class="material-symbols-outlined">expand_more</span>
           </button>
-          <ul v-if="showAccountDropdown" class="id-pass-form__dropdown">
+          <ul
+            v-if="showAccountDropdown"
+            class="id-pass-form__dropdown"
+            :style="{ maxHeight: dropdownMaxHeight + 'px' }"
+            data-test="id-pass-account-dropdown"
+          >
             <li
               v-for="sa in savedAccountsForRegion"
               :key="sa.account_id"
@@ -843,6 +880,7 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 8px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  /* Capped inline per open (issue #344) — 200px is only the ceiling. */
   max-height: 200px;
   overflow-y: auto;
 }

@@ -651,6 +651,34 @@ describe('IdPassForm — P12.2 D2 credential persistence', () => {
     expect((checkboxes[1].element as HTMLInputElement).checked).toBe(true)
   })
 
+  it('issue #344: dropdown max-height is capped to the space below the field', async () => {
+    // 11+ saved accounts used to overflow the content-fit window: the
+    // fixed 200px list poked past the window bottom, the outer body
+    // grew a second scrollbar, and the inner one couldn't reach the
+    // last account. The cap must follow the actual viewport space.
+    const ctx = mountForm()
+    const account = useAccountStore()
+    account.accounts = Array.from({ length: 12 }, (_, i) => ({
+      ...STORED_ALICE,
+      account_id: `acct-${i}`,
+    }))
+    const wrapper = await ctx.mountIt()
+
+    // Small window: 150px viewport − field bottom (0 in jsdom) − 12px
+    // margin = 138px available.
+    Object.defineProperty(window, 'innerHeight', { value: 150, configurable: true })
+    await wrapper.get('.id-pass-form__dropdown-btn').trigger('click')
+    const dropdown = wrapper.get('[data-test="id-pass-account-dropdown"]')
+    expect((dropdown.element as HTMLElement).style.maxHeight).toBe('138px')
+
+    // Roomy window: capped at the 200px design ceiling, never more.
+    await wrapper.get('.id-pass-form__dropdown-btn').trigger('click') // close
+    Object.defineProperty(window, 'innerHeight', { value: 900, configurable: true })
+    await wrapper.get('.id-pass-form__dropdown-btn').trigger('click') // reopen
+    const reopened = wrapper.get('[data-test="id-pass-account-dropdown"]')
+    expect((reopened.element as HTMLElement).style.maxHeight).toBe('200px')
+  })
+
   it('mount with no Config.AccountID falls back to first stored account for the region', async () => {
     const ctx = mountForm()
     const account = useAccountStore()
