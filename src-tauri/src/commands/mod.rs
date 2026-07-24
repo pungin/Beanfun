@@ -132,6 +132,7 @@
 
 pub mod account;
 pub mod auth;
+pub mod classic;
 pub mod config;
 #[cfg(target_os = "windows")]
 pub mod cookie_native;
@@ -331,6 +332,12 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
         // turbofish rationale applies.
         web_browser::open_member_center_browser::<tauri::Wry>,
         web_browser::open_gash_recharge_browser::<tauri::Wry>,
+        // classic (MapleStory Classic 懷舊服 — galaxy SSO + NGM launch)
+        //
+        // `open_classic_login` takes an `AppHandle`, so it needs the
+        // same `tauri::Wry` turbofish as the web_browser family.
+        classic::open_classic_login::<tauri::Wry>,
+        classic::classic_self_check,
     ])
 }
 
@@ -514,6 +521,9 @@ mod bindings_file_tests {
         "openMemberCenterBrowser",
         // --- Gash recharge (WPF bfb_Gash_Click parity) ---------------
         "openGashRechargeBrowser",
+        // --- classic (MapleStory Classic 懷舊服) ----------------------
+        "openClassicLogin",
+        "classicSelfCheck",
     ];
 
     /// DTO type names the frontend imports from `bindings.ts`.
@@ -579,6 +589,7 @@ mod bindings_file_tests {
         // --- P12.3 D2 — game catalogue ------------------------------
         "GameIniEntry",
         "GameService",
+        "ClassicCheck",
         "GameInfoBundle",
         // --- P12.3 D3 — unconnected-game DTOs ------------------------
         "AddAccountSession",

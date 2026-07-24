@@ -323,3 +323,115 @@ pub fn register_new_window_handler<R: tauri::Runtime>(window: &WebviewWindow<R>)
         );
     }
 }
+
+/// Register a `LaunchingExternalUriScheme` handler that suppresses
+/// WebView2's "open <app>?" confirmation prompt and hands the URI to
+/// `on_launch` instead.
+///
+/// The MapleStory Classic portal auto-fires an `ngm://` launch on
+/// arrival; without this hook WebView2 pops a confirmation dialog the
+/// user must click (and our portal window is hidden, so the launch
+/// would silently stall). With it, the prompt is cancelled and the
+/// caller starts Nexon Game Manager natively from its registered
+/// handler (`commands::classic`).
+///
+/// Requires `ICoreWebView2_18` (WebView2 Runtime 111+, 2023). Returns
+/// an error on older runtimes so the caller can fall back to showing
+/// the window and letting the user click the prompt by hand.
+pub fn register_external_uri_handler<R, F>(
+    window: &WebviewWindow<R>,
+    on_launch: F,
+) -> Result<(), String>
+where
+    R: tauri::Runtime,
+    F: Fn(&str) + Send + Sync + 'static,
+{
+    use std::sync::Mutex;
+
+    // `with_webview` runs the closure on the event loop thread — marshal
+    // the registration outcome back so the caller knows whether the
+    // prompt is actually suppressed (it changes the whole UX strategy).
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    let tx = Arc::new(Mutex::new(Some(tx)));
+    let on_launch = Arc::new(on_launch);
+
+    let result = window.with_webview(move |webview| unsafe {
+        use webview2_com::LaunchingExternalUriSchemeEventHandler;
+        use webview2_com_sys::Microsoft::Web::WebView2::Win32::ICoreWebView2_18;
+
+        let core = match webview.controller().CoreWebView2() {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(sender) = tx.lock().unwrap().take() {
+                    let _ = sender.send(Err(format!("CoreWebView2 unavailable: {e}")));
+                }
+                return;
+            }
+        };
+
+        let core18: ICoreWebView2_18 = match Interface::cast(&core) {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(sender) = tx.lock().unwrap().take() {
+                    let _ = sender.send(Err(format!(
+                        "ICoreWebView2_18 unavailable (runtime too old): {e}"
+                    )));
+                }
+                return;
+            }
+        };
+
+        let cb = on_launch.clone();
+        let handler = LaunchingExternalUriSchemeEventHandler::create(Box::new(
+            move |_sender, args| -> wv2_windows_core::Result<()> {
+                if let Some(args) = args {
+                    let mut uri = wv2_windows_core::PWSTR::null();
+                    args.Uri(&mut uri)?;
+                    let url = uri.to_string().unwrap_or_default();
+                    if !uri.is_null() {
+                        wv2_windows_core::imp::CoTaskMemFree(uri.as_ptr() as _);
+                    }
+                    // Cancel the prompt; the callback owns the launch.
+                    args.SetCancel(true)?;
+                    if !url.is_empty() {
+                        tracing::info!(
+                            step = "NativeHandler.ExternalUriScheme",
+                            "intercepted external-scheme launch: {url}"
+                        );
+                        cb(&url);
+                    }
+                }
+                Ok(())
+            },
+        ));
+
+        let mut token: i64 = 0;
+        if let Err(e) = core18.add_LaunchingExternalUriScheme(&handler, &mut token) {
+            if let Some(sender) = tx.lock().unwrap().take() {
+                let _ = sender.send(Err(format!("add_LaunchingExternalUriScheme failed: {e}")));
+            }
+            return;
+        }
+        tracing::info!(
+            step = "NativeHandler.ExternalUriScheme",
+            token,
+            "registered LaunchingExternalUriScheme handler"
+        );
+
+        if let Some(sender) = tx.lock().unwrap().take() {
+            let _ = sender.send(Ok(()));
+        }
+    });
+
+    if let Err(e) = result {
+        return Err(format!(
+            "with_webview failed for LaunchingExternalUriScheme handler: {e}"
+        ));
+    }
+
+    match rx.recv_timeout(std::time::Duration::from_secs(5)) {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err("LaunchingExternalUriScheme registration timed out".to_string()),
+    }
+}

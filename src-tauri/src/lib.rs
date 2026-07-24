@@ -178,6 +178,23 @@ fn webview_instance_base_dir() -> Option<PathBuf> {
         })
 }
 
+/// The per-instance WebView2 data directory prepared at boot, for
+/// runtime-created webview windows (e.g. the MapleStory Classic portal
+/// in `commands::classic`) to share with the main window. Sharing the
+/// directory means sharing the already-running per-instance browser
+/// process — a second window must NOT fall back to Tauri's default
+/// shared folder, or it reintroduces the cross-instance
+/// `ERROR_INVALID_STATE` failure (#340) for that window.
+///
+/// Returns `None` when boot fell back to the shared default (the
+/// window builder then simply omits `data_directory`, matching the
+/// main window's fallback).
+#[cfg(target_os = "windows")]
+pub(crate) fn current_instance_webview_dir() -> Option<PathBuf> {
+    let dir = webview_instance_base_dir()?.join(std::process::id().to_string());
+    dir.is_dir().then_some(dir)
+}
+
 /// Create (and lock) this process's WebView2 user data folder.
 ///
 /// Returns `None` — falling back to Tauri's shared default folder — if
