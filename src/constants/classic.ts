@@ -20,3 +20,7 @@ export const CLASSIC_ELIGIBLE_GAME_CODES: ReadonlySet<string> = new Set(['610074
 export const CLASSIC_LAUNCHED_EVENT = 'classic-launched'
 export const CLASSIC_FAILED_EVENT = 'classic-launch-failed'
 export const CLASSIC_TIMEOUT_EVENT = 'classic-launch-timeout'
+
+/** Official Nexon Game Manager installer (shown when the self-check
+ * finds no `ngm://` handler). */
+export const NGM_DOWNLOAD_URL = 'https://platform.nexon.com/NGM/Bin/Install_NGM.exe'

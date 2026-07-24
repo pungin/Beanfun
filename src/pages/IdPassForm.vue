@@ -120,7 +120,9 @@ import { useAuthStore, AUTH_ACTIONS, type LoginIntent } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
 import { useUiStore } from '../stores/ui'
 import { LOGIN_EXTERNAL_URLS, LOGIN_METHOD, type LoginExternalUrlKind } from '../constants/login'
-import type { LoginRegion } from '../types/bindings'
+import { commands, type ClassicCheck, type LoginRegion } from '../types/bindings'
+import { NGM_DOWNLOAD_URL } from '../constants/classic'
+import { safeInvoke } from '../services/invoke'
 import { useGameLauncher } from '../composables/useGameLauncher'
 import { useInAppBrowser } from '../composables/useInAppBrowser'
 
@@ -197,6 +199,50 @@ const ui = useUiStore()
  * the GamaPass login instead of silently launching nothing.
  */
 const classicNeedsGamapass = computed(() => ui.classicLoginMode && currentRegion.value === 'TW')
+
+/**
+ * Classic environment self-check (MapleLink parity): reports whether
+ * Nexon Game Manager's `ngm://` handler is registered so the user
+ * finds out BEFORE logging in, not from a stalled hidden launch.
+ * Runs whenever the 懷舊服 toggle turns on; re-runnable via the
+ * 重新檢測 link.
+ */
+const classicCheck = ref<ClassicCheck | null>(null)
+const classicChecking = ref(false)
+
+const classicNgmReady = computed(
+  () =>
+    classicCheck.value !== null &&
+    classicCheck.value.ngmRegistered &&
+    classicCheck.value.ngmExeExists,
+)
+
+async function runClassicSelfCheck(): Promise<void> {
+  if (classicChecking.value) return
+  classicChecking.value = true
+  classicCheck.value = null
+  try {
+    const result = await commands.classicSelfCheck()
+    if (result.status === 'ok') classicCheck.value = result.data
+  } catch {
+    /* leave classicCheck null — status row keeps showing "checking" state */
+  } finally {
+    classicChecking.value = false
+  }
+}
+
+watch(
+  () => ui.classicLoginMode,
+  (on) => {
+    if (on) void runClassicSelfCheck()
+  },
+  { immediate: true },
+)
+
+/** Open the official NGM installer download in the system browser. */
+async function handleDownloadNgm(): Promise<void> {
+  await safeInvoke(commands.openUrl(NGM_DOWNLOAD_URL))
+}
 
 /*
  * WPF coupling (`id-pass_form.xaml.cs` L29-37): toggling AutoLogin
@@ -558,6 +604,31 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
       >
         {{ t('classic.gamapassButton') }}
       </el-button>
+      <div class="id-pass-form__classic-status" data-test="id-pass-classic-status">
+        <span v-if="classicChecking || classicCheck === null">{{ t('classic.checking') }}</span>
+        <span v-else-if="classicNgmReady" class="id-pass-form__classic-status-ok">
+          ✓ {{ t('classic.ready') }}
+        </span>
+        <template v-else>
+          <span class="id-pass-form__classic-status-bad">⚠ {{ t('classic.ngmMissing') }}</span>
+          <button
+            type="button"
+            class="id-pass-form__inline-link"
+            data-test="id-pass-classic-download"
+            @click="handleDownloadNgm"
+          >
+            {{ t('classic.download') }}
+          </button>
+        </template>
+        <button
+          type="button"
+          class="id-pass-form__inline-link"
+          data-test="id-pass-classic-recheck"
+          @click="runClassicSelfCheck"
+        >
+          {{ t('classic.recheck') }}
+        </button>
+      </div>
     </div>
 
     <template v-else>
@@ -632,6 +703,39 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
             {{ t('ForgotPassword') }}
           </button>
         </div>
+      </div>
+
+      <div
+        v-if="ui.classicLoginMode && currentRegion === 'HK'"
+        class="id-pass-form__classic-status"
+        data-test="id-pass-classic-status-hk"
+      >
+        <span v-if="classicChecking || classicCheck === null">{{ t('classic.checking') }}</span>
+        <span v-else-if="classicNgmReady" class="id-pass-form__classic-status-ok">
+          ✓ {{ t('classic.ready') }}
+        </span>
+        <template v-else>
+          <span class="id-pass-form__classic-status-bad">⚠ {{ t('classic.ngmMissing') }}</span>
+          <button
+            type="button"
+            class="id-pass-form__inline-link"
+            data-test="id-pass-classic-download"
+            @click="handleDownloadNgm"
+          >
+            {{ t('classic.download') }}
+          </button>
+        </template>
+        <button
+          type="button"
+          class="id-pass-form__inline-link"
+          data-test="id-pass-classic-recheck"
+          @click="runClassicSelfCheck"
+        >
+          {{ t('classic.recheck') }}
+        </button>
+        <p class="id-pass-form__classic-nocn" data-test="id-pass-classic-nocn">
+          {{ t('classic.noCn') }}
+        </p>
       </div>
 
       <div class="id-pass-form__actions">
@@ -778,6 +882,33 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
   font-size: 0.8rem;
   line-height: 1.6;
   color: var(--bf-primary, #954a00);
+}
+
+.id-pass-form__classic-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--bf-on-surface-variant, #54443a);
+}
+
+.id-pass-form__classic-status-ok {
+  color: var(--el-color-success, #4f8a3d);
+  font-weight: 600;
+}
+
+.id-pass-form__classic-status-bad {
+  color: var(--el-color-danger, #c04851);
+  font-weight: 600;
+}
+
+.id-pass-form__classic-nocn {
+  flex-basis: 100%;
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--bf-on-surface-variant, #54443a);
 }
 
 .id-pass-form__inline-links {

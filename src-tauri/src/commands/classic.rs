@@ -51,6 +51,12 @@ use super::state::AppState;
 /// `ngm://` launch on arrival.
 const CLASSIC_ENTRY_URL: &str = "https://galaxy.games.gamania.com/webapi/view/login/mstc?redirect_url=https://maplestoryclassic.beanfun.com/Main?af_click_id=";
 
+/// User-Agent for the classic portal webview. beanfun/galaxy pages
+/// behave differently under the default WebView2 UA (Edg/WebView
+/// markers) — MapleLink ships the same plain-Chrome UA for exactly
+/// this window and its SSO is the working reference, so match it.
+const CLASSIC_PORTAL_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36";
+
 /// Window label for the (usually hidden) classic portal webview.
 const CLASSIC_WINDOW_LABEL: &str = "classic-login";
 
@@ -313,6 +319,7 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
     .resizable(true)
     .center()
     .visible(false)
+    .user_agent(CLASSIC_PORTAL_USER_AGENT)
     .initialization_script(&init_script);
     // Same per-instance WebView2 profile as the main window (issue
     // #340) so multi-instance users can't hit the shared-browser-process
