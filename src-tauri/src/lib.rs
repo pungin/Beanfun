@@ -491,9 +491,11 @@ pub fn run() {
         std::process::exit(1);
     });
 
-    // WebView2 browser arguments — set before the runtime initialises.
+    // WebView2 browser arguments — attached to the main window builder in
+    // `setup` (runtime windows share the per-instance environment the main
+    // window creates, so its args govern the whole browser process).
     #[cfg(target_os = "windows")]
-    {
+    let browser_args: String = {
         let config_path = storage_root.join("Config.xml");
         let disable_hw_accel =
             services::config::get_value_sync(&config_path, "disableHardwareAcceleration")
@@ -523,7 +525,22 @@ pub fn run() {
         // multiplies its `LogicalSize` by the measured text-scale ratio so
         // the window grows to fit the enlarged text rather than fighting it
         // (see src/services/windowFit.ts).
-        let mut args: Vec<String> = Vec::new();
+        // IMPORTANT: these must go through the window builder's
+        // `additional_browser_args`, NOT the
+        // `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` env var. wry passes
+        // explicit `AdditionalBrowserArguments` environment options, and
+        // the WebView2 loader then ignores the env var entirely —
+        // verified empirically: with the env var set, the spawned
+        // browser process carried none of its flags (which also means
+        // the old env-var-based hw-accel toggle silently never worked).
+        //
+        // The builder REPLACES wry's default args, so wry's defaults
+        // (mini-menu/smart-screen feature disables + autoplay) must be
+        // restated here or they'd silently vanish.
+        let mut args: Vec<String> = vec![
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection".to_string(),
+            "--autoplay-policy=no-user-gesture-required".to_string(),
+        ];
 
         if disable_hw_accel {
             args.push("--disable-gpu".to_string());
@@ -531,10 +548,20 @@ pub fn run() {
             tracing::info!("hardware acceleration disabled via Config.xml");
         }
 
-        if !args.is_empty() {
-            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args.join(" "));
+        // Dev/testing affordance: expose the webview's Chrome DevTools
+        // Protocol endpoint so automated tooling can drive the app
+        // (`BEANFUN_REMOTE_DEBUGGING_PORT=9222 beanfun.exe`). The flag
+        // applies to the whole per-instance browser process, so runtime
+        // windows (classic portal, in-app browsers) are inspectable too.
+        if let Ok(port) = std::env::var("BEANFUN_REMOTE_DEBUGGING_PORT") {
+            if port.chars().all(|c| c.is_ascii_digit()) && !port.is_empty() {
+                args.push(format!("--remote-debugging-port={port}"));
+                tracing::info!("webview remote debugging enabled on port {port}");
+            }
         }
-    }
+
+        args.join(" ")
+    };
 
     // Per-instance WebView2 profile (issue #340) — see
     // `webview_instance_base_dir` for why instances must not share one.
@@ -602,6 +629,14 @@ pub fn run() {
                     .resizable(false);
             if let Some(dir) = webview_data_dir.clone() {
                 win_builder = win_builder.data_directory(dir);
+            }
+            // Browser args must ride the builder — the WebView2 loader
+            // ignores the WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS env var
+            // when explicit environment options are passed (see the
+            // `browser_args` construction above).
+            #[cfg(target_os = "windows")]
+            {
+                win_builder = win_builder.additional_browser_args(&browser_args);
             }
             win_builder.build()?;
 
