@@ -295,6 +295,9 @@ describe('IdPassForm', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockLoginRegular.mockReset()
+    vi.mocked(commands.openUrl).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openUrl>
+    >)
     vi.mocked(commands.classicSelfCheck).mockResolvedValue({
       status: 'ok',
       data: { ngmRegistered: true, ngmExe: 'C:/NGM/NGM64.exe', ngmExeExists: true },
@@ -619,6 +622,9 @@ describe('IdPassForm — P12.2 D2 credential persistence', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockLoginRegular.mockReset()
+    vi.mocked(commands.openUrl).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openUrl>
+    >)
     vi.mocked(commands.classicSelfCheck).mockResolvedValue({
       status: 'ok',
       data: { ngmRegistered: true, ngmExe: 'C:/NGM/NGM64.exe', ngmExeExists: true },
@@ -830,6 +836,9 @@ describe('IdPassForm — P12.4 followup-A/B (Register / Forgot / GameStart)', ()
   beforeEach(() => {
     setActivePinia(createPinia())
     mockLoginRegular.mockReset()
+    vi.mocked(commands.openUrl).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openUrl>
+    >)
     vi.mocked(commands.classicSelfCheck).mockResolvedValue({
       status: 'ok',
       data: { ngmRegistered: true, ngmExe: 'C:/NGM/NGM64.exe', ngmExeExists: true },

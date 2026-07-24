@@ -761,19 +761,26 @@ async function handleStartClassic(): Promise<void> {
 const classicUnlistenFns: UnlistenFn[] = []
 
 async function registerClassicListeners(): Promise<void> {
-  const launched = await listen(CLASSIC_LAUNCHED_EVENT, () => {
-    classicLaunching.value = false
-    ElMessage.success(t('classic.launched'))
-  })
-  const failed = await listen(CLASSIC_FAILED_EVENT, () => {
-    classicLaunching.value = false
-    ElMessage.warning(t('classic.launchFailed'))
-  })
-  const timedOut = await listen(CLASSIC_TIMEOUT_EVENT, () => {
-    classicLaunching.value = false
-    ElMessage.warning(t('classic.launchTimeout'))
-  })
-  classicUnlistenFns.push(launched, failed, timedOut)
+  // try/catch: `listen` needs the Tauri IPC bridge; in jsdom specs that
+  // don't stub `@tauri-apps/api/event` (or any IPC-less environment) it
+  // rejects — the page must still mount, just without the toasts.
+  try {
+    const launched = await listen(CLASSIC_LAUNCHED_EVENT, () => {
+      classicLaunching.value = false
+      ElMessage.success(t('classic.launched'))
+    })
+    const failed = await listen(CLASSIC_FAILED_EVENT, () => {
+      classicLaunching.value = false
+      ElMessage.warning(t('classic.launchFailed'))
+    })
+    const timedOut = await listen(CLASSIC_TIMEOUT_EVENT, () => {
+      classicLaunching.value = false
+      ElMessage.warning(t('classic.launchTimeout'))
+    })
+    classicUnlistenFns.push(launched, failed, timedOut)
+  } catch (e) {
+    console.warn('[account-list] classic event listeners unavailable', e)
+  }
 }
 
 /* --------------- D8c — game switcher + active-service pipeline --------------- */
