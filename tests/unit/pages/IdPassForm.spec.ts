@@ -400,26 +400,24 @@ describe('IdPassForm', () => {
     expect(mockLoginRegular).toHaveBeenCalledWith('HK', 'hk-user', 'hk-pass')
   })
 
-  it('classic: after-login checkbox renders for HK only', async () => {
+  it('classic: GamaPass hint shows only for TW with classic mode on', async () => {
     const hk = mountForm('HK')
+    useConfigStore().entries['classicLoginMode'] = 'true'
     const hkWrapper = await hk.mountIt()
-    expect(hkWrapper.find('[data-test="id-pass-classic-after-login"]').exists()).toBe(true)
+    expect(hkWrapper.find('[data-test="id-pass-classic-hint"]').exists()).toBe(false)
 
     setActivePinia(createPinia())
     const tw = mountForm('TW')
+    useConfigStore().entries['classicLoginMode'] = 'true'
     const twWrapper = await tw.mountIt()
-    expect(twWrapper.find('[data-test="id-pass-classic-after-login"]').exists()).toBe(false)
+    expect(twWrapper.find('[data-test="id-pass-classic-hint"]').exists()).toBe(true)
   })
 
-  it('classic: ticked checkbox arms pendingClassicLaunch on an HK submit', async () => {
+  it('classic: HK submit with classic mode on arms pendingClassicLaunch', async () => {
     const ctx = mountForm('HK')
+    useConfigStore().entries['classicLoginMode'] = 'true'
     const wrapper = await ctx.mountIt()
     mockLoginRegular.mockReturnValueOnce(ok({ ...FAKE_SESSION, region: 'HK' }))
-
-    const classicBox = wrapper.find(
-      '[data-test="id-pass-classic-after-login"] .el-checkbox-stub__input',
-    )
-    await classicBox.setValue(true)
 
     const inputs = wrapper.findAll('.el-input-stub')
     await inputs[0].setValue('hk-user')
@@ -430,15 +428,26 @@ describe('IdPassForm', () => {
     expect(useUiStore().pendingClassicLaunch).toBe(true)
   })
 
+  it('classic: TW submit never arms even with classic mode on', async () => {
+    const ctx = mountForm('TW')
+    useConfigStore().entries['classicLoginMode'] = 'true'
+    const wrapper = await ctx.mountIt()
+    mockLoginRegular.mockReturnValueOnce(ok(FAKE_SESSION))
+
+    const inputs = wrapper.findAll('.el-input-stub')
+    await inputs[0].setValue('tw-user')
+    await inputs[1].setValue('tw-pass')
+    await wrapper.find('.el-form-stub').trigger('submit')
+    await flushPromises()
+
+    expect(useUiStore().pendingClassicLaunch).toBe(false)
+  })
+
   it('classic: a failed login disarms pendingClassicLaunch', async () => {
     const ctx = mountForm('HK')
+    useConfigStore().entries['classicLoginMode'] = 'true'
     const wrapper = await ctx.mountIt()
     mockLoginRegular.mockRejectedValueOnce(new Error('bad credentials'))
-
-    const classicBox = wrapper.find(
-      '[data-test="id-pass-classic-after-login"] .el-checkbox-stub__input',
-    )
-    await classicBox.setValue(true)
 
     const inputs = wrapper.findAll('.el-input-stub')
     await inputs[0].setValue('hk-user')

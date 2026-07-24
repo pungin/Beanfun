@@ -186,26 +186,17 @@ const password = ref('')
 const remember = ref(false)
 const autoLogin = ref(false)
 
-/* --------------- MapleStory Classic (懷舊服) after-login launch --------------- */
+/* --------------- MapleStory Classic (懷舊服) login mode --------------- */
 
 const ui = useUiStore()
 
-/** Config.xml key persisting the 「登入後啟動經典版」 preference. */
-const CLASSIC_AFTER_LOGIN_KEY = 'classicAfterLogin'
-
 /**
- * 「登入後啟動經典版」 checkbox. HK-only in the template: the classic
- * galaxy SSO can only be driven by an HK (account/password) session —
- * a TW account/password session has no portal-side identity (TW users
- * launch Classic via GamaPass login instead). Sticky across launches
- * via Config.xml; the actual one-shot trigger is
- * `ui.pendingClassicLaunch`, set per submission.
+ * The title-bar Classic toggle (`LoginPage.vue`) is on but the form is
+ * in TW — a TW account/password session can't drive the classic
+ * galaxy SSO (no portal-side identity), so surface a hint pointing at
+ * the GamaPass login instead of silently launching nothing.
  */
-const classicAfterLogin = ref(config.get(CLASSIC_AFTER_LOGIN_KEY) === '1')
-
-watch(classicAfterLogin, (next) => {
-  void config.set(CLASSIC_AFTER_LOGIN_KEY, next ? '1' : '0')
-})
+const classicNeedsGamapass = computed(() => ui.classicLoginMode && currentRegion.value === 'TW')
 
 /*
  * WPF coupling (`id-pass_form.xaml.cs` L29-37): toggling AutoLogin
@@ -439,7 +430,7 @@ async function submit(): Promise<void> {
    * consumes + resets it on mount. Overwriting on every submission
    * clears any stale value from an abandoned earlier attempt.
    */
-  ui.pendingClassicLaunch = classicAfterLogin.value && intent.region === 'HK'
+  ui.pendingClassicLaunch = ui.classicLoginMode && intent.region === 'HK'
 
   try {
     const session = await auth.loginRegular(intent.region, intent.accountId, intent.password)
@@ -598,13 +589,14 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
       <div class="id-pass-form__checkboxes">
         <el-checkbox v-model="remember" :label="t('RememberPassword')" />
         <el-checkbox v-model="autoLogin" :label="t('AutoLogin')" />
-        <el-checkbox
-          v-if="currentRegion === 'HK'"
-          v-model="classicAfterLogin"
-          :label="t('classic.afterLogin')"
-          data-test="id-pass-classic-after-login"
-        />
       </div>
+      <p
+        v-if="classicNeedsGamapass"
+        class="id-pass-form__classic-hint"
+        data-test="id-pass-classic-hint"
+      >
+        {{ t('classic.needGamapass') }}
+      </p>
       <div class="id-pass-form__inline-links">
         <button
           type="button"
@@ -754,6 +746,13 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.id-pass-form__classic-hint {
+  flex-basis: 100%;
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--bf-primary, #954a00);
 }
 
 .id-pass-form__inline-links {
