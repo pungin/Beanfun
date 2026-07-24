@@ -680,8 +680,47 @@ async function handleClearWebviewCache(): Promise<void> {
 
 /* --------------- mount --------------- */
 
+/* --------------- MapleStory Classic — NGM path fallback --------------- */
+
+/**
+ * Config.xml key holding a user-chosen Nexon Game Manager executable.
+ * Normally empty: the classic launcher (`commands::classic`) resolves
+ * NGM from its registered `ngm://` handler (`HKCR\ngm\shell\open\command`)
+ * and only consults this path when that auto-detection fails.
+ */
+const CLASSIC_NGM_PATH_KEY = 'classicNgmPath'
+
+const classicNgmPath = ref('')
+
+/** Pick the NGM executable by hand (fallback when auto-detect fails). */
+async function handleBrowseClassicNgm(): Promise<void> {
+  let picked: string | string[] | null
+  try {
+    picked = await openFileDialog({
+      title: 'Nexon Game Manager',
+      multiple: false,
+      directory: false,
+      filters: [{ name: 'NGM (*.exe)', extensions: ['exe'] }],
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    ElMessage.error(msg)
+    return
+  }
+  if (picked === null || Array.isArray(picked)) return
+  await configStore.set(CLASSIC_NGM_PATH_KEY, picked)
+  classicNgmPath.value = picked
+}
+
+/** Back to auto-detection (clear the manual override). */
+async function handleClearClassicNgm(): Promise<void> {
+  await configStore.set(CLASSIC_NGM_PATH_KEY, '')
+  classicNgmPath.value = ''
+}
+
 onMounted(() => {
   void hydrateGamePath()
+  classicNgmPath.value = configStore.get(CLASSIC_NGM_PATH_KEY) ?? ''
 })
 </script>
 
@@ -995,6 +1034,34 @@ onMounted(() => {
               <span>{{ t('settings.clearWebviewCache') }}</span>
             </el-button>
           </div>
+          <!-- MapleStory Classic: manual NGM path fallback. Auto-detection
+               reads the ngm:// registry handler; this override is only for
+               machines where that registration is broken. -->
+          <div class="settings__classic-ngm">
+            <span class="settings__classic-ngm-label">{{ t('settings.classicNgmPath') }}</span>
+            <el-input
+              v-model="classicNgmPath"
+              class="settings__classic-ngm-input"
+              readonly
+              :placeholder="t('settings.classicNgmAuto')"
+              data-test="settings-classic-ngm-path"
+            />
+            <el-button
+              class="bf-btn-secondary"
+              data-test="settings-classic-ngm-browse"
+              @click="handleBrowseClassicNgm"
+            >
+              {{ t('settings.classicNgmBrowse') }}
+            </el-button>
+            <el-button
+              v-if="classicNgmPath !== ''"
+              class="bf-btn-secondary"
+              data-test="settings-classic-ngm-clear"
+              @click="handleClearClassicNgm"
+            >
+              {{ t('settings.classicNgmClear') }}
+            </el-button>
+          </div>
         </section>
 
         <!-- Footer: Back button -->
@@ -1190,6 +1257,25 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.settings__classic-ngm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.settings__classic-ngm-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.settings__classic-ngm-input {
+  flex: 1 1 180px;
+  min-width: 140px;
 }
 
 .settings__maintenance-actions .el-button {

@@ -89,6 +89,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import {
   ElButton,
   ElCheckbox,
@@ -141,6 +142,12 @@ import ToolsDialogStack from '../windows/ToolsDialogStack.vue'
 import UnconnectedGameAddAccount from '../windows/UnconnectedGame_AddAccount.vue'
 import UnconnectedGameChangePassword from '../windows/UnconnectedGame_ChangePassword.vue'
 import { TOOLS_GAME_CODES } from '../constants/tools'
+import {
+  CLASSIC_ELIGIBLE_GAME_CODES,
+  CLASSIC_LAUNCHED_EVENT,
+  CLASSIC_FAILED_EVENT,
+  CLASSIC_TIMEOUT_EVENT,
+} from '../constants/classic'
 import TitleBar from '../components/TitleBar.vue'
 import { useGameLauncher } from '../composables/useGameLauncher'
 
@@ -717,6 +724,57 @@ const showToolsButton = computed<boolean>(() => {
   if (game.selectedGameCode === null) return false
   return TOOLS_GAME_CODES.has(game.selectedGameCode)
 })
+
+/* --------------- MapleStory Classic (懷舊服) --------------- */
+
+/**
+ * Show the Classic launch button only when (a) the selected game is
+ * MapleStory and (b) this session can actually drive the galaxy SSO —
+ * an HK session (account/password) or a TW GamaPass session. A TW
+ * account/password or QR session has no portal-side identity, so the
+ * classic portal would just dead-end at its login page.
+ */
+const showClassicButton = computed<boolean>(() => {
+  const code = game.selectedGameCode
+  if (code === null || !CLASSIC_ELIGIBLE_GAME_CODES.has(code)) return false
+  return auth.session?.region === 'HK' || auth.viaGamepass
+})
+
+/** Re-entry guard: one classic launch in flight at a time. */
+const classicLaunching = ref(false)
+
+/**
+ * Kick off the hidden galaxy SSO → NGM launch
+ * (`commands.openClassicLogin`). Outcome arrives asynchronously via
+ * the `classic-*` Tauri events registered in `onMounted`; the guard is
+ * released there (or on invoke error).
+ */
+async function handleStartClassic(): Promise<void> {
+  if (classicLaunching.value) return
+  classicLaunching.value = true
+  ElMessage.info(t('classic.launching'))
+  const result = await safeInvoke(commands.openClassicLogin())
+  if (!result.ok) classicLaunching.value = false
+}
+
+/** `listen()` handles for the classic launch events, torn down on unmount. */
+const classicUnlistenFns: UnlistenFn[] = []
+
+async function registerClassicListeners(): Promise<void> {
+  const launched = await listen(CLASSIC_LAUNCHED_EVENT, () => {
+    classicLaunching.value = false
+    ElMessage.success(t('classic.launched'))
+  })
+  const failed = await listen(CLASSIC_FAILED_EVENT, () => {
+    classicLaunching.value = false
+    ElMessage.warning(t('classic.launchFailed'))
+  })
+  const timedOut = await listen(CLASSIC_TIMEOUT_EVENT, () => {
+    classicLaunching.value = false
+    ElMessage.warning(t('classic.launchTimeout'))
+  })
+  classicUnlistenFns.push(launched, failed, timedOut)
+}
 
 /* --------------- D8c — game switcher + active-service pipeline --------------- */
 
@@ -2178,10 +2236,19 @@ function handleGlobalEnter(event: KeyboardEvent): void {
 
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalEnter)
+  void registerClassicListeners()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleGlobalEnter)
+  for (const unlisten of classicUnlistenFns) {
+    try {
+      unlisten()
+    } catch (e) {
+      console.error('[account-list] classic unlisten threw', e)
+    }
+  }
+  classicUnlistenFns.length = 0
 })
 </script>
 
@@ -2246,6 +2313,18 @@ onBeforeUnmount(() => {
             >
               <el-icon :size="14"><VideoPlay /></el-icon>
               <span>{{ t('GameStart') }}</span>
+            </button>
+            <button
+              v-if="showClassicButton"
+              type="button"
+              class="bf-btn-gradient account-list__start-btn account-list__classic-btn"
+              :disabled="classicLaunching"
+              :title="t('classic.buttonTitle')"
+              data-test="account-list-classic"
+              @click="handleStartClassic"
+            >
+              <el-icon :size="14"><VideoPlay /></el-icon>
+              <span>{{ t('classic.button') }}</span>
             </button>
             <button
               v-if="showToolsButton"

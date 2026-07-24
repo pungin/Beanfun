@@ -248,6 +248,17 @@ vi.mock('sortablejs', () => ({
   },
 }))
 
+const { classicEventListeners } = vi.hoisted(() => ({
+  classicEventListeners: {} as Record<string, (event: unknown) => void>,
+}))
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn((event: string, cb: (event: unknown) => void) => {
+    classicEventListeners[event] = cb
+    return Promise.resolve(vi.fn())
+  }),
+}))
+
 vi.mock('../../../src/types/bindings', () => ({
   commands: {
     getAccounts: vi.fn(),
@@ -303,6 +314,8 @@ vi.mock('../../../src/types/bindings', () => ({
      */
     openInAppBrowser: vi.fn(),
     openMemberCenterBrowser: vi.fn(),
+    /* MapleStory Classic (懷舊服) galaxy-SSO launch trigger. */
+    openClassicLogin: vi.fn(),
   },
 }))
 
@@ -814,6 +827,7 @@ describe('AccountList page', () => {
     vi.mocked(commands.checkAndKillMaplePatcher).mockReturnValue(ok([]))
     vi.mocked(commands.launchGame).mockReturnValue(ok(null))
     vi.mocked(commands.openUrl).mockReturnValue(ok(null))
+    vi.mocked(commands.openClassicLogin).mockReturnValue(ok(null))
   })
 
   it('shows the loading state while getAccounts is in flight', async () => {
@@ -1319,6 +1333,87 @@ describe('AccountList page', () => {
 
     expect(openForGame).toHaveBeenCalledTimes(1)
     expect(openForGame).toHaveBeenCalledWith('610074_T9')
+  })
+
+  it('classic: button shows for an HK session with MapleStory selected', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+    const ctx = buildHarness()
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    useAuthStore().session = { ...FAKE_SESSION, region: 'HK' }
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="account-list-classic"]').exists()).toBe(true)
+  })
+
+  it('classic: hidden for a TW account/password session (cannot drive the galaxy SSO)', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+    const ctx = buildHarness()
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    useAuthStore().session = FAKE_SESSION // TW, not via GamePass
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="account-list-classic"]').exists()).toBe(false)
+  })
+
+  it('classic: shown for a TW GamaPass session', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+    const ctx = buildHarness()
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    const auth = useAuthStore()
+    auth.session = FAKE_SESSION
+    auth.viaGamepass = true
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="account-list-classic"]').exists()).toBe(true)
+  })
+
+  it('classic: hidden when the selected game is not MapleStory', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+    const ctx = buildHarness()
+    seedActiveGame(KARTRIDER_TW, KARTRIDER_TW_INI)
+    useAuthStore().session = { ...FAKE_SESSION, region: 'HK' }
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="account-list-classic"]').exists()).toBe(false)
+  })
+
+  it('classic: click invokes openClassicLogin and toasts the launching notice', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+    const ctx = buildHarness()
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    useAuthStore().session = { ...FAKE_SESSION, region: 'HK' }
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    await wrapper.get('[data-test="account-list-classic"]').trigger('click')
+    await flushPromises()
+
+    expect(commands.openClassicLogin).toHaveBeenCalledTimes(1)
+    expect(ElMessage.info).toHaveBeenCalled()
+  })
+
+  it('classic: launch-failed event resets the guard and warns', async () => {
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+    const ctx = buildHarness()
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    useAuthStore().session = { ...FAKE_SESSION, region: 'HK' }
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    // Launch, then let the backend report failure via the Tauri event.
+    await wrapper.get('[data-test="account-list-classic"]').trigger('click')
+    await flushPromises()
+    classicEventListeners['classic-launch-failed']?.({})
+    await flushPromises()
+
+    expect(ElMessage.warning).toHaveBeenCalled()
+    // Guard released — the button is clickable again.
+    const btn = wrapper.get('[data-test="account-list-classic"]').element as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
   })
 
   it('logout: dismissing the confirm dialog is a hard cancel', async () => {
