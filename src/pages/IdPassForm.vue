@@ -537,123 +537,141 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
 
 <template>
   <el-form class="id-pass-form" label-position="top" @submit.prevent="submit">
-    <div class="id-pass-form__field">
-      <label class="id-pass-form__label">{{ t('AcountOrEmail') }}</label>
-      <div class="id-pass-form__account-wrap">
-        <el-input
-          v-model="account"
-          size="default"
-          autocomplete="username"
-          :placeholder="t('AcountOrEmail')"
-          @keydown="handleAccountKeydown"
-          @wheel.prevent="handleAccountWheel"
-        />
-        <button
-          v-if="savedAccountsForRegion.length > 0"
-          type="button"
-          class="id-pass-form__dropdown-btn"
-          @click="showAccountDropdown = !showAccountDropdown"
-        >
-          <span class="material-symbols-outlined">expand_more</span>
-        </button>
-        <ul v-if="showAccountDropdown" class="id-pass-form__dropdown">
-          <li
-            v-for="sa in savedAccountsForRegion"
-            :key="sa.account_id"
-            class="id-pass-form__dropdown-item"
-            @mousedown.prevent="selectAccount(sa.account_id)"
-          >
-            {{ sa.account_id }}
-          </li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="id-pass-form__field">
-      <label class="id-pass-form__label">{{ t('Password_') }}</label>
-      <el-input
-        v-model="password"
-        type="password"
-        size="default"
-        autocomplete="current-password"
-        :placeholder="t('Password_')"
-        show-password
-      >
-        <template #prefix>
-          <el-icon><Lock /></el-icon>
-        </template>
-      </el-input>
-    </div>
-
-    <div class="id-pass-form__options">
-      <div class="id-pass-form__checkboxes">
-        <el-checkbox v-model="remember" :label="t('RememberPassword')" />
-        <el-checkbox v-model="autoLogin" :label="t('AutoLogin')" />
-      </div>
-      <p
-        v-if="classicNeedsGamapass"
-        class="id-pass-form__classic-hint"
-        data-test="id-pass-classic-hint"
-      >
+    <!--
+      懷舊服 mode + TW: a TW account/password session cannot drive the
+      classic galaxy SSO, so the entire regular form (inputs, QR, game
+      start, …) is hidden and the only path offered is GamaPass login.
+    -->
+    <div
+      v-if="classicNeedsGamapass"
+      class="id-pass-form__classic-only"
+      data-test="id-pass-classic-only"
+    >
+      <p class="id-pass-form__classic-hint" data-test="id-pass-classic-hint">
         {{ t('classic.needGamapass') }}
       </p>
-      <div class="id-pass-form__inline-links">
-        <button
-          type="button"
-          class="id-pass-form__inline-link"
-          data-test="id-pass-register"
-          @click="handleRegisterAccount"
-        >
-          {{ t('RegisterAccount') }}
-        </button>
-        <button
-          type="button"
-          class="id-pass-form__inline-link"
-          data-test="id-pass-forgot-password"
-          @click="handleForgotPassword"
-        >
-          {{ t('ForgotPassword') }}
-        </button>
-      </div>
-    </div>
-
-    <div class="id-pass-form__actions">
       <el-button
         type="primary"
         class="id-pass-form__submit"
-        native-type="submit"
-        :loading="submitting"
-      >
-        {{ t('Login') }}
-      </el-button>
-      <el-button
-        class="id-pass-form__game-start"
-        data-test="id-pass-game-start"
-        @click="handleGameStart"
-      >
-        {{ t('GameStart') }}
-      </el-button>
-      <button
-        v-if="currentRegion === 'TW'"
-        type="button"
-        class="id-pass-form__icon-switch"
-        :title="t('QRCodeLogin')"
-        data-test="id-pass-switch-qr"
-        @click="switchToQr"
-      >
-        <span class="material-symbols-outlined">qr_code_2</span>
-      </button>
-      <button
-        v-if="currentRegion === 'TW'"
-        type="button"
-        class="id-pass-form__icon-switch"
-        :title="t('GamePassLogin')"
-        data-test="id-pass-switch-gamepass"
+        data-test="id-pass-classic-gamapass"
         @click="switchToGamepass"
       >
-        <span class="material-symbols-outlined">passkey</span>
-      </button>
+        {{ t('classic.gamapassButton') }}
+      </el-button>
     </div>
+
+    <template v-else>
+      <div class="id-pass-form__field">
+        <label class="id-pass-form__label">{{ t('AcountOrEmail') }}</label>
+        <div class="id-pass-form__account-wrap">
+          <el-input
+            v-model="account"
+            size="default"
+            autocomplete="username"
+            :placeholder="t('AcountOrEmail')"
+            @keydown="handleAccountKeydown"
+            @wheel.prevent="handleAccountWheel"
+          />
+          <button
+            v-if="savedAccountsForRegion.length > 0"
+            type="button"
+            class="id-pass-form__dropdown-btn"
+            @click="showAccountDropdown = !showAccountDropdown"
+          >
+            <span class="material-symbols-outlined">expand_more</span>
+          </button>
+          <ul v-if="showAccountDropdown" class="id-pass-form__dropdown">
+            <li
+              v-for="sa in savedAccountsForRegion"
+              :key="sa.account_id"
+              class="id-pass-form__dropdown-item"
+              @mousedown.prevent="selectAccount(sa.account_id)"
+            >
+              {{ sa.account_id }}
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="id-pass-form__field">
+        <label class="id-pass-form__label">{{ t('Password_') }}</label>
+        <el-input
+          v-model="password"
+          type="password"
+          size="default"
+          autocomplete="current-password"
+          :placeholder="t('Password_')"
+          show-password
+        >
+          <template #prefix>
+            <el-icon><Lock /></el-icon>
+          </template>
+        </el-input>
+      </div>
+
+      <div class="id-pass-form__options">
+        <div class="id-pass-form__checkboxes">
+          <el-checkbox v-model="remember" :label="t('RememberPassword')" />
+          <el-checkbox v-model="autoLogin" :label="t('AutoLogin')" />
+        </div>
+        <div class="id-pass-form__inline-links">
+          <button
+            type="button"
+            class="id-pass-form__inline-link"
+            data-test="id-pass-register"
+            @click="handleRegisterAccount"
+          >
+            {{ t('RegisterAccount') }}
+          </button>
+          <button
+            type="button"
+            class="id-pass-form__inline-link"
+            data-test="id-pass-forgot-password"
+            @click="handleForgotPassword"
+          >
+            {{ t('ForgotPassword') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="id-pass-form__actions">
+        <el-button
+          type="primary"
+          class="id-pass-form__submit"
+          native-type="submit"
+          :loading="submitting"
+        >
+          {{ t('Login') }}
+        </el-button>
+        <el-button
+          class="id-pass-form__game-start"
+          data-test="id-pass-game-start"
+          @click="handleGameStart"
+        >
+          {{ t('GameStart') }}
+        </el-button>
+        <button
+          v-if="currentRegion === 'TW'"
+          type="button"
+          class="id-pass-form__icon-switch"
+          :title="t('QRCodeLogin')"
+          data-test="id-pass-switch-qr"
+          @click="switchToQr"
+        >
+          <span class="material-symbols-outlined">qr_code_2</span>
+        </button>
+        <button
+          v-if="currentRegion === 'TW'"
+          type="button"
+          class="id-pass-form__icon-switch"
+          :title="t('GamePassLogin')"
+          data-test="id-pass-switch-gamepass"
+          @click="switchToGamepass"
+        >
+          <span class="material-symbols-outlined">passkey</span>
+        </button>
+      </div>
+    </template>
   </el-form>
 </template>
 
@@ -748,10 +766,17 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
   gap: 1rem;
 }
 
+.id-pass-form__classic-only {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
 .id-pass-form__classic-hint {
-  flex-basis: 100%;
-  margin: 0.25rem 0 0;
-  font-size: 0.75rem;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.6;
   color: var(--bf-primary, #954a00);
 }
 

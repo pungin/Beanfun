@@ -428,19 +428,21 @@ describe('IdPassForm', () => {
     expect(useUiStore().pendingClassicLaunch).toBe(true)
   })
 
-  it('classic: TW submit never arms even with classic mode on', async () => {
+  it('classic: TW with classic mode on shows ONLY the GamaPass path', async () => {
     const ctx = mountForm('TW')
     useConfigStore().entries['classicLoginMode'] = 'true'
     const wrapper = await ctx.mountIt()
-    mockLoginRegular.mockReturnValueOnce(ok(FAKE_SESSION))
 
-    const inputs = wrapper.findAll('.el-input-stub')
-    await inputs[0].setValue('tw-user')
-    await inputs[1].setValue('tw-pass')
-    await wrapper.find('.el-form-stub').trigger('submit')
+    // The whole regular form is hidden — no inputs, no QR switch, no
+    // game start; the GamaPass button is the only affordance.
+    expect(wrapper.find('[data-test="id-pass-classic-only"]').exists()).toBe(true)
+    expect(wrapper.findAll('.el-input-stub').length).toBe(0)
+    expect(wrapper.find('[data-test="id-pass-switch-qr"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="id-pass-game-start"]').exists()).toBe(false)
+
+    await wrapper.get('[data-test="id-pass-classic-gamapass"]').trigger('click')
     await flushPromises()
-
-    expect(useUiStore().pendingClassicLaunch).toBe(false)
+    expect(ctx.router.currentRoute.value.path).toBe('/login/gamepass')
   })
 
   it('classic: a failed login disarms pendingClassicLaunch', async () => {
