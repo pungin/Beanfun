@@ -91,6 +91,10 @@ pub const CLASSIC_SLOW_EVENT: &str = "classic-launch-slow";
 /// Emitted when the portal needs an interactive sign-in (always the case
 /// for TW, whose classic login is separate from the regular service).
 pub const CLASSIC_NEEDS_LOGIN_EVENT: &str = "classic-needs-login";
+/// Emitted with the GamaPass game accounts when the portal offers more
+/// than one — the frontend shows a native picker and answers with
+/// [`classic_select_account`].
+pub const CLASSIC_ACCOUNT_CHOICE_EVENT: &str = "classic-account-choice";
 
 /// `ui.window_create_failed` twin for the classic portal window.
 const WINDOW_FAILED_CODE: &str = "classic.window_create_failed";
@@ -106,18 +110,15 @@ const SOFT_DEADLINE_TICKS: u32 = 120; // 60 s
 /// Injected into every navigation of the portal window. Drives the whole
 /// flow and reports state back over `WebMessageReceived`.
 ///
-/// # Why the action button is chosen by text, never by position
+/// Selectors are **exact**, taken from the live pages: the account step
+/// is `input[type=radio][name=account]` inside a `.ui-radio-button`
+/// label wrapper, and each step's action bar holds exactly one
+/// `.bottom-fixed-action-area a.ui-btn` (「繼續」), whose click issues the
+/// step's POST. Nothing is matched by button text.
 ///
-/// The consent / account-selection pages put several
-/// `<a class="ui-btn">` in one fixed action bar and the **first** one is
-/// typically 返回. Grabbing it with a bare `querySelector` navigated the
-/// page back, the script re-injected on the reloaded page and clicked it
-/// again — an invisible loop that showed up as a repeated
-/// `account-auto-selected` message and a flow that never left the
-/// selection step. The primary action is matched by its label (with a
-/// last-button fallback, since action bars put the primary last), other
-/// candidates are retried, and every attempt is reported so a stuck
-/// flow says which button it pressed.
+/// Account selection is **not** decided in the page: the list is handed
+/// to the host, which either auto-proceeds (single account) or shows a
+/// native picker and calls `window.__bfClassicSelectAccount(value)`.
 #[cfg(target_os = "windows")]
 fn portal_script(region: LoginRegion) -> String {
     // HK signs in with the HK-beanfun button, TW with GamaPass.
@@ -139,62 +140,36 @@ fn portal_script(region: LoginRegion) -> String {
     m.kind = kind;
     post(m);
   }}
-  function textOf(el) {{
-    return ((el.innerText || el.textContent || el.value || '') + '').trim();
+  function textOf(el) {{ return ((el.innerText || el.textContent || '') + '').trim(); }}
+
+  /** The one action button of the current step (its click does the POST). */
+  function continueButton() {{
+    return document.querySelector('.bottom-fixed-action-area a.ui-btn');
   }}
 
-  var PRIMARY = /繼續|继续|下一步|確定|确定|送出|同意|允許|允许|Continue|Next|Accept|Agree|Confirm|Submit/i;
-  var BACK = /返回|上一步|取消|Back|Cancel|Previous/i;
-
-  /** Candidate action buttons, primary-first and never a back button. */
-  function actionCandidates() {{
-    var area = document.querySelector('.bottom-fixed-action-area');
-    var nodes = area ? area.querySelectorAll('a.ui-btn, button, input[type=submit]') : null;
-    if (!nodes || nodes.length === 0) {{
-      nodes = document.querySelectorAll('a.ui-btn, button, input[type=submit]');
-    }}
-    var all = [];
-    for (var i = 0; i < nodes.length; i++) {{
-      var el = nodes[i];
-      if (el.disabled) continue;
-      if (BACK.test(textOf(el))) continue;
-      all.push(el);
-    }}
-    var primary = [], rest = [];
-    for (var j = 0; j < all.length; j++) {{
-      (PRIMARY.test(textOf(all[j])) ? primary : rest).push(all[j]);
-    }}
-    // Action bars put the primary action last, so try from the end.
-    rest.reverse();
-    return primary.concat(rest);
-  }}
-
-  // Per-page submit bookkeeping: retry a different candidate when the
-  // page hasn't moved, and stop after a few so we never hammer a page.
-  var stepHref = '', tries = 0, lastTry = -99, ticks = 0;
-  function submitStep(step) {{
-    if (stepHref !== location.href) {{ stepHref = location.href; tries = 0; lastTry = -99; }}
-    if (tries >= 3) return false;
-    // ~2s between attempts so a real navigation has time to happen.
-    if (ticks - lastTry < 5) return false;
-    var candidates = actionCandidates();
-    if (candidates.length === 0) {{
-      post({{ kind: step + '-no-button', href: location.href }});
-      tries = 3;
-      return false;
-    }}
-    var btn = candidates[Math.min(tries, candidates.length - 1)];
-    post({{ kind: step + '-click', label: textOf(btn), attempt: tries + 1 }});
+  /**
+   * Select `value` and continue. The page tracks selection through its
+   * own handler on the label wrapper, so the wrapper is clicked — poking
+   * `input.checked` leaves the component state (and therefore the POST's
+   * `OpidSelAccount`) empty.
+   */
+  function selectAccount(value) {{
+    var radio = document.querySelector('input[type=radio][name=account][value="' + value + '"]');
+    if (!radio) {{ post({{ kind: 'account-missing', value: value }}); return false; }}
+    var wrap = radio.closest('label') || radio.parentElement;
+    (wrap || radio).click();
+    var btn = continueButton();
+    if (!btn) {{ post({{ kind: 'account-no-button' }}); return false; }}
+    post({{ kind: 'account-submit', value: value }});
     btn.click();
-    tries++;
-    lastTry = ticks;
     return true;
   }}
+  // Called by the host once the user picks in the native form.
+  window.__bfClassicSelectAccount = selectAccount;
 
-  var clickedLogin = false;
+  var clickedLogin = false, submittedAccount = false, acceptedConsent = false;
 
   function tick() {{
-    ticks++;
     var href = location.href;
 
     // (1) galaxy OTT init page — pick the region's sign-in route.
@@ -207,43 +182,42 @@ fn portal_script(region: LoginRegion) -> String {
     }}
 
     // (2) A password field means an interactive sign-in is required —
-    // URL alone lies, because a valid session redirects straight past
-    // these hops.
+    // the URL alone lies, because a valid session redirects straight
+    // past these hops.
     if (document.querySelector('input[type=password]')) {{
       say('need-login');
       return;
     }}
 
-    // (3) GamaPass game-account selection (TW only). One account →
-    // select + continue; several → hand the list to the host so the
-    // user isn't forced to choose inside the web page.
+    // (3) GamaPass game-account selection (TW only).
     var radios = document.querySelectorAll('input[type=radio][name=account]');
     if (radios.length > 0) {{
-      if (radios.length > 1) {{
-        var list = [];
-        for (var i = 0; i < radios.length; i++) {{
-          var label = radios[i].closest('label') || radios[i].parentElement;
-          list.push({{ value: radios[i].value, name: label ? textOf(label) : radios[i].value }});
-        }}
+      if (submittedAccount) return;
+      var list = [];
+      for (var i = 0; i < radios.length; i++) {{
+        var label = radios[i].closest('label') || radios[i].parentElement;
+        list.push({{ value: radios[i].value, name: label ? textOf(label) : radios[i].value }});
+      }}
+      if (list.length === 1) {{
+        submittedAccount = selectAccount(list[0].value);
+      }} else {{
+        // Hand the choice to the host's native picker.
         say('account-choice', {{ accounts: list }});
-        return;
       }}
-      // The page tracks selection through its own handler on the label
-      // wrapper (`.ui-radio-button.selected`), so click that — poking
-      // `input.checked` alone leaves their state untouched. Usually the
-      // lone account is pre-selected and this is a no-op.
-      if (!radios[0].checked) {{
-        var wrap = radios[0].closest('label') || radios[0].parentElement;
-        (wrap || radios[0]).click();
-      }}
-      submitStep('account');
       return;
     }}
 
     // (4) GamaPass authorization consent (TW only) — no password field,
-    // no radios, still on the GamaPass host.
+    // no radios, still on the GamaPass host. Same single action button.
     if (href.indexOf('/GamaPassLogin/') !== -1) {{
-      submitStep('consent');
+      if (!acceptedConsent) {{
+        var accept = continueButton();
+        if (accept) {{
+          acceptedConsent = true;
+          post({{ kind: 'consent-submit' }});
+          accept.click();
+        }}
+      }}
       return;
     }}
 
@@ -262,6 +236,30 @@ fn portal_script(region: LoginRegion) -> String {
 }})();
 "#
     )
+}
+
+/// One GamaPass game account offered by the selection step.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
+pub struct ClassicAccount {
+    /// `OpidSelAccount` value the page posts for this account.
+    pub value: String,
+    /// Display name shown next to the radio.
+    pub name: String,
+}
+
+/// Payload of [`CLASSIC_ACCOUNT_CHOICE_EVENT`].
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
+pub struct ClassicAccountChoice {
+    pub accounts: Vec<ClassicAccount>,
+}
+
+/// Shape of the messages the portal script posts.
+#[cfg(target_os = "windows")]
+#[derive(serde::Deserialize)]
+struct PortalMessage {
+    kind: String,
+    #[serde(default)]
+    accounts: Vec<ClassicAccount>,
 }
 
 /// Parse a registered protocol handler command (`"exe" "%1"` / `exe %1`)
@@ -531,6 +529,50 @@ fn spawn_portal_window<R: tauri::Runtime>(
     })
 }
 
+/// Answer the native game-account picker: select `value` in the open
+/// portal window and submit the step.
+///
+/// The portal script exposes `window.__bfClassicSelectAccount`, which
+/// clicks the account's label wrapper (the page tracks selection there,
+/// so `input.checked` alone would leave `OpidSelAccount` empty) and then
+/// the step's single action button.
+#[tauri::command]
+#[specta::specta]
+pub async fn classic_select_account<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    value: String,
+) -> Result<(), CommandError> {
+    let window = app
+        .get_webview_window(CLASSIC_WINDOW_LABEL)
+        .ok_or_else(|| {
+            CommandError::new(
+                "classic.portal_closed",
+                "the MapleStory Classic window is no longer open",
+            )
+        })?;
+    // `value` is an account id echoed straight back from the page; keep
+    // it to the shape the portal uses so nothing can break out of the
+    // string literal below.
+    if !value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '@')
+    {
+        return Err(CommandError::new(
+            "classic.invalid_account",
+            "unexpected characters in the selected account id",
+        ));
+    }
+    window
+        .eval(format!("window.__bfClassicSelectAccount('{value}');"))
+        .map_err(|e| {
+            CommandError::new(
+                "classic.portal_closed",
+                format!("could not drive the classic portal: {e}"),
+            )
+        })?;
+    Ok(())
+}
+
 /// Build the portal window, waiting out any previous instance and
 /// verifying the webview is actually alive.
 ///
@@ -625,16 +667,30 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
     let needs_pick_cb = needs_pick.clone();
     let window = build_portal_window(&app, &portal_script(region), start_visible, move |raw| {
         tracing::info!("classic portal message: {raw}");
-        // Tiny hand-rolled matching — the payload shapes are ours and a
-        // serde round-trip here would buy nothing.
-        if raw.contains("\"need-login\"") {
-            if !needs_login_cb.swap(true, Ordering::SeqCst) {
-                let _ = app_for_msg.emit(CLASSIC_NEEDS_LOGIN_EVENT, ());
+        let Ok(msg) = serde_json::from_str::<PortalMessage>(raw) else {
+            tracing::warn!("classic: unparseable portal message");
+            return;
+        };
+        match msg.kind.as_str() {
+            "need-login" => {
+                if !needs_login_cb.swap(true, Ordering::SeqCst) {
+                    let _ = app_for_msg.emit(CLASSIC_NEEDS_LOGIN_EVENT, ());
+                }
             }
-        } else if raw.contains("\"ngm-missing\"") {
-            ngm_missing_cb.store(true, Ordering::SeqCst);
-        } else if raw.contains("\"account-choice\"") {
-            needs_pick_cb.store(true, Ordering::SeqCst);
+            "ngm-missing" => ngm_missing_cb.store(true, Ordering::SeqCst),
+            // Several game accounts — the user picks in a native form
+            // (`classic_select_account` answers), never inside the page.
+            "account-choice" => {
+                if !needs_pick_cb.swap(true, Ordering::SeqCst) {
+                    let _ = app_for_msg.emit(
+                        CLASSIC_ACCOUNT_CHOICE_EVENT,
+                        ClassicAccountChoice {
+                            accounts: msg.accounts,
+                        },
+                    );
+                }
+            }
+            _ => {}
         }
     })
     .await?;
@@ -797,33 +853,23 @@ mod tests {
     }
 
     #[test]
-    fn portal_script_never_picks_the_action_button_by_position() {
-        // Regression: taking the FIRST `.ui-btn` in the action bar hit
-        // 返回, which bounced the page back, re-injected the script and
-        // clicked it again — a silent loop that stalled the flow at the
-        // account step. The primary action must be matched by label and
-        // back buttons must be filtered out.
+    fn portal_script_uses_the_exact_action_button_selector() {
+        // Each step's action bar holds exactly one
+        // `.bottom-fixed-action-area a.ui-btn` (「繼續」) whose click
+        // issues that step's POST — no text matching, no guessing.
         let script = portal_script(LoginRegion::TW);
-        assert!(script.contains("PRIMARY"), "primary-label matcher");
-        assert!(script.contains("BACK"), "back-label filter");
-        assert!(script.contains("繼續"));
-        assert!(script.contains("返回"));
-        assert!(
-            !script.contains(".bottom-fixed-action-area a.ui-btn')"),
-            "must not grab the first action-bar button blindly"
-        );
+        assert!(script.contains(".bottom-fixed-action-area a.ui-btn"));
+        assert!(!script.contains("PRIMARY"), "no label-matching heuristics");
     }
 
     #[test]
-    fn portal_script_retries_and_reports_each_submit_attempt() {
+    fn portal_script_defers_multi_account_choice_to_the_host() {
+        // A single account proceeds in-page; several are handed to the
+        // native picker, which answers via __bfClassicSelectAccount.
         let script = portal_script(LoginRegion::TW);
-        // Bounded retries with a different candidate each time…
-        assert!(script.contains("tries >= 3"));
-        // …and every attempt names the button it pressed, so a stuck
-        // flow is diagnosable from the log alone.
-        assert!(script.contains("-click"));
-        assert!(script.contains("label: textOf(btn)"));
-        assert!(script.contains("-no-button"));
+        assert!(script.contains("list.length === 1"));
+        assert!(script.contains("account-choice"));
+        assert!(script.contains("window.__bfClassicSelectAccount"));
     }
 
     #[test]

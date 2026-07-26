@@ -34,6 +34,13 @@ export const CLASSIC_FAILED_EVENT = 'classic-launch-failed'
 export const CLASSIC_SLOW_EVENT = 'classic-launch-slow'
 /** Emitted when the portal needs an interactive sign-in (always TW). */
 export const CLASSIC_NEEDS_LOGIN_EVENT = 'classic-needs-login'
+/**
+ * Emitted with the GamaPass game accounts when the portal offers more
+ * than one; `ClassicAccountPicker` answers with `classicSelectAccount`.
+ * A single account never reaches the frontend — the portal script
+ * selects and submits it directly.
+ */
+export const CLASSIC_ACCOUNT_CHOICE_EVENT = 'classic-account-choice'
 
 /** Official Nexon Game Manager installer (shown when the self-check
  * finds no `ngm://` handler). */

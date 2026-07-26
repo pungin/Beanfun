@@ -48,6 +48,7 @@ import zhCnLocale from 'element-plus/dist/locale/zh-cn.mjs'
 import zhTwLocale from 'element-plus/dist/locale/zh-tw.mjs'
 
 import AnnouncementModal from './components/AnnouncementModal.vue'
+import ClassicAccountPicker from './windows/ClassicAccountPicker.vue'
 import { useAccountStore } from './stores/account'
 import { useConfigStore } from './stores/config'
 import { useUiStore, type AppLocale } from './stores/ui'
@@ -102,6 +103,7 @@ onMounted(async () => {
   <el-config-provider :locale="elpLocale">
     <RouterView />
     <AnnouncementModal />
+    <ClassicAccountPicker />
   </el-config-provider>
 </template>
 

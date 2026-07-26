@@ -196,149 +196,157 @@ use tauri_specta::{collect_commands, Builder};
 ///    file alongside the Rust change; the `bindings_file_tests`
 ///    submodule (lib-test only) guards CI against accidental drift.
 pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
-    Builder::<R>::new().commands(collect_commands![
-        // system (P10.1)
-        system::version,
-        system::ping,
-        system::window_visual_environment,
-        // auth (P10.2 — regular family)
-        auth::login_regular,
-        auth::login_totp,
-        // auth (P10.2 — QR family)
-        auth::login_qr_start,
-        auth::login_qr_check,
-        // auth (P12.1 D5 — GamePass family)
-        //
-        // Both `login_gamepass_start` and `open_gamepass_window` are
-        // generic over `R: tauri::Runtime` because they take an
-        // `AppHandle<R>` (the former to run a window-alive pre-flight
-        // guard, the latter to build a `WebviewWindow<R>`).
-        // `collect_commands!` forwards generic commands to both
-        // `tauri::generate_handler!` (which strips the turbofish and
-        // re-injects `R` from the surrounding closure) and
-        // `specta::function::collect_functions!` (which expands into
-        // a non-generic inner `fn export(...)`). The specta side
-        // therefore needs a *concrete* runtime in the turbofish —
-        // using the outer `R` trips rustc E0401 (`use of generic
-        // parameter from outer item`).
-        //
-        // TS binding generation is runtime-agnostic — specta only
-        // inspects serialisable argument/return types — so pinning
-        // the specta side to `tauri::Wry` does not leak into the
-        // emitted `bindings.ts` contract; the tauri side retains
-        // the generic `R` so the command still monomorphises
-        // correctly for whichever runtime `build_specta_builder`
-        // is instantiated with (production uses `Wry`).
-        auth::login_gamepass_start::<tauri::Wry>,
-        auth::open_gamepass_window::<tauri::Wry>,
-        // auth (issues #313 / #315 / #318 — reCAPTCHA token-replay)
-        //
-        // `resume_tw_login_with_recaptcha` replays a solved reCAPTCHA token
-        // over HTTP; `open_recaptcha_window` opens the widget-solve WebView
-        // (generic over `R`; same `::<tauri::Wry>` turbofish rationale as
-        // the GamePass commands above).
-        auth::resume_tw_login_with_recaptcha,
-        auth::resume_tw_login_after_verify,
-        auth::open_recaptcha_window::<tauri::Wry>,
-        auth::close_recaptcha_window::<tauri::Wry>,
-        // auth (P10.2 — verify family)
-        auth::get_verify_page_info,
-        auth::get_verify_captcha,
-        auth::submit_verify,
-        // auth (P10.2 — logout)
-        auth::logout,
-        // account (P10.2 — base)
-        account::get_accounts,
-        account::refresh,
-        // account (P10.2 — management)
-        account::add_service_account,
-        account::change_display_name,
-        // account (P10.2 — info)
-        account::get_contract,
-        account::get_email,
-        account::get_remain_point,
-        // account (P12.3 D3 — unconnected-game flows)
-        account::unconnected_game_init_add_account_payload,
-        account::unconnected_game_add_account_check,
-        account::unconnected_game_add_account_check_nickname,
-        account::unconnected_game_add_account,
-        account::unconnected_game_change_password,
-        // account (P12.3 D8a — game switcher session sync)
-        account::set_active_service,
-        // otp (P10.2)
-        otp::get_otp,
-        // system (P10.3 — D1 open_url)
-        system::open_url,
-        // system (TitleBar minimize-to-tray bridge)
-        //
-        // Generic over `R: tauri::Runtime` because it takes an
-        // `AppHandle<R>` (to drive the window + tray side effects);
-        // see the `auth::login_gamepass_start` comment for the full
-        // E0401 / runtime-agnostic bindings rationale.
-        system::minimize_main_window::<tauri::Wry>,
-        // system (Settings → Maintenance: window/cache recovery). Generic over
-        // `R` for the same `AppHandle<R>` reason as `minimize_main_window`.
-        system::reset_window_position::<tauri::Wry>,
-        system::clear_webview2_cache::<tauri::Wry>,
-        // config (P10.3 — D2)
-        config::get_config_value,
-        config::get_all_config,
-        config::set_config,
-        // storage (P10.3 — D3)
-        storage::load_accounts,
-        storage::save_account,
-        storage::remove_account,
-        storage::import_records,
-        storage::export_records,
-        // storage AES backup (P12.2 — D10.0; AccRecovery WPF parity)
-        storage::backup_export,
-        storage::backup_restore,
-        // update (P10.3 — D4)
-        update::check_update,
-        // launcher (P10.3 — D5a launch)
-        launcher::launch_game,
-        // launcher (P10.3 — D5b path)
-        launcher::set_game_path,
-        launcher::detect_game_path,
-        // launcher (P10.3 — D5c process)
-        launcher::list_game_processes,
-        launcher::kill_game_processes,
-        // launcher (MapleStory Play/Patcher guards)
-        launcher::close_maple_play_window,
-        launcher::check_and_kill_maple_patcher,
-        // launcher (P10.3 — D5d auto-paste)
-        launcher::auto_paste,
-        // game (P12.3 D2 — list_games)
-        game::list_games,
-        // maple_cache (P12.5 D1 — Recycling button on MapleTools)
-        maple_cache::clean_maple_game_cache,
-        // web_browser (P12.4-followup-B — in-app browser window)
-        //
-        // Generic over `R: tauri::Runtime` for the same reason as
-        // `auth::open_gamepass_window`: it takes an `AppHandle<R>`
-        // (to call `WebviewWindowBuilder::new`). The specta
-        // turbofish must pin to `tauri::Wry` while the tauri side
-        // monomorphises against the runtime `build_specta_builder`
-        // is instantiated with — see the `auth::login_gamepass_start`
-        // comment above for the full E0401 / runtime-agnostic
-        // bindings rationale.
-        web_browser::open_in_app_browser::<tauri::Wry>,
-        // web_browser (P12.4-followup-B-fix F9 — Member Center)
-        //
-        // Sibling of `open_in_app_browser` that builds the
-        // member-center URL backend-side so the session's
-        // `web_token` (a server-side secret per `commands::dto`'s
-        // sentinel test) never crosses IPC. Same `tauri::Wry`
-        // turbofish rationale applies.
-        web_browser::open_member_center_browser::<tauri::Wry>,
-        web_browser::open_gash_recharge_browser::<tauri::Wry>,
-        // classic (MapleStory Classic 懷舊服 — galaxy SSO + NGM launch)
-        //
-        // `open_classic_login` takes an `AppHandle`, so it needs the
-        // same `tauri::Wry` turbofish as the web_browser family.
-        classic::open_classic_login::<tauri::Wry>,
-        classic::classic_self_check,
-    ])
+    Builder::<R>::new()
+        .commands(collect_commands![
+            // system (P10.1)
+            system::version,
+            system::ping,
+            system::window_visual_environment,
+            // auth (P10.2 — regular family)
+            auth::login_regular,
+            auth::login_totp,
+            // auth (P10.2 — QR family)
+            auth::login_qr_start,
+            auth::login_qr_check,
+            // auth (P12.1 D5 — GamePass family)
+            //
+            // Both `login_gamepass_start` and `open_gamepass_window` are
+            // generic over `R: tauri::Runtime` because they take an
+            // `AppHandle<R>` (the former to run a window-alive pre-flight
+            // guard, the latter to build a `WebviewWindow<R>`).
+            // `collect_commands!` forwards generic commands to both
+            // `tauri::generate_handler!` (which strips the turbofish and
+            // re-injects `R` from the surrounding closure) and
+            // `specta::function::collect_functions!` (which expands into
+            // a non-generic inner `fn export(...)`). The specta side
+            // therefore needs a *concrete* runtime in the turbofish —
+            // using the outer `R` trips rustc E0401 (`use of generic
+            // parameter from outer item`).
+            //
+            // TS binding generation is runtime-agnostic — specta only
+            // inspects serialisable argument/return types — so pinning
+            // the specta side to `tauri::Wry` does not leak into the
+            // emitted `bindings.ts` contract; the tauri side retains
+            // the generic `R` so the command still monomorphises
+            // correctly for whichever runtime `build_specta_builder`
+            // is instantiated with (production uses `Wry`).
+            auth::login_gamepass_start::<tauri::Wry>,
+            auth::open_gamepass_window::<tauri::Wry>,
+            // auth (issues #313 / #315 / #318 — reCAPTCHA token-replay)
+            //
+            // `resume_tw_login_with_recaptcha` replays a solved reCAPTCHA token
+            // over HTTP; `open_recaptcha_window` opens the widget-solve WebView
+            // (generic over `R`; same `::<tauri::Wry>` turbofish rationale as
+            // the GamePass commands above).
+            auth::resume_tw_login_with_recaptcha,
+            auth::resume_tw_login_after_verify,
+            auth::open_recaptcha_window::<tauri::Wry>,
+            auth::close_recaptcha_window::<tauri::Wry>,
+            // auth (P10.2 — verify family)
+            auth::get_verify_page_info,
+            auth::get_verify_captcha,
+            auth::submit_verify,
+            // auth (P10.2 — logout)
+            auth::logout,
+            // account (P10.2 — base)
+            account::get_accounts,
+            account::refresh,
+            // account (P10.2 — management)
+            account::add_service_account,
+            account::change_display_name,
+            // account (P10.2 — info)
+            account::get_contract,
+            account::get_email,
+            account::get_remain_point,
+            // account (P12.3 D3 — unconnected-game flows)
+            account::unconnected_game_init_add_account_payload,
+            account::unconnected_game_add_account_check,
+            account::unconnected_game_add_account_check_nickname,
+            account::unconnected_game_add_account,
+            account::unconnected_game_change_password,
+            // account (P12.3 D8a — game switcher session sync)
+            account::set_active_service,
+            // otp (P10.2)
+            otp::get_otp,
+            // system (P10.3 — D1 open_url)
+            system::open_url,
+            // system (TitleBar minimize-to-tray bridge)
+            //
+            // Generic over `R: tauri::Runtime` because it takes an
+            // `AppHandle<R>` (to drive the window + tray side effects);
+            // see the `auth::login_gamepass_start` comment for the full
+            // E0401 / runtime-agnostic bindings rationale.
+            system::minimize_main_window::<tauri::Wry>,
+            // system (Settings → Maintenance: window/cache recovery). Generic over
+            // `R` for the same `AppHandle<R>` reason as `minimize_main_window`.
+            system::reset_window_position::<tauri::Wry>,
+            system::clear_webview2_cache::<tauri::Wry>,
+            // config (P10.3 — D2)
+            config::get_config_value,
+            config::get_all_config,
+            config::set_config,
+            // storage (P10.3 — D3)
+            storage::load_accounts,
+            storage::save_account,
+            storage::remove_account,
+            storage::import_records,
+            storage::export_records,
+            // storage AES backup (P12.2 — D10.0; AccRecovery WPF parity)
+            storage::backup_export,
+            storage::backup_restore,
+            // update (P10.3 — D4)
+            update::check_update,
+            // launcher (P10.3 — D5a launch)
+            launcher::launch_game,
+            // launcher (P10.3 — D5b path)
+            launcher::set_game_path,
+            launcher::detect_game_path,
+            // launcher (P10.3 — D5c process)
+            launcher::list_game_processes,
+            launcher::kill_game_processes,
+            // launcher (MapleStory Play/Patcher guards)
+            launcher::close_maple_play_window,
+            launcher::check_and_kill_maple_patcher,
+            // launcher (P10.3 — D5d auto-paste)
+            launcher::auto_paste,
+            // game (P12.3 D2 — list_games)
+            game::list_games,
+            // maple_cache (P12.5 D1 — Recycling button on MapleTools)
+            maple_cache::clean_maple_game_cache,
+            // web_browser (P12.4-followup-B — in-app browser window)
+            //
+            // Generic over `R: tauri::Runtime` for the same reason as
+            // `auth::open_gamepass_window`: it takes an `AppHandle<R>`
+            // (to call `WebviewWindowBuilder::new`). The specta
+            // turbofish must pin to `tauri::Wry` while the tauri side
+            // monomorphises against the runtime `build_specta_builder`
+            // is instantiated with — see the `auth::login_gamepass_start`
+            // comment above for the full E0401 / runtime-agnostic
+            // bindings rationale.
+            web_browser::open_in_app_browser::<tauri::Wry>,
+            // web_browser (P12.4-followup-B-fix F9 — Member Center)
+            //
+            // Sibling of `open_in_app_browser` that builds the
+            // member-center URL backend-side so the session's
+            // `web_token` (a server-side secret per `commands::dto`'s
+            // sentinel test) never crosses IPC. Same `tauri::Wry`
+            // turbofish rationale applies.
+            web_browser::open_member_center_browser::<tauri::Wry>,
+            web_browser::open_gash_recharge_browser::<tauri::Wry>,
+            // classic (MapleStory Classic 懷舊服 — galaxy SSO + NGM launch)
+            //
+            // `open_classic_login` takes an `AppHandle`, so it needs the
+            // same `tauri::Wry` turbofish as the web_browser family.
+            classic::open_classic_login::<tauri::Wry>,
+            classic::classic_self_check,
+            classic::classic_select_account::<tauri::Wry>,
+        ])
+        // Event payloads reach the frontend through Tauri events rather
+        // than a command return, so specta can't discover them from the
+        // command signatures — register them explicitly or `bindings.ts`
+        // would have no type for the classic account picker.
+        .typ::<classic::ClassicAccount>()
+        .typ::<classic::ClassicAccountChoice>()
 }
 
 #[cfg(test)]
@@ -524,6 +532,7 @@ mod bindings_file_tests {
         // --- classic (MapleStory Classic 懷舊服) ----------------------
         "openClassicLogin",
         "classicSelfCheck",
+        "classicSelectAccount",
     ];
 
     /// DTO type names the frontend imports from `bindings.ts`.
@@ -590,6 +599,8 @@ mod bindings_file_tests {
         "GameIniEntry",
         "GameService",
         "ClassicCheck",
+        "ClassicAccount",
+        "ClassicAccountChoice",
         "GameInfoBundle",
         // --- P12.3 D3 — unconnected-game DTOs ------------------------
         "AddAccountSession",

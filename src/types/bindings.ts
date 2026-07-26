@@ -2236,6 +2236,23 @@ async classicSelfCheck() : Promise<Result<ClassicCheck, null>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Answer the native game-account picker: select `value` in the open
+ * portal window and submit the step.
+ * 
+ * The portal script exposes `window.__bfClassicSelectAccount`, which
+ * clicks the account's label wrapper (the page tracks selection there,
+ * so `input.checked` alone would leave `OpidSelAccount` empty) and then
+ * the step's single action button.
+ */
+async classicSelectAccount(value: string) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("classic_select_account", { value }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -2634,6 +2651,22 @@ session: AddAccountSession;
  * the server text verbatim (no i18n / classification).
  */
 error_message: string }
+/**
+ * One GamaPass game account offered by the selection step.
+ */
+export type ClassicAccount = { 
+/**
+ * `OpidSelAccount` value the page posts for this account.
+ */
+value: string; 
+/**
+ * Display name shown next to the radio.
+ */
+name: string }
+/**
+ * Payload of [`CLASSIC_ACCOUNT_CHOICE_EVENT`].
+ */
+export type ClassicAccountChoice = { accounts: ClassicAccount[] }
 /**
  * Result of the classic-readiness self-check.
  */
