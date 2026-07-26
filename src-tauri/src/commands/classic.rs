@@ -103,9 +103,21 @@ const HARD_DEADLINE_TICKS: u32 = 360; // 360 × 500 ms = 180 s
 /// watching for a late launch.
 #[cfg(target_os = "windows")]
 const SOFT_DEADLINE_TICKS: u32 = 120; // 60 s
-
 /// Injected into every navigation of the portal window. Drives the whole
 /// flow and reports state back over `WebMessageReceived`.
+///
+/// # Why the action button is chosen by text, never by position
+///
+/// The consent / account-selection pages put several
+/// `<a class="ui-btn">` in one fixed action bar and the **first** one is
+/// typically 返回. Grabbing it with a bare `querySelector` navigated the
+/// page back, the script re-injected on the reloaded page and clicked it
+/// again — an invisible loop that showed up as a repeated
+/// `account-auto-selected` message and a flow that never left the
+/// selection step. The primary action is matched by its label (with a
+/// last-button fallback, since action bars put the primary last), other
+/// candidates are retried, and every attempt is reported so a stuck
+/// flow says which button it pressed.
 #[cfg(target_os = "windows")]
 fn portal_script(region: LoginRegion) -> String {
     // HK signs in with the HK-beanfun button, TW with GamaPass.
@@ -119,7 +131,6 @@ fn portal_script(region: LoginRegion) -> String {
   function post(msg) {{
     try {{ window.chrome.webview.postMessage(JSON.stringify(msg)); }} catch (e) {{}}
   }}
-  var clickedLogin = false, accepted = false, picked = false;
   var reported = '';
   function say(kind, extra) {{
     if (reported === kind) return;
@@ -128,25 +139,62 @@ fn portal_script(region: LoginRegion) -> String {
     m.kind = kind;
     post(m);
   }}
-  function textOf(el) {{ return (el.innerText || el.textContent || '').trim(); }}
-  function clickContinue() {{
-    // The consent / account pages use a fixed action bar with an
-    // <a class="ui-btn"> whose href is javascript:; — it must be
-    // clicked, setting values alone does nothing.
-    var btn = document.querySelector('.bottom-fixed-action-area a.ui-btn')
-           || document.querySelector('.bottom-fixed-action-area .ui-btn');
-    if (btn) {{ btn.click(); return true; }}
-    var candidates = document.querySelectorAll('a.ui-btn, button, input[type=submit]');
-    for (var i = 0; i < candidates.length; i++) {{
-      var t = textOf(candidates[i]);
-      if (/同意|允許|繼續|下一步|確定|Accept|Continue|Agree/i.test(t)) {{
-        candidates[i].click();
-        return true;
-      }}
-    }}
-    return false;
+  function textOf(el) {{
+    return ((el.innerText || el.textContent || el.value || '') + '').trim();
   }}
+
+  var PRIMARY = /繼續|继续|下一步|確定|确定|送出|同意|允許|允许|Continue|Next|Accept|Agree|Confirm|Submit/i;
+  var BACK = /返回|上一步|取消|Back|Cancel|Previous/i;
+
+  /** Candidate action buttons, primary-first and never a back button. */
+  function actionCandidates() {{
+    var area = document.querySelector('.bottom-fixed-action-area');
+    var nodes = area ? area.querySelectorAll('a.ui-btn, button, input[type=submit]') : null;
+    if (!nodes || nodes.length === 0) {{
+      nodes = document.querySelectorAll('a.ui-btn, button, input[type=submit]');
+    }}
+    var all = [];
+    for (var i = 0; i < nodes.length; i++) {{
+      var el = nodes[i];
+      if (el.disabled) continue;
+      if (BACK.test(textOf(el))) continue;
+      all.push(el);
+    }}
+    var primary = [], rest = [];
+    for (var j = 0; j < all.length; j++) {{
+      (PRIMARY.test(textOf(all[j])) ? primary : rest).push(all[j]);
+    }}
+    // Action bars put the primary action last, so try from the end.
+    rest.reverse();
+    return primary.concat(rest);
+  }}
+
+  // Per-page submit bookkeeping: retry a different candidate when the
+  // page hasn't moved, and stop after a few so we never hammer a page.
+  var stepHref = '', tries = 0, lastTry = -99, ticks = 0;
+  function submitStep(step) {{
+    if (stepHref !== location.href) {{ stepHref = location.href; tries = 0; lastTry = -99; }}
+    if (tries >= 3) return false;
+    // ~2s between attempts so a real navigation has time to happen.
+    if (ticks - lastTry < 5) return false;
+    var candidates = actionCandidates();
+    if (candidates.length === 0) {{
+      post({{ kind: step + '-no-button', href: location.href }});
+      tries = 3;
+      return false;
+    }}
+    var btn = candidates[Math.min(tries, candidates.length - 1)];
+    post({{ kind: step + '-click', label: textOf(btn), attempt: tries + 1 }});
+    btn.click();
+    tries++;
+    lastTry = ticks;
+    return true;
+  }}
+
+  var clickedLogin = false;
+
   function tick() {{
+    ticks++;
     var href = location.href;
 
     // (1) galaxy OTT init page — pick the region's sign-in route.
@@ -166,36 +214,36 @@ fn portal_script(region: LoginRegion) -> String {
       return;
     }}
 
-    // (3) GamaPass game-account selection (TW only). Exactly one
-    // account → pick it and continue; several → hand the list to the
-    // host so the user isn't forced to choose inside the web page.
+    // (3) GamaPass game-account selection (TW only). One account →
+    // select + continue; several → hand the list to the host so the
+    // user isn't forced to choose inside the web page.
     var radios = document.querySelectorAll('input[type=radio][name=account]');
     if (radios.length > 0) {{
-      if (!picked) {{
-        if (radios.length === 1) {{
-          radios[0].checked = true;
-          radios[0].click();
-          picked = clickContinue();
-          if (picked) say('account-auto-selected');
-        }} else {{
-          var list = [];
-          for (var i = 0; i < radios.length; i++) {{
-            var label = radios[i].closest('label') || radios[i].parentElement;
-            list.push({{ value: radios[i].value, name: label ? textOf(label) : radios[i].value }});
-          }}
-          say('account-choice', {{ accounts: list }});
+      if (radios.length > 1) {{
+        var list = [];
+        for (var i = 0; i < radios.length; i++) {{
+          var label = radios[i].closest('label') || radios[i].parentElement;
+          list.push({{ value: radios[i].value, name: label ? textOf(label) : radios[i].value }});
         }}
+        say('account-choice', {{ accounts: list }});
+        return;
       }}
+      // The page tracks selection through its own handler on the label
+      // wrapper (`.ui-radio-button.selected`), so click that — poking
+      // `input.checked` alone leaves their state untouched. Usually the
+      // lone account is pre-selected and this is a no-op.
+      if (!radios[0].checked) {{
+        var wrap = radios[0].closest('label') || radios[0].parentElement;
+        (wrap || radios[0]).click();
+      }}
+      submitStep('account');
       return;
     }}
 
     // (4) GamaPass authorization consent (TW only) — no password field,
-    // no radios, still on the GamaPass login host.
+    // no radios, still on the GamaPass host.
     if (href.indexOf('/GamaPassLogin/') !== -1) {{
-      if (!accepted) {{
-        accepted = clickContinue();
-        if (accepted) say('authorization-accepted');
-      }}
+      submitStep('consent');
       return;
     }}
 
@@ -746,6 +794,44 @@ mod tests {
         let script = portal_script(LoginRegion::TW);
         assert!(script.contains("chrome.webview.postMessage"));
         assert!(!script.contains("document.title"));
+    }
+
+    #[test]
+    fn portal_script_never_picks_the_action_button_by_position() {
+        // Regression: taking the FIRST `.ui-btn` in the action bar hit
+        // 返回, which bounced the page back, re-injected the script and
+        // clicked it again — a silent loop that stalled the flow at the
+        // account step. The primary action must be matched by label and
+        // back buttons must be filtered out.
+        let script = portal_script(LoginRegion::TW);
+        assert!(script.contains("PRIMARY"), "primary-label matcher");
+        assert!(script.contains("BACK"), "back-label filter");
+        assert!(script.contains("繼續"));
+        assert!(script.contains("返回"));
+        assert!(
+            !script.contains(".bottom-fixed-action-area a.ui-btn')"),
+            "must not grab the first action-bar button blindly"
+        );
+    }
+
+    #[test]
+    fn portal_script_retries_and_reports_each_submit_attempt() {
+        let script = portal_script(LoginRegion::TW);
+        // Bounded retries with a different candidate each time…
+        assert!(script.contains("tries >= 3"));
+        // …and every attempt names the button it pressed, so a stuck
+        // flow is diagnosable from the log alone.
+        assert!(script.contains("-click"));
+        assert!(script.contains("label: textOf(btn)"));
+        assert!(script.contains("-no-button"));
+    }
+
+    #[test]
+    fn portal_script_selects_the_account_through_its_label_wrapper() {
+        // The page tracks selection via its own handler on the label
+        // wrapper; setting `input.checked` alone leaves it unselected.
+        let script = portal_script(LoginRegion::TW);
+        assert!(script.contains("closest('label')"));
     }
 
     #[test]
