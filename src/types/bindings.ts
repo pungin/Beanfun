@@ -2206,27 +2206,28 @@ async openGashRechargeBrowser() : Promise<Result<null, CommandError>> {
 }
 },
 /**
- * Open the classic portal for the already-authenticated beanfun
- * session and auto-launch the game once the SSO lands.
+ * Open the classic portal and launch the game.
  * 
- * Beanfun is single-session, so unlike MapleLink there is no session
- * id to resolve — the one `AppState.auth` context is the session, and
- * its cookie jar (with `bfWebToken`) is seeded straight into the
- * portal webview. Works for HK (account/password) and TW GamaPass
- * sessions; the frontend gates the button accordingly (a TW
- * account/password or QR session can't drive the galaxy SSO).
+ * `region` selects which sign-in route the portal takes and therefore
+ * how much can happen silently:
+ * 
+ * - **HK** — a live beanfun session's cookies are seeded, the window
+ * stays hidden and the whole SSO completes unattended.
+ * - **TW** — classic is a separate login, so the window is shown from
+ * the start and the user signs in inside it; the script then handles
+ * the GamaPass consent + account-selection steps. No prior beanfun
+ * session is required (and one would not help).
  */
-async openClassicLogin() : Promise<Result<null, CommandError>> {
+async openClassicLogin(region: LoginRegion) : Promise<Result<null, CommandError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("open_classic_login") };
+    return { status: "ok", data: await TAURI_INVOKE("open_classic_login", { region }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
 /**
- * Check the local prerequisites for the classic launch. A non-empty,
- * existing `classicNgmPath` from Config.xml counts as NGM available.
+ * Check the local prerequisites for the classic launch.
  */
 async classicSelfCheck() : Promise<Result<ClassicCheck, null>> {
     try {
@@ -2634,12 +2635,12 @@ session: AddAccountSession;
  */
 error_message: string }
 /**
- * Result of the classic-readiness self-check (Settings → Classic).
+ * Result of the classic-readiness self-check.
  */
 export type ClassicCheck = { 
 /**
- * Nexon Game Manager's `ngm://` protocol handler is registered
- * (or a valid manual path is configured).
+ * Nexon Game Manager's `ngm://` handler is registered (or a valid
+ * manual path is configured).
  */
 ngmRegistered: boolean; 
 /**
@@ -2649,7 +2650,11 @@ ngmExe: string | null;
 /**
  * That executable actually exists on disk.
  */
-ngmExeExists: boolean }
+ngmExeExists: boolean; 
+/**
+ * Path of the installed classic client, if found.
+ */
+clientPath: string | null }
 /**
  * Outcome of a single [`clean_maple_game_cache`] run.
  * 

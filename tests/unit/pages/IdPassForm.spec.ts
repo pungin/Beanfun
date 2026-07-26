@@ -144,7 +144,7 @@ vi.mock('element-plus', () => ({
       return () => h('span', { class: 'el-icon-stub' }, slots.default?.())
     },
   }),
-  ElMessage: { error: elMessageError, success: vi.fn(), warning: vi.fn() },
+  ElMessage: { error: elMessageError, success: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }))
 
 vi.mock('@element-plus/icons-vue', () => ({
@@ -174,6 +174,7 @@ vi.mock('../../../src/types/bindings', () => ({
     openUrl: vi.fn(),
     launchGame: vi.fn(),
     classicSelfCheck: vi.fn(),
+    openClassicLogin: vi.fn(),
   },
 }))
 
@@ -297,6 +298,9 @@ describe('IdPassForm', () => {
     mockLoginRegular.mockReset()
     vi.mocked(commands.openUrl).mockResolvedValue({ status: 'ok', data: null } as Awaited<
       ReturnType<typeof commands.openUrl>
+    >)
+    vi.mocked(commands.openClassicLogin).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openClassicLogin>
     >)
     vi.mocked(commands.classicSelfCheck).mockResolvedValue({
       status: 'ok',
@@ -450,6 +454,9 @@ describe('IdPassForm', () => {
   })
 
   it('classic: NGM-missing state offers the download link', async () => {
+    vi.mocked(commands.openClassicLogin).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openClassicLogin>
+    >)
     vi.mocked(commands.classicSelfCheck).mockResolvedValue({
       status: 'ok',
       data: { ngmRegistered: false, ngmExe: null, ngmExeExists: false },
@@ -476,21 +483,23 @@ describe('IdPassForm', () => {
     expect(commands.classicSelfCheck).not.toHaveBeenCalled()
   })
 
-  it('classic: TW with classic mode on shows ONLY the GamaPass path', async () => {
+  it('classic: TW with classic mode on shows ONLY the direct-launch path', async () => {
+    // TW Classic is a separate login from the regular service, so the
+    // whole credential form is hidden — the only affordance is the
+    // launch button, which opens the portal for an in-window sign-in.
     const ctx = mountForm('TW')
     useConfigStore().entries['classicLoginMode'] = 'true'
     const wrapper = await ctx.mountIt()
+    await flushPromises()
 
-    // The whole regular form is hidden — no inputs, no QR switch, no
-    // game start; the GamaPass button is the only affordance.
     expect(wrapper.find('[data-test="id-pass-classic-only"]').exists()).toBe(true)
     expect(wrapper.findAll('.el-input-stub').length).toBe(0)
     expect(wrapper.find('[data-test="id-pass-switch-qr"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="id-pass-game-start"]').exists()).toBe(false)
 
-    await wrapper.get('[data-test="id-pass-classic-gamapass"]').trigger('click')
+    await wrapper.get('[data-test="id-pass-classic-launch"]').trigger('click')
     await flushPromises()
-    expect(ctx.router.currentRoute.value.path).toBe('/login/gamepass')
+    expect(commands.openClassicLogin).toHaveBeenCalledWith('TW')
   })
 
   it('classic: a failed login disarms pendingClassicLaunch', async () => {
@@ -624,6 +633,9 @@ describe('IdPassForm — P12.2 D2 credential persistence', () => {
     mockLoginRegular.mockReset()
     vi.mocked(commands.openUrl).mockResolvedValue({ status: 'ok', data: null } as Awaited<
       ReturnType<typeof commands.openUrl>
+    >)
+    vi.mocked(commands.openClassicLogin).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openClassicLogin>
     >)
     vi.mocked(commands.classicSelfCheck).mockResolvedValue({
       status: 'ok',
@@ -866,6 +878,9 @@ describe('IdPassForm — P12.4 followup-A/B (Register / Forgot / GameStart)', ()
     mockLoginRegular.mockReset()
     vi.mocked(commands.openUrl).mockResolvedValue({ status: 'ok', data: null } as Awaited<
       ReturnType<typeof commands.openUrl>
+    >)
+    vi.mocked(commands.openClassicLogin).mockResolvedValue({ status: 'ok', data: null } as Awaited<
+      ReturnType<typeof commands.openClassicLogin>
     >)
     vi.mocked(commands.classicSelfCheck).mockResolvedValue({
       status: 'ok',

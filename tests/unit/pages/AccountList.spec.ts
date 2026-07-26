@@ -1347,28 +1347,15 @@ describe('AccountList page', () => {
     expect(wrapper.find('[data-test="account-list-classic"]').exists()).toBe(true)
   })
 
-  it('classic: hidden for a TW account/password session (cannot drive the galaxy SSO)', async () => {
+  it('classic: hidden for TW (Classic is a separate login there)', async () => {
     vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
     const ctx = buildHarness()
     seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
-    useAuthStore().session = FAKE_SESSION // TW, not via GamePass
+    useAuthStore().session = FAKE_SESSION // TW
     const wrapper = await ctx.mountIt()
     await flushPromises()
 
     expect(wrapper.find('[data-test="account-list-classic"]').exists()).toBe(false)
-  })
-
-  it('classic: shown for a TW GamaPass session', async () => {
-    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
-    const ctx = buildHarness()
-    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
-    const auth = useAuthStore()
-    auth.session = FAKE_SESSION
-    auth.viaGamepass = true
-    const wrapper = await ctx.mountIt()
-    await flushPromises()
-
-    expect(wrapper.find('[data-test="account-list-classic"]').exists()).toBe(true)
   })
 
   it('classic: hidden when the selected game is not MapleStory', async () => {
@@ -1393,7 +1380,7 @@ describe('AccountList page', () => {
     await wrapper.get('[data-test="account-list-classic"]').trigger('click')
     await flushPromises()
 
-    expect(commands.openClassicLogin).toHaveBeenCalledTimes(1)
+    expect(commands.openClassicLogin).toHaveBeenCalledWith('HK')
     expect(ElMessage.info).toHaveBeenCalled()
   })
 

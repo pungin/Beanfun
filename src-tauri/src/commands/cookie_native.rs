@@ -435,3 +435,98 @@ where
         Err(_) => Err("LaunchingExternalUriScheme registration timed out".to_string()),
     }
 }
+
+/// Register a `WebMessageReceived` handler — the real page→host channel.
+///
+/// # Why not `document.title` (measured, issue 懷舊服 spec §5.1)
+///
+/// The classic portal's injected script used to signal the host by
+/// setting `document.title` and the host polled `WebviewWindow::title()`.
+/// That silently never works: the native window keeps the title it was
+/// created with, so the poll saw the constant forever and the signal was
+/// lost with no error anywhere. `window.chrome.webview.postMessage(...)`
+/// → `add_WebMessageReceived` is the channel WebView2 actually provides
+/// for this, and it works on remote origins where Tauri's own IPC is
+/// blocked by the page's CSP.
+///
+/// `on_message` receives the raw string the page posted (we post JSON).
+/// Returns an error if the handler can't be attached — which doubles as
+/// a **liveness probe**: it round-trips through COM, so a window whose
+/// webview failed to initialise (`ERROR_INVALID_STATE`, spec §5.2)
+/// fails here instead of looking healthy and silently doing nothing.
+pub fn register_web_message_handler<R, F>(
+    window: &WebviewWindow<R>,
+    on_message: F,
+) -> Result<(), String>
+where
+    R: tauri::Runtime,
+    F: Fn(&str) + Send + Sync + 'static,
+{
+    use std::sync::Mutex;
+
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    let tx = Arc::new(Mutex::new(Some(tx)));
+    let on_message = Arc::new(on_message);
+
+    let result = window.with_webview(move |webview| unsafe {
+        use webview2_com::WebMessageReceivedEventHandler;
+
+        let core = match webview.controller().CoreWebView2() {
+            Ok(c) => c,
+            Err(e) => {
+                if let Some(sender) = tx.lock().unwrap().take() {
+                    let _ = sender.send(Err(format!("CoreWebView2 unavailable: {e}")));
+                }
+                return;
+            }
+        };
+
+        let cb = on_message.clone();
+        let handler = WebMessageReceivedEventHandler::create(Box::new(
+            move |_sender, args| -> wv2_windows_core::Result<()> {
+                if let Some(args) = args {
+                    let mut raw = wv2_windows_core::PWSTR::null();
+                    // `TryGetWebMessageAsString` fails for non-string
+                    // messages; we only ever post strings.
+                    if args.TryGetWebMessageAsString(&mut raw).is_ok() {
+                        let message = raw.to_string().unwrap_or_default();
+                        if !raw.is_null() {
+                            wv2_windows_core::imp::CoTaskMemFree(raw.as_ptr() as _);
+                        }
+                        if !message.is_empty() {
+                            cb(&message);
+                        }
+                    }
+                }
+                Ok(())
+            },
+        ));
+
+        let mut token: i64 = 0;
+        if let Err(e) = core.add_WebMessageReceived(&handler, &mut token) {
+            if let Some(sender) = tx.lock().unwrap().take() {
+                let _ = sender.send(Err(format!("add_WebMessageReceived failed: {e}")));
+            }
+            return;
+        }
+        tracing::info!(
+            step = "NativeHandler.WebMessage",
+            token,
+            "registered WebMessageReceived handler"
+        );
+
+        if let Some(sender) = tx.lock().unwrap().take() {
+            let _ = sender.send(Ok(()));
+        }
+    });
+
+    if let Err(e) = result {
+        return Err(format!("with_webview failed for WebMessageReceived: {e}"));
+    }
+
+    match rx.recv_timeout(std::time::Duration::from_secs(5)) {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err("WebMessageReceived registration timed out".to_string()),
+    }
+}

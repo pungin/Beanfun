@@ -125,6 +125,7 @@ import { NGM_DOWNLOAD_URL } from '../constants/classic'
 import { safeInvoke } from '../services/invoke'
 import { useGameLauncher } from '../composables/useGameLauncher'
 import { useInAppBrowser } from '../composables/useInAppBrowser'
+import { useClassicLaunch } from '../composables/useClassicLaunch'
 
 defineOptions({ name: 'IdPassForm' })
 
@@ -199,6 +200,20 @@ const ui = useUiStore()
  * the GamaPass login instead of silently launching nothing.
  */
 const classicNeedsGamapass = computed(() => ui.classicLoginMode && currentRegion.value === 'TW')
+
+/**
+ * Start the Classic portal for TW. Classic is a **separate login** from
+ * the regular service there, so no beanfun session is needed (or would
+ * help) — the portal window opens visible and the user signs in inside
+ * it; the backend script then handles the GamaPass consent and
+ * game-account selection steps. Guard + outcome toasts come from the
+ * shared composable.
+ */
+const { launching: classicLaunching, launch: launchClassic } = useClassicLaunch()
+
+function handleLaunchClassicTw(): void {
+  void launchClassic('TW')
+}
 
 /**
  * Classic environment self-check (MapleLink parity): reports whether
@@ -631,10 +646,11 @@ async function persistAfterFullSuccess(intent: LoginIntent): Promise<void> {
       <el-button
         type="primary"
         class="id-pass-form__submit"
-        data-test="id-pass-classic-gamapass"
-        @click="switchToGamepass"
+        :loading="classicLaunching"
+        data-test="id-pass-classic-launch"
+        @click="handleLaunchClassicTw"
       >
-        {{ t('classic.gamapassButton') }}
+        {{ t('classic.launchButton') }}
       </el-button>
       <div class="id-pass-form__classic-status" data-test="id-pass-classic-status">
         <span v-if="classicChecking || classicCheck === null">{{ t('classic.checking') }}</span>
