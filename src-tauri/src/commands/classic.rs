@@ -665,6 +665,7 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
     let needs_login_cb = needs_login.clone();
     let ngm_missing_cb = ngm_missing.clone();
     let needs_pick_cb = needs_pick.clone();
+    let flag_for_msg = flag.clone();
     let window = build_portal_window(&app, &portal_script(region), start_visible, move |raw| {
         tracing::info!("classic portal message: {raw}");
         let Ok(msg) = serde_json::from_str::<PortalMessage>(raw) else {
@@ -672,23 +673,26 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
             return;
         };
         match msg.kind.as_str() {
-            "need-login" => {
-                if !needs_login_cb.swap(true, Ordering::SeqCst) {
-                    let _ = app_for_msg.emit(CLASSIC_NEEDS_LOGIN_EVENT, ());
-                }
+            // Emit once — the script re-reports after every navigation.
+            "need-login" if !needs_login_cb.swap(true, Ordering::SeqCst) => {
+                let _ = app_for_msg.emit(CLASSIC_NEEDS_LOGIN_EVENT, ());
             }
-            "ngm-missing" => ngm_missing_cb.store(true, Ordering::SeqCst),
+            // The portal shows its NGM start/install layer AFTER firing
+            // the launch too, so this only means "not installed" while
+            // no launch has happened — otherwise it is post-launch noise
+            // (measured: it arrived 170 ms after a successful launch).
+            "ngm-missing" if flag_for_msg.load(Ordering::SeqCst) == PENDING => {
+                ngm_missing_cb.store(true, Ordering::SeqCst);
+            }
             // Several game accounts — the user picks in a native form
             // (`classic_select_account` answers), never inside the page.
-            "account-choice" => {
-                if !needs_pick_cb.swap(true, Ordering::SeqCst) {
-                    let _ = app_for_msg.emit(
-                        CLASSIC_ACCOUNT_CHOICE_EVENT,
-                        ClassicAccountChoice {
-                            accounts: msg.accounts,
-                        },
-                    );
-                }
+            "account-choice" if !needs_pick_cb.swap(true, Ordering::SeqCst) => {
+                let _ = app_for_msg.emit(
+                    CLASSIC_ACCOUNT_CHOICE_EVENT,
+                    ClassicAccountChoice {
+                        accounts: msg.accounts,
+                    },
+                );
             }
             _ => {}
         }
@@ -860,6 +864,20 @@ mod tests {
         let script = portal_script(LoginRegion::TW);
         assert!(script.contains(".bottom-fixed-action-area a.ui-btn"));
         assert!(!script.contains("PRIMARY"), "no label-matching heuristics");
+    }
+
+    #[test]
+    fn ngm_missing_is_only_believed_before_a_launch() {
+        // The portal shows its NGM start/install layer after a
+        // successful launch too — a measured run posted `ngm-missing`
+        // 170 ms after NGM had already started. The handler must gate
+        // that message on the launch flag still being PENDING, or a
+        // successful launch would be reported as a failure.
+        let src = include_str!("classic.rs");
+        assert!(
+            src.contains(r#""ngm-missing" if flag_for_msg.load(Ordering::SeqCst) == PENDING"#),
+            "ngm-missing must be ignored once a launch has fired"
+        );
     }
 
     #[test]
