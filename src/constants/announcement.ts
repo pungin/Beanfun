@@ -1,89 +1,67 @@
 /**
  * Announcement registry — every notice the app can show, and the rules
- * that decide when each one pops.
+ * that decide how insistent each one is.
  *
- * # Levels
+ * # Levels, least to most insistent
  *
- * | Level             | Auto-opens              | Countdown            | Remembered |
- * | ----------------- | ----------------------- | -------------------- | ---------- |
- * | `info`            | once, until acknowledged | none (close anytime) | yes        |
- * | `forced`          | once, until acknowledged | `forcedSeconds`      | yes        |
- * | `forcedEveryTime` | **every launch**         | `forcedSeconds`      | never      |
+ * | Level      | Behaviour                                                                                   |
+ * | ---------- | ------------------------------------------------------------------------------------------- |
+ * | `info`     | Closable at once; closing counts as read.                                                     |
+ * | `pinned`   | Locked for `countdownSeconds`, then the × and the backdrop both work; closing counts as read.  |
+ * | `blocking` | Same countdown, but only the acknowledge button counts as read — any other close brings it back next launch. |
  *
- * `forcedEveryTime` is for notices that must be re-read on every start
- * (a service outage, a data-loss warning); it deliberately never
- * records an acknowledgement, so it comes back next launch.
+ * `blocking` is the only level that can nag twice, and it earns that by
+ * being the only one whose "I read it" is an explicit act.
  *
  * # Publishing a new announcement
  *
- * 1. Prepend an entry to {@link ANNOUNCEMENTS} (newest first) with a
- *    fresh `id` in `"YYYY-MM-description"` form. A new id is unseen by
- *    everyone, which is what makes it pop.
- * 2. Add its `titleKey` / `bodyKeys` strings to **all three** locales in
- *    `src/i18n/messages.ts` (a property test enforces identical key
- *    sets; the key-usage guard knows `announcement.*` is consumed
- *    dynamically from this registry).
- * 3. Pick the level and, for the forced ones, `forcedSeconds`.
+ * 1. Prepend an entry here (newest first) with a fresh `id`
+ *    (`"YYYY-MM-description"`), its `date`, and a level.
+ * 2. Add its `titleKey` string to all three locales in
+ *    `src/i18n/messages.ts`, plus whatever body strings it needs.
+ * 3. Add a branch for the id in `components/AnnouncementBody.vue` — the
+ *    overlay and the archive both render from there, so they can't
+ *    drift apart.
  *
- * Old entries stay in the list: the announcement history dialog reads
- * from it, so removing one erases it from the user's record.
+ * Old entries stay in the list: the archive reads from it, so deleting
+ * one erases it from the user's record.
  */
 
 /** How insistent an announcement is — see the table in the module doc. */
-export type AnnouncementLevel = 'info' | 'forced' | 'forcedEveryTime'
-
-/** An external link rendered under an announcement's body. */
-export interface AnnouncementLink {
-  /** i18n key for the link label. */
-  labelKey: string
-  url: string
-}
+export type AnnouncementLevel = 'info' | 'pinned' | 'blocking'
 
 export interface AnnouncementDef {
-  /** Stable id; also the acknowledgement token. Never reuse one. */
+  /** Stable id; also the acknowledgement token and the body's key. */
   id: string
   level: AnnouncementLevel
-  /**
-   * Seconds the dismiss button stays disabled. Ignored for `info`
-   * (which is closable immediately).
-   */
-  forcedSeconds: number
-  /** i18n key for the card title. */
+  /** Publication date, `YYYY-MM-DD`. Shown in the archive list. */
+  date: string
+  /** i18n key for the subject line (overlay title + archive row). */
   titleKey: string
-  /** i18n keys rendered as body paragraphs, in order. */
-  bodyKeys: readonly string[]
-  links?: readonly AnnouncementLink[]
   /**
-   * Optional bespoke card body. `dualLine` renders the two-track
-   * Beanfun / MapleLink layout the #323 notice shipped with; anything
-   * else (the default) renders `bodyKeys` as plain paragraphs.
+   * Seconds the acknowledge button stays disabled. Ignored by `info`,
+   * which is closable at once.
    */
-  layout?: 'dualLine'
+  countdownSeconds?: number
 }
 
-/** External links used by the shipped announcements. */
+/** External links the shipped announcement bodies use. */
 export const ANNOUNCEMENT_MAPLELINK_URL = 'https://github.com/lshw54/maplelink'
 export const ANNOUNCEMENT_MORE_INFO_URL = 'https://github.com/pungin/Beanfun/issues/323'
 
 /**
- * Every announcement, **newest first**. The first entry is what the
- * title-bar banner names.
+ * Every announcement, **newest first**. The first entry is the one the
+ * banner names.
  */
 export const ANNOUNCEMENTS: readonly AnnouncementDef[] = [
   {
     id: '2026-07-dual-line-development-notice',
-    // Read once, then out of the way. The countdown is deliberately
-    // short: by now the dual-line notice is old news to most users, and
-    // the history dialog keeps it one click away forever.
-    level: 'forced',
-    forcedSeconds: 10,
+    // Dropped from a 30-second lock to `info`: most people have read
+    // this by now, and holding everyone for half a minute again earns
+    // nothing. It stays in the archive for anyone who wants it.
+    level: 'info',
+    date: '2026-07-07',
     titleKey: 'announcement.title',
-    bodyKeys: ['announcement.intro'],
-    links: [
-      { labelKey: 'announcement.maplelinkLink', url: ANNOUNCEMENT_MAPLELINK_URL },
-      { labelKey: 'announcement.moreInfoLink', url: ANNOUNCEMENT_MORE_INFO_URL },
-    ],
-    layout: 'dualLine',
   },
 ]
 
@@ -102,6 +80,13 @@ export function announcementById(id: string): AnnouncementDef | undefined {
 export const ANNOUNCEMENT_SEEN_KEY = 'announcementSeenIds'
 
 /**
+ * Key holding the ids whose **banner** the user dismissed. Separate
+ * from the read record: dismissing the strip is a display choice, and a
+ * later announcement brings its own banner back.
+ */
+export const ANNOUNCEMENT_BANNER_KEY = 'announcementBannerDismissedIds'
+
+/**
  * The key earlier builds wrote. It held a single value: first the
  * acknowledged **app version** (`"6.0.5"`), later the single
  * announcement id. Read-only now — {@link parseSeenIds} folds it into
@@ -112,29 +97,34 @@ export const LEGACY_ANNOUNCEMENT_SEEN_KEY = 'announcementSeenVersion'
 /**
  * The announcement a legacy value acknowledges. Everyone holding an
  * app-version value had read the issue-#323 dual-line notice — the only
- * announcement that existed then — so that id (and only that id) counts
- * as seen for them.
+ * announcement that existed then.
  */
 export const LEGACY_VALUES_MEAN_ID = '2026-07-dual-line-development-notice'
 
-/** `true` for the app-version shapes pre-ID builds stored. */
+/** `true` for the app-version shapes pre-registry builds stored. */
 function isLegacyVersionValue(value: string): boolean {
   return /^\d+\.\d+(\.\d+)*$/.test(value.trim())
 }
 
+/** Parse a comma-separated id list (either store, possibly absent). */
+export function parseIdList(stored: string | null | undefined): Set<string> {
+  const ids = new Set<string>()
+  for (const part of (stored ?? '').split(',')) {
+    const id = part.trim()
+    if (id) ids.add(id)
+  }
+  return ids
+}
+
 /**
  * Build the acknowledged-id set from the current and legacy stored
- * values (either store may be absent or empty).
+ * values (either may be absent or empty).
  */
 export function parseSeenIds(
   current: string | null | undefined,
   legacy?: string | null | undefined,
 ): Set<string> {
-  const seen = new Set<string>()
-  for (const part of (current ?? '').split(',')) {
-    const id = part.trim()
-    if (id) seen.add(id)
-  }
+  const seen = parseIdList(current)
   const legacyValue = (legacy ?? '').trim()
   if (legacyValue) {
     // A legacy id is itself an acknowledgement; a legacy app version
@@ -144,33 +134,43 @@ export function parseSeenIds(
   return seen
 }
 
-/** Serialize an acknowledged-id set back to the stored form. */
-export function serializeSeenIds(seen: Iterable<string>): string {
-  return Array.from(new Set(seen)).join(',')
+/** Serialize an id set back to the stored form. */
+export function serializeIds(ids: Iterable<string>): string {
+  return Array.from(new Set(ids)).join(',')
 }
 
 /**
- * The announcement that should auto-open now, or `null` when none must.
+ * The announcement that should auto-open now, or `null` when none must:
+ * the newest one the user has not read.
  *
- * A `forcedEveryTime` notice always wins — that is the whole point of
- * the level. Otherwise the newest unacknowledged announcement pops,
- * whatever its level.
+ * A `blocking` notice returns until it is acknowledged through its own
+ * button, which is simply the read record doing its job — no special
+ * case here.
  */
 export function pendingAnnouncement(seen: Set<string>): AnnouncementDef | null {
-  const always = ANNOUNCEMENTS.find((a) => a.level === 'forcedEveryTime')
-  if (always) return always
   return ANNOUNCEMENTS.find((a) => !seen.has(a.id)) ?? null
 }
 
-/** `true` when opening `def` should count down before it can be closed. */
-export function isForcedLevel(def: AnnouncementDef): boolean {
-  return def.level === 'forced' || def.level === 'forcedEveryTime'
+/** `true` when opening `def` locks the acknowledge button for a while. */
+export function hasCountdown(def: AnnouncementDef): boolean {
+  return def.level !== 'info' && (def.countdownSeconds ?? 0) > 0
 }
 
+/** Countdown length for `def` (0 when it has none). */
+export function countdownFor(def: AnnouncementDef): number {
+  return hasCountdown(def) ? (def.countdownSeconds ?? 0) : 0
+}
+
+/** How the user closed an announcement overlay. */
+export type CloseIntent = 'acknowledge' | 'dismiss'
+
 /**
- * `true` when acknowledging `def` should be remembered.
- * `forcedEveryTime` never is — it must return on the next launch.
+ * `true` when closing `def` via `intent` counts as having read it.
+ *
+ * Only `blocking` distinguishes the two: its × and backdrop let the
+ * user out without recording anything, so the notice returns on the
+ * next launch. Everything else treats any close as read.
  */
-export function isAcknowledgeable(def: AnnouncementDef): boolean {
-  return def.level !== 'forcedEveryTime'
+export function closingCountsAsRead(def: AnnouncementDef, intent: CloseIntent): boolean {
+  return def.level === 'blocking' ? intent === 'acknowledge' : true
 }

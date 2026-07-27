@@ -762,6 +762,21 @@ onMounted(() => {
                 </el-button>
               </div>
 
+              <!-- Announcements sit high on the page on purpose: a
+                   notice buried under the maintenance tools at the
+                   bottom is one nobody finds, and the banner's × now
+                   relies on this being easy to reach. -->
+              <div class="settings__row">
+                <el-button
+                  class="bf-btn-secondary settings__inline-btn"
+                  data-test="settings-announcements"
+                  @click="openAnnouncementList()"
+                >
+                  <el-icon><Bell /></el-icon>
+                  <span>{{ t('announcement.historyTitle') }}</span>
+                </el-button>
+              </div>
+
               <div class="settings__row">
                 <label class="settings__label">{{ t('UpdateChannel') }}</label>
                 <el-select
@@ -1026,14 +1041,6 @@ onMounted(() => {
             >
               <el-icon><Refresh /></el-icon>
               <span>{{ t('settings.resetWindowPosition') }}</span>
-            </el-button>
-            <el-button
-              class="bf-btn-secondary"
-              data-test="settings-announcements"
-              @click="openAnnouncementList()"
-            >
-              <el-icon><Bell /></el-icon>
-              <span>{{ t('announcement.historyTitle') }}</span>
             </el-button>
             <el-button
               class="bf-btn-secondary"

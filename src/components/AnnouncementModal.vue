@@ -1,36 +1,35 @@
 <script setup lang="ts">
 /**
- * Announcement modal + history dialog.
+ * Announcement overlay, banner and archive.
  *
- * # Levels (see `src/constants/announcement.ts` for the registry)
+ * # Levels (registry: `src/constants/announcement.ts`)
  *
- * - **`info`** — pops once until acknowledged; closable immediately.
- * - **`forced`** — pops once until acknowledged; the button is disabled
- *   for the announcement's own `forcedSeconds` countdown first.
- * - **`forcedEveryTime`** — pops on **every** launch and is never
- *   recorded as read, for notices that must be re-read each start.
+ * - **`info`** — closable at once; closing counts as read.
+ * - **`pinned`** — locked for its countdown, after which the × and the
+ *   backdrop both work; closing counts as read.
+ * - **`blocking`** — same countdown, but only the acknowledge button
+ *   counts as read; leaving by × or backdrop brings the notice back on
+ *   the next launch.
  *
- * Which one pops is decided by `pendingAnnouncement`, so publishing a
- * notice is an edit to the registry, never to this component.
+ * # Reaching a notice again
  *
- * # The rest of the behaviour
+ * The banner names the newest announcement and opens **it**, not a
+ * list — one click, one layer. Its × dismisses the strip for good,
+ * which is only reasonable because the text stays reachable: the
+ * archive (Settings → announcements) lists every notice ever published,
+ * and opening one shows exactly the same body, since both render
+ * {@link AnnouncementBody} keyed by id.
  *
- * - **Bigger window while shown.** The app window is normally sized for
- *   a single form; showing a notice temporarily grows it so the card
- *   isn't crammed, and restores the previous size on close.
- * - **Always reachable afterwards.** A slim permanent banner under the
- *   title bar opens the **history dialog**, which lists every
- *   announcement ever published with its read state — any of them can
- *   be re-read, always without a countdown. Settings opens the same
- *   dialog through `services/announcementUi`.
- * - **Robust "seen" state.** Acknowledged ids live in both Config.xml
- *   and WebView localStorage; either store counts, so hand-wiping one
- *   doesn't re-force a read. Values written by pre-registry builds (a
- *   lone id, or an app version like `"6.0.5"`) are folded in by
- *   `parseSeenIds`, so nobody is re-forced by the format change.
+ * # Robust read state
  *
- * Mounted once at the app root ({@link App.vue}) so it overlays whatever
- * route is active.
+ * Acknowledged ids live in both Config.xml and WebView localStorage;
+ * either store counts, so hand-wiping one doesn't re-force a read.
+ * Values written by pre-registry builds (a lone id, or an app version
+ * like `"6.0.5"`) are folded in by `parseSeenIds`, so the format change
+ * re-forces nobody.
+ *
+ * Mounted once at the app root ({@link App.vue}) so it overlays
+ * whatever route is active.
  */
 
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -38,27 +37,25 @@ import { useI18n } from 'vue-i18n'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { LogicalSize } from '@tauri-apps/api/dpi'
 
-import { commands } from '../types/bindings'
-import { safeInvoke } from '../services/invoke'
 import { setWindowFitSuspended } from '../services/windowFit'
-import {
-  announcementListOpen,
-  closeAnnouncementList,
-  openAnnouncementList,
-} from '../services/announcementUi'
+import { announcementListOpen, closeAnnouncementList } from '../services/announcementUi'
 import { useConfigStore } from '../stores/config'
 import {
   ANNOUNCEMENTS,
+  ANNOUNCEMENT_BANNER_KEY,
   ANNOUNCEMENT_SEEN_KEY,
   LATEST_ANNOUNCEMENT,
   LEGACY_ANNOUNCEMENT_SEEN_KEY,
-  isAcknowledgeable,
-  isForcedLevel,
+  closingCountsAsRead,
+  countdownFor,
+  parseIdList,
   parseSeenIds,
   pendingAnnouncement,
-  serializeSeenIds,
+  serializeIds,
   type AnnouncementDef,
+  type CloseIntent,
 } from '../constants/announcement'
+import AnnouncementBody from './AnnouncementBody.vue'
 
 /** Logical size the window grows to while a notice is shown. */
 const BIG_W = 640
@@ -73,34 +70,44 @@ const config = useConfigStore()
 const ready = ref(false)
 const visible = ref(false)
 
-/** The announcement currently rendered in the card. */
+/** The announcement currently in the overlay. */
 const current = ref<AnnouncementDef>(LATEST_ANNOUNCEMENT)
 /** Acknowledged ids, hydrated from both stores on mount. */
 const seenIds = ref<Set<string>>(new Set())
+/** Ids whose banner strip the user dismissed. */
+const bannerDismissed = ref<Set<string>>(new Set())
 
-/** Every announcement, newest first, for the history dialog. */
-const history = computed(() =>
+/** Seconds left before the acknowledge button unlocks (0 = unlocked). */
+const remaining = ref(0)
+/** `true` while the countdown holds every close affordance shut. */
+const locked = computed(() => remaining.value > 0)
+
+/** The archive dialog's open flag — Settings raises it from outside. */
+const listOpen = announcementListOpen()
+
+/** Every announcement, newest first, with its read state. */
+const archive = computed(() =>
   ANNOUNCEMENTS.map((def) => ({ def, read: seenIds.value.has(def.id) })),
 )
 
-/** The history dialog's open flag lives in a shared module — Settings
- * and the title-bar banner both open it from outside this component. */
-const listOpen = announcementListOpen()
-
 /**
- * The slim re-open banner is **permanent**: whenever the notice card
- * itself is closed it sits under the title bar so the announcement is
- * always one click away (no session-dismiss). It never triggers the
- * countdown — {@link reopen} is review mode.
+ * The strip under the title bar names the newest notice and is up
+ * unless the user dismissed it — and never while something else is
+ * already on screen.
  */
-const bannerVisible = computed(() => ready.value && !visible.value)
+const bannerVisible = computed(
+  () =>
+    ready.value &&
+    !visible.value &&
+    !listOpen.value &&
+    !bannerDismissed.value.has(LATEST_ANNOUNCEMENT.id),
+)
 
 /**
  * Reserve a strip under the title bar while the banner is up so the
- * `position: fixed` banner never overlaps the page content (it used to
- * cover the top of the login form). Toggles a global body class picked
- * up by the unscoped style block below; the router's content-fit
- * resizer then re-measures and grows the window to include the strip.
+ * `position: fixed` banner never overlaps the page content. Toggles a
+ * global body class picked up by the unscoped style block below; the
+ * router's content-fit resizer then re-measures the window.
  */
 watch(
   bannerVisible,
@@ -111,9 +118,7 @@ watch(
   },
   { immediate: true },
 )
-/** `true` = the auto-shown, countdown-gated first read; `false` = review. */
-const forced = ref(false)
-const remaining = ref(0)
+
 let timer: ReturnType<typeof setInterval> | null = null
 // Window size captured before growing, restored on close.
 let savedSize: Awaited<ReturnType<ReturnType<typeof getCurrentWindow>['innerSize']>> | null = null
@@ -149,55 +154,66 @@ async function restoreWindow(): Promise<void> {
   setWindowFitSuspended(false)
 }
 
+/** Read an id list from localStorage, tolerating a hostile store. */
+function readLocal(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+/** Write an id list to both stores; localStorage is best-effort. */
+async function persistIds(key: string, ids: Set<string>): Promise<void> {
+  const serialized = serializeIds(ids)
+  try {
+    localStorage.setItem(key, serialized)
+  } catch {
+    /* localStorage unavailable — Config.xml below still records it */
+  }
+  await config.set(key, serialized)
+}
+
 /**
  * Hydrate the acknowledged-id set from both stores plus the legacy
- * single-value key (see `parseSeenIds`). Either store alone counts, so
- * wiping one by hand doesn't re-force anything.
+ * single-value key. Either store alone counts, so wiping one by hand
+ * doesn't re-force anything.
  */
 function loadSeenIds(): Set<string> {
-  let localCurrent: string | null = null
-  let localLegacy: string | null = null
-  try {
-    localCurrent = localStorage.getItem(ANNOUNCEMENT_SEEN_KEY)
-    localLegacy = localStorage.getItem(LEGACY_ANNOUNCEMENT_SEEN_KEY)
-  } catch {
-    /* localStorage unavailable — Config.xml still answers */
-  }
   const merged = parseSeenIds(
     config.get(ANNOUNCEMENT_SEEN_KEY),
     config.get(LEGACY_ANNOUNCEMENT_SEEN_KEY),
   )
-  for (const id of parseSeenIds(localCurrent, localLegacy)) merged.add(id)
+  for (const id of parseSeenIds(
+    readLocal(ANNOUNCEMENT_SEEN_KEY),
+    readLocal(LEGACY_ANNOUNCEMENT_SEEN_KEY),
+  )) {
+    merged.add(id)
+  }
   return merged
 }
 
-/**
- * Record `def` as acknowledged in BOTH stores, so it never auto-pops
- * again — and stays that way even if one store is later wiped by hand.
- * `forcedEveryTime` notices are never recorded: they must return on the
- * next launch.
- */
+function loadBannerDismissed(): Set<string> {
+  const merged = parseIdList(config.get(ANNOUNCEMENT_BANNER_KEY))
+  for (const id of parseIdList(readLocal(ANNOUNCEMENT_BANNER_KEY))) merged.add(id)
+  return merged
+}
+
+/** Record `def` as read in both stores. */
 async function markSeen(def: AnnouncementDef): Promise<void> {
-  if (!isAcknowledgeable(def)) return
+  if (seenIds.value.has(def.id)) return
   const next = new Set(seenIds.value)
   next.add(def.id)
   seenIds.value = next
-  const serialized = serializeSeenIds(next)
-  try {
-    localStorage.setItem(ANNOUNCEMENT_SEEN_KEY, serialized)
-  } catch {
-    /* localStorage unavailable — Config.xml below still records it */
-  }
-  await config.set(ANNOUNCEMENT_SEEN_KEY, serialized)
+  await persistIds(ANNOUNCEMENT_SEEN_KEY, next)
 }
 
-/** Auto-open `def` with its level's countdown. */
-async function openPending(def: AnnouncementDef): Promise<void> {
+/** Open `def`, applying its level's countdown when asked. */
+async function openOverlay(def: AnnouncementDef, withCountdown: boolean): Promise<void> {
+  closeAnnouncementList()
   current.value = def
   visible.value = true
-  forced.value = isForcedLevel(def)
-  remaining.value = forced.value ? def.forcedSeconds : 0
-  await growWindow()
+  remaining.value = withCountdown ? countdownFor(def) : 0
   stopTimer()
   if (remaining.value > 0) {
     timer = setInterval(() => {
@@ -205,40 +221,41 @@ async function openPending(def: AnnouncementDef): Promise<void> {
       if (remaining.value <= 0) stopTimer()
     }, 1000)
   }
-}
-
-/** Open `def` for review — never a countdown, never re-acknowledged. */
-async function openForReview(def: AnnouncementDef): Promise<void> {
-  closeAnnouncementList()
-  current.value = def
-  visible.value = true
-  forced.value = false
-  remaining.value = 0
-  stopTimer()
   await growWindow()
 }
 
-async function close(): Promise<void> {
-  if (forced.value && remaining.value > 0) return // forced-read not finished
+/**
+ * Close the overlay. `intent` decides whether this counts as read —
+ * only `blocking` cares (see `closingCountsAsRead`), which is what
+ * makes it the one level that can return tomorrow.
+ */
+async function closeOverlay(intent: CloseIntent): Promise<void> {
+  if (locked.value) return // countdown still running
   const def = current.value
-  const wasForced = forced.value
   visible.value = false
   stopTimer()
   await restoreWindow()
-  // Only the auto-shown read acknowledges; a review close leaves the
-  // record alone (and `forcedEveryTime` never records at all).
-  if (wasForced || !seenIds.value.has(def.id)) await markSeen(def)
+  if (closingCountsAsRead(def, intent)) await markSeen(def)
+}
+
+/** Open a notice for review — never a countdown, always closable. */
+function openForReview(def: AnnouncementDef): void {
+  void openOverlay(def, false)
+}
+
+/** Dismiss the banner strip for the newest notice, for good. */
+async function dismissBanner(): Promise<void> {
+  const next = new Set(bannerDismissed.value)
+  next.add(LATEST_ANNOUNCEMENT.id)
+  bannerDismissed.value = next
+  await persistIds(ANNOUNCEMENT_BANNER_KEY, next)
 }
 
 /**
- * Resolve once the config store has finished loading Config.xml into its
- * cache (or after a safety timeout). Checking {@link isSeen} before this
- * reads an *empty* cache — so a previously-acknowledged version looks
- * unseen and the forced read re-fires on every launch. The localStorage
- * fallback in {@link isSeen} isn't enough: some WebView2 profiles don't
- * persist it across restarts, so Config.xml is the store that actually
- * survives and it must be loaded first. Mirrors the `watch(config.loaded)`
- * idiom already used in `LoginRegionSelection.vue`.
+ * Resolve once the config store has finished loading Config.xml into
+ * its cache (or after a safety timeout). Checking the read state before
+ * this reads an *empty* cache — so an acknowledged notice looks unread
+ * and re-opens on every launch.
  */
 function waitForConfigLoaded(timeoutMs = 5000): Promise<void> {
   if (config.loaded) return Promise.resolve()
@@ -262,14 +279,12 @@ function waitForConfigLoaded(timeoutMs = 5000): Promise<void> {
 }
 
 onMounted(async () => {
-  // Wait for Config.xml before the seen-check, or a still-empty cache
-  // makes an acknowledged announcement look unseen and re-forces its
-  // read every launch. See {@link waitForConfigLoaded}.
   await waitForConfigLoaded()
   seenIds.value = loadSeenIds()
+  bannerDismissed.value = loadBannerDismissed()
   ready.value = true
   const pending = pendingAnnouncement(seenIds.value)
-  if (pending) await openPending(pending)
+  if (pending) await openOverlay(pending, true)
 })
 
 onBeforeUnmount(() => {
@@ -278,121 +293,104 @@ onBeforeUnmount(() => {
     document.body.classList.remove('bf-ann-banner-open')
   }
 })
-
-async function open(url: string): Promise<void> {
-  await safeInvoke(commands.openUrl(url))
-}
 </script>
 
 <template>
-  <div v-if="visible" class="ann" data-testid="announcement">
+  <!-- Overlay. The backdrop closes it too, unless the countdown holds
+       it shut (and for `blocking` that exit deliberately doesn't count
+       as read). -->
+  <div v-if="visible" class="ann" data-testid="announcement" @click.self="closeOverlay('dismiss')">
     <div class="ann__card" role="dialog" aria-modal="true">
       <header class="ann__head">
         <h2 class="ann__title">{{ t(current.titleKey) }}</h2>
+        <button
+          v-if="!locked"
+          type="button"
+          class="ann__close"
+          :aria-label="t('announcement.close')"
+          data-testid="announcement-close"
+          @click="closeOverlay('dismiss')"
+        >
+          ×
+        </button>
       </header>
 
-      <p v-for="key in current.bodyKeys" :key="key" class="ann__intro">{{ t(key) }}</p>
-
-      <!-- Bespoke two-track body kept for the #323 dual-line notice;
-           later announcements render their bodyKeys as plain paragraphs. -->
-      <div v-if="current.layout === 'dualLine'" class="ann__tracks">
-        <div class="ann__track">
-          <span class="ann__dot ann__dot--beanfun" aria-hidden="true"></span>
-          <div class="ann__track-body">
-            <div class="ann__track-name">Beanfun</div>
-            <div class="ann__track-desc">{{ t('announcement.beanfun') }}</div>
-          </div>
-        </div>
-        <div class="ann__track">
-          <span class="ann__dot ann__dot--maple" aria-hidden="true"></span>
-          <div class="ann__track-body">
-            <div class="ann__track-name">MapleLink</div>
-            <div class="ann__track-desc">{{ t('announcement.maplelink') }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="current.links?.length" class="ann__links">
-        <a
-          v-for="link in current.links"
-          :key="link.url"
-          class="ann__link"
-          :data-testid="`announcement-link-${link.labelKey}`"
-          @click="open(link.url)"
-        >
-          {{ t(link.labelKey) }} ↗
-        </a>
-      </div>
+      <AnnouncementBody :id="current.id" />
 
       <button
         class="ann__btn"
         type="button"
-        :disabled="forced && remaining > 0"
+        :disabled="locked"
         data-testid="announcement-dismiss"
-        @click="close"
+        @click="closeOverlay('acknowledge')"
       >
-        <template v-if="forced">
-          {{
-            remaining > 0
-              ? t('announcement.reading', { seconds: remaining })
-              : t('announcement.dismiss')
-          }}
-        </template>
-        <template v-else>{{ t('announcement.close') }}</template>
+        {{ locked ? t('announcement.reading', { seconds: remaining }) : t('announcement.dismiss') }}
       </button>
     </div>
   </div>
 
-  <!-- History: every announcement ever published, with its read state.
-       Opened from the banner below or from Settings. -->
-  <div v-if="listOpen && !visible" class="ann" data-testid="announcement-list">
+  <!-- Archive: subject, date, chevron. Opening one shows the same body
+       the overlay does. -->
+  <div
+    v-else-if="listOpen"
+    class="ann"
+    data-testid="announcement-list"
+    @click.self="closeAnnouncementList()"
+  >
     <div class="ann__card" role="dialog" aria-modal="true">
       <header class="ann__head">
         <h2 class="ann__title">{{ t('announcement.historyTitle') }}</h2>
+        <button
+          type="button"
+          class="ann__close"
+          :aria-label="t('announcement.close')"
+          data-testid="announcement-list-close"
+          @click="closeAnnouncementList()"
+        >
+          ×
+        </button>
       </header>
-      <p class="ann__intro">{{ t('announcement.historyHint') }}</p>
 
       <ul class="ann-list">
-        <li v-for="entry in history" :key="entry.def.id">
+        <li v-for="entry in archive" :key="entry.def.id">
           <button
             type="button"
             class="ann-list__row"
             :data-testid="`announcement-history-${entry.def.id}`"
             @click="openForReview(entry.def)"
           >
-            <span class="ann-list__title">{{ t(entry.def.titleKey) }}</span>
-            <span class="ann-list__meta">
-              <span class="ann-list__level" :class="`ann-list__level--${entry.def.level}`">
-                {{ t(`announcement.level.${entry.def.level}`) }}
-              </span>
-              <span class="ann-list__state">
-                {{ entry.read ? t('announcement.stateRead') : t('announcement.stateUnread') }}
-              </span>
+            <span class="ann-list__text">
+              <span class="ann-list__subject">{{ t(entry.def.titleKey) }}</span>
+              <span class="ann-list__date">{{ entry.def.date }}</span>
             </span>
+            <span class="ann-list__chevron" aria-hidden="true">›</span>
           </button>
         </li>
       </ul>
-
-      <button
-        class="ann__btn"
-        type="button"
-        data-testid="announcement-list-close"
-        @click="closeAnnouncementList()"
-      >
-        {{ t('announcement.close') }}
-      </button>
     </div>
   </div>
 
+  <!-- Banner: names the newest notice, opens IT (no intermediate list),
+       and can be dismissed for good. -->
   <div v-else-if="bannerVisible" class="ann-banner" data-testid="announcement-banner">
     <button
       class="ann-banner__open"
       type="button"
       data-testid="announcement-banner-open"
-      @click="openAnnouncementList()"
+      @click="openForReview(LATEST_ANNOUNCEMENT)"
     >
       <span class="ann-banner__text">{{ t(LATEST_ANNOUNCEMENT.titleKey) }}</span>
       <span class="ann-banner__cta">{{ t('announcement.reopen') }} ›</span>
+    </button>
+    <button
+      class="ann-banner__close"
+      type="button"
+      :aria-label="t('announcement.bannerDismiss')"
+      :title="t('announcement.bannerDismiss')"
+      data-testid="announcement-banner-dismiss"
+      @click="dismissBanner"
+    >
+      ×
     </button>
   </div>
 </template>
@@ -428,6 +426,7 @@ async function open(url: string): Promise<void> {
 .ann__head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -439,73 +438,25 @@ async function open(url: string): Promise<void> {
   letter-spacing: 0.01em;
 }
 
-.ann__intro {
-  margin: 0 0 18px;
-  font-size: 0.9rem;
-  line-height: 1.7;
-  color: var(--bf-on-surface-variant, var(--bf-on-surface, #54443a));
-}
-
-.ann__tracks {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.ann__track {
-  display: flex;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: var(--bf-radius-card, 10px);
-  background: color-mix(in srgb, var(--bf-on-surface, #000) 6%, transparent);
-}
-
-.ann__dot {
+.ann__close {
   flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  margin-top: 5px;
-  border-radius: 50%;
-}
-
-.ann__dot--beanfun {
-  background: #ff8201;
-}
-
-.ann__dot--maple {
-  background: #3aa0ff;
-}
-
-.ann__track-name {
-  font-size: 0.9rem;
-  font-weight: 800;
-  margin-bottom: 3px;
-}
-
-.ann__track-desc {
-  font-size: 0.82rem;
-  line-height: 1.6;
-  color: var(--bf-on-surface-variant, var(--bf-on-surface, #54443a));
-}
-
-.ann__links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  margin-bottom: 20px;
-}
-
-.ann__link {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--bf-on-surface-variant, #54443a);
+  font-size: 1.25rem;
+  line-height: 1;
   cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--bf-primary, #954a00);
-  text-decoration: none;
+  transition: background 150ms ease;
 }
 
-.ann__link:hover {
-  text-decoration: underline;
+.ann__close:hover {
+  background: color-mix(in srgb, var(--bf-on-surface, #000) 10%, transparent);
 }
 
 .ann__btn {
@@ -530,9 +481,11 @@ async function open(url: string): Promise<void> {
   cursor: not-allowed;
 }
 
+/* --------------- archive list --------------- */
+
 .ann-list {
   list-style: none;
-  margin: 0 0 20px;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -560,42 +513,35 @@ async function open(url: string): Promise<void> {
   background: color-mix(in srgb, var(--bf-on-surface, #000) 9%, transparent);
 }
 
-.ann-list__title {
+.ann-list__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ann-list__subject {
   font-size: 0.88rem;
   font-weight: 700;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ann-list__meta {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+.ann-list__date {
   font-size: 0.72rem;
-}
-
-.ann-list__level {
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-weight: 700;
-  background: color-mix(in srgb, var(--bf-on-surface-variant, #54443a) 14%, transparent);
   color: var(--bf-on-surface-variant, #54443a);
 }
 
-.ann-list__level--forced,
-.ann-list__level--forcedEveryTime {
-  background: color-mix(in srgb, var(--el-color-primary, #ff8201) 18%, transparent);
-  color: var(--bf-primary, #954a00);
-}
-
-.ann-list__state {
+.ann-list__chevron {
+  flex: 0 0 auto;
+  font-size: 1.1rem;
   color: var(--bf-on-surface-variant, #54443a);
 }
 
-/* Full-width re-open banner, pinned just under the 40px custom title bar. */
+/* --------------- banner --------------- */
+
+/* Full-width strip, pinned just under the 40px custom title bar. */
 .ann-banner {
   position: fixed;
   top: 40px;
@@ -605,7 +551,7 @@ async function open(url: string): Promise<void> {
   display: flex;
   align-items: center;
   height: 30px;
-  padding: 0 12px;
+  padding: 0 6px 0 12px;
   background: color-mix(
     in srgb,
     var(--el-color-primary, #ff8201) 16%,
@@ -644,17 +590,35 @@ async function open(url: string): Promise<void> {
   font-weight: 800;
   color: var(--bf-primary, #954a00);
 }
+
+.ann-banner__close {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-left: 8px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--bf-on-surface-variant, #54443a);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ann-banner__close:hover {
+  background: color-mix(in srgb, var(--bf-on-surface, #000) 12%, transparent);
+}
 </style>
 
 <!--
   Global (unscoped) offset. The banner is `position: fixed` under the 40px
-  title bar, so on its own it floats over the page content (it used to
-  cover the top of the login form). Every page roots at
-  `[data-window-root]` with `<TitleBar class="bf-titlebar">` as its first
-  child, so reserving a banner-height strip below the title bar pushes the
-  content down exactly under the banner. Scoped styles can't reach
-  TitleBar in other components, hence the global rule gated by the body
-  class toggled in script.
+  title bar, so on its own it floats over the page content. Every page
+  roots at `[data-window-root]` with `<TitleBar class="bf-titlebar">` as
+  its first child, so reserving a banner-height strip below the title bar
+  pushes the content down exactly under the banner.
 -->
 <style>
 body.bf-ann-banner-open [data-window-root] > .bf-titlebar {
