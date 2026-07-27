@@ -755,196 +755,211 @@ onMounted(() => {
           </el-button>
         </header>
 
-        <!-- Account + announcements: the two things you come here to
-             DO, rather than toggle. -->
-        <section class="settings__section bf-glass-panel" data-test="settings-app-section">
-          <header class="settings__section-header">
-            <el-icon><User /></el-icon>
-            <span>{{ t('settings.sectionAccount') }}</span>
-          </header>
+        <!-- Two card stacks. Explicit columns rather than CSS
+             `columns` + `column-span: all`: that combination lets a
+             tall card in one column run under the full-width cards
+             below (measured — the launch-behaviour card overlapped
+             the game note). Each stack sizes to its own content, so
+             neither holes nor overlaps are possible. -->
+        <div class="settings__columns">
+          <div class="settings__column">
+            <section class="settings__section bf-glass-panel" data-test="settings-app-section">
+              <header class="settings__section-header">
+                <el-icon><User /></el-icon>
+                <span>{{ t('settings.sectionAccount') }}</span>
+              </header>
 
-          <div class="settings__actions">
-            <el-button
-              class="bf-btn-secondary"
-              data-test="settings-manage-account"
-              @click="handleManageAccount"
-            >
-              <el-icon><User /></el-icon>
-              <span>{{ t('ManageAccount') }}</span>
-            </el-button>
-            <el-button
-              class="bf-btn-secondary"
-              data-test="settings-announcements"
-              @click="openAnnouncementList()"
-            >
-              <el-icon><Bell /></el-icon>
-              <span>{{ t('announcement.historyTitle') }}</span>
-            </el-button>
-          </div>
-        </section>
-
-        <!-- General: how the app updates and what language it speaks. -->
-        <section class="settings__section bf-glass-panel" data-test="settings-general-section">
-          <header class="settings__section-header">
-            <el-icon><SettingIcon /></el-icon>
-            <span>{{ t('settings.sectionGeneral') }}</span>
-          </header>
-
-          <div class="settings__rows">
-            <div class="settings__row">
-              <label class="settings__label">{{ t('UpdateChannel') }}</label>
-              <el-select
-                :model-value="ui.updateChannel"
-                class="settings__select"
-                data-test="settings-update-channel"
-                @change="handleUpdateChannelChange"
-              >
-                <el-option
-                  v-for="opt in UPDATE_CHANNEL_OPTIONS"
-                  :key="opt.value"
-                  :value="opt.value"
-                  :label="t(opt.labelKey)"
-                />
-              </el-select>
-            </div>
-
-            <div class="settings__row settings__row--checkbox">
-              <el-checkbox
-                :model-value="ui.askUpdate"
-                data-test="settings-ask-update"
-                @change="(value) => ui.setAskUpdate(Boolean(value))"
-              >
-                {{ t('AutoCheckUpdate') }}
-              </el-checkbox>
-            </div>
-
-            <div class="settings__row">
-              <label class="settings__label">{{ t('Language') }}</label>
-              <el-select
-                :model-value="ui.language"
-                class="settings__select"
-                data-test="settings-language"
-                @change="handleLanguageChange"
-              >
-                <el-option
-                  v-for="opt in LANGUAGE_OPTIONS"
-                  :key="opt.value"
-                  :value="opt.value"
-                  :label="opt.label"
-                />
-              </el-select>
-            </div>
-
-            <div
-              v-if="showLoginModePanel"
-              class="settings__row"
-              data-test="settings-login-mode-row"
-            >
-              <label class="settings__label">{{ t('LoginMode') }}</label>
-              <el-select
-                :model-value="ui.loginMethod"
-                class="settings__select"
-                data-test="settings-login-mode"
-                @change="handleLoginMethodChange"
-              >
-                <el-option
-                  v-for="opt in LOGIN_METHOD_OPTIONS"
-                  :key="opt.value"
-                  :value="opt.value"
-                  :label="t(opt.labelKey)"
-                />
-              </el-select>
-            </div>
-          </div>
-        </section>
-
-        <!-- Appearance: everything that changes how the app looks. -->
-        <section class="settings__section bf-glass-panel" data-test="settings-appearance-section">
-          <header class="settings__section-header">
-            <el-icon><Brush /></el-icon>
-            <span>{{ t('settings.sectionAppearance') }}</span>
-          </header>
-
-          <div class="settings__rows">
-            <div class="settings__row">
-              <label class="settings__label">{{ t('ThemeColor') }}</label>
-              <div class="settings__theme-row">
-                <el-input
-                  :model-value="ui.themeColor"
-                  class="settings__theme-input"
-                  data-test="settings-theme-input"
-                  @change="handleThemeColorChange"
-                />
-                <el-color-picker
-                  :model-value="ui.themeColor"
-                  data-test="settings-theme-picker"
-                  @change="handleThemeColorChange"
-                />
-              </div>
-            </div>
-
-            <div class="settings__row settings__row--checkbox">
-              <el-checkbox
-                :model-value="ui.darkMode"
-                data-test="settings-dark-mode"
-                @change="(value) => ui.setDarkMode(Boolean(value))"
-              >
-                {{ t('settings.darkMode') }}
-              </el-checkbox>
-            </div>
-          </div>
-        </section>
-
-        <!-- Behaviour: what the app does around a launch. -->
-        <section class="settings__section bf-glass-panel" data-test="settings-behaviour-section">
-          <header class="settings__section-header">
-            <el-icon><Operation /></el-icon>
-            <span>{{ t('settings.sectionBehaviour') }}</span>
-          </header>
-
-          <div class="settings__rows">
-            <div class="settings__row settings__row--checkbox">
-              <el-checkbox
-                :model-value="ui.autoStartGame"
-                data-test="settings-auto-start-game"
-                @change="(value) => ui.setAutoStartGame(Boolean(value))"
-              >
-                {{ t('RunAfterLogin') }}
-              </el-checkbox>
-            </div>
-
-            <div class="settings__row settings__row--checkbox">
-              <el-checkbox
-                :model-value="ui.minimizeToTray"
-                data-test="settings-minimize-to-tray"
-                @change="(value) => ui.setMinimizeToTray(Boolean(value))"
-              >
-                {{ t('MinimizeToTaskbar') }}
-              </el-checkbox>
-            </div>
-
-            <div class="settings__row settings__row--checkbox">
-              <el-tooltip
-                placement="right"
-                popper-class="settings__tip-popper"
-                :content="t('settings.disableHardwareAccelerationTip')"
-              >
-                <el-checkbox
-                  :model-value="ui.disableHwAccel"
-                  data-test="settings-disable-hw-accel"
-                  @change="(value) => handleDisableHwAccelChange(Boolean(value))"
+              <div class="settings__actions">
+                <el-button
+                  class="bf-btn-secondary"
+                  data-test="settings-manage-account"
+                  @click="handleManageAccount"
                 >
-                  {{ t('DisableHardwareAcceleration') }}
-                </el-checkbox>
-              </el-tooltip>
-            </div>
+                  <el-icon><User /></el-icon>
+                  <span>{{ t('ManageAccount') }}</span>
+                </el-button>
+                <el-button
+                  class="bf-btn-secondary"
+                  data-test="settings-announcements"
+                  @click="openAnnouncementList()"
+                >
+                  <el-icon><Bell /></el-icon>
+                  <span>{{ t('announcement.historyTitle') }}</span>
+                </el-button>
+              </div>
+            </section>
+
+            <!-- General: how the app updates and what language it speaks. -->
+            <section class="settings__section bf-glass-panel" data-test="settings-general-section">
+              <header class="settings__section-header">
+                <el-icon><SettingIcon /></el-icon>
+                <span>{{ t('settings.sectionGeneral') }}</span>
+              </header>
+
+              <div class="settings__rows">
+                <div class="settings__row">
+                  <label class="settings__label">{{ t('UpdateChannel') }}</label>
+                  <el-select
+                    :model-value="ui.updateChannel"
+                    class="settings__select"
+                    data-test="settings-update-channel"
+                    @change="handleUpdateChannelChange"
+                  >
+                    <el-option
+                      v-for="opt in UPDATE_CHANNEL_OPTIONS"
+                      :key="opt.value"
+                      :value="opt.value"
+                      :label="t(opt.labelKey)"
+                    />
+                  </el-select>
+                </div>
+
+                <div class="settings__row settings__row--checkbox">
+                  <el-checkbox
+                    :model-value="ui.askUpdate"
+                    data-test="settings-ask-update"
+                    @change="(value) => ui.setAskUpdate(Boolean(value))"
+                  >
+                    {{ t('AutoCheckUpdate') }}
+                  </el-checkbox>
+                </div>
+
+                <div class="settings__row">
+                  <label class="settings__label">{{ t('Language') }}</label>
+                  <el-select
+                    :model-value="ui.language"
+                    class="settings__select"
+                    data-test="settings-language"
+                    @change="handleLanguageChange"
+                  >
+                    <el-option
+                      v-for="opt in LANGUAGE_OPTIONS"
+                      :key="opt.value"
+                      :value="opt.value"
+                      :label="opt.label"
+                    />
+                  </el-select>
+                </div>
+
+                <div
+                  v-if="showLoginModePanel"
+                  class="settings__row"
+                  data-test="settings-login-mode-row"
+                >
+                  <label class="settings__label">{{ t('LoginMode') }}</label>
+                  <el-select
+                    :model-value="ui.loginMethod"
+                    class="settings__select"
+                    data-test="settings-login-mode"
+                    @change="handleLoginMethodChange"
+                  >
+                    <el-option
+                      v-for="opt in LOGIN_METHOD_OPTIONS"
+                      :key="opt.value"
+                      :value="opt.value"
+                      :label="t(opt.labelKey)"
+                    />
+                  </el-select>
+                </div>
+              </div>
+            </section>
           </div>
-        </section>
+          <div class="settings__column">
+            <!-- Appearance: everything that changes how the app looks. -->
+            <section
+              class="settings__section bf-glass-panel"
+              data-test="settings-appearance-section"
+            >
+              <header class="settings__section-header">
+                <el-icon><Brush /></el-icon>
+                <span>{{ t('settings.sectionAppearance') }}</span>
+              </header>
+
+              <div class="settings__rows">
+                <div class="settings__row">
+                  <label class="settings__label">{{ t('ThemeColor') }}</label>
+                  <div class="settings__theme-row">
+                    <el-input
+                      :model-value="ui.themeColor"
+                      class="settings__theme-input"
+                      data-test="settings-theme-input"
+                      @change="handleThemeColorChange"
+                    />
+                    <el-color-picker
+                      :model-value="ui.themeColor"
+                      data-test="settings-theme-picker"
+                      @change="handleThemeColorChange"
+                    />
+                  </div>
+                </div>
+
+                <div class="settings__row settings__row--checkbox">
+                  <el-checkbox
+                    :model-value="ui.darkMode"
+                    data-test="settings-dark-mode"
+                    @change="(value) => ui.setDarkMode(Boolean(value))"
+                  >
+                    {{ t('settings.darkMode') }}
+                  </el-checkbox>
+                </div>
+              </div>
+            </section>
+
+            <!-- Behaviour: what the app does around a launch. -->
+            <section
+              class="settings__section bf-glass-panel"
+              data-test="settings-behaviour-section"
+            >
+              <header class="settings__section-header">
+                <el-icon><Operation /></el-icon>
+                <span>{{ t('settings.sectionBehaviour') }}</span>
+              </header>
+
+              <div class="settings__rows">
+                <div class="settings__row settings__row--checkbox">
+                  <el-checkbox
+                    :model-value="ui.autoStartGame"
+                    data-test="settings-auto-start-game"
+                    @change="(value) => ui.setAutoStartGame(Boolean(value))"
+                  >
+                    {{ t('RunAfterLogin') }}
+                  </el-checkbox>
+                </div>
+
+                <div class="settings__row settings__row--checkbox">
+                  <el-checkbox
+                    :model-value="ui.minimizeToTray"
+                    data-test="settings-minimize-to-tray"
+                    @change="(value) => ui.setMinimizeToTray(Boolean(value))"
+                  >
+                    {{ t('MinimizeToTaskbar') }}
+                  </el-checkbox>
+                </div>
+
+                <div class="settings__row settings__row--checkbox">
+                  <el-tooltip
+                    placement="right"
+                    popper-class="settings__tip-popper"
+                    :content="t('settings.disableHardwareAccelerationTip')"
+                  >
+                    <el-checkbox
+                      :model-value="ui.disableHwAccel"
+                      data-test="settings-disable-hw-accel"
+                      @change="(value) => handleDisableHwAccelChange(Boolean(value))"
+                    >
+                      {{ t('DisableHardwareAcceleration') }}
+                    </el-checkbox>
+                  </el-tooltip>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
 
         <!-- Game section (D5) — only when a game is selected (WPF parity: if no game, t_GamePath is empty + the section is uninteractive). -->
         <section
           v-if="game.selectedGame"
-          class="settings__section settings__section--wide bf-glass-panel"
+          class="settings__section bf-glass-panel"
           data-test="settings-game-section"
         >
           <header class="settings__section-header">
@@ -1062,7 +1077,7 @@ onMounted(() => {
           </header>
 
           <div class="settings__rows">
-            <div class="settings__row">
+            <div class="settings__row settings__row--path">
               <label class="settings__label">{{ t('settings.classicNgmPath') }}</label>
               <div class="settings__theme-row">
                 <el-input
@@ -1198,18 +1213,29 @@ onMounted(() => {
    column on a narrow window instead of squeezing. */
 .settings__container {
   width: 100%;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
-  align-items: start;
 }
 
-/* Header, the game section and the empty-state note read across the
-   whole width; the small preference cards are what tiles. */
-.settings__header,
-.settings__section--wide,
-.settings__section--empty {
-  grid-column: 1 / -1;
+/* Two stacks of preference cards side by side. Each stack is a plain
+   flex column, so a card is exactly as tall as its content: no grid
+   rows to align (which left holes) and no CSS-columns spanning (which
+   let a tall card run under the full-width cards below). Wraps to one
+   stack on a narrow window. */
+.settings__columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.settings__column {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .settings__section {
@@ -1291,9 +1317,12 @@ onMounted(() => {
 
 .settings__rows .settings__row .settings__select,
 .settings__rows .settings__row .settings__theme-row {
-  flex: 0 1 auto;
+  /* Take the space the label leaves, but keep a floor: `width: auto`
+     alone collapsed the selects to just their chevron. */
+  flex: 1 1 auto;
   width: auto;
-  min-width: 0;
+  min-width: 128px;
+  max-width: 62%;
 }
 
 .settings__rows .settings__row--checkbox {
@@ -1353,8 +1382,20 @@ onMounted(() => {
 }
 
 .settings__classic-ngm-input {
-  flex: 1 1 180px;
+  flex: 1 1 220px;
   min-width: 140px;
+}
+
+/* The path row carries an input plus up to two buttons — let it wrap
+   instead of pushing the buttons out of the card. */
+.settings__rows .settings__row--path {
+  flex-wrap: wrap;
+}
+
+.settings__rows .settings__row--path .settings__theme-row {
+  flex: 1 1 320px;
+  max-width: 100%;
+  flex-wrap: wrap;
 }
 
 .settings__game-path-input :deep(.el-input__inner) {
