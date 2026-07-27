@@ -89,7 +89,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import {
   ElButton,
   ElCheckbox,
@@ -133,6 +132,7 @@ import {
   wrapCommand,
 } from '../services/invoke'
 import { useInAppBrowser } from '../composables/useInAppBrowser'
+import { useClassicLaunch } from '../composables/useClassicLaunch'
 import AddServiceAccount from '../windows/AddServiceAccount.vue'
 import ChangeServiceAccountDisplayName from '../windows/ChangeServiceAccountDisplayName.vue'
 import CopyBox from '../windows/CopyBox.vue'
@@ -142,12 +142,7 @@ import ToolsDialogStack from '../windows/ToolsDialogStack.vue'
 import UnconnectedGameAddAccount from '../windows/UnconnectedGame_AddAccount.vue'
 import UnconnectedGameChangePassword from '../windows/UnconnectedGame_ChangePassword.vue'
 import { TOOLS_GAME_CODES } from '../constants/tools'
-import {
-  CLASSIC_ELIGIBLE_GAME_CODES,
-  CLASSIC_LAUNCHED_EVENT,
-  CLASSIC_FAILED_EVENT,
-  CLASSIC_TIMEOUT_EVENT,
-} from '../constants/classic'
+import { CLASSIC_ELIGIBLE_GAME_CODES } from '../constants/classic'
 import TitleBar from '../components/TitleBar.vue'
 import { useGameLauncher } from '../composables/useGameLauncher'
 
@@ -728,59 +723,35 @@ const showToolsButton = computed<boolean>(() => {
 /* --------------- MapleStory Classic (懷舊服) --------------- */
 
 /**
- * Show the Classic launch button only when (a) the selected game is
- * MapleStory and (b) this session can actually drive the galaxy SSO —
- * an HK session (account/password) or a TW GamaPass session. A TW
- * account/password or QR session has no portal-side identity, so the
- * classic portal would just dead-end at its login page.
+ * Show the Classic launch button only for a plain **HK** beanfun
+ * sign-in with MapleStory selected. HK shares one login between the
+ * regular service and Classic, so the launch completes silently from
+ * here.
+ *
+ * Excluded:
+ * - **TW** — Classic is a separate login there, so the button would
+ *   just pop another sign-in form. TW users start Classic from the
+ *   login page's 懷舊服 mode instead.
+ * - **GamaPass sessions** — those belong to the TW regular-service
+ *   login. Region already excludes them (GamaPass is TW-only), but the
+ *   origin is checked explicitly so the rule doesn't rest on how the
+ *   server labels the region.
  */
 const showClassicButton = computed<boolean>(() => {
   const code = game.selectedGameCode
   if (code === null || !CLASSIC_ELIGIBLE_GAME_CODES.has(code)) return false
-  return auth.session?.region === 'HK' || auth.viaGamepass
+  return auth.session?.region === 'HK' && !auth.viaGamepass
 })
 
-/** Re-entry guard: one classic launch in flight at a time. */
-const classicLaunching = ref(false)
-
 /**
- * Kick off the hidden galaxy SSO → NGM launch
- * (`commands.openClassicLogin`). Outcome arrives asynchronously via
- * the `classic-*` Tauri events registered in `onMounted`; the guard is
- * released there (or on invoke error).
+ * Classic launch (HK only here — see {@link showClassicButton}). Guard
+ * + outcome toasts live in the shared composable so this page and the
+ * login form behave identically.
  */
-async function handleStartClassic(): Promise<void> {
-  if (classicLaunching.value) return
-  classicLaunching.value = true
-  ElMessage.info(t('classic.launching'))
-  const result = await safeInvoke(commands.openClassicLogin())
-  if (!result.ok) classicLaunching.value = false
-}
+const { launching: classicLaunching, launch: launchClassic } = useClassicLaunch()
 
-/** `listen()` handles for the classic launch events, torn down on unmount. */
-const classicUnlistenFns: UnlistenFn[] = []
-
-async function registerClassicListeners(): Promise<void> {
-  // try/catch: `listen` needs the Tauri IPC bridge; in jsdom specs that
-  // don't stub `@tauri-apps/api/event` (or any IPC-less environment) it
-  // rejects — the page must still mount, just without the toasts.
-  try {
-    const launched = await listen(CLASSIC_LAUNCHED_EVENT, () => {
-      classicLaunching.value = false
-      ElMessage.success(t('classic.launched'))
-    })
-    const failed = await listen(CLASSIC_FAILED_EVENT, () => {
-      classicLaunching.value = false
-      ElMessage.warning(t('classic.launchFailed'))
-    })
-    const timedOut = await listen(CLASSIC_TIMEOUT_EVENT, () => {
-      classicLaunching.value = false
-      ElMessage.warning(t('classic.launchTimeout'))
-    })
-    classicUnlistenFns.push(launched, failed, timedOut)
-  } catch (e) {
-    console.warn('[account-list] classic event listeners unavailable', e)
-  }
+function handleStartClassic(): void {
+  void launchClassic('HK')
 }
 
 /* --------------- D8c — game switcher + active-service pipeline --------------- */
@@ -2243,7 +2214,6 @@ function handleGlobalEnter(event: KeyboardEvent): void {
 
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalEnter)
-  void registerClassicListeners()
   // One-shot: the login form armed an immediate Classic launch
   // (「登入後啟動經典版」). Consume before firing so a later manual
   // navigation back here can never re-trigger it.
@@ -2255,14 +2225,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleGlobalEnter)
-  for (const unlisten of classicUnlistenFns) {
-    try {
-      unlisten()
-    } catch (e) {
-      console.error('[account-list] classic unlisten threw', e)
-    }
-  }
-  classicUnlistenFns.length = 0
 })
 </script>
 

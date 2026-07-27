@@ -213,12 +213,15 @@ export type AuthAction = (typeof AUTH_ACTIONS)[keyof typeof AUTH_ACTIONS]
 export const useAuthStore = defineStore('auth', () => {
   const session = ref<SessionInfo | null>(null)
   /**
-   * `true` when the current session was minted by the GamePass webview
-   * flow ({@link applyGamepassSession}). MapleStory Classic's galaxy
-   * SSO can only be driven by an HK (account/password) session or a TW
-   * GamaPass session — a TW account/password or QR session lacks the
-   * portal-side identity — so the Classic button gates on
-   * `region === 'HK' || viaGamepass`.
+   * `true` when the current session was minted by the GamaPass webview
+   * flow ({@link applyGamepassSession}).
+   *
+   * MapleStory Classic is offered from the account list only for a
+   * plain HK beanfun sign-in: a GamaPass session belongs to the regular
+   * service's TW login, and Classic there is a separate login that the
+   * button could not satisfy. Region alone would already exclude it
+   * (GamaPass is TW-only), but the origin is tracked explicitly so the
+   * rule doesn't depend on how the server happens to label the region.
    */
   const viaGamepass = ref(false)
   const pendingTotp = ref(false)
@@ -751,8 +754,8 @@ export const useAuthStore = defineStore('auth', () => {
     closeRecaptchaWindow,
     resumeTwLoginWithRecaptcha,
     resumeTwLoginAfterVerify,
-    applyGamepassSession,
     viaGamepass,
+    applyGamepassSession,
     getVerifyPageInfo,
     getVerifyCaptcha,
     submitVerify,

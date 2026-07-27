@@ -392,37 +392,34 @@ describe('useAuthStore', () => {
     })
   })
 
-  describe('viaGamepass (MapleStory Classic SSO gate)', () => {
+  describe('viaGamepass (Classic button origin gate)', () => {
+    const GP_SESSION = {
+      region: 'TW' as const,
+      account_id: 'alice',
+      service_code: '610074',
+      service_region: 'T9',
+    }
+
     it('turns on only via applyGamepassSession and off on clearSession', () => {
       const store = useAuthStore()
       expect(store.viaGamepass).toBe(false)
 
-      store.applyGamepassSession({
-        region: 'TW',
-        account_id: 'alice',
-        service_code: '610074',
-        service_region: 'T9',
-      })
+      store.applyGamepassSession(GP_SESSION)
       expect(store.viaGamepass).toBe(true)
 
       store.clearSession()
       expect(store.viaGamepass).toBe(false)
     })
 
-    it('is reset by a regular (non-GamePass) login', async () => {
+    it('is reset by a regular (non-GamaPass) login', async () => {
       const store = useAuthStore()
-      store.applyGamepassSession({
-        region: 'TW',
-        account_id: 'alice',
-        service_code: '610074',
-        service_region: 'T9',
-      })
+      store.applyGamepassSession(GP_SESSION)
       expect(store.viaGamepass).toBe(true)
 
       vi.mocked(commands.loginRegular).mockReturnValue(
-        ok({ region: 'TW', account_id: 'bob', service_code: '610074', service_region: 'T9' }),
+        ok({ region: 'HK', account_id: 'bob', service_code: '610074', service_region: 'T9' }),
       )
-      await store.loginRegular('TW', 'bob', 'pw')
+      await store.loginRegular('HK', 'bob', 'pw')
       expect(store.viaGamepass).toBe(false)
     })
   })

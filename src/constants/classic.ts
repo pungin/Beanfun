@@ -10,6 +10,12 @@
  * Game codes whose game bar offers the Classic launch button.
  * Classic is a MapleStory offshoot, so it rides along with the regular
  * MapleStory selection (TW/HK share `610074_T9`).
+ *
+ * The button is additionally gated on region: only **HK** shares one
+ * beanfun login between the regular service and Classic. A TW classic
+ * login is entirely separate, so offering "switch to Classic" from a
+ * signed-in TW account list would just pop another login form — TW
+ * users start Classic from the login page's 懷舊服 mode instead.
  */
 export const CLASSIC_ELIGIBLE_GAME_CODES: ReadonlySet<string> = new Set(['610074_T9'])
 
@@ -19,7 +25,22 @@ export const CLASSIC_ELIGIBLE_GAME_CODES: ReadonlySet<string> = new Set(['610074
  */
 export const CLASSIC_LAUNCHED_EVENT = 'classic-launched'
 export const CLASSIC_FAILED_EVENT = 'classic-launch-failed'
-export const CLASSIC_TIMEOUT_EVENT = 'classic-launch-timeout'
+/**
+ * Emitted past the soft deadline. NOT a failure — an observed launch
+ * took 37s and one measured run landed 7s after an earlier build had
+ * already cried failure, so the backend keeps watching and may still
+ * emit {@link CLASSIC_LAUNCHED_EVENT} afterwards.
+ */
+export const CLASSIC_SLOW_EVENT = 'classic-launch-slow'
+/** Emitted when the portal needs an interactive sign-in (always TW). */
+export const CLASSIC_NEEDS_LOGIN_EVENT = 'classic-needs-login'
+/**
+ * Emitted with the GamaPass game accounts when the portal offers more
+ * than one; `ClassicAccountPicker` answers with `classicSelectAccount`.
+ * A single account never reaches the frontend — the portal script
+ * selects and submits it directly.
+ */
+export const CLASSIC_ACCOUNT_CHOICE_EVENT = 'classic-account-choice'
 
 /** Official Nexon Game Manager installer (shown when the self-check
  * finds no `ngm://` handler). */

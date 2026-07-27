@@ -371,8 +371,14 @@ const zhTW = {
     modeToggle: '懷舊服',
     modeToggleTitle:
       '切換懷舊服登入模式：登入後先啟動新楓之谷經典版，再進入帳號清單（限 HK 帳號或 TW GamaPass 登入）',
-    needGamapass: '懷舊服模式：台灣帳號請改用 GamaPass 登入，一般帳密登入無法進入經典版。',
-    gamapassButton: '使用 GamaPass 登入',
+    needGamapass:
+      '台服經典版與正式服為獨立登入，無法沿用正式服的登入狀態。點擊下方按鈕開啟經典版視窗並於視窗內登入，登入後將自動啟動遊戲。',
+    launchButton: '啟動經典版',
+    launchSlow: '經典版啟動時間較長，仍在等待中；若遊戲已開啟可忽略此訊息。',
+    needsLogin: '請於經典版視窗內完成登入。',
+    accountPickerTitle: '選擇遊戲帳號',
+    accountPickerHint: '此 beanfun 帳號底下有多個遊戲帳號，請選擇要進入經典版的帳號。',
+    accountPickerConfirm: '繼續',
     checking: '正在檢測經典版環境…',
     ready: '經典版環境已就緒',
     ngmMissing: '未偵測到 Nexon Game Manager',
@@ -384,7 +390,6 @@ const zhTW = {
     launched: '已啟動經典版，請切換至遊戲視窗。',
     launchFailed:
       '自動啟動失敗。已開啟經典版入口視窗，請依畫面指示安裝 Nexon Game Manager 或手動啟動。',
-    launchTimeout: '啟動逾時。已開啟經典版入口視窗，請於該視窗手動完成啟動。',
   },
   addAccountDialog: {
     subtitle: '將 Beanfun 帳號加入本機，下次可直接從清單快速登入。',
@@ -643,8 +648,14 @@ const zhCN = {
     modeToggle: '怀旧服',
     modeToggleTitle:
       '切换怀旧服登录模式：登录后先启动新枫之谷经典版，再进入账号列表（限 HK 账号或 TW GamaPass 登录）',
-    needGamapass: '怀旧服模式：台湾账号请改用 GamaPass 登录，一般账密登录无法进入经典版。',
-    gamapassButton: '使用 GamaPass 登录',
+    needGamapass:
+      '台服经典版与正式服为独立登录，无法沿用正式服的登录状态。点击下方按钮开启经典版窗口并在窗口内登录，登录后将自动启动游戏。',
+    launchButton: '启动经典版',
+    launchSlow: '经典版启动时间较长，仍在等待中；若游戏已开启可忽略此消息。',
+    needsLogin: '请在经典版窗口内完成登录。',
+    accountPickerTitle: '选择游戏账号',
+    accountPickerHint: '此 beanfun 账号底下有多个游戏账号，请选择要进入经典版的账号。',
+    accountPickerConfirm: '继续',
     checking: '正在检测经典版环境…',
     ready: '经典版环境已就绪',
     ngmMissing: '未检测到 Nexon Game Manager',
@@ -656,7 +667,6 @@ const zhCN = {
     launched: '已启动经典版，请切换至游戏窗口。',
     launchFailed:
       '自动启动失败。已打开经典版入口窗口，请按画面指示安装 Nexon Game Manager 或手动启动。',
-    launchTimeout: '启动超时。已打开经典版入口窗口，请在该窗口手动完成启动。',
   },
   addAccountDialog: {
     subtitle: '将 Beanfun 账号加入本机，下次可直接从列表快速登录。',
@@ -921,8 +931,16 @@ const enUS = {
     modeToggle: 'Classic',
     modeToggleTitle:
       'Toggle Classic login mode: after sign-in, MapleStory Classic launches first, then the account list opens (HK accounts or TW GamaPass only)',
-    needGamapass: 'Classic mode: Taiwan accounts must sign in with GamaPass to enter Classic.',
-    gamapassButton: 'Sign in with GamaPass',
+    needGamapass:
+      'Taiwan Classic uses a separate login from the regular service — an existing sign-in does not carry over. Open the Classic window below and sign in there; the game launches automatically afterwards.',
+    launchButton: 'Launch Classic',
+    launchSlow:
+      'Classic is taking a while to start — still waiting. Ignore this if the game has already opened.',
+    needsLogin: 'Please finish signing in inside the Classic window.',
+    accountPickerTitle: 'Choose a game account',
+    accountPickerHint:
+      'This beanfun account has several game accounts. Pick the one to enter Classic with.',
+    accountPickerConfirm: 'Continue',
     checking: 'Checking the Classic environment…',
     ready: 'Classic environment ready',
     ngmMissing: 'Nexon Game Manager not detected',
@@ -934,8 +952,6 @@ const enUS = {
     launched: 'MapleStory Classic launched — switch to the game window.',
     launchFailed:
       'Automatic launch failed. The Classic portal window has been opened — follow it to install Nexon Game Manager or launch manually.',
-    launchTimeout:
-      'Launch timed out. The Classic portal window has been opened — please finish the launch there manually.',
   },
   addAccountDialog: {
     subtitle: 'Save a beanfun! credential locally so you can sign in faster next time.',
