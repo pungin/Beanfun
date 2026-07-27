@@ -1,34 +1,33 @@
 <script setup lang="ts">
 /**
- * Project announcement modal (dual-line development notice, issue #323).
+ * Announcement modal + history dialog.
  *
- * # Behaviour (per the request)
+ * # Levels (see `src/constants/announcement.ts` for the registry)
  *
- * - **Per-announcement forced read.** On first launch where the stored
- *   acknowledgement differs from {@link ANNOUNCEMENT_ID} (a content
- *   revision string, NOT the app version — see
- *   `src/constants/announcement.ts`) the notice pops automatically and
- *   its only button is disabled for an
- *   {@link ANNOUNCEMENT_FORCED_SECONDS}-second countdown, after which it
- *   becomes "read + don't show again" and persists the ID. Updating the
- *   app without bumping the ID therefore never re-forces the read;
- *   publishing a new announcement (bumping the ID) forces it exactly
- *   once for everyone.
- * - **Bigger window while shown.** The app's window is normally sized for a
- *   single form (e.g. the login page); showing the notice temporarily grows
- *   the OS window so the announcement isn't crammed, and restores the
- *   previous size on close.
- * - **Re-openable afterwards, permanently.** Once acknowledged (or on any
- *   later launch of the same announcement) a slim full-width banner sits
- *   just under the title bar so the user can re-open and re-read the
- *   notice at will — always without the forced countdown. The banner is
- *   permanent (no dismiss) and reserves its own strip so it never
- *   overlaps the page.
- * - **Robust "seen" state.** The acknowledged ID is stored in both
- *   Config.xml and WebView localStorage; either one counts as seen, so
- *   hand-wiping one store doesn't re-trigger the forced read. Values
- *   written by pre-ID builds (app versions like `"6.0.5"`) still count
- *   as seen for the current notice — see `isAnnouncementSeenValue`.
+ * - **`info`** — pops once until acknowledged; closable immediately.
+ * - **`forced`** — pops once until acknowledged; the button is disabled
+ *   for the announcement's own `forcedSeconds` countdown first.
+ * - **`forcedEveryTime`** — pops on **every** launch and is never
+ *   recorded as read, for notices that must be re-read each start.
+ *
+ * Which one pops is decided by `pendingAnnouncement`, so publishing a
+ * notice is an edit to the registry, never to this component.
+ *
+ * # The rest of the behaviour
+ *
+ * - **Bigger window while shown.** The app window is normally sized for
+ *   a single form; showing a notice temporarily grows it so the card
+ *   isn't crammed, and restores the previous size on close.
+ * - **Always reachable afterwards.** A slim permanent banner under the
+ *   title bar opens the **history dialog**, which lists every
+ *   announcement ever published with its read state — any of them can
+ *   be re-read, always without a countdown. Settings opens the same
+ *   dialog through `services/announcementUi`.
+ * - **Robust "seen" state.** Acknowledged ids live in both Config.xml
+ *   and WebView localStorage; either store counts, so hand-wiping one
+ *   doesn't re-force a read. Values written by pre-registry builds (a
+ *   lone id, or an app version like `"6.0.5"`) are folded in by
+ *   `parseSeenIds`, so nobody is re-forced by the format change.
  *
  * Mounted once at the app root ({@link App.vue}) so it overlays whatever
  * route is active.
@@ -42,25 +41,26 @@ import { LogicalSize } from '@tauri-apps/api/dpi'
 import { commands } from '../types/bindings'
 import { safeInvoke } from '../services/invoke'
 import { setWindowFitSuspended } from '../services/windowFit'
+import {
+  announcementListOpen,
+  closeAnnouncementList,
+  openAnnouncementList,
+} from '../services/announcementUi'
 import { useConfigStore } from '../stores/config'
 import {
-  ANNOUNCEMENT_FORCED_SECONDS,
-  ANNOUNCEMENT_ID,
-  ANNOUNCEMENT_MAPLELINK_URL,
-  ANNOUNCEMENT_MORE_INFO_URL,
-  isAnnouncementSeenValue,
+  ANNOUNCEMENTS,
+  ANNOUNCEMENT_SEEN_KEY,
+  LATEST_ANNOUNCEMENT,
+  LEGACY_ANNOUNCEMENT_SEEN_KEY,
+  isAcknowledgeable,
+  isForcedLevel,
+  parseSeenIds,
+  pendingAnnouncement,
+  serializeSeenIds,
+  type AnnouncementDef,
 } from '../constants/announcement'
 
-/**
- * Key holding the acknowledged announcement ID. Written to BOTH
- * Config.xml and WebView localStorage; "seen" if *either* matches (see
- * {@link isSeen}). Two independent stores means hand-deleting one
- * (e.g. editing Config.xml) doesn't silently force the forced-read
- * again. The key name predates the ID mechanism (it used to hold the
- * app version) and is kept so legacy acknowledgements stay readable.
- */
-const SEEN_KEY = 'announcementSeenVersion'
-/** Logical size the window grows to while the notice is shown. */
+/** Logical size the window grows to while a notice is shown. */
 const BIG_W = 640
 const BIG_H = 720
 
@@ -69,9 +69,23 @@ defineOptions({ name: 'AnnouncementModal' })
 const { t } = useI18n()
 const config = useConfigStore()
 
-/** Version loaded → the re-open banner may render. */
+/** Config loaded → the banner may render. */
 const ready = ref(false)
 const visible = ref(false)
+
+/** The announcement currently rendered in the card. */
+const current = ref<AnnouncementDef>(LATEST_ANNOUNCEMENT)
+/** Acknowledged ids, hydrated from both stores on mount. */
+const seenIds = ref<Set<string>>(new Set())
+
+/** Every announcement, newest first, for the history dialog. */
+const history = computed(() =>
+  ANNOUNCEMENTS.map((def) => ({ def, read: seenIds.value.has(def.id) })),
+)
+
+/** The history dialog's open flag lives in a shared module — Settings
+ * and the title-bar banner both open it from outside this component. */
+const listOpen = announcementListOpen()
 
 /**
  * The slim re-open banner is **permanent**: whenever the notice card
@@ -99,7 +113,7 @@ watch(
 )
 /** `true` = the auto-shown, countdown-gated first read; `false` = review. */
 const forced = ref(false)
-const remaining = ref(ANNOUNCEMENT_FORCED_SECONDS)
+const remaining = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
 // Window size captured before growing, restored on close.
 let savedSize: Awaited<ReturnType<ReturnType<typeof getCurrentWindow>['innerSize']>> | null = null
@@ -135,60 +149,85 @@ async function restoreWindow(): Promise<void> {
   setWindowFitSuspended(false)
 }
 
-function isSeen(): boolean {
-  if (isAnnouncementSeenValue(config.get(SEEN_KEY))) return true
+/**
+ * Hydrate the acknowledged-id set from both stores plus the legacy
+ * single-value key (see `parseSeenIds`). Either store alone counts, so
+ * wiping one by hand doesn't re-force anything.
+ */
+function loadSeenIds(): Set<string> {
+  let localCurrent: string | null = null
+  let localLegacy: string | null = null
   try {
-    return isAnnouncementSeenValue(localStorage.getItem(SEEN_KEY))
+    localCurrent = localStorage.getItem(ANNOUNCEMENT_SEEN_KEY)
+    localLegacy = localStorage.getItem(LEGACY_ANNOUNCEMENT_SEEN_KEY)
   } catch {
-    return false
+    /* localStorage unavailable — Config.xml still answers */
   }
+  const merged = parseSeenIds(
+    config.get(ANNOUNCEMENT_SEEN_KEY),
+    config.get(LEGACY_ANNOUNCEMENT_SEEN_KEY),
+  )
+  for (const id of parseSeenIds(localCurrent, localLegacy)) merged.add(id)
+  return merged
 }
 
 /**
- * Record the current announcement as acknowledged in BOTH stores so the
- * forced read is never repeated for this notice — and stays that way
- * even if one store is later wiped by hand. Only publishing a *new*
- * announcement (bumping {@link ANNOUNCEMENT_ID}) brings it back; app
- * updates alone never do.
+ * Record `def` as acknowledged in BOTH stores, so it never auto-pops
+ * again — and stays that way even if one store is later wiped by hand.
+ * `forcedEveryTime` notices are never recorded: they must return on the
+ * next launch.
  */
-async function markSeen(): Promise<void> {
+async function markSeen(def: AnnouncementDef): Promise<void> {
+  if (!isAcknowledgeable(def)) return
+  const next = new Set(seenIds.value)
+  next.add(def.id)
+  seenIds.value = next
+  const serialized = serializeSeenIds(next)
   try {
-    localStorage.setItem(SEEN_KEY, ANNOUNCEMENT_ID)
+    localStorage.setItem(ANNOUNCEMENT_SEEN_KEY, serialized)
   } catch {
     /* localStorage unavailable — Config.xml below still records it */
   }
-  await config.set(SEEN_KEY, ANNOUNCEMENT_ID)
+  await config.set(ANNOUNCEMENT_SEEN_KEY, serialized)
 }
 
-async function openForced(): Promise<void> {
+/** Auto-open `def` with its level's countdown. */
+async function openPending(def: AnnouncementDef): Promise<void> {
+  current.value = def
   visible.value = true
-  forced.value = true
-  remaining.value = ANNOUNCEMENT_FORCED_SECONDS
+  forced.value = isForcedLevel(def)
+  remaining.value = forced.value ? def.forcedSeconds : 0
   await growWindow()
   stopTimer()
-  timer = setInterval(() => {
-    if (remaining.value > 0) remaining.value -= 1
-    if (remaining.value <= 0) stopTimer()
-  }, 1000)
+  if (remaining.value > 0) {
+    timer = setInterval(() => {
+      if (remaining.value > 0) remaining.value -= 1
+      if (remaining.value <= 0) stopTimer()
+    }, 1000)
+  }
 }
 
-async function reopen(): Promise<void> {
-  // Review mode — they've already read it, so no countdown.
+/** Open `def` for review — never a countdown, never re-acknowledged. */
+async function openForReview(def: AnnouncementDef): Promise<void> {
+  closeAnnouncementList()
+  current.value = def
   visible.value = true
   forced.value = false
   remaining.value = 0
+  stopTimer()
   await growWindow()
 }
 
 async function close(): Promise<void> {
   if (forced.value && remaining.value > 0) return // forced-read not finished
+  const def = current.value
+  const wasForced = forced.value
   visible.value = false
   stopTimer()
   await restoreWindow()
-  // Persist on the first (forced) acknowledgement so it won't auto-pop
-  // — nor count down — again until the next version. Idempotent for
-  // review closes.
-  if (!isSeen()) await markSeen()
+  // Only the auto-shown read acknowledges; a review close leaves the
+  // record alone (and `forcedEveryTime` never records at all).
+  if (wasForced || !seenIds.value.has(def.id)) await markSeen(def)
 }
 
 /**
@@ -224,11 +263,13 @@ function waitForConfigLoaded(timeoutMs = 5000): Promise<void> {
 
 onMounted(async () => {
   // Wait for Config.xml before the seen-check, or a still-empty cache
-  // makes an already-acknowledged announcement look unseen and re-forces
-  // the 30-second read every launch. See {@link waitForConfigLoaded}.
+  // makes an acknowledged announcement look unseen and re-forces its
+  // read every launch. See {@link waitForConfigLoaded}.
   await waitForConfigLoaded()
+  seenIds.value = loadSeenIds()
   ready.value = true
-  if (!isSeen()) await openForced()
+  const pending = pendingAnnouncement(seenIds.value)
+  if (pending) await openPending(pending)
 })
 
 onBeforeUnmount(() => {
@@ -247,12 +288,14 @@ async function open(url: string): Promise<void> {
   <div v-if="visible" class="ann" data-testid="announcement">
     <div class="ann__card" role="dialog" aria-modal="true">
       <header class="ann__head">
-        <h2 class="ann__title">{{ t('announcement.title') }}</h2>
+        <h2 class="ann__title">{{ t(current.titleKey) }}</h2>
       </header>
 
-      <p class="ann__intro">{{ t('announcement.intro') }}</p>
+      <p v-for="key in current.bodyKeys" :key="key" class="ann__intro">{{ t(key) }}</p>
 
-      <div class="ann__tracks">
+      <!-- Bespoke two-track body kept for the #323 dual-line notice;
+           later announcements render their bodyKeys as plain paragraphs. -->
+      <div v-if="current.layout === 'dualLine'" class="ann__tracks">
         <div class="ann__track">
           <span class="ann__dot ann__dot--beanfun" aria-hidden="true"></span>
           <div class="ann__track-body">
@@ -269,20 +312,15 @@ async function open(url: string): Promise<void> {
         </div>
       </div>
 
-      <div class="ann__links">
+      <div v-if="current.links?.length" class="ann__links">
         <a
+          v-for="link in current.links"
+          :key="link.url"
           class="ann__link"
-          data-testid="announcement-maplelink"
-          @click="open(ANNOUNCEMENT_MAPLELINK_URL)"
+          :data-testid="`announcement-link-${link.labelKey}`"
+          @click="open(link.url)"
         >
-          MapleLink ↗
-        </a>
-        <a
-          class="ann__link"
-          data-testid="announcement-issue"
-          @click="open(ANNOUNCEMENT_MORE_INFO_URL)"
-        >
-          {{ t('announcement.moreInfoLink') }} ↗
+          {{ t(link.labelKey) }} ↗
         </a>
       </div>
 
@@ -305,14 +343,55 @@ async function open(url: string): Promise<void> {
     </div>
   </div>
 
+  <!-- History: every announcement ever published, with its read state.
+       Opened from the banner below or from Settings. -->
+  <div v-if="listOpen && !visible" class="ann" data-testid="announcement-list">
+    <div class="ann__card" role="dialog" aria-modal="true">
+      <header class="ann__head">
+        <h2 class="ann__title">{{ t('announcement.historyTitle') }}</h2>
+      </header>
+      <p class="ann__intro">{{ t('announcement.historyHint') }}</p>
+
+      <ul class="ann-list">
+        <li v-for="entry in history" :key="entry.def.id">
+          <button
+            type="button"
+            class="ann-list__row"
+            :data-testid="`announcement-history-${entry.def.id}`"
+            @click="openForReview(entry.def)"
+          >
+            <span class="ann-list__title">{{ t(entry.def.titleKey) }}</span>
+            <span class="ann-list__meta">
+              <span class="ann-list__level" :class="`ann-list__level--${entry.def.level}`">
+                {{ t(`announcement.level.${entry.def.level}`) }}
+              </span>
+              <span class="ann-list__state">
+                {{ entry.read ? t('announcement.stateRead') : t('announcement.stateUnread') }}
+              </span>
+            </span>
+          </button>
+        </li>
+      </ul>
+
+      <button
+        class="ann__btn"
+        type="button"
+        data-testid="announcement-list-close"
+        @click="closeAnnouncementList()"
+      >
+        {{ t('announcement.close') }}
+      </button>
+    </div>
+  </div>
+
   <div v-else-if="bannerVisible" class="ann-banner" data-testid="announcement-banner">
     <button
       class="ann-banner__open"
       type="button"
       data-testid="announcement-banner-open"
-      @click="reopen"
+      @click="openAnnouncementList()"
     >
-      <span class="ann-banner__text">{{ t('announcement.title') }}</span>
+      <span class="ann-banner__text">{{ t(LATEST_ANNOUNCEMENT.titleKey) }}</span>
       <span class="ann-banner__cta">{{ t('announcement.reopen') }} ›</span>
     </button>
   </div>
@@ -449,6 +528,71 @@ async function open(url: string): Promise<void> {
 .ann__btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.ann-list {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ann-list__row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--bf-outline-variant, rgba(128, 128, 128, 0.25));
+  border-radius: var(--bf-radius-card, 10px);
+  background: color-mix(in srgb, var(--bf-on-surface, #000) 4%, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.ann-list__row:hover {
+  background: color-mix(in srgb, var(--bf-on-surface, #000) 9%, transparent);
+}
+
+.ann-list__title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ann-list__meta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+}
+
+.ann-list__level {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--bf-on-surface-variant, #54443a) 14%, transparent);
+  color: var(--bf-on-surface-variant, #54443a);
+}
+
+.ann-list__level--forced,
+.ann-list__level--forcedEveryTime {
+  background: color-mix(in srgb, var(--el-color-primary, #ff8201) 18%, transparent);
+  color: var(--bf-primary, #954a00);
+}
+
+.ann-list__state {
+  color: var(--bf-on-surface-variant, #54443a);
 }
 
 /* Full-width re-open banner, pinned just under the 40px custom title bar. */

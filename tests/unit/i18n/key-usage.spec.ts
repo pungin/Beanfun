@@ -212,6 +212,13 @@ const DYNAMIC_KEY_CONSUMERS: readonly DynamicConsumer[] = [
     usedBy: 'src/composables/useThemeColor.ts::THEME_PRESETS',
   },
   {
+    kind: 'prefix',
+    prefix: 'announcement.',
+    reason:
+      'Announcement card / history rows render titleKey + bodyKeys + link labelKeys read from the ANNOUNCEMENTS registry, and level badges from t(`announcement.level.${level}`).',
+    usedBy: 'src/constants/announcement.ts::ANNOUNCEMENTS → src/components/AnnouncementModal.vue',
+  },
+  {
     kind: 'literal',
     keys: ['loginRegion.defaultBadge', 'loginRegion.totpHint'],
     reason: 'Region tile hint key is read dynamically from TILES[i].hintKey.',

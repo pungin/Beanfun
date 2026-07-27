@@ -118,6 +118,7 @@ import {
 } from 'element-plus'
 import {
   ArrowLeft,
+  Bell,
   Delete,
   FolderOpened,
   InfoFilled,
@@ -135,6 +136,7 @@ import { useAuthStore } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
 import { useGameStore } from '../stores/game'
 import { useUiStore, type AppLocale, type LoginMethodValue, type UpdateChannel } from '../stores/ui'
+import { openAnnouncementList } from '../services/announcementUi'
 import { TOOLS_GAME_CODES } from '../constants/tools'
 import ToolsDialogStack from '../windows/ToolsDialogStack.vue'
 import TitleBar from '../components/TitleBar.vue'
@@ -1024,6 +1026,14 @@ onMounted(() => {
             >
               <el-icon><Refresh /></el-icon>
               <span>{{ t('settings.resetWindowPosition') }}</span>
+            </el-button>
+            <el-button
+              class="bf-btn-secondary"
+              data-test="settings-announcements"
+              @click="openAnnouncementList()"
+            >
+              <el-icon><Bell /></el-icon>
+              <span>{{ t('announcement.historyTitle') }}</span>
             </el-button>
             <el-button
               class="bf-btn-secondary"
