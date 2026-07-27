@@ -113,8 +113,21 @@ const SOFT_DEADLINE_TICKS: u32 = 120; // 60 s
 /// Selectors are **exact**, taken from the live pages: the account step
 /// is `input[type=radio][name=account]` inside a `.ui-radio-button`
 /// label wrapper, and each step's action bar holds exactly one
-/// `.bottom-fixed-action-area a.ui-btn` (「繼續」), whose click issues the
-/// step's POST. Nothing is matched by button text.
+/// `.bottom-fixed-action-area a.ui-btn` (the continue button) whose
+/// click issues the step's POST. Nothing is matched by button text.
+///
+/// # Every step waits, then verifies (measured)
+///
+/// The GamaPass pages are a client-side app: the markup is present
+/// before its handlers are bound, so clicking the instant an element
+/// appears registers nothing and the step's POST goes out incomplete —
+/// the page then shows an error. A measured run submitted the account
+/// step **389 ms** after the consent step. So each step waits for the
+/// page to settle (`readyState === 'complete'` plus a few unchanged
+/// ticks), performs the selection, and only submits on a **later tick
+/// once the selection is verified** (`input.checked` /
+/// `.ui-radio-button.selected`), re-selecting a couple of times before
+/// giving up loudly.
 ///
 /// Account selection is **not** decided in the page: the list is handed
 /// to the host, which either auto-proceeds (single account) or shows a
@@ -129,6 +142,13 @@ fn portal_script(region: LoginRegion) -> String {
     format!(
         r#"
 (function () {{
+  var TICK_MS = 400;
+  // Consecutive unchanged ticks (plus readyState) before a page is
+  // considered ready to be driven — ~1.2s, enough for the client-side
+  // app to bind its handlers.
+  var SETTLE_TICKS = 3;
+  var MAX_SELECT_ATTEMPTS = 3;
+
   function post(msg) {{
     try {{ window.chrome.webview.postMessage(JSON.stringify(msg)); }} catch (e) {{}}
   }}
@@ -147,34 +167,50 @@ fn portal_script(region: LoginRegion) -> String {
     return document.querySelector('.bottom-fixed-action-area a.ui-btn');
   }}
 
-  /**
-   * Select `value` and continue. The page tracks selection through its
-   * own handler on the label wrapper, so the wrapper is clicked — poking
-   * `input.checked` leaves the component state (and therefore the POST's
-   * `OpidSelAccount`) empty.
-   */
-  function selectAccount(value) {{
-    var radio = document.querySelector('input[type=radio][name=account][value="' + value + '"]');
-    if (!radio) {{ post({{ kind: 'account-missing', value: value }}); return false; }}
-    var wrap = radio.closest('label') || radio.parentElement;
-    (wrap || radio).click();
-    var btn = continueButton();
-    if (!btn) {{ post({{ kind: 'account-no-button' }}); return false; }}
-    post({{ kind: 'account-submit', value: value }});
-    btn.click();
-    return true;
+  // Per-page state. Anything that changes the URL resets it.
+  var pageUrl = '', settled = 0, phase = '', attempts = 0, chosen = '';
+  function pageReady() {{
+    if (location.href !== pageUrl) {{
+      pageUrl = location.href;
+      settled = 0;
+      phase = '';
+      attempts = 0;
+      return false;
+    }}
+    if (document.readyState !== 'complete') {{ settled = 0; return false; }}
+    settled++;
+    return settled >= SETTLE_TICKS;
   }}
-  // Called by the host once the user picks in the native form.
-  window.__bfClassicSelectAccount = selectAccount;
 
-  var clickedLogin = false, submittedAccount = false, acceptedConsent = false;
+  function radioFor(value) {{
+    return value
+      ? document.querySelector('input[type=radio][name=account][value="' + value + '"]')
+      : document.querySelector('input[type=radio][name=account]');
+  }}
+  function isSelected(radio) {{
+    if (!radio) return false;
+    if (radio.checked) return true;
+    var wrap = radio.closest('.ui-radio-button');
+    return !!(wrap && wrap.className.indexOf('selected') !== -1);
+  }}
+
+  /** Host entry point: pick this account on the next tick. */
+  window.__bfClassicSelectAccount = function (value) {{
+    chosen = value;
+    phase = '';
+    attempts = 0;
+    post({{ kind: 'account-chosen', value: value }});
+    return true;
+  }};
+
+  var clickedLogin = false;
 
   function tick() {{
     var href = location.href;
 
     // (1) galaxy OTT init page — pick the region's sign-in route.
     if (href.indexOf('/login/init/mstc/') !== -1) {{
-      if (!clickedLogin) {{
+      if (!clickedLogin && pageReady()) {{
         var b = document.querySelector('{selector}');
         if (b) {{ b.click(); clickedLogin = true; say('signin-clicked'); }}
       }}
@@ -192,31 +228,63 @@ fn portal_script(region: LoginRegion) -> String {
     // (3) GamaPass game-account selection (TW only).
     var radios = document.querySelectorAll('input[type=radio][name=account]');
     if (radios.length > 0) {{
-      if (submittedAccount) return;
-      var list = [];
-      for (var i = 0; i < radios.length; i++) {{
-        var label = radios[i].closest('label') || radios[i].parentElement;
-        list.push({{ value: radios[i].value, name: label ? textOf(label) : radios[i].value }});
-      }}
-      if (list.length === 1) {{
-        submittedAccount = selectAccount(list[0].value);
-      }} else {{
-        // Hand the choice to the host's native picker.
+      if (phase === 'done' || !pageReady()) return;
+
+      if (radios.length > 1 && !chosen) {{
+        // Hand the choice to the host's native picker; it answers
+        // through __bfClassicSelectAccount.
+        var list = [];
+        for (var i = 0; i < radios.length; i++) {{
+          var label = radios[i].closest('label') || radios[i].parentElement;
+          list.push({{ value: radios[i].value, name: label ? textOf(label) : radios[i].value }});
+        }}
         say('account-choice', {{ accounts: list }});
+        return;
       }}
+
+      var value = chosen || radios[0].value;
+      var radio = radioFor(value);
+      if (!radio) {{ post({{ kind: 'account-missing', value: value }}); phase = 'done'; return; }}
+
+      if (phase !== 'selected') {{
+        // The page tracks selection through its own handler on the
+        // label wrapper — poking `input.checked` leaves the component
+        // state (and therefore the POST's OpidSelAccount) empty.
+        var wrap = radio.closest('label') || radio.parentElement;
+        (wrap || radio).click();
+        phase = 'selected';
+        return; // verify on the NEXT tick, never submit in the same one
+      }}
+
+      if (!isSelected(radio)) {{
+        attempts++;
+        if (attempts >= MAX_SELECT_ATTEMPTS) {{
+          post({{ kind: 'account-select-failed', value: value }});
+          phase = 'done';
+        }} else {{
+          phase = ''; // re-select on the next tick
+        }}
+        return;
+      }}
+
+      var btn = continueButton();
+      if (!btn) {{ post({{ kind: 'account-no-button' }}); return; }}
+      post({{ kind: 'account-submit', value: value }});
+      btn.click();
+      phase = 'done';
       return;
     }}
 
     // (4) GamaPass authorization consent (TW only) — no password field,
-    // no radios, still on the GamaPass host. Same single action button.
+    // no radios, still on the GamaPass host. Same single action button,
+    // same settle-before-clicking rule.
     if (href.indexOf('/GamaPassLogin/') !== -1) {{
-      if (!acceptedConsent) {{
-        var accept = continueButton();
-        if (accept) {{
-          acceptedConsent = true;
-          post({{ kind: 'consent-submit' }});
-          accept.click();
-        }}
+      if (phase === 'done' || !pageReady()) return;
+      var accept = continueButton();
+      if (accept) {{
+        post({{ kind: 'consent-submit' }});
+        accept.click();
+        phase = 'done';
       }}
       return;
     }}
@@ -232,7 +300,7 @@ fn portal_script(region: LoginRegion) -> String {
       }}
     }}
   }}
-  setInterval(tick, 400);
+  setInterval(tick, TICK_MS);
 }})();
 "#
     )
@@ -867,6 +935,25 @@ mod tests {
     }
 
     #[test]
+    fn portal_script_settles_and_verifies_before_submitting() {
+        // The GamaPass pages bind their handlers after the markup
+        // exists, so clicking immediately registered nothing and the
+        // step POSTed incomplete data (a measured run submitted the
+        // account step 389ms after the consent step, and the page
+        // errored). Each step must settle, select, then verify on a
+        // LATER tick before submitting.
+        let script = portal_script(LoginRegion::TW);
+        assert!(script.contains("SETTLE_TICKS"));
+        assert!(script.contains("readyState"));
+        assert!(script.contains("function isSelected"));
+        assert!(script.contains("ui-radio-button"));
+        assert!(script.contains("MAX_SELECT_ATTEMPTS"));
+        assert!(script.contains("account-select-failed"));
+        // The consent step is gated on the same settle rule.
+        assert!(script.contains("phase === 'done' || !pageReady()"));
+    }
+
+    #[test]
     fn ngm_missing_is_only_believed_before_a_launch() {
         // The portal shows its NGM start/install layer after a
         // successful launch too — a measured run posted `ngm-missing`
@@ -885,7 +972,8 @@ mod tests {
         // A single account proceeds in-page; several are handed to the
         // native picker, which answers via __bfClassicSelectAccount.
         let script = portal_script(LoginRegion::TW);
-        assert!(script.contains("list.length === 1"));
+        // Several accounts and nothing chosen yet → ask the host.
+        assert!(script.contains("radios.length > 1 && !chosen"));
         assert!(script.contains("account-choice"));
         assert!(script.contains("window.__bfClassicSelectAccount"));
     }
