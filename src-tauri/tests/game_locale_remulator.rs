@@ -69,7 +69,9 @@ fn release_all_populates_empty_dir_with_five_assets() {
 }
 
 #[test]
-fn release_all_second_call_skips_every_asset() {
+fn release_all_second_call_rewrites_every_asset() {
+    // The release always writes: each launch leaves files that ARE the
+    // embedded bytes, rather than files that once hashed like them.
     let dir = TempDir::new().unwrap();
     let _ = release_all(dir.path()).unwrap();
 
@@ -77,47 +79,33 @@ fn release_all_second_call_skips_every_asset() {
     for (idx, outcome) in outcomes.iter().enumerate() {
         assert_eq!(
             *outcome,
-            ReleaseOutcome::Skipped,
-            "slot {idx} ({}) expected Skipped, got {:?}",
+            ReleaseOutcome::Rewritten,
+            "slot {idx} ({}) expected Rewritten, got {:?}",
             LR_ASSETS[idx].0,
             outcome
         );
     }
+    assert_all_files_match_embedded(dir.path());
 }
 
 #[test]
-fn release_all_rewrites_tampered_file_only() {
+fn release_all_restores_a_tampered_file() {
+    // Under always-write every slot reports `Rewritten`; the guarantee
+    // worth pinning is that tampering cannot survive a launch.
     let dir = TempDir::new().unwrap();
     let _ = release_all(dir.path()).unwrap();
 
-    // Tamper LRProc.exe (index 3) with a length-preserving byte flip.
-    // This is precisely the attack vector WPF's length-only check
-    // would have accepted; we expect SHA-256 to catch it.
-    let target_idx = 3;
-    let name = LR_ASSETS[target_idx].0;
+    let victim_idx = 3;
+    let (name, embedded) = LR_ASSETS[victim_idx];
     let victim = dir.path().join(name);
-    let mut bytes = fs::read(&victim).unwrap();
-    let original_len = bytes.len();
-    bytes[0] ^= 0xFF;
-    fs::write(&victim, &bytes).unwrap();
-    assert_eq!(fs::read(&victim).unwrap().len(), original_len);
+    let mut tampered = fs::read(&victim).unwrap();
+    tampered[0] ^= 0xFF;
+    fs::write(&victim, &tampered).unwrap();
 
-    let outcomes = release_all(dir.path()).expect("release_all should self-heal");
-    for (idx, outcome) in outcomes.iter().enumerate() {
-        let expected = if idx == target_idx {
-            ReleaseOutcome::Rewritten
-        } else {
-            ReleaseOutcome::Skipped
-        };
-        assert_eq!(
-            *outcome, expected,
-            "slot {idx} ({}) expected {:?}, got {:?}",
-            LR_ASSETS[idx].0, expected, outcome
-        );
-    }
+    let outcomes = release_all(dir.path()).unwrap();
 
-    // Post-condition: even the rewritten file now matches the
-    // embedded bytes again.
+    assert!(outcomes.iter().all(|o| *o == ReleaseOutcome::Rewritten));
+    assert_eq!(&fs::read(&victim).unwrap(), embedded);
     assert_all_files_match_embedded(dir.path());
 }
 
@@ -126,8 +114,8 @@ fn release_all_survives_deleted_file_in_populated_dir() {
     let dir = TempDir::new().unwrap();
     let _ = release_all(dir.path()).unwrap();
 
-    // Delete one asset — should be `Created` on the next pass, not
-    // `Rewritten` (there's no pre-existing file to replace).
+    // Delete one asset — it comes back as `Created` (nothing to
+    // replace) while the rest are refreshed in place.
     let target_idx = 1;
     let name = LR_ASSETS[target_idx].0;
     fs::remove_file(dir.path().join(name)).unwrap();
@@ -137,7 +125,7 @@ fn release_all_survives_deleted_file_in_populated_dir() {
         let expected = if idx == target_idx {
             ReleaseOutcome::Created
         } else {
-            ReleaseOutcome::Skipped
+            ReleaseOutcome::Rewritten
         };
         assert_eq!(
             *outcome, expected,
@@ -145,6 +133,7 @@ fn release_all_survives_deleted_file_in_populated_dir() {
             LR_ASSETS[idx].0, expected, outcome
         );
     }
+    assert_all_files_match_embedded(dir.path());
 }
 
 #[test]
