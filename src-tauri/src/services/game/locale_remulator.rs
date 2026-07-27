@@ -189,8 +189,18 @@ pub fn release_file(
     match verify_file(&target, expected_sha256) {
         Ok(true) => return Ok(ReleaseOutcome::Skipped),
         Ok(false) => {}
+        // Unreadable target (locked by a running LRProc / game, or a
+        // directory sitting on the name). That is a reason to REPLACE
+        // it, not to abort the launch: fall through to the
+        // remove-or-sideline path, which is what actually clears the
+        // obstruction. A genuinely broken target still surfaces the
+        // error from the write below, tagged with the same asset name.
         Err(e) => {
-            return Err(GameError::LocaleRemulatorRelease { name, source: e });
+            tracing::debug!(
+                asset = name,
+                error = %e,
+                "LR asset could not be verified; releasing over it"
+            );
         }
     }
 
@@ -207,7 +217,22 @@ pub fn release_file(
     let removed = match fs::remove_file(&target) {
         Ok(()) => true,
         Err(e) if e.kind() == io::ErrorKind::NotFound => false,
-        Err(e) => return Err(GameError::LocaleRemulatorRelease { name, source: e }),
+        // The old copy can't be deleted — the usual cause is that it is
+        // still mapped by a running LRProc / game from an earlier
+        // launch, which is exactly the moment an updated DLL most needs
+        // to land. Windows lets a file be RENAMED while it is open even
+        // when it cannot be deleted, so move it aside and write the new
+        // bytes to the now-free name; the stale copy is swept on a
+        // later release (see `sweep_sidelined`).
+        Err(remove_err) => match sideline(&target) {
+            Ok(()) => true,
+            Err(_) => {
+                return Err(GameError::LocaleRemulatorRelease {
+                    name,
+                    source: remove_err,
+                })
+            }
+        },
     };
 
     fs::write(&target, bytes).map_err(|e| GameError::LocaleRemulatorRelease { name, source: e })?;
@@ -219,6 +244,59 @@ pub fn release_file(
     })
 }
 
+/// Suffix marking a copy that was moved aside because it could not be
+/// deleted (still in use). Swept on later releases.
+pub(crate) const SIDELINED_SUFFIX: &str = ".old";
+
+/// Move `target` aside so its name is free to be written again.
+///
+/// Tries `<name>.old` first, then `<name>.old.1`, `.2`, … so an earlier
+/// sidelined copy that is *also* still locked doesn't block the rename.
+fn sideline(target: &Path) -> io::Result<()> {
+    let base = target.as_os_str().to_string_lossy().into_owned();
+    for attempt in 0..8 {
+        let candidate = if attempt == 0 {
+            format!("{base}{SIDELINED_SUFFIX}")
+        } else {
+            format!("{base}{SIDELINED_SUFFIX}.{attempt}")
+        };
+        let candidate = PathBuf::from(candidate);
+        // A leftover from a previous sideline may itself be deletable
+        // now; clearing it keeps the names from creeping upward.
+        if candidate.exists() && fs::remove_file(&candidate).is_err() {
+            continue;
+        }
+        if fs::rename(target, &candidate).is_ok() {
+            return Ok(());
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        "could not move the in-use file aside",
+    ))
+}
+
+/// Best-effort removal of copies left behind by [`sideline`], now that
+/// whatever held them open has probably exited. Failures are ignored —
+/// a still-locked leftover is simply retried on the next release.
+fn sweep_sidelined(target_dir: &Path) {
+    for (name, _) in LR_ASSETS.iter() {
+        let base = target_dir
+            .join(name)
+            .as_os_str()
+            .to_string_lossy()
+            .into_owned();
+        for attempt in 0..8 {
+            let candidate = if attempt == 0 {
+                format!("{base}{SIDELINED_SUFFIX}")
+            } else {
+                format!("{base}{SIDELINED_SUFFIX}.{attempt}")
+            };
+            let _ = fs::remove_file(candidate);
+        }
+    }
+}
+
 /// Release every asset in [`LR_ASSETS`] into `target_dir`, short-circuiting
 /// on the first failure (mirrors WPF's `|| chain` at `MainWindow.xaml.cs`
 /// L1904-1914).
@@ -226,6 +304,10 @@ pub fn release_file(
 /// On success returns a position-stable `[ReleaseOutcome; 5]` — index
 /// matches [`LR_ASSETS`] — so the caller can log per-asset actions.
 pub fn release_all(target_dir: &Path) -> Result<[ReleaseOutcome; 5], GameError> {
+    // Reclaim copies an earlier release had to move aside because they
+    // were still in use; harmless when there are none.
+    sweep_sidelined(target_dir);
+
     let mut outcomes = [ReleaseOutcome::Skipped; 5];
     for (idx, (name, bytes)) in LR_ASSETS.iter().enumerate() {
         let expected = expected_sha256(name).unwrap_or_else(|| {
@@ -505,6 +587,60 @@ mod tests {
         assert_eq!(outcome, ReleaseOutcome::Rewritten);
         let written = fs::read(dir.path().join(name)).unwrap();
         assert_eq!(written, bytes);
+    }
+
+    #[test]
+    fn release_file_sidelines_a_target_that_cannot_be_removed() {
+        // A stale copy still mapped by a running LRProc / game cannot be
+        // deleted — precisely when an updated DLL most needs to land. A
+        // directory standing in the file's place reproduces the same
+        // `remove_file` refusal without needing a real lock: the release
+        // must move the obstruction aside and still write the asset.
+        let dir = TempDir::new().unwrap();
+        let (name, bytes, sha) = known_asset();
+        let target = dir.path().join(name);
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("marker"), b"in use").unwrap();
+
+        let outcome = release_file(dir.path(), name, bytes, sha).unwrap();
+
+        assert_eq!(outcome, ReleaseOutcome::Rewritten);
+        // The asset is in place with the right bytes…
+        assert_eq!(fs::read(&target).unwrap(), bytes);
+        // …and the obstruction was moved aside, not destroyed.
+        let sidelined = dir.path().join(format!("{name}{SIDELINED_SUFFIX}"));
+        assert!(
+            sidelined.join("marker").exists(),
+            "obstruction must be preserved"
+        );
+    }
+
+    #[test]
+    fn release_all_sweeps_sidelined_copies() {
+        // Once whatever held the old copy open has exited, the next
+        // release reclaims the space instead of leaving `.old` files
+        // behind forever.
+        let dir = TempDir::new().unwrap();
+        for (name, bytes) in LR_ASSETS.iter() {
+            fs::write(dir.path().join(name), bytes).unwrap();
+            fs::write(
+                dir.path().join(format!("{name}{SIDELINED_SUFFIX}")),
+                b"stale",
+            )
+            .unwrap();
+        }
+
+        let outcomes = release_all(dir.path()).unwrap();
+
+        assert!(outcomes.iter().all(|o| *o == ReleaseOutcome::Skipped));
+        for (name, _) in LR_ASSETS.iter() {
+            assert!(
+                !dir.path()
+                    .join(format!("{name}{SIDELINED_SUFFIX}"))
+                    .exists(),
+                "{name}{SIDELINED_SUFFIX} must be swept"
+            );
+        }
     }
 
     #[test]
