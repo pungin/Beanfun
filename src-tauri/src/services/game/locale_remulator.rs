@@ -157,27 +157,36 @@ pub enum ReleaseOutcome {
     Rewritten,
 }
 
-/// Release one LocaleRemulator asset into `target_dir`, skipping the
-/// write when the file already matches the expected SHA-256.
+/// Release one LocaleRemulator asset into `target_dir`.
 ///
-/// Strategy (vs. WPF `App.ReleaseResource` L131-167):
-/// - present with matching hash → short-circuit → [`ReleaseOutcome::Skipped`]
-/// - `remove_file` succeeds → file pre-existed (hash mismatch) →
-///   [`ReleaseOutcome::Rewritten`] after `fs::write`
-/// - `remove_file` returns `NotFound` → fresh write → [`ReleaseOutcome::Created`]
-/// - `remove_file` returns any other error → [`GameError::LocaleRemulatorRelease`]
+/// # Strategy: always write, rename over, compare only when refused
 ///
-/// The `Created` vs `Rewritten` classification is taken from the
-/// authoritative `remove_file` result rather than from a separate
-/// `target.exists()` snapshot — that snapshot would race the actual
-/// write and occasionally mis-classify (e.g. if the file disappears
-/// between `verify_file` and `exists`, we'd still try to remove it).
-/// Trusting `remove_file` closes that TOCTOU window without adding
-/// a retry loop.
+/// The bytes are written to `<name>.tmp` and **renamed over** the
+/// target — unconditionally, without comparing first. So every launch
+/// leaves a file that is byte-for-byte what this build embeds, instead
+/// of a file that merely *hashed* like it at some point (a copy
+/// hand-restored from another version, a half-applied update, or
+/// anything an external tool "fixed" is replaced outright). The rename
+/// is also atomic: a crash mid-release can't leave a truncated DLL
+/// where a complete one used to be.
 ///
-/// Every I/O failure maps to [`GameError::LocaleRemulatorRelease`]
-/// tagged with the `'static` asset name so the UI layer (P10) can
-/// surface "LRProc.exe failed to unpack" instead of a raw `io::Error`.
+/// The only case that needs a comparison is a rename Windows refuses,
+/// which in practice means the target is mapped by an LRProc / game
+/// from an earlier launch:
+///
+/// - contents already match `expected_sha256` → nothing to do →
+///   [`ReleaseOutcome::Skipped`]
+/// - contents differ → the locked copy is moved aside by [`sideline`]
+///   (Windows allows renaming a mapped file even when it cannot be
+///   deleted) and the new bytes take the freed name →
+///   [`ReleaseOutcome::Rewritten`]
+/// - it cannot even be moved aside → the original rename error surfaces
+///   as [`GameError::LocaleRemulatorRelease`], tagged with the
+///   `'static` asset name so the UI can say which asset failed
+///
+/// `Created` vs `Rewritten` is a pre-write `exists()` snapshot: purely a
+/// label for logging, so the TOCTOU window it carries is harmless (the
+/// write itself no longer depends on it).
 pub fn release_file(
     target_dir: &Path,
     name: &'static str,
@@ -185,14 +194,6 @@ pub fn release_file(
     expected_sha256: &[u8; 32],
 ) -> Result<ReleaseOutcome, GameError> {
     let target = target_dir.join(name);
-
-    match verify_file(&target, expected_sha256) {
-        Ok(true) => return Ok(ReleaseOutcome::Skipped),
-        Ok(false) => {}
-        Err(e) => {
-            return Err(GameError::LocaleRemulatorRelease { name, source: e });
-        }
-    }
 
     // Ensure the parent directory exists. `create_dir_all` is a no-op
     // when the directory is already there, so we don't need a separate
@@ -204,28 +205,112 @@ pub fn release_file(
         }
     }
 
-    let removed = match fs::remove_file(&target) {
-        Ok(()) => true,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => false,
-        Err(e) => return Err(GameError::LocaleRemulatorRelease { name, source: e }),
-    };
+    let existed = target.exists();
+    let staged = target_dir.join(format!("{name}.tmp"));
+    let _ = fs::remove_file(&staged); // leftover from an interrupted run
+    fs::write(&staged, bytes).map_err(|e| GameError::LocaleRemulatorRelease { name, source: e })?;
 
-    fs::write(&target, bytes).map_err(|e| GameError::LocaleRemulatorRelease { name, source: e })?;
+    match fs::rename(&staged, &target) {
+        Ok(()) => Ok(if existed {
+            ReleaseOutcome::Rewritten
+        } else {
+            ReleaseOutcome::Created
+        }),
+        Err(rename_err) => {
+            // Refused — the target is in use. Now (and only now) is a
+            // comparison worth its I/O.
+            if verify_file(&target, expected_sha256).unwrap_or(false) {
+                let _ = fs::remove_file(&staged);
+                return Ok(ReleaseOutcome::Skipped);
+            }
+            match sideline(&target) {
+                Ok(()) => {
+                    fs::rename(&staged, &target).map_err(|e| {
+                        let _ = fs::remove_file(&staged);
+                        GameError::LocaleRemulatorRelease { name, source: e }
+                    })?;
+                    Ok(ReleaseOutcome::Rewritten)
+                }
+                Err(_) => {
+                    let _ = fs::remove_file(&staged);
+                    Err(GameError::LocaleRemulatorRelease {
+                        name,
+                        source: rename_err,
+                    })
+                }
+            }
+        }
+    }
+}
 
-    Ok(if removed {
-        ReleaseOutcome::Rewritten
-    } else {
-        ReleaseOutcome::Created
-    })
+/// Suffix marking a copy that was moved aside because it could not be
+/// deleted (still in use). Swept on later releases.
+pub(crate) const SIDELINED_SUFFIX: &str = ".old";
+
+/// Move `target` aside so its name is free to be written again.
+///
+/// Tries `<name>.old` first, then `<name>.old.1`, `.2`, … so an earlier
+/// sidelined copy that is *also* still locked doesn't block the rename.
+fn sideline(target: &Path) -> io::Result<()> {
+    let base = target.as_os_str().to_string_lossy().into_owned();
+    for attempt in 0..8 {
+        let candidate = if attempt == 0 {
+            format!("{base}{SIDELINED_SUFFIX}")
+        } else {
+            format!("{base}{SIDELINED_SUFFIX}.{attempt}")
+        };
+        let candidate = PathBuf::from(candidate);
+        // A leftover from a previous sideline may itself be deletable
+        // now; clearing it keeps the names from creeping upward.
+        if candidate.exists() && fs::remove_file(&candidate).is_err() {
+            continue;
+        }
+        if fs::rename(target, &candidate).is_ok() {
+            return Ok(());
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        "could not move the in-use file aside",
+    ))
+}
+
+/// Best-effort removal of copies left behind by [`sideline`], now that
+/// whatever held them open has probably exited. Failures are ignored —
+/// a still-locked leftover is simply retried on the next release.
+fn sweep_sidelined(target_dir: &Path) {
+    for (name, _) in LR_ASSETS.iter() {
+        let base = target_dir
+            .join(name)
+            .as_os_str()
+            .to_string_lossy()
+            .into_owned();
+        for attempt in 0..8 {
+            let candidate = if attempt == 0 {
+                format!("{base}{SIDELINED_SUFFIX}")
+            } else {
+                format!("{base}{SIDELINED_SUFFIX}.{attempt}")
+            };
+            let _ = fs::remove_file(candidate);
+        }
+    }
 }
 
 /// Release every asset in [`LR_ASSETS`] into `target_dir`, short-circuiting
 /// on the first failure (mirrors WPF's `|| chain` at `MainWindow.xaml.cs`
 /// L1904-1914).
 ///
+/// Every call rewrites all five assets (see [`release_file`]); a
+/// `Skipped` outcome means only that a locked target already held the
+/// right bytes.
+///
 /// On success returns a position-stable `[ReleaseOutcome; 5]` — index
 /// matches [`LR_ASSETS`] — so the caller can log per-asset actions.
 pub fn release_all(target_dir: &Path) -> Result<[ReleaseOutcome; 5], GameError> {
+    // Reclaim copies an earlier release had to move aside because they
+    // were still in use; harmless when there are none.
+    sweep_sidelined(target_dir);
+
     let mut outcomes = [ReleaseOutcome::Skipped; 5];
     for (idx, (name, bytes)) in LR_ASSETS.iter().enumerate() {
         let expected = expected_sha256(name).unwrap_or_else(|| {
@@ -486,13 +571,55 @@ mod tests {
     }
 
     #[test]
-    fn release_file_skips_when_hash_matches() {
+    fn release_file_rewrites_even_when_the_hash_already_matches() {
+        // Always-write: a matching hash proves the bytes looked right at
+        // some point, not that the file is the one this build embeds, so
+        // the release replaces it regardless.
         let dir = TempDir::new().unwrap();
         let (name, bytes, sha) = known_asset();
         fs::write(dir.path().join(name), bytes).unwrap();
 
         let outcome = release_file(dir.path(), name, bytes, sha).unwrap();
+        assert_eq!(outcome, ReleaseOutcome::Rewritten);
+        assert_eq!(fs::read(dir.path().join(name)).unwrap(), bytes);
+    }
+
+    #[test]
+    fn release_file_leaves_no_staging_file_behind() {
+        let dir = TempDir::new().unwrap();
+        let (name, bytes, sha) = known_asset();
+        release_file(dir.path(), name, bytes, sha).unwrap();
+        assert!(
+            !dir.path().join(format!("{name}.tmp")).exists(),
+            "the staged copy must be renamed into place, not left around"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn release_file_skips_a_locked_target_that_already_matches() {
+        // A DLL mapped by a running LRProc / game cannot be renamed
+        // over. When its bytes are already the ones we ship there is
+        // nothing to do — the launch must proceed, not fail.
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 0x0000_0001;
+
+        let dir = TempDir::new().unwrap();
+        let (name, bytes, sha) = known_asset();
+        let target = dir.path().join(name);
+        fs::write(&target, bytes).unwrap();
+
+        let lock = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(&target)
+            .unwrap();
+
+        let outcome = release_file(dir.path(), name, bytes, sha).unwrap();
+
         assert_eq!(outcome, ReleaseOutcome::Skipped);
+        assert!(!dir.path().join(format!("{name}.tmp")).exists());
+        drop(lock);
     }
 
     #[test]
@@ -505,6 +632,61 @@ mod tests {
         assert_eq!(outcome, ReleaseOutcome::Rewritten);
         let written = fs::read(dir.path().join(name)).unwrap();
         assert_eq!(written, bytes);
+    }
+
+    #[test]
+    fn release_file_sidelines_a_target_that_cannot_be_removed() {
+        // A stale copy still mapped by a running LRProc / game cannot be
+        // deleted — precisely when an updated DLL most needs to land. A
+        // directory standing in the file's place reproduces the same
+        // `remove_file` refusal without needing a real lock: the release
+        // must move the obstruction aside and still write the asset.
+        let dir = TempDir::new().unwrap();
+        let (name, bytes, sha) = known_asset();
+        let target = dir.path().join(name);
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("marker"), b"in use").unwrap();
+
+        let outcome = release_file(dir.path(), name, bytes, sha).unwrap();
+
+        assert_eq!(outcome, ReleaseOutcome::Rewritten);
+        // The asset is in place with the right bytes…
+        assert_eq!(fs::read(&target).unwrap(), bytes);
+        // …and the obstruction was moved aside, not destroyed.
+        let sidelined = dir.path().join(format!("{name}{SIDELINED_SUFFIX}"));
+        assert!(
+            sidelined.join("marker").exists(),
+            "obstruction must be preserved"
+        );
+    }
+
+    #[test]
+    fn release_all_sweeps_sidelined_copies() {
+        // Once whatever held the old copy open has exited, the next
+        // release reclaims the space instead of leaving `.old` files
+        // behind forever.
+        let dir = TempDir::new().unwrap();
+        for (name, bytes) in LR_ASSETS.iter() {
+            fs::write(dir.path().join(name), bytes).unwrap();
+            fs::write(
+                dir.path().join(format!("{name}{SIDELINED_SUFFIX}")),
+                b"stale",
+            )
+            .unwrap();
+        }
+
+        let outcomes = release_all(dir.path()).unwrap();
+
+        // Always-write: the assets are refreshed and the leftovers go.
+        assert!(outcomes.iter().all(|o| *o == ReleaseOutcome::Rewritten));
+        for (name, _) in LR_ASSETS.iter() {
+            assert!(
+                !dir.path()
+                    .join(format!("{name}{SIDELINED_SUFFIX}"))
+                    .exists(),
+                "{name}{SIDELINED_SUFFIX} must be swept"
+            );
+        }
     }
 
     #[test]
@@ -564,31 +746,40 @@ mod tests {
     }
 
     #[test]
-    fn release_all_skips_every_asset_on_second_call() {
+    fn release_all_rewrites_every_asset_on_a_second_call() {
+        // Always-write means a repeat launch refreshes every asset; the
+        // point is that what sits on disk is what this build embeds.
         let dir = TempDir::new().unwrap();
-        let _ = release_all(dir.path()).unwrap();
+        release_all(dir.path()).unwrap();
+
         let outcomes = release_all(dir.path()).unwrap();
-        for outcome in outcomes {
-            assert_eq!(outcome, ReleaseOutcome::Skipped);
+
+        assert!(
+            outcomes.iter().all(|o| *o == ReleaseOutcome::Rewritten),
+            "second call must rewrite: {outcomes:?}"
+        );
+        for (name, bytes) in LR_ASSETS.iter() {
+            assert_eq!(&fs::read(dir.path().join(name)).unwrap(), bytes);
         }
     }
 
     #[test]
-    fn release_all_rewrites_only_the_tampered_asset() {
+    fn release_all_restores_a_tampered_asset() {
+        // Under always-write every asset is refreshed, so the guarantee
+        // to pin is the one that matters: tampering never survives a
+        // launch.
         let dir = TempDir::new().unwrap();
-        let _ = release_all(dir.path()).unwrap();
-        // Tamper LRProc.exe (index 3 in LR_ASSETS).
+        release_all(dir.path()).unwrap();
         let victim = dir.path().join("LRProc.exe");
         let mut bytes = fs::read(&victim).unwrap();
         bytes[0] ^= 0xFF;
         fs::write(&victim, &bytes).unwrap();
 
         let outcomes = release_all(dir.path()).unwrap();
-        assert_eq!(outcomes[0], ReleaseOutcome::Skipped);
-        assert_eq!(outcomes[1], ReleaseOutcome::Skipped);
-        assert_eq!(outcomes[2], ReleaseOutcome::Skipped);
-        assert_eq!(outcomes[3], ReleaseOutcome::Rewritten);
-        assert_eq!(outcomes[4], ReleaseOutcome::Skipped);
+
+        assert!(outcomes.iter().all(|o| *o == ReleaseOutcome::Rewritten));
+        let (_, embedded) = LR_ASSETS[3];
+        assert_eq!(&fs::read(&victim).unwrap(), embedded);
     }
 
     // ---- build_lr_arguments ---------------------------------------------
