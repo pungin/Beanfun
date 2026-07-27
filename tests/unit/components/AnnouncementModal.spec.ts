@@ -1,7 +1,10 @@
+/**
+ * Announcement overlay / banner / archive specs.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { nextTick } from 'vue'
 
 import type { CommandError, Result } from '../../../src/types/bindings'
 
@@ -19,7 +22,14 @@ vi.mock('../../../src/types/bindings', () => ({
 import { commands } from '../../../src/types/bindings'
 import { createAppI18n } from '../../../src/i18n'
 import { useConfigStore } from '../../../src/stores/config'
-import { ANNOUNCEMENT_ID, ANNOUNCEMENT_FORCED_SECONDS } from '../../../src/constants/announcement'
+import {
+  ANNOUNCEMENTS,
+  ANNOUNCEMENT_BANNER_KEY,
+  ANNOUNCEMENT_SEEN_KEY,
+  LATEST_ANNOUNCEMENT,
+  LEGACY_ANNOUNCEMENT_SEEN_KEY,
+} from '../../../src/constants/announcement'
+import { closeAnnouncementList, openAnnouncementList } from '../../../src/services/announcementUi'
 import AnnouncementModal from '../../../src/components/AnnouncementModal.vue'
 
 const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ status: 'ok', data })
@@ -27,9 +37,8 @@ const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ s
 const mockOpenUrl = vi.mocked(commands.openUrl)
 const mockSetConfig = vi.mocked(commands.setConfig)
 
-const SEEN_KEY = 'announcementSeenVersion'
-/** Forced-read countdown in ms. */
-const READ_MS = ANNOUNCEMENT_FORCED_SECONDS * 1000
+/** The shipped notice — `info`, so it is closable at once. */
+const CURRENT = LATEST_ANNOUNCEMENT
 
 let pinia: ReturnType<typeof createPinia>
 
@@ -41,16 +50,10 @@ describe('AnnouncementModal', () => {
   beforeEach(() => {
     pinia = createPinia()
     setActivePinia(pinia)
-    // The modal defers its seen-check until the config store has loaded
-    // Config.xml (see `waitForConfigLoaded`). Boot has completed by the
-    // time it mounts in the app, so model that here; the dedicated race
-    // test below flips this back to `false`.
+    // The modal defers its read-check until Config.xml has loaded.
     useConfigStore().loaded = true
-    vi.useFakeTimers()
-    // The "seen" flag is now also mirrored into localStorage, which is a
-    // shared global across tests in this file — wipe it so each test
-    // starts from an unacknowledged state.
     localStorage.clear()
+    closeAnnouncementList()
     for (const fn of Object.values(commands) as ReturnType<typeof vi.fn>[]) fn.mockReset()
     mockOpenUrl.mockReturnValue(ok(null))
     mockSetConfig.mockReturnValue(ok(null))
@@ -60,161 +63,167 @@ describe('AnnouncementModal', () => {
     vi.useRealTimers()
   })
 
-  it('shows on first launch when the announcement has not been acknowledged', async () => {
+  it('shows the newest unread announcement on launch', async () => {
     const wrapper = mountModal()
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
+    expect(wrapper.find(`[data-testid="announcement-body-${CURRENT.id}"]`).exists()).toBe(true)
   })
 
-  it('does not auto-show when acknowledged, but offers the re-open chip', async () => {
-    const config = useConfigStore()
-    config.entries[SEEN_KEY] = ANNOUNCEMENT_ID
+  it('is closable at once at info level, and closing counts as read', async () => {
     const wrapper = mountModal()
     await flushPromises()
+
+    // No countdown: the acknowledge button is live immediately…
+    const btn = wrapper.get('[data-testid="announcement-dismiss"]')
+    expect((btn.element as HTMLButtonElement).disabled).toBe(false)
+    // …and the × is offered too.
+    expect(wrapper.find('[data-testid="announcement-close"]').exists()).toBe(true)
+
+    await btn.trigger('click')
+    await flushPromises()
+
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="announcement-banner-open"]').exists()).toBe(true)
+    expect(commands.setConfig).toHaveBeenCalledWith(ANNOUNCEMENT_SEEN_KEY, CURRENT.id)
+    expect(localStorage.getItem(ANNOUNCEMENT_SEEN_KEY)).toBe(CURRENT.id)
   })
 
-  it('re-opens in review mode (no countdown) when the chip is clicked', async () => {
-    const config = useConfigStore()
-    config.entries[SEEN_KEY] = ANNOUNCEMENT_ID
+  it('closes from the × and still counts as read at info level', async () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    await wrapper.get('[data-testid="announcement-banner-open"]').trigger('click')
+    await wrapper.get('[data-testid="announcement-close"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
-    // Review mode: the button is immediately usable (no 60s gate).
-    expect(
-      (wrapper.get('[data-testid="announcement-dismiss"]').element as HTMLButtonElement).disabled,
-    ).toBe(false)
-
-    // Closing returns to the chip, without re-persisting (already seen).
-    await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
-    await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="announcement-banner-open"]').exists()).toBe(true)
-    expect(commands.setConfig).not.toHaveBeenCalled()
+    expect(commands.setConfig).toHaveBeenCalledWith(ANNOUNCEMENT_SEEN_KEY, CURRENT.id)
   })
 
-  it('keeps the re-open banner permanent (no session-hide control)', async () => {
-    const config = useConfigStore()
-    config.entries[SEEN_KEY] = ANNOUNCEMENT_ID
+  it('closes from the backdrop', async () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
-    // The banner is permanent — there is no × / hide affordance.
-    expect(wrapper.find('[data-testid="announcement-banner-hide"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="announcement"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
   })
 
-  it('treats a legacy app-version value as seen (pre-ID builds, no re-force on update)', async () => {
-    // Builds before the ID mechanism stored the acknowledged APP VERSION.
-    // Everyone who acknowledged any of those versions read the current
-    // (issue #323) notice, so upgrading must not force them again.
-    const config = useConfigStore()
-    config.entries[SEEN_KEY] = '6.0.5'
+  it('does not re-open once read', async () => {
+    useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = CURRENT.id
     const wrapper = mountModal()
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
   })
 
-  it('forces the read when the stored value is a different announcement ID', async () => {
-    // A previously published (hypothetical) announcement was read, but
-    // the shipped ID has since been bumped — the new notice must force.
+  it('treats a legacy app-version value as acknowledging the inaugural notice', async () => {
+    useConfigStore().entries[LEGACY_ANNOUNCEMENT_SEEN_KEY] = '6.0.5'
+    const wrapper = mountModal()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
+  })
+
+  it('waits for Config.xml to load before the read-check', async () => {
     const config = useConfigStore()
-    config.entries[SEEN_KEY] = '2020-01-some-older-announcement'
+    config.loaded = false
     const wrapper = mountModal()
     await flushPromises()
-    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
-  })
-
-  it('treats the announcement as seen when only localStorage records it (Config.xml wiped)', async () => {
-    // Config.xml has no seen entry, but localStorage does — either store
-    // alone must suppress the forced read so hand-editing one file can't
-    // re-trigger the countdown on the next launch.
-    localStorage.setItem(SEEN_KEY, ANNOUNCEMENT_ID)
-    const wrapper = mountModal()
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
-  })
-
-  it('mirrors the acknowledged ID into localStorage on forced dismiss', async () => {
-    const wrapper = mountModal()
-    await flushPromises()
-
-    vi.advanceTimersByTime(READ_MS)
-    await nextTick()
-    await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
-    await flushPromises()
-
-    expect(localStorage.getItem(SEEN_KEY)).toBe(ANNOUNCEMENT_ID)
-  })
-
-  it('disables dismiss during the forced-read countdown, then enables it', async () => {
-    const wrapper = mountModal()
-    await flushPromises()
-    const btn = () => wrapper.get('[data-testid="announcement-dismiss"]')
-    expect((btn().element as HTMLButtonElement).disabled).toBe(true)
-
-    vi.advanceTimersByTime(READ_MS)
-    await nextTick()
-    expect((btn().element as HTMLButtonElement).disabled).toBe(false)
-  })
-
-  it('persists the ID and hides on dismiss (after the countdown)', async () => {
-    const wrapper = mountModal()
-    await flushPromises()
-
-    vi.advanceTimersByTime(READ_MS)
-    await nextTick()
-    await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
-    await flushPromises()
-
-    expect(commands.setConfig).toHaveBeenCalledWith(SEEN_KEY, ANNOUNCEMENT_ID)
-    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
-  })
-
-  it('does not persist or close while the countdown is still running', async () => {
-    const wrapper = mountModal()
-    await flushPromises()
-
-    await wrapper.get('[data-testid="announcement-dismiss"]').trigger('click')
-    await flushPromises()
-
-    expect(commands.setConfig).not.toHaveBeenCalled()
-    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
-  })
-
-  it('waits for Config.xml to load before the seen-check (no premature forced read)', async () => {
-    // Regression: the seen-check used to run on mount before the config
-    // cache was populated, so an already-acknowledged announcement read
-    // as unseen and re-forced the 30s read on every launch.
-    const config = useConfigStore()
-    config.loaded = false // still booting; cache is empty
-    const wrapper = mountModal()
-    await flushPromises()
-    // Must not force the read while the cache is still loading.
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
 
-    // loadAll() resolves — the acknowledged ID lands in the cache.
-    config.entries[SEEN_KEY] = ANNOUNCEMENT_ID
+    config.entries[ANNOUNCEMENT_SEEN_KEY] = CURRENT.id
     config.loaded = true
     await flushPromises()
 
-    // Seen → stays closed (and the re-open banner is available).
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
   })
 
-  it('opens external links via openUrl', async () => {
+  it('opens external links from the body via openUrl', async () => {
     const wrapper = mountModal()
     await flushPromises()
     await wrapper.get('[data-testid="announcement-maplelink"]').trigger('click')
     expect(commands.openUrl).toHaveBeenCalledWith('https://github.com/lshw54/maplelink')
+  })
+
+  describe('banner', () => {
+    beforeEach(() => {
+      useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = CURRENT.id
+    })
+
+    it('opens the notice itself — no intermediate list', async () => {
+      const wrapper = mountModal()
+      await flushPromises()
+
+      await wrapper.get('[data-testid="announcement-banner-open"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="announcement-list"]').exists()).toBe(false)
+    })
+
+    it('can be dismissed for good, and stays gone on the next launch', async () => {
+      const wrapper = mountModal()
+      await flushPromises()
+
+      await wrapper.get('[data-testid="announcement-banner-dismiss"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(false)
+      expect(commands.setConfig).toHaveBeenCalledWith(ANNOUNCEMENT_BANNER_KEY, CURRENT.id)
+
+      // A fresh mount with that record keeps it hidden.
+      useConfigStore().entries[ANNOUNCEMENT_BANNER_KEY] = CURRENT.id
+      const next = mountModal()
+      await flushPromises()
+      expect(next.find('[data-testid="announcement-banner"]').exists()).toBe(false)
+    })
+  })
+
+  describe('archive', () => {
+    beforeEach(() => {
+      useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = CURRENT.id
+    })
+
+    it('opens from the shared opener (Settings uses this) and lists subject + date', async () => {
+      const wrapper = mountModal()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="announcement-list"]').exists()).toBe(false)
+
+      openAnnouncementList()
+      await flushPromises()
+
+      const list = wrapper.get('[data-testid="announcement-list"]')
+      for (const def of ANNOUNCEMENTS) {
+        const row = list.get(`[data-testid="announcement-history-${def.id}"]`)
+        expect(row.text()).toContain(def.date)
+      }
+    })
+
+    it('opens a picked notice, rendering the same body the overlay does', async () => {
+      const wrapper = mountModal()
+      await flushPromises()
+      openAnnouncementList()
+      await flushPromises()
+
+      await wrapper.get(`[data-testid="announcement-history-${CURRENT.id}"]`).trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="announcement-list"]').exists()).toBe(false)
+      expect(wrapper.find(`[data-testid="announcement-body-${CURRENT.id}"]`).exists()).toBe(true)
+      // Already read — re-reading must not write again.
+      expect(commands.setConfig).not.toHaveBeenCalled()
+    })
+
+    it('closes from its own ×', async () => {
+      const wrapper = mountModal()
+      await flushPromises()
+      openAnnouncementList()
+      await flushPromises()
+
+      await wrapper.get('[data-testid="announcement-list-close"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="announcement-list"]').exists()).toBe(false)
+    })
   })
 })
