@@ -392,6 +392,38 @@ describe('useAuthStore', () => {
     })
   })
 
+  describe('viaGamepass (Classic button origin gate)', () => {
+    const GP_SESSION = {
+      region: 'TW' as const,
+      account_id: 'alice',
+      service_code: '610074',
+      service_region: 'T9',
+    }
+
+    it('turns on only via applyGamepassSession and off on clearSession', () => {
+      const store = useAuthStore()
+      expect(store.viaGamepass).toBe(false)
+
+      store.applyGamepassSession(GP_SESSION)
+      expect(store.viaGamepass).toBe(true)
+
+      store.clearSession()
+      expect(store.viaGamepass).toBe(false)
+    })
+
+    it('is reset by a regular (non-GamaPass) login', async () => {
+      const store = useAuthStore()
+      store.applyGamepassSession(GP_SESSION)
+      expect(store.viaGamepass).toBe(true)
+
+      vi.mocked(commands.loginRegular).mockReturnValue(
+        ok({ region: 'HK', account_id: 'bob', service_code: '610074', service_region: 'T9' }),
+      )
+      await store.loginRegular('HK', 'bob', 'pw')
+      expect(store.viaGamepass).toBe(false)
+    })
+  })
+
   describe('clearSession', () => {
     it('wipes session, pendingTotp, pendingVerify, qrChallenge, advanceCheckUrl and intent slots synchronously', () => {
       const auth = useAuthStore()

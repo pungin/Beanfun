@@ -723,17 +723,24 @@ const showToolsButton = computed<boolean>(() => {
 /* --------------- MapleStory Classic (懷舊服) --------------- */
 
 /**
- * Show the Classic launch button only for **HK** sessions with
- * MapleStory selected. HK shares one beanfun login between the regular
- * service and Classic, so the launch completes silently from here. TW
- * Classic is a separate login — offering the button there would just
- * pop another sign-in form, so TW users start Classic from the login
- * page's 懷舊服 mode instead.
+ * Show the Classic launch button only for a plain **HK** beanfun
+ * sign-in with MapleStory selected. HK shares one login between the
+ * regular service and Classic, so the launch completes silently from
+ * here.
+ *
+ * Excluded:
+ * - **TW** — Classic is a separate login there, so the button would
+ *   just pop another sign-in form. TW users start Classic from the
+ *   login page's 懷舊服 mode instead.
+ * - **GamaPass sessions** — those belong to the TW regular-service
+ *   login. Region already excludes them (GamaPass is TW-only), but the
+ *   origin is checked explicitly so the rule doesn't rest on how the
+ *   server labels the region.
  */
 const showClassicButton = computed<boolean>(() => {
   const code = game.selectedGameCode
   if (code === null || !CLASSIC_ELIGIBLE_GAME_CODES.has(code)) return false
-  return auth.session?.region === 'HK'
+  return auth.session?.region === 'HK' && !auth.viaGamepass
 })
 
 /**

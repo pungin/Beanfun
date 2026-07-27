@@ -212,6 +212,18 @@ export type AuthAction = (typeof AUTH_ACTIONS)[keyof typeof AUTH_ACTIONS]
 
 export const useAuthStore = defineStore('auth', () => {
   const session = ref<SessionInfo | null>(null)
+  /**
+   * `true` when the current session was minted by the GamaPass webview
+   * flow ({@link applyGamepassSession}).
+   *
+   * MapleStory Classic is offered from the account list only for a
+   * plain HK beanfun sign-in: a GamaPass session belongs to the regular
+   * service's TW login, and Classic there is a separate login that the
+   * button could not satisfy. Region alone would already exclude it
+   * (GamaPass is TW-only), but the origin is tracked explicitly so the
+   * rule doesn't depend on how the server happens to label the region.
+   */
+  const viaGamepass = ref(false)
   const pendingTotp = ref(false)
   const pendingVerify = ref(false)
   /**
@@ -308,6 +320,7 @@ export const useAuthStore = defineStore('auth', () => {
       const result = await safeInvoke(commands.loginRegular(region, account, password))
       if (result.ok) {
         session.value = result.data
+        viaGamepass.value = false
         pendingTotp.value = false
         pendingVerify.value = false
         pendingRecaptcha.value = false
@@ -345,6 +358,7 @@ export const useAuthStore = defineStore('auth', () => {
       const result = await safeInvoke(commands.loginTotp(code))
       if (result.ok) {
         session.value = result.data
+        viaGamepass.value = false
         pendingTotp.value = false
         pendingVerify.value = false
         pendingRecaptcha.value = false
@@ -397,6 +411,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (result.ok) {
         if (result.data.status === 'approved') {
           session.value = result.data.session
+          viaGamepass.value = false
           qrChallenge.value = null
           pendingTotp.value = false
           pendingVerify.value = false
@@ -462,6 +477,7 @@ export const useAuthStore = defineStore('auth', () => {
    */
   function applyGamepassSession(info: SessionInfo): void {
     session.value = info
+    viaGamepass.value = true
     pendingTotp.value = false
     pendingVerify.value = false
     pendingRecaptcha.value = false
@@ -513,6 +529,7 @@ export const useAuthStore = defineStore('auth', () => {
       const result = await safeInvoke(commands.resumeTwLoginWithRecaptcha(token))
       if (result.ok) {
         session.value = result.data
+        viaGamepass.value = false
         pendingTotp.value = false
         pendingVerify.value = false
         pendingRecaptcha.value = false
@@ -556,6 +573,7 @@ export const useAuthStore = defineStore('auth', () => {
       const result = await safeInvoke(commands.resumeTwLoginAfterVerify())
       if (result.ok) {
         session.value = result.data
+        viaGamepass.value = false
         pendingTotp.value = false
         pendingVerify.value = false
         pendingRecaptcha.value = false
@@ -637,6 +655,7 @@ export const useAuthStore = defineStore('auth', () => {
    */
   function clearSession(): void {
     session.value = null
+    viaGamepass.value = false
     pendingTotp.value = false
     pendingVerify.value = false
     pendingRecaptcha.value = false
@@ -735,6 +754,7 @@ export const useAuthStore = defineStore('auth', () => {
     closeRecaptchaWindow,
     resumeTwLoginWithRecaptcha,
     resumeTwLoginAfterVerify,
+    viaGamepass,
     applyGamepassSession,
     getVerifyPageInfo,
     getVerifyCaptcha,

@@ -1358,6 +1358,21 @@ describe('AccountList page', () => {
     expect(wrapper.find('[data-test="account-list-classic"]').exists()).toBe(false)
   })
 
+  it('classic: hidden for a GamaPass-minted session even if it reports HK', async () => {
+    // GamaPass belongs to the TW regular-service login; Classic there
+    // is a separate sign-in the button could not satisfy. The rule is
+    // explicit about the origin rather than trusting the region label.
+    vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
+    const ctx = buildHarness()
+    seedActiveGame(MAPLESTORY_TW, MAPLESTORY_TW_INI)
+    const auth = useAuthStore()
+    auth.applyGamepassSession({ ...FAKE_SESSION, region: 'HK' })
+    const wrapper = await ctx.mountIt()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="account-list-classic"]').exists()).toBe(false)
+  })
+
   it('classic: hidden when the selected game is not MapleStory', async () => {
     vi.mocked(commands.getAccounts).mockReturnValueOnce(ok(EMPTY_LIST))
     const ctx = buildHarness()
