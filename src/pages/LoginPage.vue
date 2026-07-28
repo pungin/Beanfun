@@ -14,6 +14,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { ElIcon } from 'element-plus'
 import { Clock, InfoFilled, Promotion, Setting } from '@element-plus/icons-vue'
 import TitleBar from '../components/TitleBar.vue'
+import { ROUTE_NAMES } from '../router'
 import { useConfigStore } from '../stores/config'
 import { useUiStore } from '../stores/ui'
 import type { LoginRegion } from '../types/bindings'
@@ -41,6 +42,17 @@ const currentRegion = computed(() => (config.get('loginRegion') as LoginRegion |
 
 /** True when we're on the region picker itself — hide the switcher there. */
 const isRegionPage = computed(() => route.name === 'login-region')
+
+/**
+ * The 懷舊服 toggle belongs to the account/password form only.
+ *
+ * It used to ride along on every login route, so a user on the QR page
+ * saw a Classic button that does nothing there and read it as "QR can
+ * start Classic" — it can't: HK Classic rides an account/password
+ * session and TW Classic is a separate sign-in the toggle opens from
+ * the id-pass form. Showing it beside a QR code only misleads.
+ */
+const showClassicToggle = computed(() => route.name === ROUTE_NAMES.LoginIdPass)
 
 async function toggleRegion(): Promise<void> {
   const next: LoginRegion = currentRegion.value === 'TW' ? 'HK' : 'TW'
@@ -73,7 +85,7 @@ function handleOpenAbout(): void {
   <section class="login-shell bf-glass-window" data-window-root>
     <TitleBar>
       <button
-        v-if="!isRegionPage"
+        v-if="showClassicToggle"
         type="button"
         class="login-shell__region-btn login-shell__classic-btn"
         :class="{ 'login-shell__classic-btn--active': ui.classicLoginMode }"
