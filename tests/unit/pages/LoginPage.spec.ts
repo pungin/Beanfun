@@ -32,7 +32,10 @@ function mountLoginPage(initialPath = '/login/_test') {
       {
         path: '/login',
         component: LoginPage,
-        children: [{ path: '_test', component: ChildStub }],
+        children: [
+          { path: '_test', name: 'login-id-pass', component: ChildStub },
+          { path: 'qr', name: 'login-qr', component: ChildStub },
+        ],
       },
     ],
   })
@@ -74,6 +77,15 @@ describe('LoginPage shell', () => {
     expect(titleBarText).not.toContain('info')
     expect(titleBarText).not.toContain('minimize')
     expect(titleBarText).not.toContain('close')
+  })
+
+  it('hides the classic toggle outside the account/password form', async () => {
+    // A Classic button beside a QR code reads as "QR can start Classic",
+    // which it cannot — HK Classic rides an account/password session and
+    // TW Classic is a separate sign-in opened from the id-pass form.
+    const ctx = mountLoginPage('/login/qr')
+    const wrapper = await ctx.mount()
+    expect(wrapper.find('[data-test="login-classic-mode"]').exists()).toBe(false)
   })
 
   it('classic mode toggle renders and flips classicLoginMode', async () => {
