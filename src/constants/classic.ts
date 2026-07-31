@@ -35,6 +35,12 @@ export const CLASSIC_SLOW_EVENT = 'classic-launch-slow'
 /** Emitted when the portal needs an interactive sign-in (always TW). */
 export const CLASSIC_NEEDS_LOGIN_EVENT = 'classic-needs-login'
 /**
+ * Emitted when the user closed the portal without launching. Releases
+ * the re-entry guard: without it the guard stayed armed and every later
+ * press of the launch button did nothing (issue #356).
+ */
+export const CLASSIC_CLOSED_EVENT = 'classic-portal-closed'
+/**
  * Emitted with the GamaPass game accounts when the portal offers more
  * than one; `ClassicAccountPicker` answers with `classicSelectAccount`.
  * A single account never reaches the frontend — the portal script

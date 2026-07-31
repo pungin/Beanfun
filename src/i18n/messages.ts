@@ -373,7 +373,7 @@ const zhTW = {
     button: '經典版',
     modeToggle: '懷舊服',
     modeToggleTitle:
-      '切換懷舊服登入模式：登入後先啟動新楓之谷經典版，再進入帳號清單（限 HK 帳號或 TW GamaPass 登入）',
+      '懷舊服模式：香港帳號登入後會自動啟動新楓之谷經典版；台灣帳號請按「啟動經典版」另行登入（台服經典版與正式服帳號分開）。',
     needGamapass:
       '台服經典版與正式服為獨立登入，無法沿用正式服的登入狀態。點擊下方按鈕開啟經典版視窗並於視窗內登入，登入後將自動啟動遊戲。',
     launchButton: '啟動經典版',
@@ -658,7 +658,7 @@ const zhCN = {
     button: '经典版',
     modeToggle: '怀旧服',
     modeToggleTitle:
-      '切换怀旧服登录模式：登录后先启动新枫之谷经典版，再进入账号列表（限 HK 账号或 TW GamaPass 登录）',
+      '怀旧服模式：香港账号登录后会自动启动新枫之谷经典版；台湾账号请按「启动经典版」另行登录（台服经典版与正式服账号分开）。',
     needGamapass:
       '台服经典版与正式服为独立登录，无法沿用正式服的登录状态。点击下方按钮开启经典版窗口并在窗口内登录，登录后将自动启动游戏。',
     launchButton: '启动经典版',
@@ -949,7 +949,7 @@ const enUS = {
     button: 'Classic',
     modeToggle: 'Classic',
     modeToggleTitle:
-      'Toggle Classic login mode: after sign-in, MapleStory Classic launches first, then the account list opens (HK accounts or TW GamaPass only)',
+      'Classic mode: an HK account launches MapleStory Classic right after signing in; a Taiwan account uses "Launch Classic" to sign in separately — TW Classic has its own account, apart from the regular service.',
     needGamapass:
       'Taiwan Classic uses a separate login from the regular service — an existing sign-in does not carry over. Open the Classic window below and sign in there; the game launches automatically afterwards.',
     launchButton: 'Launch Classic',

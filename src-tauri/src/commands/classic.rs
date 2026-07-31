@@ -91,6 +91,9 @@ pub const CLASSIC_SLOW_EVENT: &str = "classic-launch-slow";
 /// Emitted when the portal needs an interactive sign-in (always the case
 /// for TW, whose classic login is separate from the regular service).
 pub const CLASSIC_NEEDS_LOGIN_EVENT: &str = "classic-needs-login";
+/// Emitted when the user closed the portal without a launch, so the
+/// frontend can release its re-entry guard.
+pub const CLASSIC_CLOSED_EVENT: &str = "classic-portal-closed";
 /// Emitted with the GamaPass game accounts when the portal offers more
 /// than one — the frontend shows a native picker and answers with
 /// [`classic_select_account`].
@@ -585,9 +588,16 @@ fn spawn_portal_window<R: tauri::Runtime>(
     .user_agent(CLASSIC_PORTAL_USER_AGENT)
     .initialization_script(script);
     // Share the per-instance WebView2 profile (issue #340) so this window
-    // can't hit the cross-instance ERROR_INVALID_STATE either.
+    // can't hit the cross-instance ERROR_INVALID_STATE either — and with
+    // it the SAME browser args, because every environment on one user
+    // data folder must be configured identically. Passing the folder
+    // alone is what made this window fail with ERROR_INVALID_STATE and
+    // the launch button do nothing (issue #356).
     if let Some(dir) = crate::current_instance_webview_dir() {
         builder = builder.data_directory(dir);
+        if let Some(args) = crate::current_browser_args() {
+            builder = builder.additional_browser_args(args);
+        }
     }
     builder.build().map_err(|e| {
         CommandError::new(
@@ -827,7 +837,12 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
         for tick in 0..HARD_DEADLINE_TICKS {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             if app.get_webview_window(CLASSIC_WINDOW_LABEL).is_none() {
-                return; // user closed the portal
+                // The user closed the portal. Say so: the frontend arms a
+                // re-entry guard when the launch starts, and leaving
+                // silently here left it armed forever — every later press
+                // of the launch button then did nothing at all.
+                let _ = app.emit(CLASSIC_CLOSED_EVENT, ());
+                return;
             }
 
             match flag.load(Ordering::SeqCst) {
@@ -902,6 +917,26 @@ mod tests {
     fn rejects_empty_handler_commands() {
         assert!(parse_handler_command("", "ngm://x").is_none());
         assert!(parse_handler_command(r#""""#, "ngm://x").is_none());
+    }
+
+    #[test]
+    fn portal_window_matches_the_main_environment() {
+        // Every WebView2 environment on one user data folder must be
+        // configured identically; passing the folder without the args
+        // is refused with ERROR_INVALID_STATE (0x8007139F) and the
+        // launch button then did nothing at all (issue #356, measured).
+        let src = include_str!("classic.rs");
+        let dir_at = src
+            .find("current_instance_webview_dir")
+            .expect("dir accessor used");
+        let args_at = src
+            .find("current_browser_args")
+            .expect("args accessor used");
+        let build_end = src.find("builder.build()").expect("builder is built");
+        assert!(
+            dir_at < build_end && args_at < build_end,
+            "the portal must take BOTH the per-instance folder and its args"
+        );
     }
 
     #[test]
