@@ -30,6 +30,7 @@ import {
   CLASSIC_LAUNCHED_EVENT,
   CLASSIC_NEEDS_LOGIN_EVENT,
   CLASSIC_SLOW_EVENT,
+  CLASSIC_CLOSED_EVENT,
 } from '../constants/classic'
 
 export interface ClassicLaunch {
@@ -64,6 +65,12 @@ export function useClassicLaunch(): ClassicLaunch {
         }),
         await listen(CLASSIC_NEEDS_LOGIN_EVENT, () => {
           ElMessage.info(t('classic.needsLogin'))
+        }),
+        // Closing the portal is a deliberate cancel — release the guard
+        // quietly so the button works again (it used to stay armed and
+        // every later press did nothing).
+        await listen(CLASSIC_CLOSED_EVENT, () => {
+          launching.value = false
         }),
       )
     } catch (e) {

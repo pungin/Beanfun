@@ -189,6 +189,36 @@ fn webview_instance_base_dir() -> Option<PathBuf> {
 /// Returns `None` when boot fell back to the shared default (the
 /// window builder then simply omits `data_directory`, matching the
 /// main window's fallback).
+/// Browser arguments the main window's WebView2 environment was built
+/// with, for runtime-created windows to reuse.
+///
+/// # Why this must be shared (issue #356)
+///
+/// Every WebView2 environment sharing a user data folder must be
+/// configured **identically**; a second environment with different
+/// options is refused with `ERROR_INVALID_STATE` (0x8007139F). The
+/// MapleStory Classic portal reused the per-instance folder (#340) but
+/// not the args, so its webview failed to create and the launch button
+/// did nothing — measured, not theorised:
+///
+/// ```text
+/// ERROR tauri_runtime_wry: failed to create webview:
+///   WebView2 error: WindowsError(HRESULT(0x8007139F))
+/// WARN  classic: portal webview not usable … rebuilding once
+/// ```
+///
+/// Any window that passes [`current_instance_webview_dir`] must pass
+/// these too — they are two halves of one environment identity.
+#[cfg(target_os = "windows")]
+static BROWSER_ARGS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The main window's browser arguments; `None` before boot has set them
+/// (and on non-Windows, where the concept doesn't apply).
+#[cfg(target_os = "windows")]
+pub(crate) fn current_browser_args() -> Option<&'static str> {
+    BROWSER_ARGS.get().map(String::as_str)
+}
+
 #[cfg(target_os = "windows")]
 pub(crate) fn current_instance_webview_dir() -> Option<PathBuf> {
     let dir = webview_instance_base_dir()?.join(std::process::id().to_string());
@@ -560,7 +590,12 @@ pub fn run() {
             }
         }
 
-        args.join(" ")
+        let joined = args.join(" ");
+        // Runtime windows sharing the per-instance user data folder must
+        // build their environment with exactly these args — see
+        // `current_browser_args`.
+        let _ = BROWSER_ARGS.set(joined.clone());
+        joined
     };
 
     // Per-instance WebView2 profile (issue #340) — see
