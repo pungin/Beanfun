@@ -373,10 +373,10 @@ const zhTW = {
     button: '經典版',
     modeToggle: '懷舊服',
     modeToggleTitle:
-      '懷舊服模式：香港帳號登入後會自動啟動新楓之谷經典版；台灣帳號請按「啟動經典版」另行登入（台服經典版與正式服帳號分開）。',
+      '懷舊服模式：香港帳號登入後會自動啟動新楓之谷經典版；台灣帳號請按「使用 GamaPass 啟動經典版」另行登入（台服經典版僅支援 GamaPass，與正式服帳號分開）。',
     needGamapass:
-      '台服經典版與正式服為獨立登入，無法沿用正式服的登入狀態。點擊下方按鈕開啟經典版視窗並於視窗內登入，登入後將自動啟動遊戲。',
-    launchButton: '啟動經典版',
+      '台服經典版與正式服為獨立登入，且僅支援 GamaPass 登入（與官網一致），無法沿用正式服的登入狀態。點擊下方按鈕開啟經典版視窗並以 GamaPass 登入，完成後將自動啟動遊戲。',
+    launchButton: '使用 GamaPass 啟動經典版',
     launchSlow: '經典版啟動時間較長，仍在等待中；若遊戲已開啟可忽略此訊息。',
     needsLogin: '請於經典版視窗內完成登入。',
     accountPickerTitle: '選擇遊戲帳號',
@@ -658,10 +658,10 @@ const zhCN = {
     button: '经典版',
     modeToggle: '怀旧服',
     modeToggleTitle:
-      '怀旧服模式：香港账号登录后会自动启动新枫之谷经典版；台湾账号请按「启动经典版」另行登录（台服经典版与正式服账号分开）。',
+      '怀旧服模式：香港账号登录后会自动启动新枫之谷经典版；台湾账号请按「使用 GamaPass 启动经典版」另行登录（台服经典版仅支持 GamaPass，与正式服账号分开）。',
     needGamapass:
-      '台服经典版与正式服为独立登录，无法沿用正式服的登录状态。点击下方按钮开启经典版窗口并在窗口内登录，登录后将自动启动游戏。',
-    launchButton: '启动经典版',
+      '台服经典版与正式服为独立登录，且仅支持 GamaPass 登录（与官网一致），无法沿用正式服的登录状态。点击下方按钮打开经典版窗口并以 GamaPass 登录，完成后将自动启动游戏。',
+    launchButton: '使用 GamaPass 启动经典版',
     launchSlow: '经典版启动时间较长，仍在等待中；若游戏已开启可忽略此消息。',
     needsLogin: '请在经典版窗口内完成登录。',
     accountPickerTitle: '选择游戏账号',
@@ -949,10 +949,10 @@ const enUS = {
     button: 'Classic',
     modeToggle: 'Classic',
     modeToggleTitle:
-      'Classic mode: an HK account launches MapleStory Classic right after signing in; a Taiwan account uses "Launch Classic" to sign in separately — TW Classic has its own account, apart from the regular service.',
+      'Classic mode: an HK account launches MapleStory Classic right after signing in; a Taiwan account uses "Launch Classic with GamaPass" to sign in separately — TW Classic accepts GamaPass only and is apart from the regular service.',
     needGamapass:
-      'Taiwan Classic uses a separate login from the regular service — an existing sign-in does not carry over. Open the Classic window below and sign in there; the game launches automatically afterwards.',
-    launchButton: 'Launch Classic',
+      'Taiwan Classic uses a separate login from the regular service and accepts GamaPass only, same as the official site — an existing sign-in does not carry over. Open the Classic window below, sign in with GamaPass, and the game launches automatically afterwards.',
+    launchButton: 'Launch Classic with GamaPass',
     launchSlow:
       'Classic is taking a while to start — still waiting. Ignore this if the game has already opened.',
     needsLogin: 'Please finish signing in inside the Classic window.',
