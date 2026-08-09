@@ -583,6 +583,36 @@ pub fn run() {
         // (`BEANFUN_REMOTE_DEBUGGING_PORT=9222 beanfun.exe`). The flag
         // applies to the whole per-instance browser process, so runtime
         // windows (classic portal, in-app browsers) are inspectable too.
+        // Loopback proxy (`services::webview_proxy`): WebView2 always
+        // runs out-of-process, so without this every request from the
+        // GamaPass popup / Classic portal / in-app browser leaves the
+        // machine as `msedgewebview2.exe`. Process-matching game
+        // accelerators and split-tunnel VPNs look for `beanfun.exe`,
+        // find nothing, and leave those windows unaccelerated. Pointing
+        // the webview at a proxy hosted in *this* process moves the
+        // outbound socket back under our own identity. Opt-in, and
+        // strictly degrading: if the listener can't bind we omit the
+        // switch and the webview goes direct, exactly as before.
+        let proxy_enabled = services::config::get_value_sync(&config_path, "webviewProxy")
+            .unwrap_or_default()
+            .eq_ignore_ascii_case("true");
+        if proxy_enabled {
+            match services::webview_proxy::start() {
+                Ok(port) => {
+                    args.push(format!("--proxy-server=http://127.0.0.1:{port}"));
+                    // Redundant with Chromium's implicit loopback bypass
+                    // (which keeps `tauri.localhost` and the dev server
+                    // off the proxy) but stated so the intent survives a
+                    // future flag edit.
+                    args.push("--proxy-bypass-list=<local>".to_string());
+                    tracing::info!(port, "webview traffic routed through the in-app proxy");
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "webview proxy failed to bind; using a direct connection");
+                }
+            }
+        }
+
         if let Ok(port) = std::env::var("BEANFUN_REMOTE_DEBUGGING_PORT") {
             if port.chars().all(|c| c.is_ascii_digit()) && !port.is_empty() {
                 args.push(format!("--remote-debugging-port={port}"));

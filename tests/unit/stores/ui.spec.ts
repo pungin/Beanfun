@@ -60,6 +60,9 @@ describe('useUiStore', () => {
       expect(ui.language).toBe(DEFAULT_LOCALE)
       expect(ui.minimizeToTray).toBe(false)
       expect(ui.disableHwAccel).toBe(false)
+      // A direct connection is right unless the user runs a
+      // process-matching accelerator, so the relay stays opt-in.
+      expect(ui.webviewProxy).toBe(false)
       expect(ui.updateChannel).toBe(DEFAULT_UPDATE_CHANNEL)
       // P12.4 D2 — WPF defaults from Settings.xaml.cs ctor.
       expect(ui.autoStartGame).toBe(false)
@@ -77,6 +80,7 @@ describe('useUiStore', () => {
           Language: 'en-US',
           minimize_to_tray: 'true',
           disableHardwareAcceleration: 'true',
+          webviewProxy: 'true',
           updateChannel: 'Beta',
           autoStartGame: 'true',
           ask_update: 'false',
@@ -94,6 +98,7 @@ describe('useUiStore', () => {
       expect(ui.language).toBe('en-US')
       expect(ui.minimizeToTray).toBe(true)
       expect(ui.disableHwAccel).toBe(true)
+      expect(ui.webviewProxy).toBe(true)
       expect(ui.updateChannel).toBe('Beta')
       expect(ui.autoStartGame).toBe(true)
       expect(ui.askUpdate).toBe(false)
@@ -160,12 +165,14 @@ describe('useUiStore', () => {
       const ui = useUiStore()
       await ui.setMinimizeToTray(true)
       await ui.setDisableHwAccel(false)
+      await ui.setWebviewProxy(true)
       expect(mockSetConfig).toHaveBeenNthCalledWith(1, UI_CONFIG_KEYS.MinimizeToTray, 'true')
       expect(mockSetConfig).toHaveBeenNthCalledWith(
         2,
         UI_CONFIG_KEYS.DisableHardwareAcceleration,
         'false',
       )
+      expect(mockSetConfig).toHaveBeenNthCalledWith(3, UI_CONFIG_KEYS.WebviewProxy, 'true')
     })
 
     it('setUpdateChannel writes the literal channel value', async () => {

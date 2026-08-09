@@ -94,7 +94,10 @@ reqwest = { version = "0.12", default-features = false, features = [
 reqwest_cookie_store = "0.8"
 
 # Async runtime
-tokio = { version = "1", features = ["rt", "sync", "time", "fs", "macros"] }
+# `net` + `io-util` back the loopback webview proxy
+# (`services::webview_proxy`): a TcpListener/TcpStream accept loop and
+# `copy_bidirectional` for the CONNECT tunnels.
+tokio = { version = "1", features = ["rt", "sync", "time", "fs", "macros", "net", "io-util"] }
 futures = "0.3"
 # CancellationToken for the session keep-alive ping loop
 # (see `commands::auth::run_ping_loop` + `commands::state::AuthContext::ping_cancel`).
@@ -144,6 +147,14 @@ rand = "0.8"
 windows = { version = "0.58", features = [
   "Win32_Foundation",
   "Win32_Globalization",
+  # GetExtendedTcpTable — maps a loopback peer socket back to the
+  # process that owns it, so `services::webview_proxy` only serves our
+  # own WebView2 processes.
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Networking_WinSock",
+  # Toolhelp process snapshot — proves a proxy peer descends from us, so
+  # a look-alike `msedgewebview2.exe` cannot borrow the tunnel.
+  "Win32_System_Diagnostics_ToolHelp",
   "Win32_Graphics_Gdi",
   "Win32_Security",
   "Win32_Security_Cryptography",
