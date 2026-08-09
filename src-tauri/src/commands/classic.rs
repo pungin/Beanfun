@@ -150,6 +150,14 @@ fn portal_script(region: LoginRegion) -> String {
   // considered ready to be driven — ~1.2s, enough for the client-side
   // app to bind its handlers.
   var SETTLE_TICKS = 3;
+  // …but `readyState === 'complete'` waits for EVERY subresource, and a
+  // single hung one (an analytics script an accelerator / VPN / blocker
+  // is swallowing, a slow CDN) means it never arrives — the page then
+  // sat there untouched forever, which is what "it doesn't click
+  // GamaPass by itself" looked like. After this many unchanged ticks we
+  // act anyway: the URL has been stable for ~5s, so the document we can
+  // see is the one we are going to get.
+  var SETTLE_FALLBACK_TICKS = 12;
   var MAX_SELECT_ATTEMPTS = 3;
 
   function post(msg) {{
@@ -171,16 +179,26 @@ fn portal_script(region: LoginRegion) -> String {
   }}
 
   // Per-page state. Anything that changes the URL resets it.
-  var pageUrl = '', settled = 0, phase = '', attempts = 0, chosen = '';
+  var pageUrl = '', settled = 0, stable = 0, phase = '', attempts = 0, chosen = '';
   function pageReady() {{
     if (location.href !== pageUrl) {{
       pageUrl = location.href;
       settled = 0;
+      stable = 0;
       phase = '';
       attempts = 0;
       return false;
     }}
-    if (document.readyState !== 'complete') {{ settled = 0; return false; }}
+    stable++;
+    if (document.readyState !== 'complete') {{
+      settled = 0;
+      if (stable === SETTLE_FALLBACK_TICKS) {{
+        // Say why we are proceeding without a finished load, so a stuck
+        // flow is diagnosable from the log instead of looking idle.
+        post({{ kind: 'ready-timeout', state: document.readyState, href: location.href }});
+      }}
+      return stable >= SETTLE_FALLBACK_TICKS;
+    }}
     settled++;
     return settled >= SETTLE_TICKS;
   }}
@@ -967,6 +985,19 @@ mod tests {
         let script = portal_script(LoginRegion::TW);
         assert!(script.contains(".bottom-fixed-action-area a.ui-btn"));
         assert!(!script.contains("PRIMARY"), "no label-matching heuristics");
+    }
+
+    #[test]
+    fn portal_script_acts_even_when_the_page_never_finishes_loading() {
+        // `readyState === 'complete'` waits for every subresource; one
+        // hung request (an analytics script a VPN / accelerator /
+        // blocker swallows) meant the gate never opened and NO step ever
+        // ran — reported as "it doesn't click GamaPass by itself". The
+        // script must fall back to URL stability and say why.
+        let script = portal_script(LoginRegion::TW);
+        assert!(script.contains("SETTLE_FALLBACK_TICKS"));
+        assert!(script.contains("stable >= SETTLE_FALLBACK_TICKS"));
+        assert!(script.contains("ready-timeout"));
     }
 
     #[test]
