@@ -12,16 +12,42 @@
 //! itself, which already holds every capability the proxy could lend —
 //! is served.
 //!
+//! # Two checks, because a name is not an identity
+//!
+//! 1. The owning process's **image name** is `msedgewebview2.exe`.
+//! 2. That process **descends from us**.
+//!
+//! The first alone would be spoofable: any local program can name its
+//! executable `msedgewebview2.exe`. The second is not, because a process
+//! cannot choose its parent — WebView2's browser process is spawned by
+//! us and the renderer / network-service children hang off that, so a
+//! genuine webview socket always has our PID somewhere up its ancestry.
+//! Requiring both means an impostor would have to be a process we
+//! ourselves launched, which is not something an outsider can arrange.
+//!
+//! Ancestry alone is not enough either: we do spawn other children (the
+//! game client, NGM, LocaleRemulator), and none of them has any business
+//! borrowing this tunnel.
+//!
 //! # Fail-open, deliberately
 //!
-//! If the ownership lookup itself fails — the connection already closed
-//! and left the table, an API error, an unexpected address family — the
+//! If a lookup itself fails — the connection already closed and left the
+//! table, a snapshot error, an unexpected address family — the
 //! connection is **allowed**. The check is defense-in-depth on a
 //! loopback port that is off by default; a bug or a race in it must
 //! never be able to take the user's webview offline. Only a *positive*
-//! identification of some other process rejects.
+//! identification of something that isn't our webview rejects.
+//!
+//! Note this is not a hole in practice: to *use* the proxy a caller
+//! needs a live connection, and a live connection always has a row in
+//! the TCP table. The lookup realistically only misses for sockets that
+//! are already gone, which have nothing left to relay.
 
+#[cfg(target_os = "windows")]
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
+#[cfg(target_os = "windows")]
+use std::sync::Mutex;
 
 /// Image name of the WebView2 runtime's processes. Every socket the
 /// webview opens is owned by one of these (the network service child,
@@ -54,16 +80,126 @@ pub fn peer_is_webview(peer: SocketAddr, listen_port: u16) -> bool {
     if pid == std::process::id() {
         return true;
     }
-    match image_name(pid) {
-        Some(name) => {
-            let ours = name.eq_ignore_ascii_case(WEBVIEW_IMAGE_NAME);
-            if !ours {
-                tracing::warn!(pid, image = %name, "webview proxy: refused a connection from another process");
-            }
-            ours
+
+    // Cheap check first: the image name filters out every ordinary
+    // caller (a script, a curl, another app) without touching the
+    // process snapshot.
+    let Some(name) = image_name(pid) else {
+        return true;
+    };
+    if !name.eq_ignore_ascii_case(WEBVIEW_IMAGE_NAME) {
+        tracing::warn!(pid, image = %name, "webview proxy: refused a connection from another process");
+        return false;
+    }
+
+    // Expensive check second: a matching name only counts if the
+    // process is actually one we launched.
+    match descends_from_us(pid) {
+        Some(true) => true,
+        Some(false) => {
+            tracing::warn!(
+                pid,
+                image = %name,
+                "webview proxy: refused a look-alike process that is not our webview"
+            );
+            false
         }
         None => true,
     }
+}
+
+/// Verified descendants, so a busy page load pays for the process
+/// snapshot once rather than once per connection.
+///
+/// Caching a PID is safe against PID reuse because the image-name check
+/// above runs on *every* connection and is not cached: a recycled PID
+/// only reaches this cache if the new occupant is itself named
+/// `msedgewebview2.exe`.
+#[cfg(target_os = "windows")]
+static VERIFIED_DESCENDANTS: Mutex<Option<HashSet<u32>>> = Mutex::new(None);
+
+/// Longest ancestry chain we will walk before giving up. WebView2 sits
+/// two hops from us (network service → browser process → us); the extra
+/// room costs nothing and the bound guarantees termination even if the
+/// snapshot ever contains a cycle.
+#[cfg(target_os = "windows")]
+const MAX_ANCESTRY_HOPS: usize = 16;
+
+/// Does `pid` have our own process somewhere up its parent chain?
+///
+/// `None` means the question could not be answered (snapshot failure) —
+/// callers treat that as "allow", per the fail-open policy above.
+#[cfg(target_os = "windows")]
+fn descends_from_us(pid: u32) -> Option<bool> {
+    if let Ok(cache) = VERIFIED_DESCENDANTS.lock() {
+        if cache.as_ref().is_some_and(|seen| seen.contains(&pid)) {
+            return Some(true);
+        }
+    }
+
+    let parents = parent_map()?;
+    let me = std::process::id();
+
+    let mut current = pid;
+    for _ in 0..MAX_ANCESTRY_HOPS {
+        // A link we cannot resolve means the process (or an ancestor)
+        // has exited, so the chain cannot reach us. That is a definite
+        // "not ours" — unlike a snapshot failure, which is unknowable
+        // and handled by the `?` on `parent_map` above.
+        let Some(&parent) = parents.get(&current) else {
+            return Some(false);
+        };
+        if parent == me {
+            if let Ok(mut cache) = VERIFIED_DESCENDANTS.lock() {
+                cache.get_or_insert_with(HashSet::new).insert(pid);
+            }
+            return Some(true);
+        }
+        // PID 0 is the idle process and a self-parent is corrupt data;
+        // either way the chain is over and we never found ourselves.
+        if parent == 0 || parent == current {
+            return Some(false);
+        }
+        current = parent;
+    }
+    Some(false)
+}
+
+/// Snapshot every live process as a `pid -> parent pid` map.
+#[cfg(target_os = "windows")]
+fn parent_map() -> Option<HashMap<u32, u32>> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+
+    // SAFETY: the snapshot handle is closed on every path below, and
+    // `entry` is initialised with the size field the API requires.
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }.ok()?;
+
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
+
+    let mut map = HashMap::new();
+    if unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok() {
+        loop {
+            map.insert(entry.th32ProcessID, entry.th32ParentProcessID);
+            if unsafe { Process32NextW(snapshot, &mut entry) }.is_err() {
+                break;
+            }
+        }
+    }
+    unsafe {
+        let _ = CloseHandle(snapshot);
+    }
+
+    if map.is_empty() {
+        return None;
+    }
+    Some(map)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -198,6 +334,40 @@ mod tests {
         // Windows leaves the upper 16 bits unspecified — they must not
         // leak into the comparison.
         assert_eq!(port_from_row(0xDEAD_901F), 8080);
+    }
+
+    #[test]
+    fn the_process_snapshot_sees_this_process_and_its_parent() {
+        let parents = parent_map().expect("snapshot");
+        assert!(parents.contains_key(&std::process::id()));
+    }
+
+    #[test]
+    fn a_process_we_launched_is_recognised_as_our_descendant() {
+        // The real guarantee: an impostor cannot fake this, because it
+        // cannot arrange for us to be its parent.
+        let mut child = std::process::Command::new("cmd.exe")
+            .args(["/c", "ping -n 6 127.0.0.1 > nul"])
+            .spawn()
+            .expect("spawn child");
+
+        let verdict = descends_from_us(child.id());
+        let _ = child.kill();
+        let _ = child.wait();
+
+        assert_eq!(verdict, Some(true));
+    }
+
+    #[test]
+    fn a_process_outside_our_tree_is_rejected() {
+        // PID 4 is the Windows System process — parented by the idle
+        // process, so the walk terminates without ever reaching us.
+        assert_eq!(descends_from_us(4), Some(false));
+    }
+
+    #[test]
+    fn an_unknown_pid_is_rejected_rather_than_walked_forever() {
+        assert_eq!(descends_from_us(u32::MAX), Some(false));
     }
 
     #[test]

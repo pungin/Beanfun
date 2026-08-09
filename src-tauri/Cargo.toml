@@ -152,6 +152,9 @@ windows = { version = "0.58", features = [
   # own WebView2 processes.
   "Win32_NetworkManagement_IpHelper",
   "Win32_Networking_WinSock",
+  # Toolhelp process snapshot — proves a proxy peer descends from us, so
+  # a look-alike `msedgewebview2.exe` cannot borrow the tunnel.
+  "Win32_System_Diagnostics_ToolHelp",
   "Win32_Graphics_Gdi",
   "Win32_Security",
   "Win32_Security_Cryptography",
