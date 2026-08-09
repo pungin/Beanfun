@@ -18,6 +18,7 @@ pub mod maple_cache;
 pub mod storage;
 pub mod system;
 pub mod updater;
+pub mod webview_proxy;
 
 #[cfg(target_os = "windows")]
 pub mod process;

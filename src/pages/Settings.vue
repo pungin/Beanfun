@@ -591,13 +591,34 @@ function handleTools(): void {
  * `disableHardwareAcceleration` toggle handler. WPF L213-222 shows
  * a restart prompt after writing the new value to Config.
  *
- * The SPA now honours this flag at startup via
- * `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--disable-gpu` (set in
- * `lib.rs::run()` before the WebView2 runtime initialises).
- * A full restart is still required for the change to take effect.
+ * The SPA honours this flag at startup by appending `--disable-gpu`
+ * to the window builder's `additional_browser_args` in `lib.rs::run()`
+ * — NOT via `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, which WebView2
+ * ignores once wry passes explicit environment options. The args are
+ * fixed for the life of the browser process, so a full restart is
+ * required for the change to take effect.
  */
 async function handleDisableHwAccelChange(value: boolean): Promise<void> {
   await ui.setDisableHwAccel(value)
+  try {
+    await ElMessageBox.alert(
+      t('MsgRestartForHardwareAccel'),
+      t('MsgRestartForHardwareAccelTitle'),
+      { type: 'info' },
+    )
+  } catch {
+    /* User dismissed the alert — no-op. */
+  }
+}
+
+/**
+ * `webviewProxy` toggle handler — same restart contract as the
+ * hardware-acceleration one, and for the same reason: the
+ * `--proxy-server` switch is baked into the browser arguments at
+ * startup (see `services::webview_proxy`).
+ */
+async function handleWebviewProxyChange(value: boolean): Promise<void> {
+  await ui.setWebviewProxy(value)
   try {
     await ElMessageBox.alert(
       t('MsgRestartForHardwareAccel'),
@@ -948,6 +969,22 @@ onMounted(() => {
                       @change="(value) => handleDisableHwAccelChange(Boolean(value))"
                     >
                       {{ t('DisableHardwareAcceleration') }}
+                    </el-checkbox>
+                  </el-tooltip>
+                </div>
+
+                <div class="settings__row settings__row--checkbox">
+                  <el-tooltip
+                    placement="right"
+                    popper-class="settings__tip-popper"
+                    :content="t('settings.webviewProxyTip')"
+                  >
+                    <el-checkbox
+                      :model-value="ui.webviewProxy"
+                      data-test="settings-webview-proxy"
+                      @change="(value) => handleWebviewProxyChange(Boolean(value))"
+                    >
+                      {{ t('settings.webviewProxy') }}
                     </el-checkbox>
                   </el-tooltip>
                 </div>

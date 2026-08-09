@@ -14,6 +14,7 @@
  * | `language`          | `Language`                    | `zh-TW`     |
  * | `minimizeToTray`    | `minimize_to_tray`            | `false`     |
  * | `disableHwAccel`    | `disableHardwareAcceleration` | `false`     |
+ * | `webviewProxy`      | `webviewProxy`                | `false`     |
  * | `updateChannel`     | `updateChannel`               | `Stable`    |
  * | `autoStartGame`     | `autoStartGame`               | `false`     |
  * | `askUpdate`         | `ask_update`                  | `true`      |
@@ -116,6 +117,14 @@ export const UI_CONFIG_KEYS = {
   Language: 'Language',
   MinimizeToTray: 'minimize_to_tray',
   DisableHardwareAcceleration: 'disableHardwareAcceleration',
+  /**
+   * Route WebView2's traffic through the loopback proxy hosted in
+   * `beanfun.exe` (`services::webview_proxy`) so process-matching game
+   * accelerators / split-tunnel VPNs pick up the login popups. Read
+   * once at startup when the browser arguments are built, so changing
+   * it needs a restart. Not a WPF key — new in the Tauri client.
+   */
+  WebviewProxy: 'webviewProxy',
   UpdateChannel: 'updateChannel',
   AutoStartGame: 'autoStartGame',
   AskUpdate: 'ask_update',
@@ -207,6 +216,12 @@ export const useUiStore = defineStore('ui', () => {
     parseBool(config.get(UI_CONFIG_KEYS.DisableHardwareAcceleration), false),
   )
 
+  /** Off by default: a direct connection is right for everyone who
+   * isn't running a process-matching accelerator. */
+  const webviewProxy = computed<boolean>(() =>
+    parseBool(config.get(UI_CONFIG_KEYS.WebviewProxy), false),
+  )
+
   const updateChannel = computed<UpdateChannel>(() => {
     const raw = config.get(UI_CONFIG_KEYS.UpdateChannel)
     return isUpdateChannel(raw) ? raw : DEFAULT_UPDATE_CHANNEL
@@ -260,6 +275,10 @@ export const useUiStore = defineStore('ui', () => {
 
   async function setDisableHwAccel(value: boolean): Promise<void> {
     await config.set(UI_CONFIG_KEYS.DisableHardwareAcceleration, stringifyBool(value))
+  }
+
+  async function setWebviewProxy(value: boolean): Promise<void> {
+    await config.set(UI_CONFIG_KEYS.WebviewProxy, stringifyBool(value))
   }
 
   async function setUpdateChannel(value: UpdateChannel): Promise<void> {
@@ -343,6 +362,7 @@ export const useUiStore = defineStore('ui', () => {
     minimizeToTray,
     classicLoginMode,
     disableHwAccel,
+    webviewProxy,
     updateChannel,
     autoStartGame,
     askUpdate,
@@ -357,6 +377,7 @@ export const useUiStore = defineStore('ui', () => {
     setMinimizeToTray,
     setClassicLoginMode,
     setDisableHwAccel,
+    setWebviewProxy,
     setUpdateChannel,
     setAutoStartGame,
     setAskUpdate,

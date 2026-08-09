@@ -460,6 +460,9 @@ const zhTW = {
     gameSectionEmpty: '尚未選擇任何遊戲，遊戲相關設定將於選擇遊戲後出現。',
     disableHardwareAccelerationTip:
       '關閉硬體加速可降低 GPU 使用，但介面動畫會較不流暢。\n更動後需完全重新啟動 Beanfun 才會套用。',
+    webviewProxy: '讓加速器 / VPN 認得網頁流量',
+    webviewProxyTip:
+      '登入視窗（GamaPass、經典版）的網路連線由 WebView2 另一個行程送出，\n只認程式名稱的遊戲加速器或分流 VPN 會漏掉它們。\n開啟後改由 Beanfun 本身轉送，加速器即可辨識。\n不會更動 Windows 任何設定，也不影響其他程式。\n更動後需完全重新啟動 Beanfun 才會套用。',
     darkMode: '深色模式',
     tradLoginTip: '使用傳統登入流程（多次跳轉），\n適合自動登入失敗或無法跳出登入視窗時使用。',
     killPatcherTip: '阻止 beanfun! 啟動的更新程式 (Patcher.aspx) 自動執行。',
@@ -745,6 +748,9 @@ const zhCN = {
     gameSectionEmpty: '尚未选择任何游戏，游戏相关设定将于选择游戏后出现。',
     disableHardwareAccelerationTip:
       '关闭硬件加速可降低 GPU 使用，但界面动画会较不流畅。\n更动后需完全重新启动 Beanfun 才会套用。',
+    webviewProxy: '让加速器 / VPN 认得网页流量',
+    webviewProxyTip:
+      '登录窗口（GamaPass、经典版）的网络连接由 WebView2 另一个进程送出，\n只认程序名称的游戏加速器或分流 VPN 会漏掉它们。\n开启后改由 Beanfun 本身转发，加速器即可识别。\n不会更动 Windows 任何设置，也不影响其他程序。\n更动后需完全重新启动 Beanfun 才会套用。',
     darkMode: '深色模式',
     tradLoginTip: '使用传统登录流程（多次跳转），\n适合自动登录失败或无法跳出登录窗口时使用。',
     killPatcherTip: '阻止 beanfun! 启动的更新程序 (Patcher.aspx) 自动执行。',
@@ -1043,6 +1049,9 @@ const enUS = {
     gameSectionEmpty: 'No game selected. Game-specific settings will appear once you pick one.',
     disableHardwareAccelerationTip:
       'Disabling hardware acceleration lowers GPU use but makes UI animations less smooth.\nA full Beanfun restart is required for the change to take effect.',
+    webviewProxy: 'Let accelerators / VPNs see web traffic',
+    webviewProxyTip:
+      'The login windows (GamaPass, Classic) send their traffic from a separate WebView2 process,\nso game accelerators and split-tunnel VPNs that match on program name miss them.\nTurn this on to relay that traffic through Beanfun itself, where they can see it.\nNothing in Windows is changed, and no other program is affected.\nA full Beanfun restart is required for the change to take effect.',
     darkMode: 'Dark Mode',
     tradLoginTip:
       'Use the traditional multi-redirect login flow.\nHandy when auto-login fails or the login window does not appear.',
