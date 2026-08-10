@@ -336,11 +336,21 @@ pub async fn get_accounts(
     );
 
     if accounts.is_empty() {
+        // The preview answers "did we get the account page or a login
+        // page?", but the account page carries account ids and names.
+        // Developer builds keep it; a shipped build must not put that
+        // in a file we ask users to send us. `body_len` alone already
+        // separates "empty response" from "wrong page".
+        #[cfg(debug_assertions)]
+        let body_preview = &body[..body.len().min(500)];
+        #[cfg(not(debug_assertions))]
+        let body_preview = "<omitted in release builds>";
+
         tracing::warn!(
             service_code,
             service_region,
             body_len = body.len(),
-            body_preview = &body[..body.len().min(500)],
+            body_preview,
             "get_accounts: returned 0 accounts — possible stale cookie issue"
         );
     }
@@ -629,9 +639,13 @@ async fn auth_aspx(
     tracing::debug!(
         service_code,
         service_region,
-        session_web_token = session.web_token.as_str(),
-        jar_web_token = ?jar_before,
-        used_web_token = web_token,
+        // Masked: this diagnostic exists to compare the three tokens
+        // against each other, which the masked form still supports.
+        // The values themselves are live credentials and the log is a
+        // file users are asked to send us.
+        session_web_token = %crate::core::redact::mask(session.web_token.as_str()),
+        jar_web_token = %crate::core::redact::mask_opt(jar_before.as_deref()),
+        used_web_token = %crate::core::redact::mask(web_token),
         "auth_aspx: before request"
     );
 
@@ -652,8 +666,8 @@ async fn auth_aspx(
         tracing::warn!(
             service_code,
             service_region,
-            before = ?jar_before,
-            after = ?jar_after,
+            before = %crate::core::redact::mask_opt(jar_before.as_deref()),
+            after = %crate::core::redact::mask_opt(jar_after.as_deref()),
             "auth_aspx: bfWebToken cookie changed during request"
         );
     }

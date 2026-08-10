@@ -175,7 +175,7 @@ async fn run_from_check(
         CheckAccountOutcome::RecaptchaRequired => {
             tracing::info!(
                 step = "TwRegular.CheckAccountType",
-                account_id = %creds.account,
+                account_id = %crate::core::redact::mask(&creds.account),
                 "reCAPTCHA required; pausing for widget solve"
             );
             Ok(TwStepOutcome::RecaptchaRequired {
@@ -215,7 +215,7 @@ async fn run_from_login(
         Err(LoginError::AdvanceCheckRequired { url }) => {
             tracing::info!(
                 step = "TwRegular.AccountLogin",
-                account_id = %creds.account,
+                account_id = %crate::core::redact::mask(&creds.account),
                 "advance-check required; parking session for post-verify resume"
             );
             return Ok(TwStepOutcome::AdvanceCheckRequired { ctx, url });
@@ -227,7 +227,7 @@ async fn run_from_login(
         AccountLoginOutcome::RecaptchaRequired => {
             tracing::info!(
                 step = "TwRegular.AccountLogin",
-                account_id = %creds.account,
+                account_id = %crate::core::redact::mask(&creds.account),
                 "reCAPTCHA required; pausing for widget solve"
             );
             Ok(TwStepOutcome::RecaptchaRequired {
@@ -249,7 +249,7 @@ async fn run_from_login(
             tracing::info!(
                 step = "TwRegular",
                 region = ?LoginRegion::TW,
-                account_id = %creds.account,
+                account_id = %crate::core::redact::mask(&creds.account),
                 "login flow completed successfully"
             );
 

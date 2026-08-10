@@ -330,6 +330,29 @@ pub async fn clear_webview2_cache<R: tauri::Runtime>(
     Ok(())
 }
 
+/// Reveal the folder holding this install's log files.
+///
+/// The whole point of writing logs to disk is that a user can attach
+/// one to a bug report, which they can only do if they can find it. The
+/// path is computed here from the storage root — never accepted from
+/// the frontend — so this cannot be turned into an arbitrary "open this
+/// path" primitive.
+///
+/// # Errors
+///
+/// - `system.open_failed` — the OS file manager could not be launched.
+#[tauri::command]
+#[specta::specta]
+pub async fn open_logs_folder(state: State<'_, AppState>) -> Result<(), CommandError> {
+    let dir = crate::services::logging::logs_dir(&state.storage_root);
+    // The folder only exists once something has been logged to it; a
+    // user asking to see it before then should get an empty folder
+    // rather than an error.
+    let _ = std::fs::create_dir_all(&dir);
+    system::open_directory(&dir).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

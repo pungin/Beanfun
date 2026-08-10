@@ -71,7 +71,7 @@ pub async fn send_login(
         // about the body, so this is a parity-superset.
         tracing::warn!(
             step = "SendLogin",
-            body_preview = %truncate_chars(&body, BODY_LOG_PREVIEW_CHARS),
+            body_preview = %crate::core::redact::scrub(truncate_chars(&body, BODY_LOG_PREVIEW_CHARS)),
             "SendLogin scrape returned 0 hidden inputs"
         );
         return Err(LoginError::SendLoginNoFormData);

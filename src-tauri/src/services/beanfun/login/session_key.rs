@@ -43,16 +43,19 @@ async fn get_session_key_tw(client: &BeanfunClient) -> Result<String, LoginError
 
     session_key_from_url(final_url.as_str()).ok_or_else(|| {
         // Diagnostic: when the portal-default redirect chain ends on a
-        // URL whose query doesn't carry `[sp][Ss]?[Kk]ey=…` we want
-        // the operator to see what URL we actually landed on. The URL
-        // query may contain user-agent-derived identifiers but not
-        // credentials; logging the full URL is safe in this context
-        // and is the minimum context needed to tell "Beanfun changed
-        // its redirect target" apart from a transient network glitch.
+        // URL whose query doesn't carry `[sp][Ss]?[Kk]ey=…` we want to
+        // see what URL we actually landed on — that is what separates
+        // "Beanfun changed its redirect target" from a transient
+        // network glitch, and scheme + host + path answers it.
+        //
+        // The query is dropped even though the skey is by definition
+        // *not* in it on this path: whatever else Beanfun redirects
+        // with is unknown to us, and this log now ends up in a file
+        // users paste into public issues.
         tracing::warn!(
             step = "GetSessionKey",
             region = ?LoginRegion::TW,
-            final_url = %final_url,
+            final_url = %crate::core::redact::redact_uri(final_url.as_str()),
             "session key regex did not match the redirected URL"
         );
         LoginError::MissingSessionKey
@@ -85,7 +88,7 @@ async fn get_session_key_hk(client: &BeanfunClient) -> Result<String, LoginError
         step = "GetSessionKey",
         region = ?LoginRegion::HK,
         body_len = body.len(),
-        body_preview = %truncate_chars(&body, 2000),
+        body_preview = %crate::core::redact::scrub(truncate_chars(&body, 2000)),
         "OTP1 span regex did not match the response body"
     );
     Err(LoginError::MissingSessionKey)

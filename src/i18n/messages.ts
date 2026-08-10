@@ -485,6 +485,9 @@ const zhTW = {
     clearWebviewCacheConfirm:
       '這會清除 WebView2 的快取與縮放狀態，不會登出你的帳號。清理後建議重新啟動 Beanfun。要繼續嗎？',
     clearWebviewCacheDone: 'WebView2 快取已清理，建議重新啟動 Beanfun。',
+    openLogsFolder: '開啟記錄檔資料夾',
+    openLogsFolderTip:
+      '每次啟動會產生一個記錄檔，只保留最近 30 個。\n回報問題時附上最新一個，可省下大量來回猜測。\n內容只有程式自身的診斷訊息，不含帳號密碼。',
   },
   inAppBrowser: {
     fallbackToSystem: '此網址不在 Beanfun 內建瀏覽器允許清單，將改以系統預設瀏覽器開啟。',
@@ -773,6 +776,9 @@ const zhCN = {
     clearWebviewCacheConfirm:
       '这会清除 WebView2 的缓存与缩放状态，不会登出你的账号。清理后建议重新启动 Beanfun。要继续吗？',
     clearWebviewCacheDone: 'WebView2 缓存已清理，建议重新启动 Beanfun。',
+    openLogsFolder: '打开日志文件夹',
+    openLogsFolderTip:
+      '每次启动会产生一个日志文件，只保留最近 30 个。\n回报问题时附上最新一个，可省下大量来回猜测。\n内容只有程序自身的诊断信息，不含账号密码。',
   },
   inAppBrowser: {
     fallbackToSystem: '此网址不在 Beanfun 内建浏览器允许列表，将改以系统默认浏览器开启。',
@@ -1075,6 +1081,9 @@ const enUS = {
     clearWebviewCacheConfirm:
       'This clears the WebView2 cache and zoom state. It will not sign you out. A Beanfun restart is recommended afterwards. Continue?',
     clearWebviewCacheDone: 'WebView2 cache cleared. Restarting Beanfun is recommended.',
+    openLogsFolder: 'Open log folder',
+    openLogsFolderTip:
+      'Each launch writes one log file; the newest 30 are kept.\nAttaching the latest one to a bug report saves a lot of guesswork.\nIt holds diagnostics from the app itself — no account or password data.',
   },
   inAppBrowser: {
     fallbackToSystem:

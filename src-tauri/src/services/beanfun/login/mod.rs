@@ -231,7 +231,7 @@ where
         tracing::warn!(
             step,
             error = %e,
-            body_preview = %truncate_chars(text, BODY_LOG_PREVIEW_CHARS),
+            body_preview = %crate::core::redact::scrub(truncate_chars(text, BODY_LOG_PREVIEW_CHARS)),
             "login step JSON parse failed"
         );
         LoginError::from(e)

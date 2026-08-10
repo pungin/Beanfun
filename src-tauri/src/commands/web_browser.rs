@@ -364,7 +364,7 @@ async fn open_url_in_webview<R: tauri::Runtime>(
             let _ = window.set_focus();
             tracing::info!(
                 step = "InAppBrowser.PageReadyShown",
-                url = %payload.url(),
+                url = %crate::core::redact::redact_uri(payload.url().as_str()),
                 "in-app browser shown after first non-about:blank Finished event"
             );
         })
@@ -442,7 +442,8 @@ async fn open_url_in_webview<R: tauri::Runtime>(
     tracing::info!(
         step = "InAppBrowser.Opened",
         label = %label,
-        url = %target_url,
+        // Member-centre and Gash URLs carry `web_token` in the query.
+        url = %crate::core::redact::redact_uri(target_url.as_str()),
         "in-app browser window opened (hidden until first paint)"
     );
 

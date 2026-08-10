@@ -173,7 +173,7 @@ pub async fn check_account_type(
     // IP. `account` is non-secret; the captcha token itself is never logged.
     tracing::info!(
         step = "CheckAccountType.Verdict",
-        account_id = %account,
+        account_id = %crate::core::redact::mask(account),
         result_code = parsed.result_code.as_deref().unwrap_or(""),
         succeeded,
         is_recaptcha,
