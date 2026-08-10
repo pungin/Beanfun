@@ -219,7 +219,7 @@ pub async fn poll_qr_login_status(
         tracing::warn!(
             step = "qr_poll",
             error = %e,
-            body_preview = %truncate_chars(&body, BODY_LOG_PREVIEW_CHARS),
+            body_preview = %crate::core::redact::scrub(truncate_chars(&body, BODY_LOG_PREVIEW_CHARS)),
             "QR poll response JSON parse failed",
         );
         LoginError::QrJsonParseFailed
@@ -246,7 +246,7 @@ pub async fn poll_qr_login_status(
             tracing::warn!(
                 step = "qr_poll",
                 result_message = ?other,
-                body_preview = %truncate_chars(&body, BODY_LOG_PREVIEW_CHARS),
+                body_preview = %crate::core::redact::scrub(truncate_chars(&body, BODY_LOG_PREVIEW_CHARS)),
                 "QR poll returned unknown ResultMessage",
             );
             Err(LoginError::ServerMessage(body))

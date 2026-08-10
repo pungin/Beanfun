@@ -9,6 +9,7 @@
 
 pub mod legacy;
 pub mod parser;
+pub mod redact;
 pub mod time;
 pub mod version;
 pub mod wcdes;

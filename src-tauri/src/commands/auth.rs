@@ -1395,15 +1395,14 @@ fn parse_mltoken_fragment(fragment: &str) -> Option<(RecaptchaStep, String)> {
 }
 
 /// Strip query parameters from a URL for safe logging.
-/// Prevents session tokens (e.g. `pSKey`) from leaking into traces.
+///
+/// Thin adapter over [`crate::core::redact::redact_uri`], which is the
+/// one place the redaction rules live now that logs are written to disk
+/// and sent to us. Kept as a named wrapper because the call sites below
+/// already hold a parsed [`Url`], and it also drops the fragment —
+/// `mltoken=login~<token>` arrives there.
 fn redact_url_query(url: &Url) -> String {
-    let mut redacted = url.clone();
-    redacted.set_query(None);
-    if url.query().is_some() {
-        format!("{}?[REDACTED]", redacted)
-    } else {
-        redacted.to_string()
-    }
+    crate::core::redact::redact_uri(url.as_str())
 }
 
 /// Check whether `url` is a landing page WPF's

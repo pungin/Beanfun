@@ -763,11 +763,23 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
     let needs_pick_cb = needs_pick.clone();
     let flag_for_msg = flag.clone();
     let window = build_portal_window(&app, &portal_script(region), start_visible, move |raw| {
-        tracing::info!("classic portal message: {raw}");
+        // Only the `kind` is safe to print: the payload carries game
+        // account ids, and `ready-timeout` reports an `href` whose query
+        // can hold session parameters. Developer builds keep the raw
+        // message; a shipped build must not put it in a file we ask
+        // users to send us.
+        #[cfg(debug_assertions)]
+        tracing::debug!("classic portal message (raw): {raw}");
+
         let Ok(msg) = serde_json::from_str::<PortalMessage>(raw) else {
-            tracing::warn!("classic: unparseable portal message");
+            tracing::warn!(len = raw.len(), "classic: unparseable portal message");
             return;
         };
+        tracing::info!(
+            kind = %msg.kind,
+            accounts = msg.accounts.len(),
+            "classic portal message"
+        );
         match msg.kind.as_str() {
             // Emit once — the script re-reports after every navigation.
             "need-login" if !needs_login_cb.swap(true, Ordering::SeqCst) => {

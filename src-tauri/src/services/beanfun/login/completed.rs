@@ -178,14 +178,20 @@ pub async fn login_completed(
     // will surface the gap instead of silently swallowing it — an
     // empty-value log line that would otherwise read identically.
     let account_id_display = if account_id.is_empty() {
-        "<deferred>"
+        "<deferred>".to_string()
     } else {
-        account_id
+        // Masked: this line marks a successful login, and the id is the
+        // user's beanfun account (an email address, in the common case)
+        // in a file we ask users to attach to public bug reports. The
+        // masked form still confirms *which* stored account logged in
+        // when several are configured.
+        crate::core::redact::mask(account_id)
     };
     tracing::info!(
         step = "LoginCompleted",
         region = ?client.config().region,
-        account_id = account_id_display,
+        // redact-ok: masked at the binding above (sentinel or mask()).
+        account_id = %account_id_display,
         "login flow completed successfully"
     );
 

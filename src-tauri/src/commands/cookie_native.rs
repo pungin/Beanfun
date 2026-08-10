@@ -394,9 +394,16 @@ where
                     // Cancel the prompt; the callback owns the launch.
                     args.SetCancel(true)?;
                     if !url.is_empty() {
+                        // The `ngm://` launch URL carries the GamaPass
+                        // session token in its *path*
+                        // (`-passarg:'… sess<hex> …'`), so only the
+                        // scheme is safe to print. "Did we intercept a
+                        // launch?" is the diagnostic; the payload is a
+                        // credential.
                         tracing::info!(
                             step = "NativeHandler.ExternalUriScheme",
-                            "intercepted external-scheme launch: {url}"
+                            uri = %crate::core::redact::redact_uri(&url),
+                            "intercepted external-scheme launch"
                         );
                         cb(&url);
                     }
