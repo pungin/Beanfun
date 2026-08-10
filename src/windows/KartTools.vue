@@ -364,4 +364,14 @@ function handleVisibleChange(value: boolean): void {
   justify-content: flex-start;
   gap: 0.5rem;
 }
+
+/*
+ * Same Element Plus `.el-button + .el-button { margin-left: 12px }`
+ * default as MapleTools. Here the container is a grid, so the stray
+ * margin shifts every cell but the first out of its column track. The
+ * grid `gap` owns the spacing.
+ */
+.kart-tools__button + .kart-tools__button {
+  margin-left: 0;
+}
 </style>

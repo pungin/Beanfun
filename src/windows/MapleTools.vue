@@ -437,6 +437,18 @@ function handleVisibleChange(value: boolean): void {
   justify-content: flex-start;
   gap: 0.5rem;
 }
+
+/*
+ * Element Plus ships `.el-button + .el-button { margin-left: 12px }`
+ * for its horizontal button groups. In this vertical stack that margin
+ * indents every button after the first — with `width: 100%` they then
+ * also overflow the column by the same 12px, which is why the list
+ * looked ragged with only the top button flush. The column's own `gap`
+ * owns the spacing here.
+ */
+.maple-tools__button + .maple-tools__button {
+  margin-left: 0;
+}
 </style>
 
 <style>

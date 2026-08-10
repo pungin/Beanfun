@@ -333,6 +333,14 @@ async fn open_url_in_webview<R: tauri::Runtime>(
         .inner_size(850.0, 550.0)
         .resizable(true)
         .visible(false)
+        // Without this every `target="_blank"` control on the page is
+        // dead — the opener plugin cancels the click and its `open_url`
+        // is denied here. See `commands::remote_page`.
+        .initialization_script(crate::commands::remote_page::KEEP_LINKS_IN_WINDOW)
+        // …`alert()` is dead for the same reason, and a popup that
+        // never comes back sends the page into a blocked iframe.
+        .initialization_script(crate::commands::remote_page::RESTORE_ALERT)
+        .initialization_script(crate::commands::remote_page::KEEP_POPUPS_ALIVE)
         .on_page_load(move |window, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;

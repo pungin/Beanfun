@@ -142,6 +142,7 @@ pub mod game;
 pub mod launcher;
 pub mod maple_cache;
 pub mod otp;
+pub mod remote_page;
 pub mod session;
 pub mod state;
 pub mod storage;

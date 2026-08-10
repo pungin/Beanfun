@@ -604,6 +604,12 @@ fn spawn_portal_window<R: tauri::Runtime>(
     .center()
     .visible(visible)
     .user_agent(CLASSIC_PORTAL_USER_AGENT)
+    // TW users sign in inside this window, and that form's links
+    // (register / forgot password) are `target="_blank"` — dead without
+    // this. See `commands::remote_page`.
+    .initialization_script(crate::commands::remote_page::KEEP_LINKS_IN_WINDOW)
+    .initialization_script(crate::commands::remote_page::RESTORE_ALERT)
+    .initialization_script(crate::commands::remote_page::KEEP_POPUPS_ALIVE)
     .initialization_script(script);
     // Share the per-instance WebView2 profile (issue #340) so this window
     // can't hit the cross-instance ERROR_INVALID_STATE either — and with
