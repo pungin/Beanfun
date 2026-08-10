@@ -333,6 +333,10 @@ async fn open_url_in_webview<R: tauri::Runtime>(
         .inner_size(850.0, 550.0)
         .resizable(true)
         .visible(false)
+        // Without this every `target="_blank"` control on the page is
+        // dead — the opener plugin cancels the click and its `open_url`
+        // is denied here. See `commands::link_policy`.
+        .initialization_script(crate::commands::link_policy::KEEP_LINKS_IN_WINDOW)
         .on_page_load(move |window, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;

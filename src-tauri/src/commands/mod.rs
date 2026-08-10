@@ -140,6 +140,7 @@ pub mod dto;
 pub mod error;
 pub mod game;
 pub mod launcher;
+pub mod link_policy;
 pub mod maple_cache;
 pub mod otp;
 pub mod session;
