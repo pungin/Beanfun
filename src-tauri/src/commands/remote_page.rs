@@ -92,6 +92,20 @@ pub const KEEP_LINKS_IN_WINDOW: &str = r#"
       // takes. Propagation is left intact so the page's own handlers
       // still run.
       event.preventDefault();
+      // Navigate the TOP-LEVEL context, not this frame. beanfun's member
+      // centre renders the Gama Pass account app inside an iframe, and a
+      // `_blank` link in there points at accounts.gamania.com, which
+      // answers `frame-ancestors 'none'`. Navigating the frame therefore
+      // gets blocked outright and the control stays dead — which is what
+      // `_blank` means anyway: leave this browsing context. Writing
+      // `top.location.href` is permitted cross-origin from a frame that
+      // is allowed to navigate top, which a real user click grants.
+      try {
+        if (window.top && window.top !== window) {
+          window.top.location.href = url.href;
+          return;
+        }
+      } catch (_) {}
       window.location.assign(url.href);
     },
     true,
@@ -333,10 +347,18 @@ mod tests {
     }
 
     #[test]
-    fn it_navigates_in_the_same_window() {
-        assert!(KEEP_LINKS_IN_WINDOW.contains("window.location.assign"));
-        // A new native window would just reintroduce the popup we are
-        // deliberately collapsing into this one.
+    fn it_navigates_the_top_level_context_not_the_frame() {
+        // The member centre renders the account app in an iframe whose
+        // `_blank` links point at a host that forbids framing, so
+        // navigating the frame is guaranteed to be blocked. Getting this
+        // wrong is not a style question — it is the difference between
+        // the button working and the button being dead.
+        assert!(KEEP_LINKS_IN_WINDOW.contains("window.top.location.href = url.href"));
+        assert!(KEEP_LINKS_IN_WINDOW.contains("window.top !== window"));
+        // …with the plain case still handled when there is no frame.
+        assert!(KEEP_LINKS_IN_WINDOW.contains("window.location.assign(url.href)"));
+        // A new native window would just reintroduce the popup WebView2
+        // will not give us.
         assert!(!KEEP_LINKS_IN_WINDOW.contains("window.open"));
     }
 
