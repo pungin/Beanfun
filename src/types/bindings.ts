@@ -1370,6 +1370,27 @@ async clearWebview2Cache() : Promise<Result<null, CommandError>> {
 }
 },
 /**
+ * Reveal the folder holding this install's log files.
+ * 
+ * The whole point of writing logs to disk is that a user can attach
+ * one to a bug report, which they can only do if they can find it. The
+ * path is computed here from the storage root — never accepted from
+ * the frontend — so this cannot be turned into an arbitrary "open this
+ * path" primitive.
+ * 
+ * # Errors
+ * 
+ * - `system.open_failed` — the OS file manager could not be launched.
+ */
+async openLogsFolder() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_logs_folder") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Read a single config value by `key`, falling back to `""` when
  * the file is missing / unreadable / the key is absent.
  * 

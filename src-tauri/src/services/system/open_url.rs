@@ -101,6 +101,30 @@ pub async fn open_url(url: &str) -> Result<(), SystemError> {
     .map_err(SystemError::SpawnBlockingFailed)?
 }
 
+/// Reveal a local directory in the OS file manager.
+///
+/// Separate from [`open_url`] on purpose: the scheme allowlist there
+/// exists to stop arbitrary strings reaching the shell, and a path is
+/// not a URL. Callers must pass a path *the app computed itself*, never
+/// one supplied by a page or a config value.
+///
+/// # Errors
+///
+/// - [`SystemError::OpenFailed`] — the OS opener returned an I/O error.
+/// - [`SystemError::SpawnBlockingFailed`] — the blocking task panicked
+///   or was cancelled.
+pub async fn open_directory(dir: &std::path::Path) -> Result<(), SystemError> {
+    let owned = dir.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        open::that(&owned).map_err(|source| SystemError::OpenFailed {
+            url: owned.display().to_string(),
+            source,
+        })
+    })
+    .await
+    .map_err(SystemError::SpawnBlockingFailed)?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

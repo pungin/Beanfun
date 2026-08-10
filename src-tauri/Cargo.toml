@@ -76,6 +76,9 @@ anyhow = "1"
 # Logging / tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Non-blocking file writer behind the on-disk log layer
+# (see services::logging) so a slow disk never stalls a traced call.
+tracing-appender = "0.2"
 
 # HTTP client (rustls — avoid OpenSSL dependency)
 # native-tls (SChannel on Windows), NOT rustls: reCAPTCHA Enterprise fingerprints

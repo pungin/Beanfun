@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 use commands::error::CommandError;
 use commands::state::AppState;
 use tauri::Manager;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 /// Canonical location of the auto-generated `bindings.ts` the
 /// frontend imports from.
@@ -458,18 +458,22 @@ pub fn default_typescript_exporter() -> specta_typescript::Typescript {
 ///   cookie jar dumps, regex preview bodies) without forcing a
 ///   `RUST_LOG` env var on every contributor's shell.
 ///
-/// # Output destination
+/// # Output destinations
 ///
-/// Default [`tracing_subscriber::fmt`] writes to **stderr**. In
-/// `cargo tauri dev` that's the same terminal that runs the dev
-/// server, so logs appear interleaved with Vite's HMR output and
-/// Cargo's compile messages. For the production Windows build the
-/// `windows_subsystem = "windows"` attribute in `main.rs` suppresses
-/// the console window, so stderr lands in the void; future P-stage
-/// work can route to a file via [`tauri-plugin-log`] or a custom
-/// rolling-file appender if production observability becomes a
-/// requirement (none today — WPF parity scope only covers dev-time
-/// debugging).
+/// Two layers, both fed by the same filter:
+///
+/// - **stderr** — for `cargo tauri dev`, where it lands in the terminal
+///   running the dev server.
+/// - **a file** under `%APPDATA%\Beanfun\logs\` — for everyone else.
+///   The production Windows build sets `windows_subsystem = "windows"`
+///   in `main.rs`, so there is no console and stderr goes nowhere. Every
+///   user-reported problem used to arrive with no evidence attached
+///   (see [`crate::services::logging`] for what that cost us on issue
+///   #356). The file layer is what makes "send me the log" possible.
+///
+/// File logging is best-effort: if the folder or file cannot be
+/// created, the stderr layer is installed alone rather than failing the
+/// launch.
 ///
 /// # Test isolation
 ///
@@ -491,11 +495,49 @@ pub fn default_typescript_exporter() -> specta_typescript::Typescript {
 /// could only flatten into prose are now first-class and, with this
 /// subscriber installed, queryable via downstream JSON exporters
 /// when we eventually need them.
-fn init_tracing() {
+fn init_tracing(storage_root: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,beanfun_lib=debug"));
 
-    fmt().with_env_filter(filter).with_target(true).init();
+    let stderr_layer = tracing_subscriber::fmt::layer().with_target(true);
+
+    // One file per launch, named so a sort is chronological.
+    let opened = storage_root.and_then(|root| {
+        let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+        services::logging::open_log_file(root, &stamp, std::process::id())
+    });
+
+    let Some((path, file)) = opened else {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(stderr_layer)
+            .init();
+        return None;
+    };
+
+    // The worker guard must outlive every log call, i.e. the process.
+    // Leaking it is the honest way to say "this lives forever" — a
+    // `static` would need interior mutability for the same effect.
+    let (writer, guard) = tracing_appender::non_blocking(file);
+    Box::leak(Box::new(guard));
+
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_target(true)
+        // No terminal on the other end, so escape codes would just be
+        // noise in a file the user is going to paste into an issue.
+        .with_ansi(false)
+        .with_writer(writer);
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(stderr_layer)
+        .with(file_layer)
+        .init();
+
+    Some(path)
 }
 
 /// Tauri application entry point.
@@ -507,19 +549,32 @@ fn init_tracing() {
 ///
 /// # Boot ordering
 ///
-/// [`init_tracing`] is the very first call so even the storage-root
-/// resolver gets a live subscriber if it ever grows a `tracing::warn!`
-/// (today it short-circuits via [`eprintln!`] for the fatal path so
-/// the tracing layer is unused there, but the ordering is the
-/// safe default for future additions).
+/// The storage root resolves *before* [`init_tracing`], because the log
+/// file lives under it. Nothing logs in between: the resolver's only
+/// failure path is the fatal [`eprintln!`] below, which needs no
+/// subscriber. Anything added to the resolver later must keep that
+/// property or move after this call.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    init_tracing();
-
     let storage_root = resolve_storage_root().unwrap_or_else(|err| {
         eprintln!("fatal: cannot resolve storage root — {err}");
         std::process::exit(1);
     });
+
+    let log_path = init_tracing(Some(&storage_root));
+    match log_path {
+        Some(path) => tracing::info!(
+            version = env!("CARGO_PKG_VERSION"),
+            pid = std::process::id(),
+            path = %path.display(),
+            "beanfun starting; logging to file"
+        ),
+        None => tracing::warn!(
+            version = env!("CARGO_PKG_VERSION"),
+            pid = std::process::id(),
+            "beanfun starting; file logging unavailable"
+        ),
+    }
 
     // WebView2 browser arguments — attached to the main window builder in
     // `setup` (runtime windows share the per-instance environment the main

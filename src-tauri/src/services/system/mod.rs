@@ -22,10 +22,10 @@
 //! | Module         | Responsibility                                                    |
 //! | -------------- | ----------------------------------------------------------------- |
 //! | [`error`]      | `SystemError` — typed failures across the system service          |
-//! | [`mod@open_url`] | `open_url` — scheme-allowlisted wrapper over [`open::that`]     |
+//! | [`mod@open_url`] | `open_url` — scheme-allowlisted wrapper over [`open::that`]; `open_directory` — reveal a local folder |
 
 pub mod error;
 pub mod open_url;
 
 pub use error::SystemError;
-pub use open_url::open_url;
+pub use open_url::{open_directory, open_url};

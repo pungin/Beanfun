@@ -122,6 +122,7 @@ import {
   Brush,
   Clock,
   Delete,
+  Document,
   FolderOpened,
   InfoFilled,
   Operation,
@@ -703,6 +704,15 @@ async function handleClearWebviewCache(): Promise<void> {
   if (result.ok) ElMessage.success(t('settings.clearWebviewCacheDone'))
 }
 
+/**
+ * Reveal the log folder. Logs only help if a reporter can find them,
+ * and asking someone to paste `%APPDATA%\Beanfun\logs` into Explorer
+ * loses people who would otherwise have sent us the evidence.
+ */
+async function handleOpenLogsFolder(): Promise<void> {
+  await safeInvoke(commands.openLogsFolder())
+}
+
 /* --------------- mount --------------- */
 
 /* --------------- MapleStory Classic — NGM path fallback --------------- */
@@ -1169,6 +1179,20 @@ onMounted(() => {
               <el-icon><Delete /></el-icon>
               <span>{{ t('settings.clearWebviewCache') }}</span>
             </el-button>
+            <el-tooltip
+              placement="top"
+              popper-class="settings__tip-popper"
+              :content="t('settings.openLogsFolderTip')"
+            >
+              <el-button
+                class="bf-btn-secondary"
+                data-test="settings-open-logs"
+                @click="handleOpenLogsFolder"
+              >
+                <el-icon><Document /></el-icon>
+                <span>{{ t('settings.openLogsFolder') }}</span>
+              </el-button>
+            </el-tooltip>
           </div>
         </section>
 
