@@ -2113,7 +2113,7 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
     .resizable(true)
     // Same dead-`target="_blank"` problem as the in-app browser — the
     // sign-in page's help / register links are exactly that shape.
-    .initialization_script(crate::commands::link_policy::KEEP_LINKS_IN_WINDOW)
+    .initialization_script(crate::commands::remote_page::KEEP_LINKS_IN_WINDOW)
     .initialization_script(build_gamepass_init_script(&account, &password).as_str())
     .on_page_load(move |window, payload| {
         // Only the `Finished` edge matters — `Started` fires before
