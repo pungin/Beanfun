@@ -9,9 +9,12 @@
 //! is not ours to fix: the control is cancelled, the IPC is denied, and
 //! nothing happens.
 //!
-//! Two APIs are affected today; both shims are pure page-side JavaScript
+//! Three shims live here, covering `target="_blank"` links, `alert()`,
+//! and popups that never come back. All are pure page-side JavaScript
 //! with no IPC and no capability, so they close the gap without opening
-//! one.
+//! one. A test asserts each is actually injected into each remote
+//! window — a shim that ships wired to nothing fixes nothing, and that
+//! has already happened once here.
 //!
 //! # The dead-button bug
 //!
@@ -207,6 +210,80 @@ pub const RESTORE_ALERT: &str = r#"
 })();
 "#;
 
+/// Stops pages falling back to a blocked `<iframe>` when a popup does
+/// not come back.
+///
+/// # The symptom
+///
+/// ```text
+/// Framing 'https://accounts.gamania.com/' violates the following
+/// Content Security Policy directive: "frame-ancestors 'none'"
+/// ```
+///
+/// Gamania's account host refuses framing outright — measured on `/`,
+/// `/login` and `/signin?client_id=…`, all three answer
+/// `frame-ancestors 'none'` plus `X-Frame-Options: SAMEORIGIN`, and the
+/// headers are byte-identical under a WebView2 and a plain Chrome
+/// user-agent. Nothing on our side can permit that framing, and the same
+/// page works in Chrome — so the page is not *supposed* to be framing
+/// it. It is falling back to an iframe because its popup never arrived.
+///
+/// # Why the popup never arrives
+///
+/// `window.open` returns `null` in a wry-hosted WebView2. Measured in
+/// the main window, which registers **no** `NewWindowRequested` handler
+/// at all: the return value is still `null`. So this is not our
+/// popup-to-same-window policy — WebView2 simply does not create a
+/// popup, or hand back a `WindowProxy`, unless the host supplies a
+/// webview for it through `put_NewWindow`.
+///
+/// The page then reads that `null` as "popup blocked" and takes its
+/// fallback path, which is the framing attempt above.
+///
+/// # What this does
+///
+/// Calls through to the real `window.open` — so
+/// [`super::cookie_native::register_new_window_handler`] still routes
+/// the navigation — and then, only when that returns nothing, hands back
+/// a small stand-in carrying the members popup code actually touches
+/// (`closed`, `close`, `focus`, `blur`, `postMessage`, `opener`,
+/// `location.href`). The page stops believing it was blocked, so it
+/// never reaches for the iframe.
+///
+/// This does **not** manufacture a real popup, and there is no opener
+/// relationship: a flow that needs the popup to `postMessage` back to
+/// its parent still cannot complete. Giving pages a genuine second
+/// window means implementing `put_NewWindow` with a deferral and a
+/// second webview built from inside the event handler — a much larger
+/// and deadlock-prone change (see the wry#583 note on
+/// `commands::auth::open_gamepass_window`), and not one to make
+/// speculatively.
+pub const KEEP_POPUPS_ALIVE: &str = r#"
+(function () {
+  var nativeOpen = window.open;
+  window.open = function (url, target, features) {
+    var opened = null;
+    try {
+      opened = nativeOpen.call(window, url, target, features);
+    } catch (_) {}
+    if (opened) return opened;
+    var href = url === undefined || url === null ? '' : String(url);
+    return {
+      closed: false,
+      opener: window,
+      name: target === undefined ? '' : String(target),
+      location: { href: href, assign: function () {}, replace: function () {} },
+      close: function () {
+        this.closed = true;
+      },
+      focus: function () {},
+      blur: function () {},
+      postMessage: function () {},
+    };
+  };
+})();
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,6 +368,85 @@ mod tests {
         // rather than replaced by something that guesses an answer.
         assert!(!RESTORE_ALERT.contains("window.confirm ="));
         assert!(!RESTORE_ALERT.contains("window.prompt ="));
+    }
+
+    #[test]
+    fn the_popup_shim_still_calls_through_to_the_real_open() {
+        // The stand-in must not replace the navigation, only the return
+        // value — otherwise the link goes nowhere at all.
+        assert!(KEEP_POPUPS_ALIVE.contains("nativeOpen.call(window, url, target, features)"));
+        assert!(KEEP_POPUPS_ALIVE.contains("if (opened) return opened;"));
+    }
+
+    #[test]
+    fn the_popup_stand_in_carries_what_popup_code_touches() {
+        for member in [
+            "closed:",
+            "opener:",
+            "close:",
+            "focus:",
+            "blur:",
+            "postMessage:",
+            "location:",
+        ] {
+            assert!(
+                KEEP_POPUPS_ALIVE.contains(member),
+                "the stand-in is missing {member}"
+            );
+        }
+    }
+
+    /// Every shim here must actually be injected into every window that
+    /// renders a remote page.
+    ///
+    /// This exists because [`RESTORE_ALERT`] once shipped with its
+    /// content fully tested and **wired into nothing** — the edit that
+    /// was supposed to add the `initialization_script` calls silently
+    /// never ran. Tests that only assert on the constant cannot see
+    /// that: the script was perfect and dead. This one reads the call
+    /// sites instead.
+    #[test]
+    fn every_shim_is_injected_into_every_remote_window() {
+        use std::path::Path;
+
+        const SHIMS: &[&str] = &["KEEP_LINKS_IN_WINDOW", "RESTORE_ALERT", "KEEP_POPUPS_ALIVE"];
+        // The windows that render pages we do not control.
+        const WINDOWS: &[&str] = &[
+            "web_browser.rs", // in-app browser
+            "auth.rs",        // GamePass sign-in
+            "classic.rs",     // MapleStory Classic portal
+        ];
+
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/commands");
+        let mut missing = Vec::new();
+        for window in WINDOWS {
+            let source = std::fs::read_to_string(dir.join(window)).expect("read call site");
+            for shim in SHIMS {
+                let injected =
+                    format!(".initialization_script(crate::commands::remote_page::{shim}")
+                        .replace(' ', "");
+                let dense: String = source.chars().filter(|c| !c.is_whitespace()).collect();
+                if !dense.contains(&injected) {
+                    missing.push(format!("{window} never injects {shim}"));
+                }
+            }
+        }
+
+        assert!(
+            missing.is_empty(),
+            "a shim that is not injected fixes nothing:\n  {}",
+            missing.join("\n  ")
+        );
+    }
+
+    #[test]
+    fn the_popup_shim_needs_no_ipc_and_no_capability() {
+        for forbidden in ["invoke", "__TAURI", "plugin:", "ipc.localhost"] {
+            assert!(
+                !KEEP_POPUPS_ALIVE.contains(forbidden),
+                "the shim must not depend on {forbidden}"
+            );
+        }
     }
 
     #[test]
