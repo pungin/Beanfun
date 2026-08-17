@@ -132,6 +132,7 @@ use regex::Regex;
 
 use crate::core::launch_data::decode_launch_ticket;
 use crate::core::parser::{capture_first, extract_service_account_create_time};
+use crate::core::redact::scrub;
 use crate::core::time::{dt_compact_now, dt_iso_now};
 use crate::core::wcdes::decrypt_hex;
 use crate::services::beanfun::account::ServiceAccount;
@@ -216,16 +217,21 @@ pub async fn get_otp(
         // holding a *successful* `1;…` envelope — its payload carries
         // the live OTP key + ciphertext, which must never be logged.
         // The other variants only ever carry a rejection message.
+        // The body is server-controlled and could echo back a parameter
+        // we sent, so it goes through `scrub` even though its field name
+        // is outside the leak guard's list. `scrub` only rewrites
+        // credential-shaped `k=v` pairs, leaving a plain rejection
+        // message like `0;  Query String Error` intact.
         let raw_response = match err {
-            LoginError::OtpDecryptionFailed { .. } => "<redacted: success envelope>",
-            _ => envelope.as_str(),
+            LoginError::OtpDecryptionFailed { .. } => "<redacted: success envelope>".to_owned(),
+            _ => scrub(&envelope),
         };
         tracing::warn!(
             error = %err,
             request_url = %redact_otp_url(&url),
             raw_response,
             raw_response_len = envelope.len(),
-            "OTP step 5 failed — verbatim server response logged for diagnosis"
+            "OTP step 5 failed — server response logged for diagnosis"
         );
     }
     result
@@ -470,7 +476,7 @@ async fn step_5_post_otp_v2(
             body_len = body.len(),
             // Byte-slicing the body directly would panic on a preview
             // boundary that lands mid-codepoint.
-            body_preview = %snippet_for_diagnostics(&body),
+            body_preview = %scrub(&snippet_for_diagnostics(&body)),
             "get_webstart_otp_v2.ashx returned a body that is not the expected JSON"
         );
         LoginError::OtpEmptyResponse
