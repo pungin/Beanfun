@@ -196,8 +196,6 @@ pub async fn get_otp(
     service_region: &str,
 ) -> Result<String, LoginError> {
     let step1 = step_1_init(client, account, service_code, service_region).await?;
-    let secret_code = step_2_get_secret_code(client).await?;
-    step_3_record_start(client, account, &step1, service_code, service_region).await?;
 
     // Branch on the page's own shape rather than on the region: a page
     // that carries `m_objData` is one whose OTP now comes from the v2
@@ -205,20 +203,30 @@ pub async fn get_otp(
     // `Query String Error`. Observed migrated on TW; HK's page has no
     // such literal and keeps the legacy path. If HK migrates later this
     // needs no change.
-    // Both step 5s identify the caller with the same three values, so
-    // resolve them once here rather than in each branch.
-    let integrity = resolve_client_integrity().await;
-
     if let Some(handoff) = &step1.launch {
-        // Deliberately no long poll on this path. The page's
+        // Recording the start is what the page does alongside opening
+        // the launcher, and nothing downstream depends on it — so a
+        // migrated page missing a field it no longer has to carry must
+        // not cost the user their password.
+        if let Err(error) =
+            step_3_record_start(client, account, &step1, service_code, service_region).await
+        {
+            tracing::warn!(%error, "could not record the service start; continuing");
+        }
+
+        // Deliberately no secret code and no long poll on this path.
+        // The v2 request does not carry a secret code, and the page's
         // `GetResultByLongPolling` call is the launcher's installation
-        // check, unrelated to the password, and it holds the connection
-        // open — waiting on it only delays every retrieval.
+        // check — unrelated to the password, and it holds the
+        // connection open.
+        let integrity = resolve_client_integrity().await;
         return step_5_post_otp_v2(client, handoff, &integrity, &step1.page_url).await;
     }
 
-    // The legacy path still primes server-side state with it.
+    let secret_code = step_2_get_secret_code(client).await?;
+    step_3_record_start(client, account, &step1, service_code, service_region).await?;
     step_4_long_poll(client, &step1.long_polling_key).await?;
+    let integrity = resolve_client_integrity().await;
 
     let url = build_get_webstart_otp_url(
         client,
@@ -333,8 +341,28 @@ async fn step_1_init(
     ensure_success(&resp, "game_start_step2.aspx")?;
     let body = client.bounded_text(resp).await?;
 
-    let long_polling_key = parse_long_polling_key(&body)?;
+    // Read the handoff *first*: it decides which route this page is on,
+    // and therefore which of the literals below are required at all.
+    //
+    // A migrated page has dropped the ones the old flow used — there is
+    // no `GetResultByLongPolling&key=` on it any more, because the page
+    // no longer polls; it opens the launcher. Parsing them before
+    // looking would fail the whole retrieval before the handoff is even
+    // read, and the reported error would name a literal that is *meant*
+    // to be gone.
+    let launch = parse_launch_handoff(&body);
+    let migrated = launch.is_some();
+
+    let long_polling_key = match parse_long_polling_key(&body) {
+        Ok(key) => key,
+        Err(_) if migrated => String::new(),
+        Err(e) => return Err(e),
+    };
     let unk_data = match client.config().region {
+        // Still wanted when present — it is the service-start form's
+        // anti-forgery field — but not worth failing a retrieval over
+        // on a page that no longer has to carry it.
+        LoginRegion::TW if migrated => parse_unk_data(&body).ok(),
         LoginRegion::TW => Some(parse_unk_data(&body)?),
         LoginRegion::HK => None,
     };
@@ -344,12 +372,14 @@ async fn step_1_init(
     // fallback scrape gets its chance.
     let screatetime = match account.screatetime.as_deref() {
         Some(s) if !s.is_empty() => s.to_string(),
-        _ => parse_screatetime_fallback(&body)?,
+        // The v2 request does not carry a create time; only the
+        // best-effort service-start form does.
+        _ => match parse_screatetime_fallback(&body) {
+            Ok(t) => t,
+            Err(_) if migrated => String::new(),
+            Err(e) => return Err(e),
+        },
     };
-
-    // Absence is not an error here: the legacy path does not need it,
-    // and the v2 path reports its own typed error when it is missing.
-    let launch = parse_launch_handoff(&body);
 
     Ok(Step1Data {
         page_url,

@@ -756,3 +756,63 @@ async fn tw_v2_refusal_surfaces_the_server_message() {
         "the endpoint's own message must survive, got: {err}"
     );
 }
+
+/// A migrated page carries the handoff and nothing else.
+///
+/// The literals the old flow read are gone with the flow that used
+/// them: the page no longer polls, so there is no
+/// `GetResultByLongPolling&key=`, and no `MyAccountData` form fragment
+/// either. This is the shape the live TW page actually has.
+fn step1_body_tw_migrated_only_handoff(payload: &str) -> String {
+    format!(
+        "<script>\nvar m_objData = {{ \"region\": \"TW;Production\", \"sn\": \"SN-1234\", \"data\": \"{payload}\" }};\n</script>"
+    )
+}
+
+/// The retired literals must not be required to reach the handoff.
+///
+/// Demanding them ran the retrieval into a failure that named a literal
+/// which is *meant* to be absent — before the handoff sitting in the
+/// same page had even been read. On the live TW page there is nothing
+/// else left to parse, so this is the case that matters most.
+#[tokio::test]
+async fn tw_v2_works_on_a_page_that_kept_only_the_handoff() {
+    let server = MockServer::start().await;
+    let client = client_for(&server, LoginRegion::TW);
+    let session = test_session(LoginRegion::TW);
+    // No stored create time either, so the fallback scrape is exercised
+    // on a page that has nothing to give it.
+    let account = account_with(None);
+
+    let ticket = "c".repeat(64);
+    let plaintext = format!("LaunchTicket={ticket}&ServiceAccount=acct");
+    let payload = launch_payload(&plaintext, "1a2b3c4d", 4, TABLES[4]);
+
+    mount_step1(&server, &step1_body_tw_migrated_only_handoff(&payload)).await;
+    // Deliberately no secret-code and no service-start mocks: the v2
+    // route must not depend on either. An unmatched request would fail
+    // the exchange, which is exactly what this asserts.
+    Mock::given(method("POST"))
+        .and(path(
+            "/beanfun_block/generic_handlers/get_webstart_otp_v2.ashx",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+            r#"{{"result":1,"data":"{}","message":null}}"#,
+            v2_data("OTP98765", "ABCDEFGH")
+        )))
+        .mount(&server)
+        .await;
+
+    let otp = get_otp(&client, &session, &account, SERVICE_CODE, SERVICE_REGION)
+        .await
+        .expect("a page with only the handoff must still yield a password");
+    assert_eq!(otp, "OTP98765");
+
+    let requests = server.received_requests().await.unwrap_or_default();
+    assert!(
+        !requests
+            .iter()
+            .any(|r| r.url.path().ends_with("get_cookies.ashx")),
+        "the v2 request carries no secret code, so fetching one is a wasted round trip"
+    );
+}
