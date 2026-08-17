@@ -139,7 +139,7 @@ use chrono::Local;
 use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use regex::Regex;
 
-use crate::core::launch_data::decode_launch_ticket;
+use crate::core::launch_data::{decode_launch_data, LaunchPayload, LegacyOtpParams};
 use crate::core::parser::{capture_first, extract_service_account_create_time};
 use crate::core::redact::scrub;
 use crate::core::time::{dt_compact_now, dt_iso_now};
@@ -220,7 +220,24 @@ pub async fn get_otp(
         // check — unrelated to the password, and it holds the
         // connection open.
         let integrity = resolve_client_integrity().await;
-        return step_5_post_otp_v2(client, handoff, &integrity, &step1.page_url).await;
+
+        // Which endpoint answers is decided by what the blob turned out
+        // to carry, not by the game or the region. Both payloads are
+        // live: MapleStory hands over a `LaunchTicket`, while Mabinogi,
+        // Elsword and others hand over the pre-v2 parameters.
+        let payload =
+            decode_launch_data(&handoff.data).map_err(|e| LoginError::OtpDecryptionFailed {
+                cause: format!("launch data: {e}"),
+            })?;
+        return match payload {
+            LaunchPayload::Ticket(ticket) => {
+                step_5_post_otp_v2(client, handoff, &ticket, &integrity, &step1.page_url).await
+            }
+            LaunchPayload::Legacy(params) => {
+                step_5_get_otp_from_handoff(client, handoff, &params, &integrity, &step1.page_url)
+                    .await
+            }
+        };
     }
 
     let secret_code = step_2_get_secret_code(client).await?;
@@ -311,11 +328,16 @@ struct Step1Data {
 /// Its `region` member is ignored: it is the constant
 /// `"TW;Production"` and no request we make carries it.
 struct LaunchHandoff {
-    /// 36-character GUID, sent as `SN` on the v2 OTP request.
+    /// 36-character GUID, sent as `SN` on either OTP request.
     sn: String,
-    /// Obfuscated blob carrying the `LaunchTicket`, decoded by
-    /// [`decode_launch_ticket`].
+    /// Obfuscated blob carrying the OTP payload, decoded by
+    /// [`decode_launch_data`].
     data: String,
+    /// Present only on pages whose blob carries the pre-v2 payload —
+    /// `ggm.js` forwards these to the launcher exactly when they exist,
+    /// and the pre-v2 OTP URL is the one that needs them.
+    web_token: Option<String>,
+    secret_code: Option<String>,
 }
 
 /// Step 1 — fetch `game_start_step2.aspx`, extract the long-polling
@@ -596,17 +618,82 @@ struct OtpV2Response {
 ///
 /// Replaces the pre-v2 `GET get_webstart_otp.ashx`, which now answers
 /// `0;        Query String Error` regardless of what it is sent.
-async fn step_5_post_otp_v2(
+/// Step 5 (pre-v2, driven by the handoff) — `GET
+/// get_webstart_otp.ashx` with the parameters the blob supplied.
+///
+/// This is the same endpoint the non-migrated path uses, but every
+/// value comes from the page rather than from our own session state.
+/// That matters most for `ppppp`: the WPF-era constant is stale, and
+/// the live one arrives in the blob.
+async fn step_5_get_otp_from_handoff(
     client: &BeanfunClient,
     handoff: &LaunchHandoff,
+    params: &LegacyOtpParams,
     integrity: &ClientIntegrity,
     referer: &str,
 ) -> Result<String, LoginError> {
-    let launch_ticket =
-        decode_launch_ticket(&handoff.data).map_err(|e| LoginError::OtpDecryptionFailed {
-            cause: format!("launch data: {e}"),
-        })?;
+    // `ggm.js` only forwards these two when the page declares them, and
+    // a page that hands over this payload always does. Their absence
+    // means the page shape changed under us, which is worth naming
+    // rather than sending a request that cannot succeed.
+    let (Some(web_token), Some(secret_code)) = (&handoff.web_token, &handoff.secret_code) else {
+        return Err(LoginError::OtpDecryptionFailed {
+            cause: "launch data carries the pre-v2 payload but the page declared no webToken/secretCode".to_owned(),
+        });
+    };
 
+    let base = client.portal_url("beanfun_block/generic_handlers/get_webstart_otp.ashx")?;
+    // As in the WPF builder: only the space in `CreateTime` needs
+    // encoding; every other character in these values is URL-safe.
+    let create_time = params.create_time.replace(' ', "%20");
+    let url = format!(
+        "{base}?SN={sn}&WebToken={web_token}&SecretCode={secret_code}&ppppp={ppppp}\
+         &ServiceCode={sc}&ServiceRegion={sr}&ServiceAccount={sa}&CreateTime={create_time}\
+         &d={tick}&CV={cv}&Hash={hash}&arch={arch}",
+        sn = handoff.sn,
+        ppppp = params.ppppp,
+        sc = params.service_code,
+        sr = params.service_region,
+        sa = params.service_account,
+        tick = tick_count_ms(),
+        cv = utf8_percent_encode(&integrity.cv, ESCAPE_DATA_STRING),
+        hash = utf8_percent_encode(&integrity.hash, ESCAPE_DATA_STRING),
+        arch = utf8_percent_encode(integrity.arch, ESCAPE_DATA_STRING),
+    );
+
+    let resp = client
+        .http()
+        .get(&url)
+        .header(reqwest::header::REFERER, referer)
+        .send()
+        .await?;
+    ensure_success(&resp, "get_webstart_otp.ashx")?;
+    let envelope = client.bounded_text(resp).await?;
+
+    let result = step_6_decrypt(&envelope);
+    if let Err(err) = &result {
+        let raw_response = match err {
+            LoginError::OtpDecryptionFailed { .. } => "<redacted: success envelope>".to_owned(),
+            _ => scrub(&envelope),
+        };
+        tracing::warn!(
+            error = %err,
+            request_url = %redact_otp_url(&url),
+            raw_response,
+            raw_response_len = envelope.len(),
+            "OTP step 5 (handoff, pre-v2) failed — server response logged for diagnosis"
+        );
+    }
+    result
+}
+
+async fn step_5_post_otp_v2(
+    client: &BeanfunClient,
+    handoff: &LaunchHandoff,
+    launch_ticket: &str,
+    integrity: &ClientIntegrity,
+    referer: &str,
+) -> Result<String, LoginError> {
     let url = client.portal_url("beanfun_block/generic_handlers/get_webstart_otp_v2.ashx")?;
     let resp = client
         .http()
@@ -614,7 +701,7 @@ async fn step_5_post_otp_v2(
         .header(reqwest::header::REFERER, referer)
         .json(&OtpV2Request {
             sn: &handoff.sn,
-            launch_ticket: &launch_ticket,
+            launch_ticket,
             cv: &integrity.cv,
             hash: &integrity.hash,
             arch: integrity.arch,
@@ -813,7 +900,12 @@ fn parse_launch_handoff(html: &str) -> Option<LaunchHandoff> {
     if sn.is_empty() || data.is_empty() {
         return None;
     }
-    Some(LaunchHandoff { sn, data })
+    Some(LaunchHandoff {
+        sn,
+        data,
+        web_token: capture_first(launch_web_token_regex(), &block).filter(|v| !v.is_empty()),
+        secret_code: capture_first(launch_secret_code_regex(), &block).filter(|v| !v.is_empty()),
+    })
 }
 
 /// Extract the `m_strSecretCode` JS literal from step 2's response.
@@ -886,6 +978,24 @@ fn launch_data_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(r#""data"\s*:\s*"([^"]*)""#).expect("launch data regex must compile")
+    })
+}
+
+/// `"webToken"` inside that literal. Only pages carrying the pre-v2
+/// payload declare it.
+fn launch_web_token_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#""webToken"\s*:\s*"([^"]*)""#).expect("launch web token regex must compile")
+    })
+}
+
+/// `"secretCode"` inside that literal. As above.
+fn launch_secret_code_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#""secretCode"\s*:\s*"([^"]*)""#)
+            .expect("launch secret code regex must compile")
     })
 }
 
@@ -1521,11 +1631,47 @@ mod tests {
         var ggmCallback = false;
     "#;
 
+    /// The shape every non-MapleStory game was observed to serve: the
+    /// same literal plus the two values the pre-v2 OTP URL needs.
+    const LAUNCH_LITERAL_WITH_TOKENS: &str = r#"
+        var m_objData = {
+            "region": "TW;Production",
+            "sn": "c65aa8c4-ff3a-4372-a842-7e69990f8bee",
+            "webToken": "aaaabbbbccccddddeeeeffff00001111",
+            "secretCode": "1111000fffeeeeddddccccbbbbaaaa22",
+            "data": "7abcdef0123456789"
+        };
+    "#;
+
     #[test]
     fn launch_handoff_extracts_sn_and_data() {
         let handoff = parse_launch_handoff(LAUNCH_LITERAL).expect("literal should parse");
         assert_eq!(handoff.sn, "11111111-2222-3333-4444-555555555555");
         assert_eq!(handoff.data, "5abcdef0123456789");
+    }
+
+    /// A page that declares neither token is the `LaunchTicket` shape;
+    /// nothing may invent values it did not send.
+    #[test]
+    fn launch_handoff_without_tokens_leaves_them_absent() {
+        let handoff = parse_launch_handoff(LAUNCH_LITERAL).expect("literal should parse");
+        assert!(handoff.web_token.is_none());
+        assert!(handoff.secret_code.is_none());
+    }
+
+    #[test]
+    fn launch_handoff_extracts_the_tokens_when_the_page_declares_them() {
+        let handoff =
+            parse_launch_handoff(LAUNCH_LITERAL_WITH_TOKENS).expect("literal should parse");
+        assert_eq!(handoff.sn, "c65aa8c4-ff3a-4372-a842-7e69990f8bee");
+        assert_eq!(
+            handoff.web_token.as_deref(),
+            Some("aaaabbbbccccddddeeeeffff00001111")
+        );
+        assert_eq!(
+            handoff.secret_code.as_deref(),
+            Some("1111000fffeeeeddddccccbbbbaaaa22")
+        );
     }
 
     #[test]
