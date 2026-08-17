@@ -166,7 +166,7 @@ pub async fn get_otp(
     let secret_code = step_2_get_secret_code(client).await?;
     step_3_record_start(client, account, &step1, service_code, service_region).await?;
     step_4_long_poll(client, &step1.long_polling_key).await?;
-    let envelope = step_5_get_otp(
+    let url = build_get_webstart_otp_url(
         client,
         session,
         account,
@@ -174,9 +174,29 @@ pub async fn get_otp(
         &secret_code,
         service_code,
         service_region,
-    )
-    .await?;
-    step_6_decrypt(&envelope)
+        tick_count_ms(),
+    )?;
+    let envelope = step_5_get_otp(client, &url).await?;
+
+    let result = step_6_decrypt(&envelope);
+    if let Err(err) = &result {
+        // `OtpDecryptionFailed` is the one failure that reaches here
+        // holding a *successful* `1;…` envelope — its payload carries
+        // the live OTP key + ciphertext, which must never be logged.
+        // The other variants only ever carry a rejection message.
+        let raw_response = match err {
+            LoginError::OtpDecryptionFailed { .. } => "<redacted: success envelope>",
+            _ => envelope.as_str(),
+        };
+        tracing::warn!(
+            error = %err,
+            request_url = %redact_otp_url(&url),
+            raw_response,
+            raw_response_len = envelope.len(),
+            "OTP step 5 failed — verbatim server response logged for diagnosis"
+        );
+    }
+    result
 }
 
 // -----------------------------------------------------------------------------
@@ -325,38 +345,10 @@ async fn step_4_long_poll(
 /// Step 5 — read the `1;{key}{ciphertext_hex}` envelope from
 /// `get_webstart_otp.ashx`.
 ///
-/// The URL is built **as a string** rather than via reqwest's `.query()`
-/// builder because two of the parameters require WPF-specific encoding
-/// that the form-urlencoder would emit differently:
-///
-/// 1. `CreateTime` contains a literal space (e.g. `2024-01-15 12:34:56`)
-///    that WPF replaces with `%20` (L101 `acc.screatetime.Replace(" ", "%20")`).
-///    reqwest's `.query()` would emit `+` instead, which most servers
-///    accept but is **not** byte-identical to the WPF wire format.
-/// 2. `ppppp` is a 64-char uppercase hex literal that must appear
-///    verbatim — no encoding, no normalisation.
-///
-/// All other characters in the URL (cookies, sids, hex digits) are
-/// already URL-safe, so a literal `format!` is sufficient.
-async fn step_5_get_otp(
-    client: &BeanfunClient,
-    session: &Session,
-    account: &ServiceAccount,
-    step1: &Step1Data,
-    secret_code: &str,
-    service_code: &str,
-    service_region: &str,
-) -> Result<String, LoginError> {
-    let url = build_get_webstart_otp_url(
-        client,
-        session,
-        account,
-        step1,
-        secret_code,
-        service_code,
-        service_region,
-        tick_count_ms(),
-    )?;
+/// Takes the URL pre-built by [`build_get_webstart_otp_url`] (see that
+/// function for why it is assembled as a string) so the caller keeps a
+/// copy to log if the envelope turns out to be a rejection.
+async fn step_5_get_otp(client: &BeanfunClient, url: &str) -> Result<String, LoginError> {
     let resp = client.http().get(url).send().await?;
     ensure_success(&resp, "get_webstart_otp.ashx")?;
     client.bounded_text(resp).await
@@ -562,6 +554,20 @@ fn tick_count_ms() -> i32 {
 ///
 /// Argument order mirrors the WPF URL template (L100-102) so a side-
 /// by-side diff against `BeanfunClient.OTP.cs` is mechanical.
+///
+/// The URL is assembled **as a string** rather than via reqwest's
+/// `.query()` builder because two parameters require WPF-specific
+/// encoding that the form-urlencoder would emit differently:
+///
+/// 1. `CreateTime` contains a literal space (e.g. `2024-01-15 12:34:56`)
+///    that WPF replaces with `%20` (L101 `acc.screatetime.Replace(" ", "%20")`).
+///    reqwest's `.query()` would emit `+` instead, which most servers
+///    accept but is **not** byte-identical to the WPF wire format.
+/// 2. `ppppp` is a 64-char uppercase hex literal that must appear
+///    verbatim — no encoding, no normalisation.
+///
+/// All other characters in the URL (cookies, sids, hex digits) are
+/// already URL-safe, so a literal `format!` is sufficient.
 #[allow(clippy::too_many_arguments)]
 fn build_get_webstart_otp_url(
     client: &BeanfunClient,
@@ -590,6 +596,36 @@ fn build_get_webstart_otp_url(
         create_time = create_time_encoded,
         tick = tick,
     ))
+}
+
+/// Secret-bearing query parameters of step 5's URL. Their values are
+/// replaced with a length when the URL is logged.
+const OTP_URL_SECRET_PARAMS: [&str; 4] = ["SN", "WebToken", "SecretCode", "ServiceAccount"];
+
+/// Rewrite step 5's URL so it is safe to put in a log line.
+///
+/// Every parameter *name* survives, and the non-secret values stay
+/// verbatim on purpose — a rotated `ppppp` constant, a reformatted
+/// `CreateTime` or a wrong `ServiceCode` are exactly what a rejection
+/// diagnosis needs to see, and `ppppp` is a hardcoded constant already
+/// visible in this file. The four session-scoped values collapse to
+/// `<N chars>`, which still distinguishes "absent", "truncated" and
+/// "present" without putting a live token on disk.
+fn redact_otp_url(url: &str) -> String {
+    let Some((base, query)) = url.split_once('?') else {
+        return url.to_string();
+    };
+    let redacted = query
+        .split('&')
+        .map(|pair| match pair.split_once('=') {
+            Some((key, value)) if OTP_URL_SECRET_PARAMS.contains(&key) => {
+                format!("{key}=<{} chars>", value.len())
+            }
+            _ => pair.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{base}?{redacted}")
 }
 
 // -----------------------------------------------------------------------------
@@ -963,6 +999,47 @@ mod tests {
         assert!(url.contains("ServiceRegion=T9"), "got: {url}");
         assert!(url.contains("ServiceAccount=SID_1"), "got: {url}");
         assert!(url.contains("d=12345"), "got: {url}");
+    }
+
+    // -------------------------------------------------------------------------
+    // redact_otp_url
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn redact_otp_url_hides_secrets_but_keeps_diagnostic_values() {
+        let url = format!(
+            "https://bfweb.hk.beanfun.com/x.ashx?SN=LPK&WebToken=WEB_TOKEN_X&SecretCode=SECRET&ppppp={PPPPP_LITERAL}&ServiceCode=610074&ServiceRegion=T9&ServiceAccount=SID_1&CreateTime=2024-01-15%2012:34:56&d=12345"
+        );
+        let redacted = redact_otp_url(&url);
+
+        // Secrets gone, but their presence and length still visible.
+        for secret in ["LPK", "WEB_TOKEN_X", "SECRET", "SID_1"] {
+            assert!(
+                !redacted.contains(secret),
+                "{secret} must not survive redaction, got: {redacted}"
+            );
+        }
+        assert!(redacted.contains("WebToken=<11 chars>"), "got: {redacted}");
+        assert!(redacted.contains("SN=<3 chars>"), "got: {redacted}");
+
+        // The values a rejection diagnosis actually needs stay verbatim.
+        assert!(
+            redacted.contains(&format!("ppppp={PPPPP_LITERAL}")),
+            "got: {redacted}"
+        );
+        assert!(
+            redacted.contains("CreateTime=2024-01-15%2012:34:56"),
+            "got: {redacted}"
+        );
+        assert!(redacted.contains("ServiceCode=610074"), "got: {redacted}");
+        assert!(redacted.contains("ServiceRegion=T9"), "got: {redacted}");
+        assert!(redacted.contains("d=12345"), "got: {redacted}");
+    }
+
+    #[test]
+    fn redact_otp_url_passes_through_a_query_less_url() {
+        let url = "https://bfweb.hk.beanfun.com/x.ashx";
+        assert_eq!(redact_otp_url(url), url);
     }
 
     // -------------------------------------------------------------------------
