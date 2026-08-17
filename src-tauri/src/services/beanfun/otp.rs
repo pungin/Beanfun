@@ -119,15 +119,24 @@
 //!
 //! The v2 request needs a `LaunchTicket`, which is *not* a new
 //! server round-trip: it travels obfuscated inside `m_objData.data`,
-//! decoded by [`crate::core::launch_data`]. It also needs `CV` and
-//! `Hash`, which identify the official launcher build and are pinned
-//! as constants here. `docs/OTP-PROTOCOL-CHANGE.md` has the full
-//! derivation and the provenance of those two values.
+//! decoded by [`crate::core::launch_data`]. It also needs `CV`,
+//! `Hash` and `arch`, which identify the official launcher build and
+//! come from [`super::client_integrity`].
+//! `docs/OTP-PROTOCOL-CHANGE.md` has the full derivation.
+//!
+//! # The same three values on the legacy path
+//!
+//! The pre-v2 `GET` grew the identical `&CV=…&Hash=…&arch=…` suffix in
+//! Game Manager 1.5.x — `GGM.Shared.Beanfun.BeanfunUrlBuilder.BuildOtpUrl`
+//! appends it — and rejects requests that omit it. Sending it keeps the
+//! legacy fallback above genuinely usable rather than doomed the moment
+//! it is reached. HK, whose page carries no `m_objData` and whose portal
+//! has not been observed to want the suffix, is left byte-identical.
 
 use std::sync::OnceLock;
 
 use chrono::Local;
-use percent_encoding::percent_decode_str;
+use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use regex::Regex;
 
 use crate::core::launch_data::decode_launch_ticket;
@@ -137,6 +146,7 @@ use crate::core::time::{dt_compact_now, dt_iso_now};
 use crate::core::wcdes::decrypt_hex;
 use crate::services::beanfun::account::ServiceAccount;
 use crate::services::beanfun::client::{BeanfunClient, LoginRegion};
+use crate::services::beanfun::client_integrity::ClientIntegrity;
 use crate::services::beanfun::error::LoginError;
 use crate::services::beanfun::login::ensure_success;
 use crate::services::beanfun::session::Session;
@@ -195,8 +205,12 @@ pub async fn get_otp(
     // `Query String Error`. Observed migrated on TW; HK's page has no
     // such literal and keeps the legacy path. If HK migrates later this
     // needs no change.
+    // Both step 5s identify the caller with the same three values, so
+    // resolve them once here rather than in each branch.
+    let integrity = resolve_client_integrity().await;
+
     if let Some(handoff) = &step1.launch {
-        return step_5_post_otp_v2(client, handoff).await;
+        return step_5_post_otp_v2(client, handoff, &integrity).await;
     }
 
     let url = build_get_webstart_otp_url(
@@ -208,6 +222,13 @@ pub async fn get_otp(
         service_code,
         service_region,
         tick_count_ms(),
+        // The suffix is a Game Manager convention, and the Game Manager
+        // is a TW/OATW product; HK's legacy endpoint has not been
+        // observed to want it, so its request stays as it was.
+        match client.config().region {
+            LoginRegion::TW => Some(&integrity),
+            LoginRegion::HK => None,
+        },
     )?;
     let envelope = step_5_get_otp(client, &url).await?;
 
@@ -401,22 +422,20 @@ async fn step_4_long_poll(
     Ok(())
 }
 
-/// Identity of the official launcher that `get_webstart_otp_v2.ashx`
-/// expects its caller to present.
+/// Resolve the launcher identity off the async executor.
 ///
-/// `CV` is `GGMWebStart.dll`'s managed assembly version and `Hash` is
-/// the SHA-256 of that file's bytes in lowercase hex — the launcher
-/// computes both at runtime. We cannot, so they are pinned here and
-/// must be re-pinned whenever Gamania ships a new Game Manager;
-/// `generic_handlers/CheckVersion.ashx` announces that in 80 bytes and
-/// is the cheapest way to notice. See `docs/OTP-PROTOCOL-CHANGE.md`.
-///
-/// Values from the reverse engineering in pungin/Beanfun#368 for
-/// Game Manager 1.5.0.2; not independently verified here.
-const GGM_CV: &str = "1.5.0.2";
-const GGM_DLL_SHA256: &str = "dfd568a69d87abcd8f4a93d1a4481ebb57712d1d28ab0b6fc018fcf140101e06";
-/// `Environment.Is64BitProcess` in the launcher. It ships 64-bit.
-const GGM_ARCH: &str = "x64";
+/// [`ClientIntegrity::resolve`] reads and hashes a ~1.3 MB file; a cold
+/// cache makes that long enough to be worth handing to `spawn_blocking`.
+/// A join failure (runtime shutting down) degrades to the bundled
+/// constants rather than failing the OTP outright.
+async fn resolve_client_integrity() -> ClientIntegrity {
+    tokio::task::spawn_blocking(ClientIntegrity::resolve)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "client-integrity resolve task failed; using bundled constants");
+            ClientIntegrity::fallback()
+        })
+}
 
 /// Body of the v2 OTP request. Field names are PascalCase on the wire
 /// except `arch`, matching the launcher verbatim.
@@ -449,6 +468,7 @@ struct OtpV2Response {
 async fn step_5_post_otp_v2(
     client: &BeanfunClient,
     handoff: &LaunchHandoff,
+    integrity: &ClientIntegrity,
 ) -> Result<String, LoginError> {
     let launch_ticket =
         decode_launch_ticket(&handoff.data).map_err(|e| LoginError::OtpDecryptionFailed {
@@ -462,9 +482,9 @@ async fn step_5_post_otp_v2(
         .json(&OtpV2Request {
             sn: &handoff.sn,
             launch_ticket: &launch_ticket,
-            cv: GGM_CV,
-            hash: GGM_DLL_SHA256,
-            arch: GGM_ARCH,
+            cv: &integrity.cv,
+            hash: &integrity.hash,
+            arch: integrity.arch,
         })
         .send()
         .await?;
@@ -778,6 +798,18 @@ fn tick_count_ms() -> i32 {
 ///
 /// All other characters in the URL (cookies, sids, hex digits) are
 /// already URL-safe, so a literal `format!` is sufficient.
+/// Characters `Uri.EscapeDataString` leaves alone: the RFC 3986
+/// unreserved set (`ALPHA / DIGIT / "-" / "." / "_" / "~"`).
+///
+/// [`NON_ALPHANUMERIC`] escapes the four punctuation marks too, so they
+/// are removed to match .NET exactly — a dotted version would otherwise
+/// go out as `1%2E5%2E0%2E2`.
+const ESCAPE_DATA_STRING: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
+
 #[allow(clippy::too_many_arguments)]
 fn build_get_webstart_otp_url(
     client: &BeanfunClient,
@@ -788,12 +820,13 @@ fn build_get_webstart_otp_url(
     service_code: &str,
     service_region: &str,
     tick: i32,
+    integrity: Option<&ClientIntegrity>,
 ) -> Result<String, LoginError> {
     let base = client.portal_url("beanfun_block/generic_handlers/get_webstart_otp.ashx")?;
     // WPF replaces only spaces with `%20`; every other char in the
     // screatetime format (`yyyy-MM-dd HH:mm:ss`) is already URL-safe.
     let create_time_encoded = step1.screatetime.replace(' ', "%20");
-    Ok(format!(
+    let mut url = format!(
         "{base}?SN={sn}&WebToken={web_token}&SecretCode={secret_code}&ppppp={ppppp}&ServiceCode={sc}&ServiceRegion={sr}&ServiceAccount={sid}&CreateTime={create_time}&d={tick}",
         base = base,
         sn = step1.long_polling_key,
@@ -805,7 +838,21 @@ fn build_get_webstart_otp_url(
         sid = account.sid,
         create_time = create_time_encoded,
         tick = tick,
-    ))
+    );
+    if let Some(integrity) = integrity {
+        use std::fmt::Write as _;
+        // Appended last, in this order, exactly as `BuildOtpUrl` does.
+        // Infallible for a String sink; the result is discarded rather
+        // than unwrapped to keep the builder panic-free.
+        let _ = write!(
+            url,
+            "&CV={cv}&Hash={hash}&arch={arch}",
+            cv = utf8_percent_encode(&integrity.cv, ESCAPE_DATA_STRING),
+            hash = utf8_percent_encode(&integrity.hash, ESCAPE_DATA_STRING),
+            arch = utf8_percent_encode(integrity.arch, ESCAPE_DATA_STRING),
+        );
+    }
+    Ok(url)
 }
 
 /// Secret-bearing query parameters of step 5's URL. Their values are
@@ -1155,14 +1202,12 @@ mod tests {
     // build_get_webstart_otp_url
     // -------------------------------------------------------------------------
 
-    #[test]
-    fn step5_url_replaces_screatetime_spaces_with_percent20() {
-        // Build a tiny client + session and verify the URL string
-        // contains `%20` (not `+`) where screatetime had a space.
+    /// Shared fixture for the legacy URL-builder tests.
+    fn step5_url_fixture(region: LoginRegion, integrity: Option<&ClientIntegrity>) -> String {
         use crate::services::beanfun::client::ClientConfig;
-        let client = BeanfunClient::new(ClientConfig::for_region(LoginRegion::TW)).unwrap();
+        let client = BeanfunClient::new(ClientConfig::for_region(region)).unwrap();
         let session = Session::new(
-            LoginRegion::TW,
+            region,
             "SKEY_X",
             "WEB_TOKEN_X",
             "ACCOUNT_ID_X",
@@ -1184,14 +1229,29 @@ mod tests {
             long_polling_key: "LPK".to_string(),
             unk_data: None,
             screatetime: "2024-01-15 12:34:56".to_string(),
-            // This test covers the legacy URL builder, which is the
+            // These tests cover the legacy URL builder, which is the
             // path taken precisely when the page carried no handoff.
             launch: None,
         };
-        let url = build_get_webstart_otp_url(
-            &client, &session, &account, &step1, "SECRET", "610074", "T9", 12345,
+        build_get_webstart_otp_url(
+            &client, &session, &account, &step1, "SECRET", "610074", "T9", 12345, integrity,
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    fn test_integrity() -> ClientIntegrity {
+        ClientIntegrity {
+            cv: "1.5.0.2".to_string(),
+            hash: "dfd568a69d87abcd8f4a93d1a4481ebb57712d1d28ab0b6fc018fcf140101e06".to_string(),
+            arch: "x64",
+        }
+    }
+
+    #[test]
+    fn step5_url_replaces_screatetime_spaces_with_percent20() {
+        // Build a tiny client + session and verify the URL string
+        // contains `%20` (not `+`) where screatetime had a space.
+        let url = step5_url_fixture(LoginRegion::TW, None);
 
         assert!(
             url.contains("CreateTime=2024-01-15%2012:34:56"),
@@ -1212,6 +1272,72 @@ mod tests {
         assert!(url.contains("ServiceRegion=T9"), "got: {url}");
         assert!(url.contains("ServiceAccount=SID_1"), "got: {url}");
         assert!(url.contains("d=12345"), "got: {url}");
+    }
+
+    // -------------------------------------------------------------------------
+    // build_get_webstart_otp_url — client-integrity suffix
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn step5_url_appends_client_integrity_suffix_after_the_cache_buster() {
+        // `BuildOtpUrl` appends CV/Hash/arch last, in that order, after
+        // `&d=`. Pin the whole tail so a future reordering is caught.
+        let integrity = test_integrity();
+        let url = step5_url_fixture(LoginRegion::TW, Some(&integrity));
+
+        assert!(
+            url.ends_with(
+                "&d=12345&CV=1.5.0.2&Hash=dfd568a69d87abcd8f4a93d1a4481ebb57712d1d28ab0b6fc018fcf140101e06&arch=x64"
+            ),
+            "got: {url}",
+        );
+    }
+
+    #[test]
+    fn step5_url_omits_the_suffix_entirely_when_integrity_is_absent() {
+        // The HK path: not an empty `&CV=&Hash=&arch=`, but no suffix at
+        // all, so HK's request stays byte-identical to before.
+        let url = step5_url_fixture(LoginRegion::HK, None);
+
+        assert!(url.ends_with("&d=12345"), "got: {url}");
+        assert!(!url.contains("CV="), "got: {url}");
+        assert!(!url.contains("Hash="), "got: {url}");
+        assert!(!url.contains("arch="), "got: {url}");
+    }
+
+    #[test]
+    fn step5_url_leaves_unreserved_characters_in_the_suffix_unescaped() {
+        // `Uri.EscapeDataString` preserves `-._~`; a naive
+        // `NON_ALPHANUMERIC` set would emit `1%2E5%2E0%2E2` and the
+        // server would reject the version.
+        let integrity = ClientIntegrity {
+            cv: "1.5.0.2-beta_1~x".to_string(),
+            hash: "abc".to_string(),
+            arch: "x64",
+        };
+        let url = step5_url_fixture(LoginRegion::TW, Some(&integrity));
+
+        assert!(url.contains("&CV=1.5.0.2-beta_1~x"), "got: {url}");
+        assert!(!url.contains("%2E"), "got: {url}");
+        assert!(!url.contains("%2D"), "got: {url}");
+        assert!(!url.contains("%5F"), "got: {url}");
+        assert!(!url.contains("%7E"), "got: {url}");
+    }
+
+    #[test]
+    fn step5_url_percent_encodes_reserved_characters_in_the_suffix() {
+        // Defensive: a malformed local launcher version must not be
+        // able to inject extra query parameters into the request.
+        let integrity = ClientIntegrity {
+            cv: "1.0&Hash=evil".to_string(),
+            hash: "aa".to_string(),
+            arch: "x64",
+        };
+        let url = step5_url_fixture(LoginRegion::TW, Some(&integrity));
+
+        assert!(url.contains("&CV=1.0%26Hash%3Devil"), "got: {url}");
+        // Exactly one real `Hash=` parameter survives.
+        assert_eq!(url.matches("&Hash=").count(), 1, "got: {url}");
     }
 
     // -------------------------------------------------------------------------

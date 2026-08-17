@@ -507,3 +507,93 @@ async fn step5_url_carries_ppppp_literal_and_percent20_create_time() {
         .expect("step 5 URL shape happy path");
     assert_eq!(otp, "OK______");
 }
+
+#[tokio::test]
+async fn tw_step5_url_carries_the_client_integrity_triple() {
+    // Issue #368: beanfun answers `0;Query String Error` unless the TW
+    // request fingerprints the client with CV/Hash/arch. The exact
+    // values depend on whether this machine has Gamania Games Manager
+    // installed, so assert their *shape* (a dotted version, 64 lowercase
+    // hex chars, a known arch) rather than pinning the bundled
+    // constants — that keeps the test honest on both kinds of host.
+    let server = MockServer::start().await;
+    let client = client_for(&server, LoginRegion::TW);
+    let session = test_session(LoginRegion::TW);
+    let account = account_with(Some("2024-01-15 12:34:56"));
+    let envelope = make_envelope("ABCDEFGH", "OTPINTEG");
+
+    mount_step1(&server, &step1_body_tw("LPK_CI", "k=v", None)).await;
+    mount_step2(&server, "var m_strSecretCode = 'SECRET';").await;
+    mount_step3_ok(&server).await;
+    mount_step4_ok(&server).await;
+    mount_step5(&server, &envelope).await;
+
+    let otp = get_otp(&client, &session, &account, SERVICE_CODE, SERVICE_REGION)
+        .await
+        .expect("TW OTP succeeds with the integrity suffix");
+    assert_eq!(otp, "OTPINTEG");
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("wiremock records requests");
+    let step5 = requests
+        .iter()
+        .find(|r| r.url.path() == "/beanfun_block/generic_handlers/get_webstart_otp.ashx")
+        .expect("step 5 was requested");
+    let query: std::collections::HashMap<_, _> = step5.url.query_pairs().into_owned().collect();
+
+    let cv = query.get("CV").expect("CV must be present on TW");
+    assert!(
+        cv.split('.')
+            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit())),
+        "CV should be a dotted numeric version, got {cv}",
+    );
+
+    let hash = query.get("Hash").expect("Hash must be present on TW");
+    assert_eq!(hash.len(), 64, "Hash should be a SHA-256 hex digest");
+    assert!(
+        hash.chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+        "Hash should be lowercase hex, got {hash}",
+    );
+
+    let arch = query.get("arch").expect("arch must be present on TW");
+    assert!(arch == "x64" || arch == "x86", "unexpected arch {arch}");
+}
+
+#[tokio::test]
+async fn hk_step5_url_omits_the_client_integrity_triple() {
+    // Gamania Games Manager is a TW/OATW product, so HK's request must
+    // stay byte-identical to its pre-#368 shape.
+    let server = MockServer::start().await;
+    let client = client_for(&server, LoginRegion::HK);
+    let session = test_session(LoginRegion::HK);
+    let account = account_with(Some("2024-02-29 00:00:01"));
+    let envelope = make_envelope("HKKEY123", "HKNOINTG");
+
+    mount_step1(&server, &step1_body_hk("LPK_HK", None)).await;
+    mount_step2(&server, "var m_strSecretCode = 'SECRET_HK';").await;
+    mount_step3_ok(&server).await;
+    mount_step4_ok(&server).await;
+    mount_step5(&server, &envelope).await;
+
+    let otp = get_otp(&client, &session, &account, SERVICE_CODE, SERVICE_REGION)
+        .await
+        .expect("HK OTP succeeds without the integrity suffix");
+    assert_eq!(otp, "HKNOINTG");
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("wiremock records requests");
+    let step5 = requests
+        .iter()
+        .find(|r| r.url.path() == "/beanfun_block/generic_handlers/get_webstart_otp.ashx")
+        .expect("step 5 was requested");
+    let query: std::collections::HashMap<_, _> = step5.url.query_pairs().into_owned().collect();
+
+    assert!(!query.contains_key("CV"), "HK must not send CV");
+    assert!(!query.contains_key("Hash"), "HK must not send Hash");
+    assert!(!query.contains_key("arch"), "HK must not send arch");
+}
