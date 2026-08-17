@@ -1,0 +1,7 @@
+{
+  "cv": "1.5.0.2",
+  "hash": "dfd568a69d87abcd8f4a93d1a4481ebb57712d1d28ab0b6fc018fcf140101e06",
+  "arch": "x64",
+  "installer": "https://tw.beanfun.com/ggm/index.aspx",
+  "note": "Client-integrity values beanfun's TW OTP endpoint checks. Edit and push to code to hotfix every user without a release; see docs/GGM-CLIENT-HOTFIX.md. Save as UTF-8; hash must be exactly 64 hex characters."
+}

@@ -561,6 +561,11 @@ pub fn run() {
         std::process::exit(1);
     });
 
+    // The published client-integrity values are cached beside Config.xml;
+    // without this the hotfix layer is skipped and resolution falls
+    // through to the installed GGM or the compiled-in pair.
+    services::beanfun::ggm_hotfix::set_cache_dir(storage_root.clone());
+
     let log_path = init_tracing(Some(&storage_root));
     match log_path {
         Some(path) => tracing::info!(

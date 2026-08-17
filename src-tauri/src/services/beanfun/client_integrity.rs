@@ -127,7 +127,7 @@ impl ClientIntegrity {
     /// -plausible one gives the server a chance to accept where an absent
     /// one is guaranteed to be rejected.
     pub fn resolve() -> Self {
-        match locate_ggm_dll().as_deref().and_then(Self::from_ggm_dll) {
+        match Self::resolve_local() {
             Some(found) => found,
             None => {
                 tracing::debug!(
@@ -135,6 +135,29 @@ impl ClientIntegrity {
                 );
                 Self::fallback()
             }
+        }
+    }
+
+    /// The installed GGM's values, or `None` when there is no GGM to
+    /// read.
+    ///
+    /// Split out from [`Self::resolve`] so the caller can try the
+    /// published values in between rather than dropping straight to the
+    /// compiled-in pair.
+    pub fn resolve_local() -> Option<Self> {
+        locate_ggm_dll().as_deref().and_then(Self::from_ggm_dll)
+    }
+
+    /// Build the triple from a `CV` / `Hash` pair someone published or
+    /// pinned.
+    ///
+    /// `arch` is never published: it describes the binary asking, which
+    /// is this build, not whatever machine produced the values.
+    pub fn from_published(values: &crate::services::beanfun::ggm_hotfix::PublishedValues) -> Self {
+        Self {
+            cv: values.cv.clone(),
+            hash: values.hash.clone(),
+            arch: ARCH,
         }
     }
 

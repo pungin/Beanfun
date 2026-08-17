@@ -481,12 +481,41 @@ async fn step_4_long_poll(
 /// A join failure (runtime shutting down) degrades to the bundled
 /// constants rather than failing the OTP outright.
 async fn resolve_client_integrity() -> ClientIntegrity {
-    tokio::task::spawn_blocking(ClientIntegrity::resolve)
+    use crate::services::beanfun::ggm_hotfix;
+
+    // 1. What the user pinned. An explicit choice outranks everything,
+    //    including a newer published pair.
+    if let Some(pinned) = tokio::task::spawn_blocking(ggm_hotfix::pinned)
+        .await
+        .ok()
+        .flatten()
+    {
+        return ClientIntegrity::from_published(&pinned);
+    }
+
+    // 2. The GGM installed here. It follows its own updates, so these
+    //    values survive beanfun raising the bar without us doing
+    //    anything — and they are this machine's truth rather than a
+    //    guess about it.
+    let local = tokio::task::spawn_blocking(ClientIntegrity::resolve_local)
         .await
         .unwrap_or_else(|e| {
-            tracing::warn!(error = %e, "client-integrity resolve task failed; using bundled constants");
-            ClientIntegrity::fallback()
-        })
+            tracing::warn!(error = %e, "client-integrity resolve task failed");
+            None
+        });
+    if let Some(local) = local {
+        return local;
+    }
+
+    // 3. What we published. This is the hotfix lever: one commit fixes
+    //    every user with no GGM installed, with no release and nothing
+    //    for them to do. See `services::beanfun::ggm_hotfix`.
+    if let Some(published) = ggm_hotfix::published().await {
+        return ClientIntegrity::from_published(&published);
+    }
+
+    // 4. What we shipped with.
+    ClientIntegrity::fallback()
 }
 
 /// Body of the v2 OTP request. Field names are PascalCase on the wire
