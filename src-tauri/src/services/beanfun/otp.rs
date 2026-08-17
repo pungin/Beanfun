@@ -1181,6 +1181,9 @@ mod tests {
             long_polling_key: "LPK".to_string(),
             unk_data: None,
             screatetime: "2024-01-15 12:34:56".to_string(),
+            // This test covers the legacy URL builder, which is the
+            // path taken precisely when the page carried no handoff.
+            launch: None,
         };
         let url = build_get_webstart_otp_url(
             &client, &session, &account, &step1, "SECRET", "610074", "T9", 12345,
