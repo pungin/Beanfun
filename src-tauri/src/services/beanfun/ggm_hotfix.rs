@@ -22,6 +22,10 @@
 //! runbook, including how to tell this failure apart from the ones that
 //! need a code change instead.
 //!
+//! Nobody is expected to notice a new Game Manager by hand:
+//! `.github/workflows/ggm-watch.yml` asks beanfun hourly which build it
+//! ships and opens an issue with the new pair when that moves.
+//!
 //! # Failing quietly is the point
 //!
 //! Every step here is best-effort. A fetch that times out, a file that

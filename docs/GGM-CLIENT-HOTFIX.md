@@ -6,6 +6,12 @@ Gamania Games Manager has just shipped a new build.
 **No code change. No release.** Edit `ggm-client.json` at the repository
 root and push.
 
+You may arrive here from an issue labelled `ggm-version` instead of from
+a user report — the watcher notices a new Game Manager on its own, which
+is the point of it. Step 1 is still worth reading: a new build shipping
+and users failing are two separate facts, and only the second one means
+this lever is the fix.
+
 ---
 
 ## 1. Confirm it is actually this
@@ -37,7 +43,15 @@ compiled-in pair has gone stale.
 
 ## 2. Get the new values
 
-Run on a Windows machine with the **new** GGM installed:
+**Look for an open issue labelled `ggm-version` first.** The watcher
+(`.github/workflows/ggm-watch.yml`) asks beanfun hourly which build it
+ships, and when that moves it installs the thing on a Windows runner and
+posts the finished document — both `cv` and `hash`, ready to paste. You
+may well have the values before anyone reports a failure.
+
+If there is no issue — the watcher failed, or beanfun raised the bar
+without shipping a new build — run this on a Windows machine with the
+**new** GGM installed:
 
 ```powershell
 .\scripts\ggm-client.ps1
@@ -47,8 +61,14 @@ It prints `cv`, `hash` and `arch`, and assembles the document. No GGM?
 Install it from <https://tw.beanfun.com/ggm/index.aspx>, or point at a
 copy of the file with `-Dll <path>`.
 
-A CI runner can produce the hash but **never the version** — the version
-lives in a Windows version resource. Both are required.
+Both halves have to come off the file itself. The version lives in a
+Windows version resource, so a Linux runner can never read it — that is
+the whole reason the watcher spends a Windows runner rather than
+unpacking the installer.
+
+To check the watcher by hand, or after fixing it: **Actions → Watch GGM
+version → Run workflow**, with `force` ticked to make it install and
+read even when the version matches.
 
 ## 3. Write it
 

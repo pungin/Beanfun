@@ -1,0 +1,219 @@
+# Watch for a new Gamania Games Manager, so `ggm-client.json` can be updated
+# before users notice.
+#
+# TW launches state which build of the game manager is asking — its version and
+# the SHA-256 of `GGMWebStart.dll` — and beanfun refuses a pair it doesn't
+# accept. The pair lives in `ggm-client.json`, which the app fetches, so a new
+# manager needs a commit here rather than a release. See
+# `docs/GGM-CLIENT-HOTFIX.md`.
+#
+# beanfun announces the current build in eighty bytes:
+#
+#   GET https://tw.beanfun.com/generic_handlers/CheckVersion.ashx
+#   {"url": "https://tw.beanfun.com/ggm/GGMSetup_1.5.0.2.exe", "version": "1.5.0.2"}
+#
+# `version` is exactly the `cv` we publish, so the hourly check is an equality
+# test on one small GET — nobody has to notice a new manager by hand.
+#
+# Reading the hash needs the DLL, and the DLL is inside an Inno Setup 6.3
+# installer that Ubuntu's innoextract (1.9, from 2020) cannot parse and that
+# 7-Zip sees only as a PE with a large blob appended. A Windows runner sidesteps
+# the question: it installs the thing and reads the file. That runner starts
+# only when the version actually moved, so the hourly cost stays one Linux
+# request.
+#
+# Public repositories don't consume Actions minutes. GitHub runs scheduled jobs
+# late when it's busy, so "hourly" means "roughly hourly".
+
+name: Watch GGM version
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Install and read the pair even if the version matches"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ggm-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check the announced version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.upstream.outputs.version }}
+      url: ${{ steps.upstream.outputs.url }}
+      changed: ${{ steps.compare.outputs.changed }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Ask beanfun which build it ships
+        id: upstream
+        run: |
+          body=$(curl -fsS --max-time 30 \
+            "https://tw.beanfun.com/generic_handlers/CheckVersion.ashx")
+          version=$(printf '%s' "$body" | jq -r '.version // ""')
+          url=$(printf '%s' "$body" | jq -r '.url // ""')
+          if [ -z "$version" ] || [ -z "$url" ]; then
+            echo "::error::CheckVersion.ashx did not answer with a version and url"
+            printf '%s\n' "$body"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "beanfun ships $version ($url)"
+
+      - name: Compare it with what we publish
+        id: compare
+        env:
+          UPSTREAM: ${{ steps.upstream.outputs.version }}
+          FORCED: ${{ inputs.force }}
+        run: |
+          published=$(jq -r '.cv // ""' ggm-client.json)
+          echo "published=$published  upstream=$UPSTREAM  forced=$FORCED"
+          if [ "$published" = "$UPSTREAM" ] && [ "$FORCED" != "true" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "unchanged"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  values:
+    name: Read the new pair
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    runs-on: windows-latest
+    # A silent install that isn't silent waits for a click that will never come.
+    # Nothing here is worth more than a few minutes of a runner.
+    timeout-minutes: 12
+    outputs:
+      cv: ${{ steps.read.outputs.cv }}
+      hash: ${{ steps.read.outputs.hash }}
+
+    steps:
+      # Installing it is the only reliable way to open it: Inno Setup 6.3 is
+      # newer than any unpacker available here. The runner is discarded
+      # afterwards, so what the installer does to the machine doesn't matter.
+      - name: Install the manager and read the file
+        id: read
+        shell: pwsh
+        env:
+          URL: ${{ needs.check.outputs.url }}
+        run: |
+          Invoke-WebRequest -Uri $env:URL -OutFile setup.exe -TimeoutSec 600
+          "downloaded {0:N1} MB" -f ((Get-Item setup.exe).Length / 1MB)
+
+          $dir = Join-Path $env:RUNNER_TEMP 'ggm'
+          $log = Join-Path $env:RUNNER_TEMP 'install.log'
+          $switches = @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', '/SP-',
+            "/DIR=$dir", "/LOG=$log"
+          )
+
+          # Waited on with a limit, not `-Wait`: a runner has no desktop, so an
+          # installer that decides to ask something waits forever. Whatever it
+          # managed to write before being stopped is still worth looking at.
+          $p = Start-Process -FilePath .\setup.exe -PassThru -ArgumentList $switches
+          if ($p.WaitForExit(240000)) {
+            "installer exit code: $($p.ExitCode)"
+          } else {
+            Write-Host "::warning::installer did not finish in 4 minutes; stopping it"
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
+          # It may start itself when it finishes; nothing here wants it running.
+          Get-Process -Name GGMWebStart, GamaniaGameDownloader -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+
+          # Its own log says what it was doing, which is the one thing a hang
+          # cannot otherwise tell us.
+          if (Test-Path $log) {
+            "--- installer log (last 40 lines) ---"
+            Get-Content $log -Tail 40
+          } else {
+            "no installer log at $log"
+          }
+
+          # Looked for whether or not the installer finished cleanly: it may
+          # have written the file before stopping, and the file is all this
+          # wants.
+          $dll = Get-ChildItem $dir -Recurse -Filter GGMWebStart.dll -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $dll) {
+            Write-Host "::error::GGMWebStart.dll not found under $dir"
+            Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue |
+              Select-Object -First 30 -ExpandProperty FullName
+            exit 1
+          }
+
+          $cv = $dll.VersionInfo.FileVersion
+          $hash = (Get-FileHash $dll.FullName -Algorithm SHA256).Hash.ToLower()
+          "cv=$cv" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "hash=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "read $($dll.FullName)"
+          "version $cv"
+          "sha256  $hash"
+
+  report:
+    name: Say so
+    needs: [check, values]
+    # `always()` so a failed read still reports the version — knowing a new
+    # manager shipped is most of the value, even without the hash.
+    if: always() && needs.check.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Open an issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+          URL: ${{ needs.check.outputs.url }}
+          CV: ${{ needs.values.outputs.cv }}
+          HASH: ${{ needs.values.outputs.hash }}
+        run: |
+          # The label has to exist before it can be filtered on or applied, and
+          # it won't on the first run.
+          gh label create ggm-version \
+            --description "beanfun shipped a new Gamania Games Manager" \
+            --color FBCA04 2>/dev/null || true
+
+          # One open issue at a time — this runs hourly.
+          existing=$(gh issue list --state open --label ggm-version --json number \
+            --jq '.[0].number // ""' 2>/dev/null || true)
+          if [ -n "$existing" ]; then
+            echo "issue #$existing is already open"
+            exit 0
+          fi
+
+          installer=$(basename "$URL")
+
+          if [ -n "$HASH" ]; then
+            note=""
+            # The version is stated twice — by beanfun and by the file itself —
+            # and a disagreement means one of them isn't describing what shipped.
+            if [ -n "$CV" ] && [ "$CV" != "$VERSION" ]; then
+              note=$(printf '\n> beanfun announces `%s` but the installed file reports `%s`. Check which\n> one the endpoint accepts before publishing.\n' "$VERSION" "$CV")
+            fi
+            values=$(printf 'Both halves, read from the installed file:\n\n```json\n{\n  "installer": "%s",\n  "cv": "%s",\n  "hash": "%s"\n}\n```\n%s' "$installer" "${CV:-$VERSION}" "$HASH" "$note")
+          else
+            values=$(printf 'The hash could not be read — see the `Read the new pair` job. Run\n`scripts/ggm-client.ps1 -Write` on a machine with the new manager installed.\n\nThe announced version is `%s`.\n' "$VERSION")
+          fi
+
+          body=$(printf 'beanfun now ships Gamania Games Manager `%s`, where `ggm-client.json` still\npublishes a different version.\n\n%s\n\nInstaller: %s\n\nA commit is enough — the app fetches this file, so no release is needed.\nSee `docs/GGM-CLIENT-HOTFIX.md`.\n\nUntil then TW launches keep working for anyone with the manager installed\n(their own copy is read first) and for anyone whose current values still pass.\n' "$VERSION" "$values" "$URL")
+
+          gh issue create \
+            --title "Gamania Games Manager updated to $VERSION" \
+            --label ggm-version \
+            --body "$body"
