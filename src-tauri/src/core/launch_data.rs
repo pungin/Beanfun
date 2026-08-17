@@ -21,12 +21,14 @@
 //! There are two, and both are live:
 //!
 //! - **`LaunchTicket=…`** — a ticket for `get_webstart_otp_v2.ashx`.
-//!   Observed on MapleStory, whose page declares no `webToken` or
-//!   `secretCode`.
+//!   Observed on MapleStory.
 //! - **`ppppp=…`** — the query parameters for the pre-v2
 //!   `get_webstart_otp.ashx`, alongside `ServiceCode`,
-//!   `ServiceRegion`, `ServiceAccount` and `CreateTime`. Observed on
-//!   Mabinogi and Elsword, whose pages do declare those two.
+//!   `ServiceRegion`, `ServiceAccount` and `CreateTime`, joined by
+//!   `&&&&`. Observed on CSO, Elsword and Mabinogi.
+//!
+//! Both kinds of page declare `m_objData`, so only the decoded
+//! contents distinguish them.
 //!
 //! Treating a `ppppp` payload as a failed `LaunchTicket` decode is
 //! what broke every game but MapleStory (upstream issue #376): the
@@ -94,7 +96,7 @@ pub enum LaunchDataError {
     #[error("decrypted launch data carries neither a LaunchTicket nor a ppppp payload")]
     MissingTicket,
 
-    #[error("LaunchTicket is not 64 hex characters (got {0})")]
+    #[error("LaunchTicket field is present but empty")]
     MalformedTicket(String),
 }
 
@@ -106,12 +108,17 @@ impl From<wcdes::WcdesError> for LaunchDataError {
 
 /// The two payloads a `m_objData.data` blob is known to carry.
 ///
-/// Which one a page hands over is not a property of the account or the
-/// region — it is per game. A page that also declares `webToken` and
-/// `secretCode` carries [`LaunchPayload::Legacy`]; one that declares
-/// neither carries [`LaunchPayload::Ticket`]. That matches `ggm.js`,
-/// which forwards those two to the launcher only when they exist, and
-/// it matches the launcher having two OTP URL builders.
+/// Which one a page hands over is per game — whether that game has
+/// been migrated to the v2 endpoint yet. **From the outside the two
+/// pages look identical**: both declare `m_objData`, so the blob has to
+/// be decoded before the route is known. That is why routing on the
+/// mere presence of the literal sent every un-migrated game to an
+/// endpoint with nothing to give it (upstream #376).
+///
+/// Independently measured across four titles by @ToooAir on that
+/// issue: MapleStory (`610074_T9`) carries a ticket; CSO
+/// (`610153_TN`), Elsword (`300148_AF`) and Mabinogi (`600309_A2`)
+/// carry the pre-v2 parameters. All four declare `m_objData`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum LaunchPayload {
     /// A ticket `get_webstart_otp_v2.ashx` takes directly.
@@ -149,7 +156,11 @@ pub fn decode_launch_data(data: &str) -> Result<LaunchPayload, LaunchDataError> 
     };
 
     if let Some(ticket) = field("LaunchTicket") {
-        if ticket.len() != 64 || !ticket.chars().all(|c| c.is_ascii_hexdigit()) {
+        // Presence decides the route; length does not. Pinning it to
+        // the 64 characters seen so far would be the same over-narrow
+        // acceptance that made every `ppppp` game fail, and #376
+        // reports observed lengths moving elsewhere in this protocol.
+        if ticket.is_empty() {
             return Err(LaunchDataError::MalformedTicket(ticket));
         }
         return Ok(LaunchPayload::Ticket(ticket));

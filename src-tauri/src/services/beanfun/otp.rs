@@ -234,8 +234,28 @@ pub async fn get_otp(
                 step_5_post_otp_v2(client, handoff, &ticket, &integrity, &step1.page_url).await
             }
             LaunchPayload::Legacy(params) => {
-                step_5_get_otp_from_handoff(client, handoff, &params, &integrity, &step1.page_url)
-                    .await
+                // The page usually declares these two alongside the
+                // blob, but nothing observed guarantees it — and the
+                // pre-v2 flow already had its own sources for both, so
+                // fall back to those rather than refuse to try.
+                let web_token = match &handoff.web_token {
+                    Some(token) => token.clone(),
+                    None => session.web_token.clone(),
+                };
+                let secret_code = match &handoff.secret_code {
+                    Some(code) => code.clone(),
+                    None => step_2_get_secret_code(client).await?,
+                };
+                step_5_get_otp_from_handoff(
+                    client,
+                    handoff,
+                    &params,
+                    &web_token,
+                    &secret_code,
+                    &integrity,
+                    &step1.page_url,
+                )
+                .await
             }
         };
     }
@@ -625,23 +645,16 @@ struct OtpV2Response {
 /// value comes from the page rather than from our own session state.
 /// That matters most for `ppppp`: the WPF-era constant is stale, and
 /// the live one arrives in the blob.
+#[allow(clippy::too_many_arguments)]
 async fn step_5_get_otp_from_handoff(
     client: &BeanfunClient,
     handoff: &LaunchHandoff,
     params: &LegacyOtpParams,
+    web_token: &str,
+    secret_code: &str,
     integrity: &ClientIntegrity,
     referer: &str,
 ) -> Result<String, LoginError> {
-    // `ggm.js` only forwards these two when the page declares them, and
-    // a page that hands over this payload always does. Their absence
-    // means the page shape changed under us, which is worth naming
-    // rather than sending a request that cannot succeed.
-    let (Some(web_token), Some(secret_code)) = (&handoff.web_token, &handoff.secret_code) else {
-        return Err(LoginError::OtpDecryptionFailed {
-            cause: "launch data carries the pre-v2 payload but the page declared no webToken/secretCode".to_owned(),
-        });
-    };
-
     let base = client.portal_url("beanfun_block/generic_handlers/get_webstart_otp.ashx")?;
     // As in the WPF builder: only the space in `CreateTime` needs
     // encoding; every other character in these values is URL-safe.
