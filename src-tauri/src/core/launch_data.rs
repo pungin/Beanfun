@@ -42,11 +42,17 @@ use crate::core::wcdes::{self, decrypt_hex};
 /// `Command.DecryptParam()`. Each is a permutation of the 16 hex
 /// digits — a precondition for step 2 to be reversible, asserted in
 /// the tests.
-const TABLES: [&str; 4] = [
+/// Public so a wire test can build a payload the way the page does,
+/// rather than pasting one from a capture.
+pub const TABLES: [&str; 8] = [
     "bac987d65e432f10",
     "3bc4d5e6f2a79108",
     "cdbeaf9012456378",
     "4e6fb81a3c5d7092",
+    "bdef1246789ac530",
+    "5f82cb4093e71d6a",
+    "df1468ace0357b92",
+    "b50c61a4f93e82d7",
 ];
 
 /// Length of the ASCII DES key embedded in the normalized hex.
@@ -116,8 +122,50 @@ fn decode(data: &str) -> Result<String, LaunchDataError> {
         .to_digit(16)
         .ok_or(LaunchDataError::BadSelector(selector_char))? as usize;
 
-    let table_index = selector % TABLES.len();
+    // Which table the selector names is not settled. `n % 4` decodes
+    // every payload seen so far, but there are eight tables, and the one
+    // sample available (selector 12) cannot tell `n % 4` apart from the
+    // table order simply differing from the launcher's own indexing.
+    //
+    // So rather than commit to a rule and be wrong for some accounts,
+    // each table is tried until one yields a plaintext carrying a
+    // `LaunchTicket`. A wrong table gives noise, and noise does not
+    // spell a field name by accident, so the signal is sound. Eight DES
+    // passes over ~272 bytes costs nothing measurable, and it keeps
+    // working if beanfun adds a ninth table.
+    //
+    // Most-likely first, so the diagnostic usually names the same one.
+    let rest: String = chars.collect();
+    let mut order: Vec<usize> = vec![selector % 4, selector % TABLES.len()];
+    order.extend(0..TABLES.len());
+
+    let mut tried: Vec<usize> = Vec::with_capacity(TABLES.len());
+    let mut first_error: Option<LaunchDataError> = None;
+    for table_index in order {
+        if tried.contains(&table_index) {
+            continue;
+        }
+        tried.push(table_index);
+        match decode_with(&rest, selector, table_index) {
+            Ok(plaintext) if plaintext.contains("LaunchTicket=") => {
+                tracing::debug!(selector, table = table_index, "launch data table");
+                return Ok(plaintext);
+            }
+            // Decoded to something, but not to our payload — that is a
+            // wrong table, not a broken one.
+            Ok(_) => {}
+            Err(e) => {
+                first_error.get_or_insert(e);
+            }
+        }
+    }
+    Err(first_error.unwrap_or(LaunchDataError::MissingTicket))
+}
+
+/// One decode attempt with the table already chosen.
+fn decode_with(body: &str, selector: usize, table_index: usize) -> Result<String, LaunchDataError> {
     let table = TABLES[table_index];
+    let chars = body.chars();
 
     let normalized = chars
         .map(|c| {

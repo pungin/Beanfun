@@ -27,14 +27,15 @@
 //! | wire shape: step 3 form payload includes `unk_data` (TW)   | wiremock body matcher confirms the extra k=v field                       |
 //! | wire shape: step 5 URL contains `%20`, `ppppp=`, `sid=...` | wiremock query/path matchers confirm verbatim WPF byte format            |
 
+use beanfun_lib::core::launch_data::TABLES;
 use beanfun_lib::core::wcdes::encrypt_hex;
 use beanfun_lib::services::beanfun::{
     get_otp, BeanfunClient, ClientConfig, Endpoints, LoginError, LoginRegion, ServiceAccount,
     Session,
 };
 use url::Url;
-use wiremock::matchers::{body_string_contains, method, path, query_param};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::matchers::{body_string_contains, header_exists, method, path, query_param};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 const SERVICE_CODE: &str = "610074";
 const SERVICE_REGION: &str = "T9";
@@ -596,4 +597,162 @@ async fn hk_step5_url_omits_the_client_integrity_triple() {
     assert!(!query.contains_key("CV"), "HK must not send CV");
     assert!(!query.contains_key("Hash"), "HK must not send Hash");
     assert!(!query.contains_key("arch"), "HK must not send arch");
+}
+
+// -----------------------------------------------------------------------------
+// Group F — the v2 route, on the wire
+// -----------------------------------------------------------------------------
+
+/// Encode a launch payload the way the game-start page does, so the
+/// decoder is exercised against the construction rather than against a
+/// restatement of itself.
+fn launch_payload(plaintext: &str, key: &str, selector: usize, table: &str) -> String {
+    let mut padded = plaintext.to_string();
+    while padded.len() % 8 != 0 {
+        padded.push(char::from(0));
+    }
+    let cipher_hex = encrypt_hex(&padded, key).expect("encrypts");
+
+    let at = selector + 1;
+    let mut normalized = String::new();
+    normalized.push_str(&cipher_hex[..at]);
+    normalized.push_str(key);
+    normalized.push_str(&cipher_hex[at..]);
+
+    let mut out = String::new();
+    out.push(char::from_digit(selector as u32, 16).expect("selector is one hex digit"));
+    for c in normalized.chars() {
+        let index = c.to_digit(16).expect("normalized is hex") as usize;
+        out.push(table.chars().nth(index).expect("table covers every nibble"));
+    }
+    out
+}
+
+/// A migrated TW page: everything step 1 already parses, plus the
+/// launcher hand-off.
+fn step1_body_tw_migrated(payload: &str) -> String {
+    format!(
+        "<script>\nServiceAccountCreateTime: \"2024-01-15 12:34:56\";\nurl = \"GetResultByLongPolling&key=LPK_OK\";\nfoo = MyAccountData.ServiceAccountCreateTime + \"k=v\";\nvar m_objData = {{ \"region\": \"TW;Production\", \"sn\": \"SN-1234\", \"data\": \"{payload}\" }};\n</script>"
+    )
+}
+
+/// The v2 payload: eight characters of ASCII key, then the ciphertext.
+fn v2_data(otp: &str, key: &str) -> String {
+    let mut padded = otp.to_string();
+    while padded.len() % 8 != 0 {
+        padded.push(char::from(0));
+    }
+    format!("{key}{}", encrypt_hex(&padded, key).expect("encrypts"))
+}
+
+/// The v2 exchange, pinned where it actually broke.
+///
+/// Three things moved at once when beanfun migrated TW, and each is
+/// invisible until it fails in the field:
+///
+/// - handlers under `generic_handlers` began checking `Referer`, and
+///   answer a complaint about a null referrer without one;
+/// - the request has to name which launcher build is asking, or the
+///   endpoint says `Query String Error`;
+/// - the retired endpoint refuses everything, so calling it buys only a
+///   wait on the way to the real failure.
+#[tokio::test]
+async fn tw_v2_names_the_page_and_the_build_and_leaves_the_old_endpoint_alone() {
+    let server = MockServer::start().await;
+    let client = client_for(&server, LoginRegion::TW);
+    let session = test_session(LoginRegion::TW);
+    let account = account_with(Some("2024-01-15 12:34:56"));
+
+    let ticket = "a".repeat(64);
+    let plaintext = format!("LaunchTicket={ticket}&ServiceAccount=acct");
+    // Selector 5 with a table `n % 4` cannot reach: a payload the old
+    // four-table decoder would have failed on.
+    let payload = launch_payload(&plaintext, "1a2b3c4d", 5, TABLES[6]);
+
+    mount_step1(&server, &step1_body_tw_migrated(&payload)).await;
+    mount_step2(&server, "var m_strSecretCode = 'SECRET_OK';").await;
+    mount_step3_ok(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path(
+            "/beanfun_block/generic_handlers/get_webstart_otp_v2.ashx",
+        ))
+        .and(header_exists("referer"))
+        .respond_with(move |req: &Request| {
+            let body: serde_json::Value =
+                serde_json::from_slice(&req.body).expect("request body is JSON");
+            assert_eq!(body["SN"], "SN-1234", "the endpoint keys on the page's sn");
+            assert_eq!(body["LaunchTicket"], ticket, "the decoded ticket is sent");
+            for field in ["CV", "Hash", "arch"] {
+                assert!(
+                    body[field].as_str().is_some_and(|v| !v.is_empty()),
+                    "{field} must name the build asking, or the endpoint refuses"
+                );
+            }
+            ResponseTemplate::new(200).set_body_string(format!(
+                r#"{{"result":1,"data":"{}","message":null}}"#,
+                v2_data("OTP12345", "ABCDEFGH")
+            ))
+        })
+        .mount(&server)
+        .await;
+
+    let otp = get_otp(&client, &session, &account, SERVICE_CODE, SERVICE_REGION)
+        .await
+        .expect("v2 OTP");
+    assert_eq!(otp, "OTP12345");
+
+    let requests = server.received_requests().await.unwrap_or_default();
+    assert!(
+        !requests
+            .iter()
+            .any(|r| r.url.path().ends_with("get_webstart_otp.ashx")),
+        "the retired endpoint must not be called on a migrated page"
+    );
+    assert!(
+        !requests
+            .iter()
+            .any(|r| r.url.path().ends_with("get_result.ashx")),
+        "the launcher's install check must not be awaited for a password"
+    );
+}
+
+/// A refusal has to arrive as the endpoint's own words.
+///
+/// `Query String Error` names the cause — a build it does not accept —
+/// and collapsing it into a generic parse failure sends the next
+/// maintainer looking at the decoder instead.
+#[tokio::test]
+async fn tw_v2_refusal_surfaces_the_server_message() {
+    let server = MockServer::start().await;
+    let client = client_for(&server, LoginRegion::TW);
+    let session = test_session(LoginRegion::TW);
+    let account = account_with(Some("2024-01-15 12:34:56"));
+
+    // The decoder rightly insists on a 64-hex ticket, so the fixture
+    // has to look like one.
+    let plaintext = format!("LaunchTicket={}&ServiceAccount=acct", "b".repeat(64));
+    let payload = launch_payload(&plaintext, "1a2b3c4d", 2, TABLES[2]);
+    mount_step1(&server, &step1_body_tw_migrated(&payload)).await;
+    mount_step2(&server, "var m_strSecretCode = 'SECRET_OK';").await;
+    mount_step3_ok(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path(
+            "/beanfun_block/generic_handlers/get_webstart_otp_v2.ashx",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"{"result":0,"data":null,"message":"Query String Error"}"#),
+        )
+        .mount(&server)
+        .await;
+
+    let err = get_otp(&client, &session, &account, SERVICE_CODE, SERVICE_REGION)
+        .await
+        .expect_err("a refusal must surface");
+    assert!(
+        format!("{err}").contains("Query String Error"),
+        "the endpoint's own message must survive, got: {err}"
+    );
 }

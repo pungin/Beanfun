@@ -198,7 +198,7 @@ pub async fn get_otp(
     let step1 = step_1_init(client, account, service_code, service_region).await?;
     let secret_code = step_2_get_secret_code(client).await?;
     step_3_record_start(client, account, &step1, service_code, service_region).await?;
-    step_4_long_poll(client, &step1.long_polling_key).await?;
+
     // Branch on the page's own shape rather than on the region: a page
     // that carries `m_objData` is one whose OTP now comes from the v2
     // endpoint, and the pre-v2 handler answers every request with
@@ -210,8 +210,15 @@ pub async fn get_otp(
     let integrity = resolve_client_integrity().await;
 
     if let Some(handoff) = &step1.launch {
-        return step_5_post_otp_v2(client, handoff, &integrity).await;
+        // Deliberately no long poll on this path. The page's
+        // `GetResultByLongPolling` call is the launcher's installation
+        // check, unrelated to the password, and it holds the connection
+        // open — waiting on it only delays every retrieval.
+        return step_5_post_otp_v2(client, handoff, &integrity, &step1.page_url).await;
     }
+
+    // The legacy path still primes server-side state with it.
+    step_4_long_poll(client, &step1.long_polling_key).await?;
 
     let url = build_get_webstart_otp_url(
         client,
@@ -277,6 +284,14 @@ struct Step1Data {
     /// `account.screatetime` if it was `Some`, or the value
     /// fallback-parsed from this step's response body.
     screatetime: String,
+    /// The page's own URL, query and all.
+    ///
+    /// Handlers under `generic_handlers` began checking `Referer`, and
+    /// answer `The URL referrer is null or from a different domain!`
+    /// without one. Being same-origin, and with beanfun's
+    /// `strict-origin-when-cross-origin` policy, a browser sends this
+    /// whole URL — so we send exactly it.
+    page_url: String,
     /// The launcher-handoff literal, when the page carries one. Only
     /// the v2 OTP path reads it; `None` on pages without it.
     launch: Option<LaunchHandoff>,
@@ -305,18 +320,16 @@ async fn step_1_init(
     service_code: &str,
     service_region: &str,
 ) -> Result<Step1Data, LoginError> {
-    let url = client.portal_url("beanfun_block/game_zone/game_start_step2.aspx")?;
-    let resp = client
-        .http()
-        .get(url)
-        .query(&[
-            ("service_code", service_code),
-            ("service_region", service_region),
-            ("sotp", account.ssn.as_str()),
-            ("dt", dt_compact_now().as_str()),
-        ])
-        .send()
-        .await?;
+    let mut url = client.portal_url("beanfun_block/game_zone/game_start_step2.aspx")?;
+    url.query_pairs_mut()
+        .append_pair("service_code", service_code)
+        .append_pair("service_region", service_region)
+        .append_pair("sotp", account.ssn.as_str())
+        .append_pair("dt", dt_compact_now().as_str());
+    // Kept because the handlers below are now asked to name the page
+    // that sent them; see `Step1Data::page_url`.
+    let page_url = url.to_string();
+    let resp = client.http().get(url).send().await?;
     ensure_success(&resp, "game_start_step2.aspx")?;
     let body = client.bounded_text(resp).await?;
 
@@ -339,6 +352,7 @@ async fn step_1_init(
     let launch = parse_launch_handoff(&body);
 
     Ok(Step1Data {
+        page_url,
         long_polling_key,
         unk_data,
         screatetime,
@@ -387,7 +401,15 @@ async fn step_3_record_start(
         form.push((k.as_str(), v.as_str()));
     }
 
-    let resp = client.http().post(url).form(&form).send().await?;
+    // Same referrer requirement as the v2 endpoint — this handler
+    // lives under `generic_handlers` too.
+    let resp = client
+        .http()
+        .post(url)
+        .header(reqwest::header::REFERER, step1.page_url.as_str())
+        .form(&form)
+        .send()
+        .await?;
     ensure_success(&resp, "record_service_start.ashx")?;
     // Body deliberately not read — WPF discards `UploadString`'s
     // return value (L91-94). We must still consume the connection so
@@ -469,6 +491,7 @@ async fn step_5_post_otp_v2(
     client: &BeanfunClient,
     handoff: &LaunchHandoff,
     integrity: &ClientIntegrity,
+    referer: &str,
 ) -> Result<String, LoginError> {
     let launch_ticket =
         decode_launch_ticket(&handoff.data).map_err(|e| LoginError::OtpDecryptionFailed {
@@ -479,6 +502,7 @@ async fn step_5_post_otp_v2(
     let resp = client
         .http()
         .post(url)
+        .header(reqwest::header::REFERER, referer)
         .json(&OtpV2Request {
             sn: &handoff.sn,
             launch_ticket: &launch_ticket,
@@ -1226,6 +1250,8 @@ mod tests {
             sauthtype: None,
         };
         let step1 = Step1Data {
+            page_url: "https://tw.beanfun.com/beanfun_block/game_zone/game_start_step2.aspx"
+                .to_string(),
             long_polling_key: "LPK".to_string(),
             unk_data: None,
             screatetime: "2024-01-15 12:34:56".to_string(),
