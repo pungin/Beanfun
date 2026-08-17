@@ -37,9 +37,9 @@ on:
         type: boolean
         default: false
 
+# The propose job asks for more; this is the floor for everything else.
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: ggm-watch
@@ -53,6 +53,7 @@ jobs:
       version: ${{ steps.upstream.outputs.version }}
       url: ${{ steps.upstream.outputs.url }}
       changed: ${{ steps.compare.outputs.changed }}
+      read: ${{ steps.compare.outputs.read }}
 
     steps:
       - uses: actions/checkout@v6
@@ -81,17 +82,27 @@ jobs:
         run: |
           published=$(jq -r '.cv // ""' ggm-client.json)
           echo "published=$published  upstream=$UPSTREAM  forced=$FORCED"
-          if [ "$published" = "$UPSTREAM" ] && [ "$FORCED" != "true" ]; then
+
+          # `changed` says the published pair is out of date. `read` says to go
+          # and look. Forcing a run sets only the second: a dispatch made to
+          # test the machinery must not be able to claim the change it is
+          # testing for, and announce an update to the version already here.
+          if [ "$published" = "$UPSTREAM" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "unchanged"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+          if [ "$published" != "$UPSTREAM" ] || [ "$FORCED" = "true" ]; then
+            echo "read=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "read=false" >> "$GITHUB_OUTPUT"
+          fi
 
   values:
     name: Read the new pair
     needs: check
-    if: needs.check.outputs.changed == 'true'
+    if: needs.check.outputs.read == 'true'
     runs-on: windows-latest
     # A silent install that isn't silent waits for a click that will never come.
     # Nothing here is worth more than a few minutes of a runner.
@@ -164,18 +175,28 @@ jobs:
           "version $cv"
           "sha256  $hash"
 
-  report:
-    name: Say so
+  propose:
+    name: Propose the new pair
     needs: [check, values]
-    # `always()` so a failed read still reports the version — knowing a new
-    # manager shipped is most of the value, even without the hash.
+    # `always()` so a failed read still says a new manager shipped — that alone
+    # is most of the warning. Gated on `changed`, not on `read`: a forced run
+    # is someone testing this, and it must not announce a version we already
+    # publish.
     if: always() && needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Open an issue
+      # With both halves in hand there is nothing left to decide, so open the
+      # change rather than a request for someone to make it. An issue would be
+      # a description of a one-line edit that this job has already worked out.
+      - name: Open a pull request
+        if: needs.values.outputs.hash != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.check.outputs.version }}
@@ -183,13 +204,53 @@ jobs:
           CV: ${{ needs.values.outputs.cv }}
           HASH: ${{ needs.values.outputs.hash }}
         run: |
-          # The label has to exist before it can be filtered on or applied, and
-          # it won't on the first run.
+          branch="ggm/$VERSION"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "$branch already exists; nothing to propose"
+            exit 0
+          fi
+
+          # Edited in place rather than rewritten: the file may carry fields
+          # this job knows nothing about, and rewriting it would drop them
+          # without saying so. `cv` comes from the file rather than the
+          # announcement — the file is what the endpoint is asked about — and a
+          # disagreement is called out below rather than hidden by the values.
+          installer=$(basename "$URL")
+          jq --arg installer "$installer" --arg cv "${CV:-$VERSION}" --arg hash "$HASH" \
+            '.installer = $installer | .cv = $cv | .hash = $hash' \
+            ggm-client.json > ggm-client.next.json
+          mv ggm-client.next.json ggm-client.json
+          cat ggm-client.json
+
+          note=""
+          if [ -n "$CV" ] && [ "$CV" != "$VERSION" ]; then
+            note=$(printf '\n> beanfun announces `%s` but the installed file reports `%s`. The file'"'"'s\n> version is used here; check which one the endpoint accepts before merging.\n' "$VERSION" "$CV")
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add ggm-client.json
+          git commit -m "chore(otp): publish client-integrity values for GGM $VERSION"
+          git push origin "$branch"
+
+          gh pr create \
+            --title "chore(otp): publish client-integrity values for GGM $VERSION" \
+            --body "$(printf 'beanfun now ships Gamania Games Manager `%s`. These values were read from\n`GGMWebStart.dll` inside its installer, on a runner that installed it.\n%s\nMerging publishes them: the app fetches this file and caches it for six hours,\nso affected users are carried across without a release and without doing\nanything. See docs/GGM-CLIENT-HOTFIX.md.\n\nUntil then, TW launches keep working for anyone whose installed manager is\nnewer than the pair we publish, and for anyone whose current values still\npass.\n\nInstaller: %s\n\nOpened by `.github/workflows/ggm-watch.yml`.\n' "$VERSION" "$note" "$URL")"
+
+      # Only when the values could not be read. There is nothing to merge, so
+      # the version alone is the message.
+      - name: Open an issue instead
+        if: needs.values.outputs.hash == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+          URL: ${{ needs.check.outputs.url }}
+        run: |
           gh label create ggm-version \
             --description "beanfun shipped a new Gamania Games Manager" \
             --color FBCA04 2>/dev/null || true
 
-          # One open issue at a time — this runs hourly.
           existing=$(gh issue list --state open --label ggm-version --json number \
             --jq '.[0].number // ""' 2>/dev/null || true)
           if [ -n "$existing" ]; then
@@ -197,23 +258,7 @@ jobs:
             exit 0
           fi
 
-          installer=$(basename "$URL")
-
-          if [ -n "$HASH" ]; then
-            note=""
-            # The version is stated twice — by beanfun and by the file itself —
-            # and a disagreement means one of them isn't describing what shipped.
-            if [ -n "$CV" ] && [ "$CV" != "$VERSION" ]; then
-              note=$(printf '\n> beanfun announces `%s` but the installed file reports `%s`. Check which\n> one the endpoint accepts before publishing.\n' "$VERSION" "$CV")
-            fi
-            values=$(printf 'Both halves, read from the installed file:\n\n```json\n{\n  "installer": "%s",\n  "cv": "%s",\n  "hash": "%s"\n}\n```\n%s' "$installer" "${CV:-$VERSION}" "$HASH" "$note")
-          else
-            values=$(printf 'The hash could not be read — see the `Read the new pair` job. Run\n`scripts/ggm-client.ps1 -Write` on a machine with the new manager installed.\n\nThe announced version is `%s`.\n' "$VERSION")
-          fi
-
-          body=$(printf 'beanfun now ships Gamania Games Manager `%s`, where `ggm-client.json` still\npublishes a different version.\n\n%s\n\nInstaller: %s\n\nA commit is enough — the app fetches this file, so no release is needed.\nSee `docs/GGM-CLIENT-HOTFIX.md`.\n\nUntil then TW launches keep working for anyone with the manager installed\n(their own copy is read first) and for anyone whose current values still pass.\n' "$VERSION" "$values" "$URL")
-
           gh issue create \
             --title "Gamania Games Manager updated to $VERSION" \
             --label ggm-version \
-            --body "$body"
+            --body "$(printf 'beanfun now ships Gamania Games Manager `%s`, but the hash could not be read\nhere — see the `Read the new pair` job.\n\nRun `scripts/ggm-client.ps1 -Write` on a machine with the new manager\ninstalled and commit the result. A commit is enough; the app fetches this\nfile, so no release is needed.\n\nInstaller: %s\n' "$VERSION" "$URL")"
