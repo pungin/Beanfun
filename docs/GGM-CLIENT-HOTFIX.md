@@ -29,12 +29,12 @@ symptom this lever fixes.
 **Symptoms that are _not_ this** — changing values will not help, and
 will cost you six hours if you get it wrong:
 
-| In the log | What it means |
-|---|---|
-| `no usable launch ticket in the game-start page` | the page's shape changed → code change |
-| `credential response was not JSON` | the response format changed → code change |
-| `launch data: ...` decode errors | the decoding algorithm changed, e.g. new tables → code change |
-| no `Otp.Tw.*` lines at all | this route was never taken; look elsewhere |
+| In the log                                       | What it means                                                 |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| `no usable launch ticket in the game-start page` | the page's shape changed → code change                        |
+| `credential response was not JSON`               | the response format changed → code change                     |
+| `launch data: ...` decode errors                 | the decoding algorithm changed, e.g. new tables → code change |
+| no `Otp.Tw.*` lines at all                       | this route was never taken; look elsewhere                    |
 
 Users **with GGM installed are unaffected** — they read their own copy
 and never consult the published file. So if every report comes from

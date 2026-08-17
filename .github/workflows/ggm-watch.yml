@@ -29,11 +29,11 @@ name: Watch GGM version
 
 on:
   schedule:
-    - cron: "23 * * * *"
+    - cron: '23 * * * *'
   workflow_dispatch:
     inputs:
       force:
-        description: "Install and read the pair even if the version matches"
+        description: 'Install and read the pair even if the version matches'
         type: boolean
         default: false
 
