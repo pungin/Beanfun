@@ -153,7 +153,15 @@ in `services/beanfun/ggm_hotfix.rs` at that branch, then change it back.
 
 1. **Pinned** — `%APPDATA%\Beanfun\ggm-client.json` with `"override": true`.
    A deliberate choice; nothing overrides it.
-2. **Installed GGM** — read from `GGMWebStart.dll` on this machine. Self-updating,
-   so it survives beanfun raising the bar with no action from us.
-3. **Published** — this file, cached for six hours. The hotfix lever.
-4. **Compiled in** — ships with the app, so a machine with none of the above works.
+2. **Installed GGM or published — whichever names the newer build.** The
+   installed `GGMWebStart.dll` is this machine's own truth, and GGM updates
+   itself, but only when it runs; the people this app exists for launch from
+   here rather than the official site, so an install can sit at whatever
+   version it was last opened at. Comparing versions keeps a stale install
+   from being preferred over a fix, without letting a bad publish take down a
+   machine whose own install was fine. A tie goes to the installed file.
+3. **Compiled in** — ships with the app, so a machine with none of the above works.
+
+That ordering is the reason the lever works at all. Preferring the installed
+GGM outright would make the stalest machines — the ones most likely to be
+refused — the only ones a published fix could never reach.

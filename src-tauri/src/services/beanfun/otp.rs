@@ -493,29 +493,79 @@ async fn resolve_client_integrity() -> ClientIntegrity {
         return ClientIntegrity::from_published(&pinned);
     }
 
-    // 2. The GGM installed here. It follows its own updates, so these
-    //    values survive beanfun raising the bar without us doing
-    //    anything — and they are this machine's truth rather than a
-    //    guess about it.
+    // 2 and 3. The GGM installed here, and what we published — whichever
+    //    describes the newer build.
+    //
+    //    GGM updates itself, but only when it runs, and the people this
+    //    app exists for are precisely the ones who never run it: they
+    //    launch from here, not from the official site. An install that
+    //    has sat untouched since Gamania last shipped reports what it was
+    //    then, and those are the values beanfun stops accepting — so
+    //    preferring it unconditionally would make the stalest machines
+    //    the only ones the hotfix lever could never reach.
+    //
+    //    Preferring the published pair unconditionally trades that for
+    //    the opposite hazard: a bad publish takes down users whose own
+    //    install was fine. Comparing versions avoids both. A tie goes to
+    //    the installed file, which is this machine's own truth rather
+    //    than a claim about it.
     let local = tokio::task::spawn_blocking(ClientIntegrity::resolve_local)
         .await
         .unwrap_or_else(|e| {
             tracing::warn!(error = %e, "client-integrity resolve task failed");
             None
         });
-    if let Some(local) = local {
-        return local;
-    }
+    let published = ggm_hotfix::published().await;
 
-    // 3. What we published. This is the hotfix lever: one commit fixes
-    //    every user with no GGM installed, with no release and nothing
-    //    for them to do. See `services::beanfun::ggm_hotfix`.
-    if let Some(published) = ggm_hotfix::published().await {
-        return ClientIntegrity::from_published(&published);
+    match (local, published) {
+        (Some(local), Some(published)) => {
+            if names_a_newer_build(&published.cv, &local.cv) {
+                tracing::info!(
+                    local = %local.cv,
+                    published = %published.cv,
+                    "published client-integrity is newer than the installed GGM"
+                );
+                ClientIntegrity::from_published(&published)
+            } else {
+                local
+            }
+        }
+        (Some(local), None) => local,
+        (None, Some(published)) => ClientIntegrity::from_published(&published),
+        // 4. What we shipped with.
+        (None, None) => ClientIntegrity::fallback(),
     }
+}
 
-    // 4. What we shipped with.
-    ClientIntegrity::fallback()
+/// Whether `candidate` names a strictly newer build than `current`.
+///
+/// Dotted numbers compared segment by segment, missing segments read as
+/// zero so `1.5.1` beats `1.5`. Anything unparseable compares as zero,
+/// which makes a malformed version lose rather than win — the safe
+/// direction, since the loser is simply not used.
+///
+/// Not `core::version::is_newer`: that one answers a different question.
+/// It compares release tags carrying a build timestamp, and treats a
+/// matching timestamp as authoritative regardless of the numbers. A GGM
+/// file version is four plain numbers with no stamp to match on.
+fn names_a_newer_build(candidate: &str, current: &str) -> bool {
+    fn parts(v: &str) -> Vec<u64> {
+        v.split('.')
+            .map(|p| p.trim().parse().unwrap_or(0))
+            .collect()
+    }
+    let (a, b) = (parts(candidate), parts(current));
+    let width = a.len().max(b.len());
+    for i in 0..width {
+        let (x, y) = (
+            a.get(i).copied().unwrap_or(0),
+            b.get(i).copied().unwrap_or(0),
+        );
+        if x != y {
+            return x > y;
+        }
+    }
+    false
 }
 
 /// Body of the v2 OTP request. Field names are PascalCase on the wire
@@ -999,6 +1049,36 @@ fn snippet_for_diagnostics(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_newer_published_version_wins() {
+        // The case that motivated comparing at all: an install left alone
+        // since before Gamania's last release.
+        assert!(names_a_newer_build("1.5.0.2", "1.4.9.9"));
+        assert!(names_a_newer_build("1.5.1", "1.5.0.2"));
+        assert!(names_a_newer_build("2.0", "1.9.9.9"));
+    }
+
+    #[test]
+    fn an_equal_or_older_published_version_does_not() {
+        // A tie goes to the installed file, and a publish that names an
+        // older build is a mistake that must not take working machines down.
+        assert!(!names_a_newer_build("1.5.0.2", "1.5.0.2"));
+        assert!(
+            !names_a_newer_build("1.5.0", "1.5.0.0"),
+            "missing segments read as zero"
+        );
+        assert!(!names_a_newer_build("1.4.0", "1.5.0.2"));
+    }
+
+    #[test]
+    fn an_unreadable_version_loses() {
+        // Whatever cannot be parsed compares as zero. Losing is the safe
+        // direction: the loser is simply not used.
+        assert!(!names_a_newer_build("", "1.0"));
+        assert!(!names_a_newer_build("not.a.version", "0.0.1"));
+        assert!(names_a_newer_build("0.0.1", "not.a.version"));
+    }
+
     use super::*;
 
     // -------------------------------------------------------------------------

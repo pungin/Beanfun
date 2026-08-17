@@ -41,8 +41,11 @@
 //!
 //! # Resolution strategy
 //!
-//! [`ClientIntegrity::resolve`] prefers the **locally installed** GGM and
-//! only falls back to the bundled constants:
+//! [`ClientIntegrity::resolve`] describes the **locally installed** GGM,
+//! falling back to the bundled constants. Whether that description or a
+//! published one is used is decided by the caller — see
+//! `services::beanfun::otp::resolve_client_integrity`, which takes
+//! whichever names the newer build:
 //!
 //! 1. Locate `GGMWebStart.dll` — first via the `gamaniagames://` protocol
 //!    handler the installer registers (authoritative even for non-default
@@ -50,12 +53,18 @@
 //! 2. Hash it and read its version.
 //! 3. If either half cannot be obtained, use [`ClientIntegrity::fallback`].
 //!
-//! Reading the live file is what keeps us current: GGM self-updates (it
-//! polls `CheckVersion.ashx` on every launch and hands off to `Patcher.exe`
-//! when it is behind), so a user who can launch through the official site at
-//! all necessarily has an up-to-date DLL. The bundled constants exist only
-//! for users with no GGM installed, and go stale the next time Gamania ships
-//! a GGM build — refreshing them is a release-time chore, not a runtime one.
+//! Reading the live file keeps us current *if the file is current*. GGM
+//! self-updates — it polls `CheckVersion.ashx` on launch and hands off to
+//! `Patcher.exe` when it is behind — but only when it runs, and the people
+//! this app exists for are the ones who never run it: they launch from here,
+//! not from the official site. So an install can sit at whatever version it
+//! was when it was last opened, which may be the version beanfun has since
+//! stopped accepting.
+//!
+//! That is why the caller compares this against the published pair instead of
+//! taking it on sight. The bundled constants remain the answer for a machine
+//! with neither, and go stale the next time Gamania ships a GGM build —
+//! refreshing them is a release-time chore, not a runtime one.
 //!
 //! # Deliberately all-or-nothing
 //!
