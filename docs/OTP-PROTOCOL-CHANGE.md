@@ -19,12 +19,12 @@ Nothing on our side is malformed. Beanfun replaced the endpoint.
 `services::beanfun::otp` is a 1:1 port of the WPF client's OTP chain.
 Step 5 of that chain no longer exists in the form we call it:
 
-| | what we send | what the official client sends |
-|---|---|---|
+|          | what we send                             | what the official client sends              |
+| -------- | ---------------------------------------- | ------------------------------------------- |
 | endpoint | `generic_handlers/get_webstart_otp.ashx` | `generic_handlers/get_webstart_otp_v2.ashx` |
-| method | `GET` | `POST` |
-| params | 9 query-string fields | JSON body |
-| response | `1;{key}{cipher_hex}` text | `application/json` |
+| method   | `GET`                                    | `POST`                                      |
+| params   | 9 query-string fields                    | JSON body                                   |
+| response | `1;{key}{cipher_hex}` text               | `application/json`                          |
 
 New contract:
 
@@ -52,12 +52,12 @@ installed native helper (GGM — 遊戲橘子遊戲管理員, `GGMSetup_1.5.0.2.
 gamaniagames://Region={0}&&&&SN={1}&&&&Cmd=06004&&&&WebToken={2}&&&&SecretCode={3}&&&&Data={4}
 ```
 
-| `Cmd` | ggm.js function | carries WebToken/SecretCode |
-|---|---|---|
-| `06003` | `OpenSelect` | no |
-| `06004` | `LaunchGame` | **yes** |
-| `06005` | `OpenDownloader` | no |
-| `06006` | `SmartLaunch` | **yes** |
+| `Cmd`   | ggm.js function  | carries WebToken/SecretCode |
+| ------- | ---------------- | --------------------------- |
+| `06003` | `OpenSelect`     | no                          |
+| `06004` | `LaunchGame`     | **yes**                     |
+| `06005` | `OpenDownloader` | no                          |
+| `06006` | `SmartLaunch`    | **yes**                     |
 
 Both token-carrying variants fall back to a `Data`-only form when
 `webToken`/`secretCode` are absent.
@@ -73,14 +73,14 @@ GGM then performs the rest itself (all observed in the capture):
 6. launches the game with the OTP on its command line
 
 So `WebToken` and `SecretCode` — the two values we currently put in
-step 5's query string — are now *inputs handed to GGM*, not parameters
+step 5's query string — are now _inputs handed to GGM_, not parameters
 of the OTP call.
 
 ## `LaunchTicket` — it is inside `Data`, not computed by GGM
 
 Reverse engineering by @takidog on
 [pungin/Beanfun#368](https://github.com/pungin/Beanfun/issues/368)
-settles this. GGM does **not** derive `LaunchTicket`; it *decrypts* it
+settles this. GGM does **not** derive `LaunchTicket`; it _decrypts_ it
 out of the `Data` field the web page already hands over. So the value
 does reach us — obfuscated — and no binary needs to be reimplemented
 to get it.
@@ -91,7 +91,7 @@ to get it.
 2. Drop that character.
 3. Pick substitution table `n % 4`.
 4. Map each character to its index in the table, emitted as a hex
-   digit — call the result the *normalized hex*.
+   digit — call the result the _normalized hex_.
 5. The 8 characters at offset `n + 1` are the DES key (ASCII).
 6. Remove those 8 characters; the remainder is the ciphertext hex.
 7. DES-ECB decrypt, `Padding = None`.
@@ -201,7 +201,7 @@ The plan, which avoids reverse-engineering `LaunchTicket` while keeping
 the "show / copy / auto-paste OTP" feature:
 
 1. Log in as we already do; keep `region`, `sn`, `webToken`, `secretCode`.
-2. Invoke `gamaniagames://…&Cmd=06004&…` so the *official* GGM runs the
+2. Invoke `gamaniagames://…&Cmd=06004&…` so the _official_ GGM runs the
    `LaunchTicket` + `get_webstart_otp_v2` sequence.
 3. Point Beanfun's configured game path at a shim executable we ship.
 4. The shim receives `argv[3]` / `argv[4]` and hands them back to the
