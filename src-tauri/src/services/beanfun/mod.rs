@@ -35,6 +35,7 @@ pub mod client;
 pub mod client_integrity;
 pub mod error;
 pub mod games;
+pub mod ggm_hotfix;
 pub mod login;
 pub mod otp;
 pub mod session;
