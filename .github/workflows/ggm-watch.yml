@@ -37,7 +37,7 @@ on:
         type: boolean
         default: false
 
-# The propose job asks for more; this is the floor for everything else.
+# The reporting job asks for more; this is the floor for everything else.
 permissions:
   contents: read
 
@@ -175,90 +175,64 @@ jobs:
           "version $cv"
           "sha256  $hash"
 
-  propose:
-    name: Propose the new pair
+  report:
+    name: Report the new pair
     needs: [check, values]
     # `always()` so a failed read still says a new manager shipped — that alone
-    # is most of the warning. Gated on `changed`, not on `read`: a forced run
-    # is someone testing this, and it must not announce a version we already
-    # publish.
+    # is most of the warning. Gated on `changed`, not on `read`: a forced run is
+    # someone testing this, and must not announce a version we already publish.
     if: always() && needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
       issues: write
 
     steps:
-      - uses: actions/checkout@v6
-
-      # With both halves in hand there is nothing left to decide, so open the
-      # change rather than a request for someone to make it. An issue would be
-      # a description of a one-line edit that this job has already worked out.
-      - name: Open a pull request
-        if: needs.values.outputs.hash != ''
+      # An issue rather than a pull request. Opening one would mean this
+      # workflow pushing a branch, and the change it would carry is two strings
+      # an issue can state just as exactly — with none of the permission a bot
+      # needs to write to the repository it runs in.
+      - name: Open an issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           VERSION: ${{ needs.check.outputs.version }}
           URL: ${{ needs.check.outputs.url }}
           CV: ${{ needs.values.outputs.cv }}
           HASH: ${{ needs.values.outputs.hash }}
         run: |
-          branch="ggm/$VERSION"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            echo "$branch already exists; nothing to propose"
-            exit 0
-          fi
-
-          # Edited in place rather than rewritten: the file may carry fields
-          # this job knows nothing about, and rewriting it would drop them
-          # without saying so. `cv` comes from the file rather than the
-          # announcement — the file is what the endpoint is asked about — and a
-          # disagreement is called out below rather than hidden by the values.
-          installer=$(basename "$URL")
-          jq --arg installer "$installer" --arg cv "${CV:-$VERSION}" --arg hash "$HASH" \
-            '.installer = $installer | .cv = $cv | .hash = $hash' \
-            ggm-client.json > ggm-client.next.json
-          mv ggm-client.next.json ggm-client.json
-          cat ggm-client.json
-
-          note=""
-          if [ -n "$CV" ] && [ "$CV" != "$VERSION" ]; then
-            note=$(printf '\n> beanfun announces `%s` but the installed file reports `%s`. The file'"'"'s\n> version is used here; check which one the endpoint accepts before merging.\n' "$VERSION" "$CV")
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git add ggm-client.json
-          git commit -m "chore(otp): publish client-integrity values for GGM $VERSION"
-          git push origin "$branch"
-
-          gh pr create \
-            --title "chore(otp): publish client-integrity values for GGM $VERSION" \
-            --body "$(printf 'beanfun now ships Gamania Games Manager `%s`. These values were read from\n`GGMWebStart.dll` inside its installer, on a runner that installed it.\n%s\nMerging publishes them: the app fetches this file and caches it for six hours,\nso affected users are carried across without a release and without doing\nanything. See docs/GGM-CLIENT-HOTFIX.md.\n\nUntil then, TW launches keep working for anyone whose installed manager is\nnewer than the pair we publish, and for anyone whose current values still\npass.\n\nInstaller: %s\n\nOpened by `.github/workflows/ggm-watch.yml`.\n' "$VERSION" "$note" "$URL")"
-
-      # Only when the values could not be read. There is nothing to merge, so
-      # the version alone is the message.
-      - name: Open an issue instead
-        if: needs.values.outputs.hash == ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.check.outputs.version }}
-          URL: ${{ needs.check.outputs.url }}
-        run: |
           gh label create ggm-version \
             --description "beanfun shipped a new Gamania Games Manager" \
             --color FBCA04 2>/dev/null || true
 
-          existing=$(gh issue list --state open --label ggm-version --json number \
-            --jq '.[0].number // ""' 2>/dev/null || true)
+          # This runs hourly and the manager stays new for days, so an open
+          # issue means it has already been said.
+          existing=$(gh issue list --state open --label ggm-version \
+            --json number --jq '.[0].number // ""' 2>/dev/null || true)
           if [ -n "$existing" ]; then
-            echo "issue #$existing is already open"
+            echo "issue #$existing already reports this"
             exit 0
+          fi
+
+          # The version is stated twice — by beanfun, and by the file itself.
+          # A disagreement means one of them is not describing what shipped, and
+          # publishing the wrong one locks every user out rather than letting
+          # them in.
+          note=""
+          if [ -n "$CV" ] && [ "$CV" != "$VERSION" ]; then
+            note=$(printf '\n> beanfun announces `%s` but the file reports `%s` — check which one the\n> endpoint accepts before publishing.' "$VERSION" "$CV")
+          fi
+
+          if [ -n "$HASH" ]; then
+            body=$(printf 'beanfun now ships Gamania Games Manager `%s`, read from `GGMWebStart.dll`\non a runner that installed it:\n\n```json\n{\n  "cv": "%s",\n  "hash": "%s"\n}\n```\n%s\n\nPut those two values in `ggm-client.json` and commit. That is the whole fix:\nthe app fetches this file and caches it for six hours, so affected users are\ncarried across without a release and without doing anything themselves.\nLeave the other fields as they are — see `docs/GGM-CLIENT-HOTFIX.md`.\n\nInstaller: %s\nRun: %s/actions/runs/%s\n' \
+              "$VERSION" "${CV:-$VERSION}" "$HASH" "$note" "$URL" "$GITHUB_SERVER_URL/$REPO" "$GITHUB_RUN_ID")
+          else
+            # Half an answer, worth saying anyway: knowing a new manager shipped
+            # is most of the warning, and the pair can be read by hand.
+            body=$(printf 'beanfun now ships Gamania Games Manager `%s`, but the hash could not be\nread here — see the `Read the new pair` job.\n\nRun `scripts/ggm-client.ps1 -Write` on a machine with the new manager\ninstalled, and commit the result. A commit is enough; the app fetches this\nfile, so no release is needed. See `docs/GGM-CLIENT-HOTFIX.md`.\n\nInstaller: %s\nRun: %s/actions/runs/%s\n' \
+              "$VERSION" "$URL" "$GITHUB_SERVER_URL/$REPO" "$GITHUB_RUN_ID")
           fi
 
           gh issue create \
             --title "Gamania Games Manager updated to $VERSION" \
             --label ggm-version \
-            --body "$(printf 'beanfun now ships Gamania Games Manager `%s`, but the hash could not be read\nhere — see the `Read the new pair` job.\n\nRun `scripts/ggm-client.ps1 -Write` on a machine with the new manager\ninstalled and commit the result. A commit is enough; the app fetches this\nfile, so no release is needed.\n\nInstaller: %s\n' "$VERSION" "$URL")"
+            --body "$body"
