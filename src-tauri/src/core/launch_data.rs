@@ -139,7 +139,11 @@ fn decode(data: &str) -> Result<String, LaunchDataError> {
     }
 
     let key = &normalized[offset..offset + KEY_LEN];
-    let cipher_hex = format!("{}{}", &normalized[..offset], &normalized[offset + KEY_LEN..]);
+    let cipher_hex = format!(
+        "{}{}",
+        &normalized[..offset],
+        &normalized[offset + KEY_LEN..]
+    );
 
     let plaintext = decrypt_hex(&cipher_hex, key)?;
     Ok(plaintext.trim_matches('\0').to_owned())
@@ -155,12 +159,7 @@ mod tests {
     fn encode(selector: usize, key: &str, cipher_hex: &str) -> String {
         let table: Vec<char> = TABLES[selector % TABLES.len()].chars().collect();
         let offset = selector + 1;
-        let normalized = format!(
-            "{}{}{}",
-            &cipher_hex[..offset],
-            key,
-            &cipher_hex[offset..]
-        );
+        let normalized = format!("{}{}{}", &cipher_hex[..offset], key, &cipher_hex[offset..]);
         let body: String = normalized
             .chars()
             .map(|c| table[c.to_digit(16).expect("normalized hex") as usize])
@@ -183,7 +182,9 @@ mod tests {
             chars.dedup();
             assert_eq!(chars.len(), 16, "table {i} has duplicate characters");
             assert!(
-                chars.iter().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+                chars
+                    .iter()
+                    .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
                 "table {i} holds a non-lowercase-hex character"
             );
         }
@@ -227,7 +228,10 @@ mod tests {
 
     #[test]
     fn empty_input_is_rejected() {
-        assert_eq!(decode_launch_ticket("").unwrap_err(), LaunchDataError::Empty);
+        assert_eq!(
+            decode_launch_ticket("").unwrap_err(),
+            LaunchDataError::Empty
+        );
     }
 
     #[test]
@@ -252,6 +256,9 @@ mod tests {
     fn blob_too_short_for_a_key_is_rejected() {
         // Table 0 characters only, but far fewer than offset + 8.
         let err = decode_launch_ticket("0bac").unwrap_err();
-        assert!(matches!(err, LaunchDataError::TooShort { .. }), "got {err:?}");
+        assert!(
+            matches!(err, LaunchDataError::TooShort { .. }),
+            "got {err:?}"
+        );
     }
 }

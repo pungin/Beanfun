@@ -444,11 +444,10 @@ async fn step_5_post_otp_v2(
     client: &BeanfunClient,
     handoff: &LaunchHandoff,
 ) -> Result<String, LoginError> {
-    let launch_ticket = decode_launch_ticket(&handoff.data).map_err(|e| {
-        LoginError::OtpDecryptionFailed {
+    let launch_ticket =
+        decode_launch_ticket(&handoff.data).map_err(|e| LoginError::OtpDecryptionFailed {
             cause: format!("launch data: {e}"),
-        }
-    })?;
+        })?;
 
     let url = client.portal_url("beanfun_block/generic_handlers/get_webstart_otp_v2.ashx")?;
     let resp = client
@@ -720,9 +719,7 @@ fn launch_object_regex() -> &'static Regex {
 /// whole page, so the generic key name cannot match something else.
 fn launch_sn_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r#""sn"\s*:\s*"([^"]*)""#).expect("launch sn regex must compile")
-    })
+    RE.get_or_init(|| Regex::new(r#""sn"\s*:\s*"([^"]*)""#).expect("launch sn regex must compile"))
 }
 
 /// `"data"` inside that literal — the obfuscated `LaunchTicket` blob.
