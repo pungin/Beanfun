@@ -76,23 +76,116 @@ So `WebToken` and `SecretCode` — the two values we currently put in
 step 5's query string — are now *inputs handed to GGM*, not parameters
 of the OTP call.
 
-`CV` and `Hash` are **not** an integrity gate: the per-game
-GameInfo.ini declares `Version=2.1.1.2`, exactly the 7 characters sent
-as `CV`, and `Hash` is 64 hex. They are cache revalidation for that
-file, and we could compute them ourselves.
+## `LaunchTicket` — it is inside `Data`, not computed by GGM
 
-## Blocker: `LaunchTicket`
+Reverse engineering by @takidog on
+[pungin/Beanfun#368](https://github.com/pungin/Beanfun/issues/368)
+settles this. GGM does **not** derive `LaunchTicket`; it *decrypts* it
+out of the `Data` field the web page already hands over. So the value
+does reach us — obfuscated — and no binary needs to be reimplemented
+to get it.
 
-`LaunchTicket` (64 characters) is derived inside GGM from
-`WebToken` / `SecretCode` / `SN`. It is never transmitted — every
-response in a 665-entry capture was checked and none contains a
-64-character value. Reproducing it means reverse-engineering the GGM
-binary.
+`GGMWebStart.Command.DecryptParam()`:
 
-## Chosen approach: let GGM fetch the OTP, intercept the result
+1. `n = int(data[0], 16)` — first character, as a hex digit.
+2. Drop that character.
+3. Pick substitution table `n % 4`.
+4. Map each character to its index in the table, emitted as a hex
+   digit — call the result the *normalized hex*.
+5. The 8 characters at offset `n + 1` are the DES key (ASCII).
+6. Remove those 8 characters; the remainder is the ciphertext hex.
+7. DES-ECB decrypt, `Padding = None`.
+8. UTF-8 decode, strip trailing `\0`.
+9. Split on `;`, then parse `key=value` pairs joined by `&`.
 
-The OTP still reaches the game as **command-line arguments**. The
-per-game GameInfo.ini gives the launch template:
+The four hardcoded tables:
+
+```text
+0: bac987d65e432f10
+1: 3bc4d5e6f2a79108
+2: cdbeaf9012456378
+3: 4e6fb81a3c5d7092
+```
+
+Each is a complete permutation of the 16 hex digits — verified, and a
+prerequisite for step 4 to be well defined.
+
+The sample in that issue is internally consistent: `len(Data) = 553`,
+selector `5` → table 1, key offset 6, ciphertext 544 hex = 272 bytes
+(a multiple of the 8-byte DES block), plaintext 266 bytes after
+stripping six NULs.
+
+Decrypted plaintext:
+
+```text
+LaunchTicket=<64 hex>
+ServiceCode=<6>
+ServiceRegion=<2>
+ServiceAccount=<20>
+BeanfunUrl=<URL>
+WebStartPatch=<URL>
+;<5 hex>
+```
+
+**Steps 5–8 are already implemented here.** `core::wcdes::decrypt_hex`
+takes an 8-character ASCII key plus hex ciphertext and runs DES-ECB
+with no padding — exactly this. It is the same construction the old
+step 6 used (`payload.split_at(8)`), now wrapped in a substitution
+layer. Only steps 1–4 and 9 are new code.
+
+## What still needs GGM: `CV` and `Hash`
+
+Correcting an earlier guess in this document — these are not cache
+revalidation:
+
+- `CV` = the **.NET assembly version** of `GGMWebStart.dll`
+  (`Assembly.GetExecutingAssembly().GetName().Version`), not the PE
+  file version and not the GameInfo.ini version it coincidentally
+  matches in length.
+- `Hash` = SHA-256 of `GGMWebStart.dll`'s bytes, lowercase hex,
+  computed at runtime. Not a constant in the binary.
+- `arch` = `Environment.Is64BitProcess` → `x64` / `x86`.
+
+This pair is a **client-attestation gate**: the server is asking the
+caller to prove it is running the official launcher. Sending it from
+anything else is asserting an identity we do not have. It is also the
+part most likely to be tightened later (per-build salting, obfuscation,
+signing), so treat any automation around it as load-bearing but
+fragile.
+
+The upstream launcher path is:
+`C:\Program Files\gamania Games\gamania Games Manager\GGMWebStart.exe`,
+version 1.5.0.2.
+
+## The `adapter.ashx` command codes
+
+Static analysis of GGM gives the numeric `cmd` values behind the
+five-character parameter observed in the capture:
+
+```text
+GET  /generic_handlers/adapter.ashx?cmd=01004&d=<TickCount>
+GET  /generic_handlers/adapter.ashx?cmd=01003&service_code=…&service_region=…&d=…&CV=…&Hash=…&arch=…
+GET  /generic_handlers/adapter.ashx?cmd=06002&sn=…&result=…&d=<TickCount>
+POST /beanfun_block/generic_handlers/get_webstart_otp_v2.ashx
+```
+
+## Two ways forward
+
+### A. No GGM — decode `Data` ourselves
+
+Now the preferred route. We already fetch `game_start_step2.aspx` in
+step 1, and `Data` is a page-supplied value, so it is likely already in
+a response we hold; that needs confirming (see the open question).
+Then: decode `LaunchTicket` per the algorithm above, and `POST` the v2
+payload ourselves.
+
+Remaining dependency is only `CV` + `Hash`, which are properties of a
+GGM release rather than of the session — see "Keeping CV/Hash current".
+
+### B. Delegate to GGM and intercept the OTP
+
+Kept as a fallback. The OTP still reaches the game as **command-line
+arguments**; the per-game GameInfo.ini gives the launch template:
 
 ```
 exe=MapleStory.exe tw.login.maplestory.beanfun.com 8484 BeanFun %s %s
@@ -122,17 +215,51 @@ Benefit: protocol-independent. Whatever Gamania changes server-side,
 the OTP still ends up on that command line — which is why the 2013
 trick still works today.
 
+## Keeping `CV` / `Hash` current
+
+They change only when Gamania ships a new GGM — a handful of times a
+year. `CheckVersion.ashx` returns `{ url, version }` in 80 bytes and is
+the natural change detector.
+
+Recommended shape: **detect in CI, ship in a release.** A scheduled job
+polls `CheckVersion.ashx`; on a version change it downloads the
+installer, extracts `GGMWebStart.dll` (`7z x`), computes the SHA-256,
+reads the assembly version, and opens a PR bumping two constants. The
+app carries them as constants — no runtime dependency, no extra request
+on the OTP path, and every change is reviewable in git history.
+
+The alternative floated upstream — publish the values to GitHub Pages
+and have the launcher fetch them at runtime — trades a release cycle
+for a permanent network dependency inside the auth path, gives every
+user the same single point of failure with no rollback through the
+normal release channel, and adds latency to each OTP fetch. For a value
+that changes three times a year that is a poor trade. If runtime
+refresh is wanted anyway, fetch with a fallback to the baked-in
+constant, cache for a day, and never let it block the OTP call.
+
+Two traps for the CI job:
+
+- `CV` is the **managed assembly version**, which can differ from the
+  PE `VERSIONINFO`. Read the .NET metadata, not just the file version.
+- The four substitution tables live inside the DLL. Hash and version
+  automate cleanly; extracting the tables does not. Treat an algorithm
+  change as a manual review item — it should be rare, and it will
+  announce itself as a decode failure.
+
 ## Open question — blocks implementation
 
-**What goes in `Data={4}`?** `ggm.js` only defines the interface; the
-call site lives in an authenticated page (`loader.ashx` returns
-`_bf_IsInitOK = false` without a session). The URI never crosses the
-network, so it is not in any capture. Until its format is known, the
-URI builder cannot be written.
+**Where does the page get `Data`?** `ggm.js` only defines the
+interface; the call site lives in an authenticated page (`loader.ashx`
+returns `_bf_IsInitOK = false` without a session), and the URI itself
+never crosses the network. The plaintext fields
+(`ServiceCode` / `ServiceRegion` / `ServiceAccount`) say it is
+per-launch and server-issued, so it is very likely embedded in
+`game_start_step2.aspx` — **which step 1 already downloads**. If so the
+fix needs a new scrape, not a new request.
 
-To recover it, from a logged-in session: read the JS that calls
-`ggm.LaunchGame(...)` / `ggm.SmartLaunch(...)` on
-`beanfun_block/game_zone/game_start_step2.aspx`, and quote how the
+To confirm, from a logged-in session: find `Data` in the
+`game_start_step2.aspx` response, or read the JS that calls
+`ggm.LaunchGame(...)` / `ggm.SmartLaunch(...)` and quote how the
 object's `data` property is built.
 
 ## What has already been fixed
