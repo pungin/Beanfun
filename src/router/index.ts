@@ -574,6 +574,21 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   let currentWidth = 560
   let observer: ResizeObserver | null = null
 
+  /**
+   * Smallest zoom difference worth re-applying. Zoom is a ratio of
+   * measured pixel counts, so it carries float noise that must not read
+   * as a change.
+   */
+  const ZOOM_EPSILON = 0.001
+
+  /**
+   * The last size/zoom this resizer actually pushed to the OS window, or
+   * `null` when that is unknown (first fit, or an overlay resized the
+   * window itself). Guards `fitWindow` against re-applying what is
+   * already on screen — see the note where it is read.
+   */
+  let lastApplied: { w: number; h: number; zoom: number } | null = null
+
   /*
    * Track the OS window scale factor so `textScaleFactor()` can split
    * `devicePixelRatio` (= DPI scale × text scale × zoom) into its parts.
@@ -638,7 +653,14 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   function fitWindow(): void {
     // A full-window overlay (AnnouncementModal) may be holding the window
     // at a fixed larger size; don't snap it back to content height.
-    if (isWindowFitSuspended()) return
+    if (isWindowFitSuspended()) {
+      // The overlay resizes the window behind our back, so what we last
+      // applied is no longer what is on screen. Forget it, or the
+      // idempotence guard below would mistake the overlay's size for
+      // ours and skip the restoring fit.
+      lastApplied = null
+      return
+    }
     const root = document.querySelector('[data-window-root]') as HTMLElement | null
     if (!root) return
     // Temporarily disable overflow clipping so scrollHeight reflects
@@ -677,9 +699,41 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     const wLogical = Math.max(320, Math.round(naturalW * zoom * cssToLogical))
     const hLogical = Math.max(160, Math.round(naturalH * zoom * cssToLogical))
     root.style.height = '100vh'
-    void getCurrentWebview().setZoom(zoom)
-    setAppliedWebviewZoom(zoom)
-    void appWindow.setSize(new LogicalSize(wLogical, hLogical))
+
+    /*
+     * Apply nothing that is already applied.
+     *
+     * Every `setSize` / `setZoom` changes the viewport, which fires the
+     * ResizeObserver, which fits again. That is fine while the result
+     * converges — but the pipeline measures in CSS px and applies in
+     * rounded logical px, so a fixed point does not have to exist: a
+     * height that rounds to H can measure back as H±1, which re-applies,
+     * which measures back as H, forever. The window then jitters by a
+     * pixel several times a second for as long as the page is open,
+     * which is what issue #367 reports on the Settings page (its content
+     * only gets tall enough to land on such a boundary once logged in).
+     *
+     * Comparing against what we last applied breaks any such cycle: a
+     * genuine layout change still differs and still applies, while a
+     * rounding echo is dropped and the loop stops. The tolerance is one
+     * logical pixel because that is exactly the quantum the rounding can
+     * disagree by.
+     */
+    const zoomChanged = lastApplied === null || Math.abs(lastApplied.zoom - zoom) > ZOOM_EPSILON
+    const sizeChanged =
+      lastApplied === null ||
+      Math.abs(lastApplied.w - wLogical) > 1 ||
+      Math.abs(lastApplied.h - hLogical) > 1
+    if (!zoomChanged && !sizeChanged) return
+
+    lastApplied = { w: wLogical, h: hLogical, zoom }
+    if (zoomChanged) {
+      void getCurrentWebview().setZoom(zoom)
+      setAppliedWebviewZoom(zoom)
+    }
+    if (sizeChanged) {
+      void appWindow.setSize(new LogicalSize(wLogical, hLogical))
+    }
   }
 
   /**
