@@ -3154,8 +3154,29 @@ onBeforeUnmount(() => {
   z-index: 1;
 }
 
+/*
+ * #370: the bounce runs a fixed number of times, not forever.
+ *
+ * `v-if` keeps this element mounted for as long as the list is
+ * scrollable and not at the bottom — i.e. the whole time a user with
+ * more than a screenful of accounts sits idle. An `infinite` animation
+ * there never lets the compositor go to sleep: measured on an otherwise
+ * idle window, one such animation took the process tree from 0.009% to
+ * 0.451% of total CPU, and kept the GPU busy alongside it.
+ *
+ * Six iterations is nine seconds of motion, which is all the affordance
+ * needs — and because `v-if` recreates the element, the bounce replays
+ * every time the hint reappears, which is exactly when the user has
+ * scrolled and might need telling again.
+ */
 .account-list__scroll-hint svg {
-  animation: account-list__scroll-hint-bounce 1.5s ease-in-out infinite;
+  animation: account-list__scroll-hint-bounce 1.5s ease-in-out 6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-list__scroll-hint svg {
+    animation: none;
+  }
 }
 
 @keyframes account-list__scroll-hint-bounce {
