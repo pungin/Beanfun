@@ -13,6 +13,7 @@
 //! | [`login`]    | Login flows: session-key, TW/HK regular, TOTP, QRCode   |
 //! | [`account`]  | Account list + JSON management (gamezone.ashx) + WebForms add-account / change-password |
 //! | [`otp`]      | OTP retrieval (5 HTTP + WCDES decrypt)                  |
+//! | [`client_integrity`] | `CV`/`Hash`/`arch` GGM fingerprint the TW OTP endpoint requires |
 //! | [`verify`]   | Advance-check captcha re-auth (3 HTTP, TW only)         |
 //!
 //! # Safety posture
@@ -31,6 +32,7 @@
 
 pub mod account;
 pub mod client;
+pub mod client_integrity;
 pub mod error;
 pub mod games;
 pub mod login;
@@ -47,6 +49,7 @@ pub use account::{
     CheckOutcome, ServiceAccount,
 };
 pub use client::{BeanfunClient, ClientConfig, Endpoints, LoginRegion};
+pub use client_integrity::ClientIntegrity;
 pub use error::LoginError;
 pub use games::{
     image_base_url, list_games, parse_service_ini, parse_service_list, GameInfoBundle,

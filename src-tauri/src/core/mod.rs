@@ -7,6 +7,7 @@
 //!
 //! HTTP / IO / async orchestration belongs under `services::` (added in P3+).
 
+pub mod launch_data;
 pub mod legacy;
 pub mod parser;
 pub mod redact;

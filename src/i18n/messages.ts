@@ -509,6 +509,14 @@ const zhTW = {
       invalid_totp: '驗證碼錯誤，請重新輸入。',
       not_logged_in: '尚未登入。',
       gamepass_window_already_open: 'GamePass 登入視窗已開啟，請先關閉再重新嘗試。',
+      otp_missing_long_polling_key: '取得遊戲密碼失敗：伺服器頁面格式無法辨識，請重新登入後再試。',
+      otp_missing_unk_data: '取得遊戲密碼失敗：伺服器頁面格式無法辨識，請重新登入後再試。',
+      otp_missing_create_time: '取得遊戲密碼失敗：找不到帳號建立時間，請重新整理帳號列表後再試。',
+      otp_missing_secret_code: '取得遊戲密碼失敗：登入狀態可能已失效，請重新登入後再試。',
+      otp_empty_response: '伺服器未回應遊戲密碼，請稍後再試。',
+      otp_server_rejected:
+        '伺服器拒絕了取得遊戲密碼的請求，請重新登入後再試；若持續發生，可能為官方維護中。',
+      otp_decryption_failed: '遊戲密碼解密失敗，請重新登入後再試。',
     },
     beanfun: {
       bad_credentials: '帳號或密碼錯誤。',
@@ -800,6 +808,14 @@ const zhCN = {
       invalid_totp: '验证码错误，请重新输入。',
       not_logged_in: '尚未登录。',
       gamepass_window_already_open: 'GamePass 登录窗口已开启，请先关闭再重新尝试。',
+      otp_missing_long_polling_key: '获取游戏密码失败：服务器页面格式无法识别，请重新登录后再试。',
+      otp_missing_unk_data: '获取游戏密码失败：服务器页面格式无法识别，请重新登录后再试。',
+      otp_missing_create_time: '获取游戏密码失败：找不到账号创建时间，请刷新账号列表后再试。',
+      otp_missing_secret_code: '获取游戏密码失败：登录状态可能已失效，请重新登录后再试。',
+      otp_empty_response: '服务器未返回游戏密码，请稍后再试。',
+      otp_server_rejected:
+        '服务器拒绝了获取游戏密码的请求，请重新登录后再试；若持续发生，可能为官方维护中。',
+      otp_decryption_failed: '游戏密码解密失败，请重新登录后再试。',
     },
     beanfun: {
       bad_credentials: '账号或密码错误。',
@@ -1107,6 +1123,18 @@ const enUS = {
       not_logged_in: 'Not logged in.',
       gamepass_window_already_open:
         'GamePass login window is already open. Please close it before trying again.',
+      otp_missing_long_polling_key:
+        'Could not get the game password: unrecognized server page. Please log in again.',
+      otp_missing_unk_data:
+        'Could not get the game password: unrecognized server page. Please log in again.',
+      otp_missing_create_time:
+        'Could not get the game password: account creation time not found. Please refresh the account list.',
+      otp_missing_secret_code:
+        'Could not get the game password: your session may have expired. Please log in again.',
+      otp_empty_response: 'The server returned no game password. Please try again later.',
+      otp_server_rejected:
+        'The server rejected the game password request. Please log in again; if it keeps happening, the service may be under maintenance.',
+      otp_decryption_failed: 'Failed to decrypt the game password. Please log in again.',
     },
     beanfun: {
       bad_credentials: 'Wrong account or password.',

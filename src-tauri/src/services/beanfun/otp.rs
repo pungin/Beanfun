@@ -66,18 +66,87 @@
 //! provenance of this literal is **unknown**: it appears to be a
 //! protocol-level constant the server validates against. Do not
 //! change it without empirical verification.
+//!
+//! # Empty captures (deliberate divergence from WPF)
+//!
+//! Every value that step 5 splices into its query string is scraped
+//! with a `(.*)` capture group copied verbatim from WPF. `(.*)`
+//! matches the empty string, so a page shaped like
+//! `var m_strSecretCode = '';` yields `Ok("")` rather than a "not
+//! found" miss — and WPF forwards that straight into the URL as
+//! `SecretCode=`.
+//!
+//! Steps 3 and 4 discard their response bodies (`drop(resp)`, mirroring
+//! WPF's ignored `UploadString` return value) and `ensure_success`
+//! only inspects the HTTP status, which these `.ashx` handlers keep at
+//! 200 even when they reject the request. Step 5 is therefore the first
+//! step that reads a body — so *every* upstream breakage collapses into
+//! one opaque `OtpServerRejected("Query String Error")` there, with no
+//! signal as to which parameter was actually bad.
+//!
+//! To keep failures attributable, `parse_long_polling_key` and
+//! `parse_secret_code` — the two scrapes whose patterns really do use
+//! `(.*)` — reject an empty capture and return their existing typed
+//! `OtpMissing*` errors instead. This is the one place we knowingly
+//! break the 1:1 WPF alignment: WPF's behaviour here is a diagnostic
+//! dead end, not a protocol requirement.
+//!
+//! `CreateTime` needs no such guard — its regex is already
+//! `([^"]+)`. It reaches step 5 empty by a different route:
+//! [`ServiceAccount`] is `Deserialize` and arrives over IPC from the
+//! frontend, so `screatetime: Some("")` bypasses the fallback scrape
+//! that a `None` would have triggered. `step_1_init` treats that
+//! empty string as absent.
+//!
+//! Note this does **not** cover greedy over-capture (a second `"` later
+//! on the same line makes `key=(.*)"` swallow the rest of it). Tightening
+//! those patterns to `([^"]*)` would change what gets matched on real
+//! pages, so it is left alone pending captures from a live server.
+//!
+//! # Two step 5s
+//!
+//! Beanfun replaced step 5. `GET get_webstart_otp.ashx` with its nine
+//! query parameters now answers `0;        Query String Error` no
+//! matter what it is sent; the live endpoint is
+//! `POST get_webstart_otp_v2.ashx` with a JSON body, and the OTP comes
+//! back in a JSON `data` member rather than a `1;…` envelope.
+//!
+//! Both paths live here. [`get_otp`] picks between them on whether
+//! step 1's page carries the `m_objData` launcher-handoff literal —
+//! the page's own shape, not the configured region, so a region that
+//! migrates later needs no code change. TW has migrated; HK has not
+//! been observed to.
+//!
+//! The v2 request needs a `LaunchTicket`, which is *not* a new
+//! server round-trip: it travels obfuscated inside `m_objData.data`,
+//! decoded by [`crate::core::launch_data`]. It also needs `CV`,
+//! `Hash` and `arch`, which identify the official launcher build and
+//! come from [`super::client_integrity`].
+//! `docs/OTP-PROTOCOL-CHANGE.md` has the full derivation.
+//!
+//! # The same three values on the legacy path
+//!
+//! The pre-v2 `GET` grew the identical `&CV=…&Hash=…&arch=…` suffix in
+//! Game Manager 1.5.x — `GGM.Shared.Beanfun.BeanfunUrlBuilder.BuildOtpUrl`
+//! appends it — and rejects requests that omit it. Sending it keeps the
+//! legacy fallback above genuinely usable rather than doomed the moment
+//! it is reached. HK, whose page carries no `m_objData` and whose portal
+//! has not been observed to want the suffix, is left byte-identical.
 
 use std::sync::OnceLock;
 
 use chrono::Local;
-use percent_encoding::percent_decode_str;
+use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use regex::Regex;
 
+use crate::core::launch_data::decode_launch_ticket;
 use crate::core::parser::{capture_first, extract_service_account_create_time};
+use crate::core::redact::scrub;
 use crate::core::time::{dt_compact_now, dt_iso_now};
 use crate::core::wcdes::decrypt_hex;
 use crate::services::beanfun::account::ServiceAccount;
 use crate::services::beanfun::client::{BeanfunClient, LoginRegion};
+use crate::services::beanfun::client_integrity::ClientIntegrity;
 use crate::services::beanfun::error::LoginError;
 use crate::services::beanfun::login::ensure_success;
 use crate::services::beanfun::session::Session;
@@ -127,10 +196,39 @@ pub async fn get_otp(
     service_region: &str,
 ) -> Result<String, LoginError> {
     let step1 = step_1_init(client, account, service_code, service_region).await?;
+
+    // Branch on the page's own shape rather than on the region: a page
+    // that carries `m_objData` is one whose OTP now comes from the v2
+    // endpoint, and the pre-v2 handler answers every request with
+    // `Query String Error`. Observed migrated on TW; HK's page has no
+    // such literal and keeps the legacy path. If HK migrates later this
+    // needs no change.
+    if let Some(handoff) = &step1.launch {
+        // Recording the start is what the page does alongside opening
+        // the launcher, and nothing downstream depends on it — so a
+        // migrated page missing a field it no longer has to carry must
+        // not cost the user their password.
+        if let Err(error) =
+            step_3_record_start(client, account, &step1, service_code, service_region).await
+        {
+            tracing::warn!(%error, "could not record the service start; continuing");
+        }
+
+        // Deliberately no secret code and no long poll on this path.
+        // The v2 request does not carry a secret code, and the page's
+        // `GetResultByLongPolling` call is the launcher's installation
+        // check — unrelated to the password, and it holds the
+        // connection open.
+        let integrity = resolve_client_integrity().await;
+        return step_5_post_otp_v2(client, handoff, &integrity, &step1.page_url).await;
+    }
+
     let secret_code = step_2_get_secret_code(client).await?;
     step_3_record_start(client, account, &step1, service_code, service_region).await?;
     step_4_long_poll(client, &step1.long_polling_key).await?;
-    let envelope = step_5_get_otp(
+    let integrity = resolve_client_integrity().await;
+
+    let url = build_get_webstart_otp_url(
         client,
         session,
         account,
@@ -138,9 +236,41 @@ pub async fn get_otp(
         &secret_code,
         service_code,
         service_region,
-    )
-    .await?;
-    step_6_decrypt(&envelope)
+        tick_count_ms(),
+        // The suffix is a Game Manager convention, and the Game Manager
+        // is a TW/OATW product; HK's legacy endpoint has not been
+        // observed to want it, so its request stays as it was.
+        match client.config().region {
+            LoginRegion::TW => Some(&integrity),
+            LoginRegion::HK => None,
+        },
+    )?;
+    let envelope = step_5_get_otp(client, &url).await?;
+
+    let result = step_6_decrypt(&envelope);
+    if let Err(err) = &result {
+        // `OtpDecryptionFailed` is the one failure that reaches here
+        // holding a *successful* `1;…` envelope — its payload carries
+        // the live OTP key + ciphertext, which must never be logged.
+        // The other variants only ever carry a rejection message.
+        // The body is server-controlled and could echo back a parameter
+        // we sent, so it goes through `scrub` even though its field name
+        // is outside the leak guard's list. `scrub` only rewrites
+        // credential-shaped `k=v` pairs, leaving a plain rejection
+        // message like `0;  Query String Error` intact.
+        let raw_response = match err {
+            LoginError::OtpDecryptionFailed { .. } => "<redacted: success envelope>".to_owned(),
+            _ => scrub(&envelope),
+        };
+        tracing::warn!(
+            error = %err,
+            request_url = %redact_otp_url(&url),
+            raw_response,
+            raw_response_len = envelope.len(),
+            "OTP step 5 failed — server response logged for diagnosis"
+        );
+    }
+    result
 }
 
 // -----------------------------------------------------------------------------
@@ -162,6 +292,30 @@ struct Step1Data {
     /// `account.screatetime` if it was `Some`, or the value
     /// fallback-parsed from this step's response body.
     screatetime: String,
+    /// The page's own URL, query and all.
+    ///
+    /// Handlers under `generic_handlers` began checking `Referer`, and
+    /// answer `The URL referrer is null or from a different domain!`
+    /// without one. Being same-origin, and with beanfun's
+    /// `strict-origin-when-cross-origin` policy, a browser sends this
+    /// whole URL — so we send exactly it.
+    page_url: String,
+    /// The launcher-handoff literal, when the page carries one. Only
+    /// the v2 OTP path reads it; `None` on pages without it.
+    launch: Option<LaunchHandoff>,
+}
+
+/// The `m_objData` literal `game_start_step2.aspx` builds for the
+/// native launcher.
+///
+/// Its `region` member is ignored: it is the constant
+/// `"TW;Production"` and no request we make carries it.
+struct LaunchHandoff {
+    /// 36-character GUID, sent as `SN` on the v2 OTP request.
+    sn: String,
+    /// Obfuscated blob carrying the `LaunchTicket`, decoded by
+    /// [`decode_launch_ticket`].
+    data: String,
 }
 
 /// Step 1 — fetch `game_start_step2.aspx`, extract the long-polling
@@ -174,35 +328,65 @@ async fn step_1_init(
     service_code: &str,
     service_region: &str,
 ) -> Result<Step1Data, LoginError> {
-    let url = client.portal_url("beanfun_block/game_zone/game_start_step2.aspx")?;
-    let resp = client
-        .http()
-        .get(url)
-        .query(&[
-            ("service_code", service_code),
-            ("service_region", service_region),
-            ("sotp", account.ssn.as_str()),
-            ("dt", dt_compact_now().as_str()),
-        ])
-        .send()
-        .await?;
+    let mut url = client.portal_url("beanfun_block/game_zone/game_start_step2.aspx")?;
+    url.query_pairs_mut()
+        .append_pair("service_code", service_code)
+        .append_pair("service_region", service_region)
+        .append_pair("sotp", account.ssn.as_str())
+        .append_pair("dt", dt_compact_now().as_str());
+    // Kept because the handlers below are now asked to name the page
+    // that sent them; see `Step1Data::page_url`.
+    let page_url = url.to_string();
+    let resp = client.http().get(url).send().await?;
     ensure_success(&resp, "game_start_step2.aspx")?;
     let body = client.bounded_text(resp).await?;
 
-    let long_polling_key = parse_long_polling_key(&body)?;
+    // Read the handoff *first*: it decides which route this page is on,
+    // and therefore which of the literals below are required at all.
+    //
+    // A migrated page has dropped the ones the old flow used — there is
+    // no `GetResultByLongPolling&key=` on it any more, because the page
+    // no longer polls; it opens the launcher. Parsing them before
+    // looking would fail the whole retrieval before the handoff is even
+    // read, and the reported error would name a literal that is *meant*
+    // to be gone.
+    let launch = parse_launch_handoff(&body);
+    let migrated = launch.is_some();
+
+    let long_polling_key = match parse_long_polling_key(&body) {
+        Ok(key) => key,
+        Err(_) if migrated => String::new(),
+        Err(e) => return Err(e),
+    };
     let unk_data = match client.config().region {
+        // Still wanted when present — it is the service-start form's
+        // anti-forgery field — but not worth failing a retrieval over
+        // on a page that no longer has to carry it.
+        LoginRegion::TW if migrated => parse_unk_data(&body).ok(),
         LoginRegion::TW => Some(parse_unk_data(&body)?),
         LoginRegion::HK => None,
     };
+    // A stored `Some("")` is as unusable as `None` — both produce an
+    // empty `CreateTime=` on step 5's URL, which the portal rejects
+    // with a generic "Query String Error". Treat it as absent so the
+    // fallback scrape gets its chance.
     let screatetime = match account.screatetime.as_deref() {
-        Some(s) => s.to_string(),
-        None => parse_screatetime_fallback(&body)?,
+        Some(s) if !s.is_empty() => s.to_string(),
+        // The v2 request does not carry a create time; only the
+        // best-effort service-start form does.
+        _ => match parse_screatetime_fallback(&body) {
+            Ok(t) => t,
+            Err(_) if migrated => String::new(),
+            Err(e) => return Err(e),
+        },
     };
 
     Ok(Step1Data {
+        page_url,
         long_polling_key,
         unk_data,
         screatetime,
+        launch,
     })
 }
 
@@ -247,7 +431,15 @@ async fn step_3_record_start(
         form.push((k.as_str(), v.as_str()));
     }
 
-    let resp = client.http().post(url).form(&form).send().await?;
+    // Same referrer requirement as the v2 endpoint — this handler
+    // lives under `generic_handlers` too.
+    let resp = client
+        .http()
+        .post(url)
+        .header(reqwest::header::REFERER, step1.page_url.as_str())
+        .form(&form)
+        .send()
+        .await?;
     ensure_success(&resp, "record_service_start.ashx")?;
     // Body deliberately not read — WPF discards `UploadString`'s
     // return value (L91-94). We must still consume the connection so
@@ -282,41 +474,113 @@ async fn step_4_long_poll(
     Ok(())
 }
 
+/// Resolve the launcher identity off the async executor.
+///
+/// [`ClientIntegrity::resolve`] reads and hashes a ~1.3 MB file; a cold
+/// cache makes that long enough to be worth handing to `spawn_blocking`.
+/// A join failure (runtime shutting down) degrades to the bundled
+/// constants rather than failing the OTP outright.
+async fn resolve_client_integrity() -> ClientIntegrity {
+    tokio::task::spawn_blocking(ClientIntegrity::resolve)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "client-integrity resolve task failed; using bundled constants");
+            ClientIntegrity::fallback()
+        })
+}
+
+/// Body of the v2 OTP request. Field names are PascalCase on the wire
+/// except `arch`, matching the launcher verbatim.
+#[derive(serde::Serialize)]
+struct OtpV2Request<'a> {
+    #[serde(rename = "SN")]
+    sn: &'a str,
+    #[serde(rename = "LaunchTicket")]
+    launch_ticket: &'a str,
+    #[serde(rename = "CV")]
+    cv: &'a str,
+    #[serde(rename = "Hash")]
+    hash: &'a str,
+    arch: &'a str,
+}
+
+/// Reply shape: `{ "result": 1, "data": "…", "message": null }`.
+#[derive(serde::Deserialize)]
+struct OtpV2Response {
+    result: i64,
+    data: Option<String>,
+    message: Option<String>,
+}
+
+/// Step 5 (v2) — `POST get_webstart_otp_v2.ashx` and decrypt the OTP
+/// out of the JSON reply.
+///
+/// Replaces the pre-v2 `GET get_webstart_otp.ashx`, which now answers
+/// `0;        Query String Error` regardless of what it is sent.
+async fn step_5_post_otp_v2(
+    client: &BeanfunClient,
+    handoff: &LaunchHandoff,
+    integrity: &ClientIntegrity,
+    referer: &str,
+) -> Result<String, LoginError> {
+    let launch_ticket =
+        decode_launch_ticket(&handoff.data).map_err(|e| LoginError::OtpDecryptionFailed {
+            cause: format!("launch data: {e}"),
+        })?;
+
+    let url = client.portal_url("beanfun_block/generic_handlers/get_webstart_otp_v2.ashx")?;
+    let resp = client
+        .http()
+        .post(url)
+        .header(reqwest::header::REFERER, referer)
+        .json(&OtpV2Request {
+            sn: &handoff.sn,
+            launch_ticket: &launch_ticket,
+            cv: &integrity.cv,
+            hash: &integrity.hash,
+            arch: integrity.arch,
+        })
+        .send()
+        .await?;
+    ensure_success(&resp, "get_webstart_otp_v2.ashx")?;
+    let body = client.bounded_text(resp).await?;
+
+    let parsed: OtpV2Response = serde_json::from_str(&body).map_err(|_| {
+        tracing::warn!(
+            body_len = body.len(),
+            // Byte-slicing the body directly would panic on a preview
+            // boundary that lands mid-codepoint.
+            body_preview = %scrub(&snippet_for_diagnostics(&body)),
+            "get_webstart_otp_v2.ashx returned a body that is not the expected JSON"
+        );
+        LoginError::OtpEmptyResponse
+    })?;
+
+    if parsed.result != 1 {
+        return Err(LoginError::OtpServerRejected {
+            // Prefer the server's own wording; fall back to the code so
+            // the failure is never reported as an empty string.
+            message: parsed
+                .message
+                .filter(|m| !m.is_empty())
+                .unwrap_or_else(|| format!("result={}", parsed.result)),
+        });
+    }
+
+    let payload = parsed
+        .data
+        .filter(|d| !d.is_empty())
+        .ok_or(LoginError::OtpEmptyResponse)?;
+    decrypt_otp_payload(&payload)
+}
+
 /// Step 5 — read the `1;{key}{ciphertext_hex}` envelope from
 /// `get_webstart_otp.ashx`.
 ///
-/// The URL is built **as a string** rather than via reqwest's `.query()`
-/// builder because two of the parameters require WPF-specific encoding
-/// that the form-urlencoder would emit differently:
-///
-/// 1. `CreateTime` contains a literal space (e.g. `2024-01-15 12:34:56`)
-///    that WPF replaces with `%20` (L101 `acc.screatetime.Replace(" ", "%20")`).
-///    reqwest's `.query()` would emit `+` instead, which most servers
-///    accept but is **not** byte-identical to the WPF wire format.
-/// 2. `ppppp` is a 64-char uppercase hex literal that must appear
-///    verbatim — no encoding, no normalisation.
-///
-/// All other characters in the URL (cookies, sids, hex digits) are
-/// already URL-safe, so a literal `format!` is sufficient.
-async fn step_5_get_otp(
-    client: &BeanfunClient,
-    session: &Session,
-    account: &ServiceAccount,
-    step1: &Step1Data,
-    secret_code: &str,
-    service_code: &str,
-    service_region: &str,
-) -> Result<String, LoginError> {
-    let url = build_get_webstart_otp_url(
-        client,
-        session,
-        account,
-        step1,
-        secret_code,
-        service_code,
-        service_region,
-        tick_count_ms(),
-    )?;
+/// Takes the URL pre-built by [`build_get_webstart_otp_url`] (see that
+/// function for why it is assembled as a string) so the caller keeps a
+/// copy to log if the envelope turns out to be a rejection.
+async fn step_5_get_otp(client: &BeanfunClient, url: &str) -> Result<String, LoginError> {
     let resp = client.http().get(url).send().await?;
     ensure_success(&resp, "get_webstart_otp.ashx")?;
     client.bounded_text(resp).await
@@ -366,6 +630,17 @@ fn step_6_decrypt(envelope: &str) -> Result<String, LoginError> {
             message: payload.to_string(),
         });
     }
+    decrypt_otp_payload(payload)
+}
+
+/// Decrypt a `{8-char ASCII key}{ciphertext hex}` OTP payload.
+///
+/// Shared by both protocol versions: the pre-v2 envelope puts this
+/// after `1;`, and `get_webstart_otp_v2.ashx` returns the same shape
+/// as its JSON `data` member. The 40-character `data` observed from
+/// the official launcher is exactly 8 + 32 hex = 8 + two DES blocks,
+/// which is what identifies it as this construction.
+fn decrypt_otp_payload(payload: &str) -> Result<String, LoginError> {
     if payload.len() < 8 {
         return Err(LoginError::OtpDecryptionFailed {
             cause: format!(
@@ -395,12 +670,16 @@ fn step_6_decrypt(envelope: &str) -> Result<String, LoginError> {
 ///
 /// Matches the WPF regex at L36 verbatim: the closing `"` is part of
 /// the pattern so the capture group stops at it.
+///
+/// **Deliberate divergence from WPF** (see the "Empty captures" note
+/// in the module docs): an empty capture is rejected here rather than
+/// forwarded as `SN=` on step 5's URL.
 fn parse_long_polling_key(html: &str) -> Result<String, LoginError> {
-    capture_first(long_polling_key_regex(), html).ok_or_else(|| {
-        LoginError::OtpMissingLongPollingKey {
+    capture_first(long_polling_key_regex(), html)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| LoginError::OtpMissingLongPollingKey {
             snippet: snippet_for_diagnostics(html),
-        }
-    })
+        })
 }
 
 /// Extract the `(key, value)` pair from the TW-only inline JS literal
@@ -435,13 +714,41 @@ fn parse_unk_data(html: &str) -> Result<(String, String), LoginError> {
 /// Re-uses the same regex as P4.1's
 /// [`crate::core::parser::extract_service_account_create_time`] so we
 /// keep one source of truth for the pattern.
+///
+/// Needs no empty-capture guard (unlike its two sibling parsers): the
+/// shared regex is `ServiceAccountCreateTime: "([^"]+)"`, whose `+`
+/// already makes an empty match impossible.
 fn parse_screatetime_fallback(html: &str) -> Result<String, LoginError> {
     extract_service_account_create_time(html).ok_or(LoginError::OtpMissingCreateTime)
 }
 
+/// Extract `m_objData` from step 1's response.
+///
+/// Returns `None` when the literal is absent or either member is
+/// missing — the page shape differs by region, and only the v2 OTP
+/// path needs this, so a miss is not an error at scrape time.
+fn parse_launch_handoff(html: &str) -> Option<LaunchHandoff> {
+    let block = capture_first(launch_object_regex(), html)?;
+    let sn = capture_first(launch_sn_regex(), &block)?;
+    let data = capture_first(launch_data_regex(), &block)?;
+    if sn.is_empty() || data.is_empty() {
+        return None;
+    }
+    Some(LaunchHandoff { sn, data })
+}
+
 /// Extract the `m_strSecretCode` JS literal from step 2's response.
+///
+/// **Deliberate divergence from WPF** (see the "Empty captures" note
+/// in the module docs): the pattern's `'(.*)'` matches a literal
+/// `var m_strSecretCode = '';` and captures an empty string, which
+/// WPF would forward as `SecretCode=` on step 5's URL. Rejecting it
+/// here surfaces `OtpMissingSecretCode` at step 2 — the step that
+/// actually failed — instead of an opaque step-5 server rejection.
 fn parse_secret_code(html: &str) -> Result<String, LoginError> {
-    capture_first(secret_code_regex(), html).ok_or(LoginError::OtpMissingSecretCode)
+    capture_first(secret_code_regex(), html)
+        .filter(|s| !s.is_empty())
+        .ok_or(LoginError::OtpMissingSecretCode)
 }
 
 // -----------------------------------------------------------------------------
@@ -477,6 +784,32 @@ fn secret_code_regex() -> &'static Regex {
     })
 }
 
+/// The `m_objData = { … }` object literal. `(?s)` lets it span lines
+/// (the page pretty-prints it) and the lazy `.*?` stops at the first
+/// closing brace, which is the end of this flat literal.
+fn launch_object_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#"(?s)var m_objData\s*=\s*\{(.*?)\}"#)
+            .expect("launch object regex must compile")
+    })
+}
+
+/// `"sn"` inside that literal. Applied to the captured block, not the
+/// whole page, so the generic key name cannot match something else.
+fn launch_sn_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#""sn"\s*:\s*"([^"]*)""#).expect("launch sn regex must compile"))
+}
+
+/// `"data"` inside that literal — the obfuscated `LaunchTicket` blob.
+fn launch_data_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#""data"\s*:\s*"([^"]*)""#).expect("launch data regex must compile")
+    })
+}
+
 // -----------------------------------------------------------------------------
 // Step 5 URL builder + tick counter (private)
 // -----------------------------------------------------------------------------
@@ -505,6 +838,32 @@ fn tick_count_ms() -> i32 {
 ///
 /// Argument order mirrors the WPF URL template (L100-102) so a side-
 /// by-side diff against `BeanfunClient.OTP.cs` is mechanical.
+///
+/// The URL is assembled **as a string** rather than via reqwest's
+/// `.query()` builder because two parameters require WPF-specific
+/// encoding that the form-urlencoder would emit differently:
+///
+/// 1. `CreateTime` contains a literal space (e.g. `2024-01-15 12:34:56`)
+///    that WPF replaces with `%20` (L101 `acc.screatetime.Replace(" ", "%20")`).
+///    reqwest's `.query()` would emit `+` instead, which most servers
+///    accept but is **not** byte-identical to the WPF wire format.
+/// 2. `ppppp` is a 64-char uppercase hex literal that must appear
+///    verbatim — no encoding, no normalisation.
+///
+/// All other characters in the URL (cookies, sids, hex digits) are
+/// already URL-safe, so a literal `format!` is sufficient.
+/// Characters `Uri.EscapeDataString` leaves alone: the RFC 3986
+/// unreserved set (`ALPHA / DIGIT / "-" / "." / "_" / "~"`).
+///
+/// [`NON_ALPHANUMERIC`] escapes the four punctuation marks too, so they
+/// are removed to match .NET exactly — a dotted version would otherwise
+/// go out as `1%2E5%2E0%2E2`.
+const ESCAPE_DATA_STRING: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
+
 #[allow(clippy::too_many_arguments)]
 fn build_get_webstart_otp_url(
     client: &BeanfunClient,
@@ -515,12 +874,13 @@ fn build_get_webstart_otp_url(
     service_code: &str,
     service_region: &str,
     tick: i32,
+    integrity: Option<&ClientIntegrity>,
 ) -> Result<String, LoginError> {
     let base = client.portal_url("beanfun_block/generic_handlers/get_webstart_otp.ashx")?;
     // WPF replaces only spaces with `%20`; every other char in the
     // screatetime format (`yyyy-MM-dd HH:mm:ss`) is already URL-safe.
     let create_time_encoded = step1.screatetime.replace(' ', "%20");
-    Ok(format!(
+    let mut url = format!(
         "{base}?SN={sn}&WebToken={web_token}&SecretCode={secret_code}&ppppp={ppppp}&ServiceCode={sc}&ServiceRegion={sr}&ServiceAccount={sid}&CreateTime={create_time}&d={tick}",
         base = base,
         sn = step1.long_polling_key,
@@ -532,7 +892,51 @@ fn build_get_webstart_otp_url(
         sid = account.sid,
         create_time = create_time_encoded,
         tick = tick,
-    ))
+    );
+    if let Some(integrity) = integrity {
+        use std::fmt::Write as _;
+        // Appended last, in this order, exactly as `BuildOtpUrl` does.
+        // Infallible for a String sink; the result is discarded rather
+        // than unwrapped to keep the builder panic-free.
+        let _ = write!(
+            url,
+            "&CV={cv}&Hash={hash}&arch={arch}",
+            cv = utf8_percent_encode(&integrity.cv, ESCAPE_DATA_STRING),
+            hash = utf8_percent_encode(&integrity.hash, ESCAPE_DATA_STRING),
+            arch = utf8_percent_encode(integrity.arch, ESCAPE_DATA_STRING),
+        );
+    }
+    Ok(url)
+}
+
+/// Secret-bearing query parameters of step 5's URL. Their values are
+/// replaced with a length when the URL is logged.
+const OTP_URL_SECRET_PARAMS: [&str; 4] = ["SN", "WebToken", "SecretCode", "ServiceAccount"];
+
+/// Rewrite step 5's URL so it is safe to put in a log line.
+///
+/// Every parameter *name* survives, and the non-secret values stay
+/// verbatim on purpose — a rotated `ppppp` constant, a reformatted
+/// `CreateTime` or a wrong `ServiceCode` are exactly what a rejection
+/// diagnosis needs to see, and `ppppp` is a hardcoded constant already
+/// visible in this file. The four session-scoped values collapse to
+/// `<N chars>`, which still distinguishes "absent", "truncated" and
+/// "present" without putting a live token on disk.
+fn redact_otp_url(url: &str) -> String {
+    let Some((base, query)) = url.split_once('?') else {
+        return url.to_string();
+    };
+    let redacted = query
+        .split('&')
+        .map(|pair| match pair.split_once('=') {
+            Some((key, value)) if OTP_URL_SECRET_PARAMS.contains(&key) => {
+                format!("{key}=<{} chars>", value.len())
+            }
+            _ => pair.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{base}?{redacted}")
 }
 
 // -----------------------------------------------------------------------------
@@ -663,6 +1067,47 @@ mod tests {
         assert!(matches!(
             parse_secret_code(html).unwrap_err(),
             LoginError::OtpMissingSecretCode
+        ));
+    }
+
+    // -------------------------------------------------------------------------
+    // Empty captures — see the module-level "Empty captures" note.
+    //
+    // Each of these pages *matches* its regex but captures "". Before
+    // the non-empty filter they returned `Ok("")`, which step 5 spliced
+    // into its URL as a bare `Param=` and the portal bounced with a
+    // generic "Query String Error" — attributing an upstream failure to
+    // the wrong step.
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn empty_secret_code_capture_is_rejected() {
+        let html = r#"<script>var m_strSecretCode = '';</script>"#;
+        assert!(matches!(
+            parse_secret_code(html).unwrap_err(),
+            LoginError::OtpMissingSecretCode
+        ));
+    }
+
+    #[test]
+    fn empty_long_polling_key_capture_is_rejected() {
+        let html = r#"<script>x = "GetResultByLongPolling&key=";</script>"#;
+        assert!(matches!(
+            parse_long_polling_key(html).unwrap_err(),
+            LoginError::OtpMissingLongPollingKey { .. }
+        ));
+    }
+
+    /// The `CreateTime` scrape needs no guard of its own — its regex
+    /// uses `([^"]+)`, so an empty value is a miss, not an empty
+    /// capture. Pinned here so a future loosening of that pattern to
+    /// `(.*)` fails loudly instead of silently reopening the hole.
+    #[test]
+    fn empty_screatetime_is_a_miss_not_an_empty_capture() {
+        let html = r#"x = ServiceAccountCreateTime: ""; y = 1;"#;
+        assert!(matches!(
+            parse_screatetime_fallback(html).unwrap_err(),
+            LoginError::OtpMissingCreateTime
         ));
     }
 
@@ -811,14 +1256,12 @@ mod tests {
     // build_get_webstart_otp_url
     // -------------------------------------------------------------------------
 
-    #[test]
-    fn step5_url_replaces_screatetime_spaces_with_percent20() {
-        // Build a tiny client + session and verify the URL string
-        // contains `%20` (not `+`) where screatetime had a space.
+    /// Shared fixture for the legacy URL-builder tests.
+    fn step5_url_fixture(region: LoginRegion, integrity: Option<&ClientIntegrity>) -> String {
         use crate::services::beanfun::client::ClientConfig;
-        let client = BeanfunClient::new(ClientConfig::for_region(LoginRegion::TW)).unwrap();
+        let client = BeanfunClient::new(ClientConfig::for_region(region)).unwrap();
         let session = Session::new(
-            LoginRegion::TW,
+            region,
             "SKEY_X",
             "WEB_TOKEN_X",
             "ACCOUNT_ID_X",
@@ -837,14 +1280,34 @@ mod tests {
             sauthtype: None,
         };
         let step1 = Step1Data {
+            page_url: "https://tw.beanfun.com/beanfun_block/game_zone/game_start_step2.aspx"
+                .to_string(),
             long_polling_key: "LPK".to_string(),
             unk_data: None,
             screatetime: "2024-01-15 12:34:56".to_string(),
+            // These tests cover the legacy URL builder, which is the
+            // path taken precisely when the page carried no handoff.
+            launch: None,
         };
-        let url = build_get_webstart_otp_url(
-            &client, &session, &account, &step1, "SECRET", "610074", "T9", 12345,
+        build_get_webstart_otp_url(
+            &client, &session, &account, &step1, "SECRET", "610074", "T9", 12345, integrity,
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    fn test_integrity() -> ClientIntegrity {
+        ClientIntegrity {
+            cv: "1.5.0.2".to_string(),
+            hash: "dfd568a69d87abcd8f4a93d1a4481ebb57712d1d28ab0b6fc018fcf140101e06".to_string(),
+            arch: "x64",
+        }
+    }
+
+    #[test]
+    fn step5_url_replaces_screatetime_spaces_with_percent20() {
+        // Build a tiny client + session and verify the URL string
+        // contains `%20` (not `+`) where screatetime had a space.
+        let url = step5_url_fixture(LoginRegion::TW, None);
 
         assert!(
             url.contains("CreateTime=2024-01-15%2012:34:56"),
@@ -865,6 +1328,208 @@ mod tests {
         assert!(url.contains("ServiceRegion=T9"), "got: {url}");
         assert!(url.contains("ServiceAccount=SID_1"), "got: {url}");
         assert!(url.contains("d=12345"), "got: {url}");
+    }
+
+    // -------------------------------------------------------------------------
+    // build_get_webstart_otp_url — client-integrity suffix
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn step5_url_appends_client_integrity_suffix_after_the_cache_buster() {
+        // `BuildOtpUrl` appends CV/Hash/arch last, in that order, after
+        // `&d=`. Pin the whole tail so a future reordering is caught.
+        let integrity = test_integrity();
+        let url = step5_url_fixture(LoginRegion::TW, Some(&integrity));
+
+        assert!(
+            url.ends_with(
+                "&d=12345&CV=1.5.0.2&Hash=dfd568a69d87abcd8f4a93d1a4481ebb57712d1d28ab0b6fc018fcf140101e06&arch=x64"
+            ),
+            "got: {url}",
+        );
+    }
+
+    #[test]
+    fn step5_url_omits_the_suffix_entirely_when_integrity_is_absent() {
+        // The HK path: not an empty `&CV=&Hash=&arch=`, but no suffix at
+        // all, so HK's request stays byte-identical to before.
+        let url = step5_url_fixture(LoginRegion::HK, None);
+
+        assert!(url.ends_with("&d=12345"), "got: {url}");
+        assert!(!url.contains("CV="), "got: {url}");
+        assert!(!url.contains("Hash="), "got: {url}");
+        assert!(!url.contains("arch="), "got: {url}");
+    }
+
+    #[test]
+    fn step5_url_leaves_unreserved_characters_in_the_suffix_unescaped() {
+        // `Uri.EscapeDataString` preserves `-._~`; a naive
+        // `NON_ALPHANUMERIC` set would emit `1%2E5%2E0%2E2` and the
+        // server would reject the version.
+        let integrity = ClientIntegrity {
+            cv: "1.5.0.2-beta_1~x".to_string(),
+            hash: "abc".to_string(),
+            arch: "x64",
+        };
+        let url = step5_url_fixture(LoginRegion::TW, Some(&integrity));
+
+        assert!(url.contains("&CV=1.5.0.2-beta_1~x"), "got: {url}");
+        assert!(!url.contains("%2E"), "got: {url}");
+        assert!(!url.contains("%2D"), "got: {url}");
+        assert!(!url.contains("%5F"), "got: {url}");
+        assert!(!url.contains("%7E"), "got: {url}");
+    }
+
+    #[test]
+    fn step5_url_percent_encodes_reserved_characters_in_the_suffix() {
+        // Defensive: a malformed local launcher version must not be
+        // able to inject extra query parameters into the request.
+        let integrity = ClientIntegrity {
+            cv: "1.0&Hash=evil".to_string(),
+            hash: "aa".to_string(),
+            arch: "x64",
+        };
+        let url = step5_url_fixture(LoginRegion::TW, Some(&integrity));
+
+        assert!(url.contains("&CV=1.0%26Hash%3Devil"), "got: {url}");
+        // Exactly one real `Hash=` parameter survives.
+        assert_eq!(url.matches("&Hash=").count(), 1, "got: {url}");
+    }
+
+    // -------------------------------------------------------------------------
+    // parse_launch_handoff
+    // -------------------------------------------------------------------------
+
+    /// Shaped like the real page: pretty-printed across lines, quoted
+    /// keys, and a `region` member we deliberately ignore.
+    const LAUNCH_LITERAL: &str = r#"
+        var supportService = ['300148', '610074'];
+        var m_objData = {
+            "region": "TW;Production",
+            "sn": "11111111-2222-3333-4444-555555555555",
+            "data": "5abcdef0123456789"
+        };
+        var ggmCallback = false;
+    "#;
+
+    #[test]
+    fn launch_handoff_extracts_sn_and_data() {
+        let handoff = parse_launch_handoff(LAUNCH_LITERAL).expect("literal should parse");
+        assert_eq!(handoff.sn, "11111111-2222-3333-4444-555555555555");
+        assert_eq!(handoff.data, "5abcdef0123456789");
+    }
+
+    #[test]
+    fn launch_handoff_absent_is_none_not_an_error() {
+        // The legacy path must keep working on a page without the
+        // literal, so a miss is `None` rather than a failure.
+        assert!(parse_launch_handoff("<html>no launcher handoff here</html>").is_none());
+    }
+
+    #[test]
+    fn launch_handoff_with_empty_members_is_none() {
+        let html = r#"var m_objData = { "sn": "", "data": "" };"#;
+        assert!(parse_launch_handoff(html).is_none());
+    }
+
+    #[test]
+    fn launch_handoff_stops_at_the_literals_own_brace() {
+        // A later object on the page must not be absorbed into the
+        // capture by a greedy match.
+        let html = r#"
+            var m_objData = { "sn": "SN-1", "data": "D-1" };
+            var other = { "sn": "SN-2", "data": "D-2" };
+        "#;
+        let handoff = parse_launch_handoff(html).expect("should parse");
+        assert_eq!(handoff.sn, "SN-1");
+        assert_eq!(handoff.data, "D-1");
+    }
+
+    // -------------------------------------------------------------------------
+    // OtpV2Response
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn otp_v2_response_parses_the_observed_shape() {
+        let parsed: OtpV2Response =
+            serde_json::from_str(r#"{"result":1,"data":"abcdefgh0123","message":null}"#).unwrap();
+        assert_eq!(parsed.result, 1);
+        assert_eq!(parsed.data.as_deref(), Some("abcdefgh0123"));
+        assert!(parsed.message.is_none());
+    }
+
+    #[test]
+    fn otp_v2_response_carries_a_server_message_on_failure() {
+        let parsed: OtpV2Response =
+            serde_json::from_str(r#"{"result":0,"data":null,"message":"nope"}"#).unwrap();
+        assert_eq!(parsed.result, 0);
+        assert_eq!(parsed.message.as_deref(), Some("nope"));
+    }
+
+    // -------------------------------------------------------------------------
+    // decrypt_otp_payload
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn otp_payload_round_trips_through_the_shared_decryptor() {
+        // 8 bytes of plaintext = one DES block, giving 8 + 16 hex = a
+        // 24-character payload of the same shape as the wire format.
+        let key = "a1b2c3d4";
+        let cipher_hex = crate::core::wcdes::encrypt_hex("OTP12345", key).unwrap();
+        let payload = format!("{key}{cipher_hex}");
+        assert_eq!(decrypt_otp_payload(&payload).unwrap(), "OTP12345");
+    }
+
+    /// The launcher's reply carries a 40-character `data`. That is
+    /// exactly an 8-character key plus 32 hex characters — two DES
+    /// blocks — which is what identifies it as the same envelope the
+    /// pre-v2 protocol used. Pinned so the reasoning survives.
+    #[test]
+    fn observed_v2_payload_length_is_key_plus_whole_des_blocks() {
+        let hex_len = 40 - 8;
+        assert_eq!(hex_len % 2, 0);
+        assert_eq!((hex_len / 2) % 8, 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // redact_otp_url
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn redact_otp_url_hides_secrets_but_keeps_diagnostic_values() {
+        let url = format!(
+            "https://bfweb.hk.beanfun.com/x.ashx?SN=LPK&WebToken=WEB_TOKEN_X&SecretCode=SECRET&ppppp={PPPPP_LITERAL}&ServiceCode=610074&ServiceRegion=T9&ServiceAccount=SID_1&CreateTime=2024-01-15%2012:34:56&d=12345"
+        );
+        let redacted = redact_otp_url(&url);
+
+        // Secrets gone, but their presence and length still visible.
+        for secret in ["LPK", "WEB_TOKEN_X", "SECRET", "SID_1"] {
+            assert!(
+                !redacted.contains(secret),
+                "{secret} must not survive redaction, got: {redacted}"
+            );
+        }
+        assert!(redacted.contains("WebToken=<11 chars>"), "got: {redacted}");
+        assert!(redacted.contains("SN=<3 chars>"), "got: {redacted}");
+
+        // The values a rejection diagnosis actually needs stay verbatim.
+        assert!(
+            redacted.contains(&format!("ppppp={PPPPP_LITERAL}")),
+            "got: {redacted}"
+        );
+        assert!(
+            redacted.contains("CreateTime=2024-01-15%2012:34:56"),
+            "got: {redacted}"
+        );
+        assert!(redacted.contains("ServiceCode=610074"), "got: {redacted}");
+        assert!(redacted.contains("ServiceRegion=T9"), "got: {redacted}");
+        assert!(redacted.contains("d=12345"), "got: {redacted}");
+    }
+
+    #[test]
+    fn redact_otp_url_passes_through_a_query_less_url() {
+        let url = "https://bfweb.hk.beanfun.com/x.ashx";
+        assert_eq!(redact_otp_url(url), url);
     }
 
     // -------------------------------------------------------------------------
