@@ -102,6 +102,27 @@
 //! on the same line makes `key=(.*)"` swallow the rest of it). Tightening
 //! those patterns to `([^"]*)` would change what gets matched on real
 //! pages, so it is left alone pending captures from a live server.
+//!
+//! # Two step 5s
+//!
+//! Beanfun replaced step 5. `GET get_webstart_otp.ashx` with its nine
+//! query parameters now answers `0;        Query String Error` no
+//! matter what it is sent; the live endpoint is
+//! `POST get_webstart_otp_v2.ashx` with a JSON body, and the OTP comes
+//! back in a JSON `data` member rather than a `1;…` envelope.
+//!
+//! Both paths live here. [`get_otp`] picks between them on whether
+//! step 1's page carries the `m_objData` launcher-handoff literal —
+//! the page's own shape, not the configured region, so a region that
+//! migrates later needs no code change. TW has migrated; HK has not
+//! been observed to.
+//!
+//! The v2 request needs a `LaunchTicket`, which is *not* a new
+//! server round-trip: it travels obfuscated inside `m_objData.data`,
+//! decoded by [`crate::core::launch_data`]. It also needs `CV` and
+//! `Hash`, which identify the official launcher build and are pinned
+//! as constants here. `docs/OTP-PROTOCOL-CHANGE.md` has the full
+//! derivation and the provenance of those two values.
 
 use std::sync::OnceLock;
 
@@ -109,6 +130,7 @@ use chrono::Local;
 use percent_encoding::percent_decode_str;
 use regex::Regex;
 
+use crate::core::launch_data::decode_launch_ticket;
 use crate::core::parser::{capture_first, extract_service_account_create_time};
 use crate::core::time::{dt_compact_now, dt_iso_now};
 use crate::core::wcdes::decrypt_hex;
@@ -166,6 +188,16 @@ pub async fn get_otp(
     let secret_code = step_2_get_secret_code(client).await?;
     step_3_record_start(client, account, &step1, service_code, service_region).await?;
     step_4_long_poll(client, &step1.long_polling_key).await?;
+    // Branch on the page's own shape rather than on the region: a page
+    // that carries `m_objData` is one whose OTP now comes from the v2
+    // endpoint, and the pre-v2 handler answers every request with
+    // `Query String Error`. Observed migrated on TW; HK's page has no
+    // such literal and keeps the legacy path. If HK migrates later this
+    // needs no change.
+    if let Some(handoff) = &step1.launch {
+        return step_5_post_otp_v2(client, handoff).await;
+    }
+
     let url = build_get_webstart_otp_url(
         client,
         session,
@@ -218,6 +250,22 @@ struct Step1Data {
     /// `account.screatetime` if it was `Some`, or the value
     /// fallback-parsed from this step's response body.
     screatetime: String,
+    /// The launcher-handoff literal, when the page carries one. Only
+    /// the v2 OTP path reads it; `None` on pages without it.
+    launch: Option<LaunchHandoff>,
+}
+
+/// The `m_objData` literal `game_start_step2.aspx` builds for the
+/// native launcher.
+///
+/// Its `region` member is ignored: it is the constant
+/// `"TW;Production"` and no request we make carries it.
+struct LaunchHandoff {
+    /// 36-character GUID, sent as `SN` on the v2 OTP request.
+    sn: String,
+    /// Obfuscated blob carrying the `LaunchTicket`, decoded by
+    /// [`decode_launch_ticket`].
+    data: String,
 }
 
 /// Step 1 — fetch `game_start_step2.aspx`, extract the long-polling
@@ -259,10 +307,15 @@ async fn step_1_init(
         _ => parse_screatetime_fallback(&body)?,
     };
 
+    // Absence is not an error here: the legacy path does not need it,
+    // and the v2 path reports its own typed error when it is missing.
+    let launch = parse_launch_handoff(&body);
+
     Ok(Step1Data {
         long_polling_key,
         unk_data,
         screatetime,
+        launch,
     })
 }
 
@@ -342,6 +395,106 @@ async fn step_4_long_poll(
     Ok(())
 }
 
+/// Identity of the official launcher that `get_webstart_otp_v2.ashx`
+/// expects its caller to present.
+///
+/// `CV` is `GGMWebStart.dll`'s managed assembly version and `Hash` is
+/// the SHA-256 of that file's bytes in lowercase hex — the launcher
+/// computes both at runtime. We cannot, so they are pinned here and
+/// must be re-pinned whenever Gamania ships a new Game Manager;
+/// `generic_handlers/CheckVersion.ashx` announces that in 80 bytes and
+/// is the cheapest way to notice. See `docs/OTP-PROTOCOL-CHANGE.md`.
+///
+/// Values from the reverse engineering in pungin/Beanfun#368 for
+/// Game Manager 1.5.0.2; not independently verified here.
+const GGM_CV: &str = "1.5.0.2";
+const GGM_DLL_SHA256: &str = "dfd568a69d87abcd8f4a93d1a4481ebb57712d1d28ab0b6fc018fcf140101e06";
+/// `Environment.Is64BitProcess` in the launcher. It ships 64-bit.
+const GGM_ARCH: &str = "x64";
+
+/// Body of the v2 OTP request. Field names are PascalCase on the wire
+/// except `arch`, matching the launcher verbatim.
+#[derive(serde::Serialize)]
+struct OtpV2Request<'a> {
+    #[serde(rename = "SN")]
+    sn: &'a str,
+    #[serde(rename = "LaunchTicket")]
+    launch_ticket: &'a str,
+    #[serde(rename = "CV")]
+    cv: &'a str,
+    #[serde(rename = "Hash")]
+    hash: &'a str,
+    arch: &'a str,
+}
+
+/// Reply shape: `{ "result": 1, "data": "…", "message": null }`.
+#[derive(serde::Deserialize)]
+struct OtpV2Response {
+    result: i64,
+    data: Option<String>,
+    message: Option<String>,
+}
+
+/// Step 5 (v2) — `POST get_webstart_otp_v2.ashx` and decrypt the OTP
+/// out of the JSON reply.
+///
+/// Replaces the pre-v2 `GET get_webstart_otp.ashx`, which now answers
+/// `0;        Query String Error` regardless of what it is sent.
+async fn step_5_post_otp_v2(
+    client: &BeanfunClient,
+    handoff: &LaunchHandoff,
+) -> Result<String, LoginError> {
+    let launch_ticket = decode_launch_ticket(&handoff.data).map_err(|e| {
+        LoginError::OtpDecryptionFailed {
+            cause: format!("launch data: {e}"),
+        }
+    })?;
+
+    let url = client.portal_url("beanfun_block/generic_handlers/get_webstart_otp_v2.ashx")?;
+    let resp = client
+        .http()
+        .post(url)
+        .json(&OtpV2Request {
+            sn: &handoff.sn,
+            launch_ticket: &launch_ticket,
+            cv: GGM_CV,
+            hash: GGM_DLL_SHA256,
+            arch: GGM_ARCH,
+        })
+        .send()
+        .await?;
+    ensure_success(&resp, "get_webstart_otp_v2.ashx")?;
+    let body = client.bounded_text(resp).await?;
+
+    let parsed: OtpV2Response = serde_json::from_str(&body).map_err(|_| {
+        tracing::warn!(
+            body_len = body.len(),
+            // Byte-slicing the body directly would panic on a preview
+            // boundary that lands mid-codepoint.
+            body_preview = %snippet_for_diagnostics(&body),
+            "get_webstart_otp_v2.ashx returned a body that is not the expected JSON"
+        );
+        LoginError::OtpEmptyResponse
+    })?;
+
+    if parsed.result != 1 {
+        return Err(LoginError::OtpServerRejected {
+            // Prefer the server's own wording; fall back to the code so
+            // the failure is never reported as an empty string.
+            message: parsed
+                .message
+                .filter(|m| !m.is_empty())
+                .unwrap_or_else(|| format!("result={}", parsed.result)),
+        });
+    }
+
+    let payload = parsed
+        .data
+        .filter(|d| !d.is_empty())
+        .ok_or(LoginError::OtpEmptyResponse)?;
+    decrypt_otp_payload(&payload)
+}
+
 /// Step 5 — read the `1;{key}{ciphertext_hex}` envelope from
 /// `get_webstart_otp.ashx`.
 ///
@@ -398,6 +551,17 @@ fn step_6_decrypt(envelope: &str) -> Result<String, LoginError> {
             message: payload.to_string(),
         });
     }
+    decrypt_otp_payload(payload)
+}
+
+/// Decrypt a `{8-char ASCII key}{ciphertext hex}` OTP payload.
+///
+/// Shared by both protocol versions: the pre-v2 envelope puts this
+/// after `1;`, and `get_webstart_otp_v2.ashx` returns the same shape
+/// as its JSON `data` member. The 40-character `data` observed from
+/// the official launcher is exactly 8 + 32 hex = 8 + two DES blocks,
+/// which is what identifies it as this construction.
+fn decrypt_otp_payload(payload: &str) -> Result<String, LoginError> {
     if payload.len() < 8 {
         return Err(LoginError::OtpDecryptionFailed {
             cause: format!(
@@ -479,6 +643,21 @@ fn parse_screatetime_fallback(html: &str) -> Result<String, LoginError> {
     extract_service_account_create_time(html).ok_or(LoginError::OtpMissingCreateTime)
 }
 
+/// Extract `m_objData` from step 1's response.
+///
+/// Returns `None` when the literal is absent or either member is
+/// missing — the page shape differs by region, and only the v2 OTP
+/// path needs this, so a miss is not an error at scrape time.
+fn parse_launch_handoff(html: &str) -> Option<LaunchHandoff> {
+    let block = capture_first(launch_object_regex(), html)?;
+    let sn = capture_first(launch_sn_regex(), &block)?;
+    let data = capture_first(launch_data_regex(), &block)?;
+    if sn.is_empty() || data.is_empty() {
+        return None;
+    }
+    Some(LaunchHandoff { sn, data })
+}
+
 /// Extract the `m_strSecretCode` JS literal from step 2's response.
 ///
 /// **Deliberate divergence from WPF** (see the "Empty captures" note
@@ -523,6 +702,34 @@ fn secret_code_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(r#"var m_strSecretCode = '(.*)';"#).expect("secret code regex must compile")
+    })
+}
+
+/// The `m_objData = { … }` object literal. `(?s)` lets it span lines
+/// (the page pretty-prints it) and the lazy `.*?` stops at the first
+/// closing brace, which is the end of this flat literal.
+fn launch_object_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#"(?s)var m_objData\s*=\s*\{(.*?)\}"#)
+            .expect("launch object regex must compile")
+    })
+}
+
+/// `"sn"` inside that literal. Applied to the captured block, not the
+/// whole page, so the generic key name cannot match something else.
+fn launch_sn_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#""sn"\s*:\s*"([^"]*)""#).expect("launch sn regex must compile")
+    })
+}
+
+/// `"data"` inside that literal — the obfuscated `LaunchTicket` blob.
+fn launch_data_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#""data"\s*:\s*"([^"]*)""#).expect("launch data regex must compile")
     })
 }
 
@@ -999,6 +1206,101 @@ mod tests {
         assert!(url.contains("ServiceRegion=T9"), "got: {url}");
         assert!(url.contains("ServiceAccount=SID_1"), "got: {url}");
         assert!(url.contains("d=12345"), "got: {url}");
+    }
+
+    // -------------------------------------------------------------------------
+    // parse_launch_handoff
+    // -------------------------------------------------------------------------
+
+    /// Shaped like the real page: pretty-printed across lines, quoted
+    /// keys, and a `region` member we deliberately ignore.
+    const LAUNCH_LITERAL: &str = r#"
+        var supportService = ['300148', '610074'];
+        var m_objData = {
+            "region": "TW;Production",
+            "sn": "11111111-2222-3333-4444-555555555555",
+            "data": "5abcdef0123456789"
+        };
+        var ggmCallback = false;
+    "#;
+
+    #[test]
+    fn launch_handoff_extracts_sn_and_data() {
+        let handoff = parse_launch_handoff(LAUNCH_LITERAL).expect("literal should parse");
+        assert_eq!(handoff.sn, "11111111-2222-3333-4444-555555555555");
+        assert_eq!(handoff.data, "5abcdef0123456789");
+    }
+
+    #[test]
+    fn launch_handoff_absent_is_none_not_an_error() {
+        // The legacy path must keep working on a page without the
+        // literal, so a miss is `None` rather than a failure.
+        assert!(parse_launch_handoff("<html>no launcher handoff here</html>").is_none());
+    }
+
+    #[test]
+    fn launch_handoff_with_empty_members_is_none() {
+        let html = r#"var m_objData = { "sn": "", "data": "" };"#;
+        assert!(parse_launch_handoff(html).is_none());
+    }
+
+    #[test]
+    fn launch_handoff_stops_at_the_literals_own_brace() {
+        // A later object on the page must not be absorbed into the
+        // capture by a greedy match.
+        let html = r#"
+            var m_objData = { "sn": "SN-1", "data": "D-1" };
+            var other = { "sn": "SN-2", "data": "D-2" };
+        "#;
+        let handoff = parse_launch_handoff(html).expect("should parse");
+        assert_eq!(handoff.sn, "SN-1");
+        assert_eq!(handoff.data, "D-1");
+    }
+
+    // -------------------------------------------------------------------------
+    // OtpV2Response
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn otp_v2_response_parses_the_observed_shape() {
+        let parsed: OtpV2Response =
+            serde_json::from_str(r#"{"result":1,"data":"abcdefgh0123","message":null}"#).unwrap();
+        assert_eq!(parsed.result, 1);
+        assert_eq!(parsed.data.as_deref(), Some("abcdefgh0123"));
+        assert!(parsed.message.is_none());
+    }
+
+    #[test]
+    fn otp_v2_response_carries_a_server_message_on_failure() {
+        let parsed: OtpV2Response =
+            serde_json::from_str(r#"{"result":0,"data":null,"message":"nope"}"#).unwrap();
+        assert_eq!(parsed.result, 0);
+        assert_eq!(parsed.message.as_deref(), Some("nope"));
+    }
+
+    // -------------------------------------------------------------------------
+    // decrypt_otp_payload
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn otp_payload_round_trips_through_the_shared_decryptor() {
+        // 8 bytes of plaintext = one DES block, giving 8 + 16 hex = a
+        // 24-character payload of the same shape as the wire format.
+        let key = "a1b2c3d4";
+        let cipher_hex = crate::core::wcdes::encrypt_hex("OTP12345", key).unwrap();
+        let payload = format!("{key}{cipher_hex}");
+        assert_eq!(decrypt_otp_payload(&payload).unwrap(), "OTP12345");
+    }
+
+    /// The launcher's reply carries a 40-character `data`. That is
+    /// exactly an 8-character key plus 32 hex characters — two DES
+    /// blocks — which is what identifies it as the same envelope the
+    /// pre-v2 protocol used. Pinned so the reasoning survives.
+    #[test]
+    fn observed_v2_payload_length_is_key_plus_whole_des_blocks() {
+        let hex_len = 40 - 8;
+        assert_eq!(hex_len % 2, 0);
+        assert_eq!((hex_len / 2) % 8, 0);
     }
 
     // -------------------------------------------------------------------------

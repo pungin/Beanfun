@@ -282,12 +282,29 @@ The upstream sample's 553 gives 272 bytes = 34 blocks. Two independent
 captures landing exactly on the block boundary is good evidence the
 format is understood.
 
-## Remaining work
+## Status
 
-1. ~~Decode `Data` → `LaunchTicket`~~ — `core::launch_data`.
-2. Scrape `m_objData` out of step 1's response.
-3. Source `CV` / `Hash` (see above) and `arch`.
-4. `POST` the v2 payload and read the OTP from `data` in the reply.
+Implemented, **not yet run against a live server**:
+
+1. `core::launch_data::decode_launch_ticket` — decodes the blob.
+2. `parse_launch_handoff` — scrapes `m_objData` from step 1's response.
+3. `GGM_CV` / `GGM_DLL_SHA256` / `GGM_ARCH` — pinned in
+   `services::beanfun::otp`.
+4. `step_5_post_otp_v2` — posts the payload and decrypts the reply's
+   `data`.
+
+`get_otp` selects the path on whether step 1's page carries
+`m_objData`, so HK keeps the legacy endpoint and a later HK migration
+needs no code change.
+
+### The one unverified assumption
+
+The reply's `data` is treated as the same `{8-char key}{ciphertext
+hex}` envelope the pre-v2 protocol used. The observed length of 40 is
+exactly 8 + 32 hex = 8 + two DES blocks, which is why — but no
+plaintext OTP has been seen to confirm it. If the assumption is wrong
+the symptom will be `auth.otp_decryption_failed`, or an OTP that comes
+out as mojibake, rather than a silent wrong answer.
 
 ## What has already been fixed
 
