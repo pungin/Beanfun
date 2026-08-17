@@ -246,21 +246,48 @@ Two traps for the CI job:
   change as a manual review item — it should be rare, and it will
   announce itself as a decode failure.
 
-## Open question — blocks implementation
+## Where `Data` comes from — confirmed
 
-**Where does the page get `Data`?** `ggm.js` only defines the
-interface; the call site lives in an authenticated page (`loader.ashx`
-returns `_bf_IsInitOK = false` without a session), and the URI itself
-never crosses the network. The plaintext fields
-(`ServiceCode` / `ServiceRegion` / `ServiceAccount`) say it is
-per-launch and server-issued, so it is very likely embedded in
-`game_start_step2.aspx` — **which step 1 already downloads**. If so the
-fix needs a new scrape, not a new request.
+`game_start_step2.aspx` — **the page step 1 already downloads**. So the
+fix needs a new scrape, not a new request. The literal:
 
-To confirm, from a logged-in session: find `Data` in the
-`game_start_step2.aspx` response, or read the JS that calls
-`ggm.LaunchGame(...)` / `ggm.SmartLaunch(...)` and quote how the
-object's `data` property is built.
+```javascript
+var m_objData = {
+    "region": "TW;Production",
+    "sn": "<36-char GUID>",
+    "data": "<537 characters>"
+};
+
+function LaunchGame() {
+    if (supportService.indexOf(MyAccountData.ServiceCode) > -1) {
+        parent.GGM.SmartLaunch(m_objData, …);   // Cmd=06006
+    } else {
+        parent.GGM.LaunchGame(m_objData, …);    // Cmd=06004
+    }
+}
+```
+
+Three things worth noting:
+
+- `region` is the literal `TW;Production`, not `TW`.
+- There is **no** `webToken` or `secretCode` property, so `ggm.js`
+  takes its `else` branch and the handoff URI is only
+  `Region&SN&Cmd&Data`. Those two values never reach the launcher.
+- `supportService` is a hardcoded service-code allowlist that picks
+  `SmartLaunch` over `LaunchGame`; `610074` (MapleStory TW) is in it.
+
+The observed `data` length of 537 satisfies the decoder's arithmetic:
+`537 - 1 - 8 = 528` hex characters = 264 bytes = 33 whole DES blocks.
+The upstream sample's 553 gives 272 bytes = 34 blocks. Two independent
+captures landing exactly on the block boundary is good evidence the
+format is understood.
+
+## Remaining work
+
+1. ~~Decode `Data` → `LaunchTicket`~~ — `core::launch_data`.
+2. Scrape `m_objData` out of step 1's response.
+3. Source `CV` / `Hash` (see above) and `arch`.
+4. `POST` the v2 payload and read the OTP from `data` in the reply.
 
 ## What has already been fixed
 
