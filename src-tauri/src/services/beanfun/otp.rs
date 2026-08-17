@@ -66,6 +66,42 @@
 //! provenance of this literal is **unknown**: it appears to be a
 //! protocol-level constant the server validates against. Do not
 //! change it without empirical verification.
+//!
+//! # Empty captures (deliberate divergence from WPF)
+//!
+//! Every value that step 5 splices into its query string is scraped
+//! with a `(.*)` capture group copied verbatim from WPF. `(.*)`
+//! matches the empty string, so a page shaped like
+//! `var m_strSecretCode = '';` yields `Ok("")` rather than a "not
+//! found" miss — and WPF forwards that straight into the URL as
+//! `SecretCode=`.
+//!
+//! Steps 3 and 4 discard their response bodies (`drop(resp)`, mirroring
+//! WPF's ignored `UploadString` return value) and `ensure_success`
+//! only inspects the HTTP status, which these `.ashx` handlers keep at
+//! 200 even when they reject the request. Step 5 is therefore the first
+//! step that reads a body — so *every* upstream breakage collapses into
+//! one opaque `OtpServerRejected("Query String Error")` there, with no
+//! signal as to which parameter was actually bad.
+//!
+//! To keep failures attributable, `parse_long_polling_key` and
+//! `parse_secret_code` — the two scrapes whose patterns really do use
+//! `(.*)` — reject an empty capture and return their existing typed
+//! `OtpMissing*` errors instead. This is the one place we knowingly
+//! break the 1:1 WPF alignment: WPF's behaviour here is a diagnostic
+//! dead end, not a protocol requirement.
+//!
+//! `CreateTime` needs no such guard — its regex is already
+//! `([^"]+)`. It reaches step 5 empty by a different route:
+//! [`ServiceAccount`] is `Deserialize` and arrives over IPC from the
+//! frontend, so `screatetime: Some("")` bypasses the fallback scrape
+//! that a `None` would have triggered. `step_1_init` treats that
+//! empty string as absent.
+//!
+//! Note this does **not** cover greedy over-capture (a second `"` later
+//! on the same line makes `key=(.*)"` swallow the rest of it). Tightening
+//! those patterns to `([^"]*)` would change what gets matched on real
+//! pages, so it is left alone pending captures from a live server.
 
 use std::sync::OnceLock;
 
@@ -194,9 +230,13 @@ async fn step_1_init(
         LoginRegion::TW => Some(parse_unk_data(&body)?),
         LoginRegion::HK => None,
     };
+    // A stored `Some("")` is as unusable as `None` — both produce an
+    // empty `CreateTime=` on step 5's URL, which the portal rejects
+    // with a generic "Query String Error". Treat it as absent so the
+    // fallback scrape gets its chance.
     let screatetime = match account.screatetime.as_deref() {
-        Some(s) => s.to_string(),
-        None => parse_screatetime_fallback(&body)?,
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => parse_screatetime_fallback(&body)?,
     };
 
     Ok(Step1Data {
@@ -395,12 +435,16 @@ fn step_6_decrypt(envelope: &str) -> Result<String, LoginError> {
 ///
 /// Matches the WPF regex at L36 verbatim: the closing `"` is part of
 /// the pattern so the capture group stops at it.
+///
+/// **Deliberate divergence from WPF** (see the "Empty captures" note
+/// in the module docs): an empty capture is rejected here rather than
+/// forwarded as `SN=` on step 5's URL.
 fn parse_long_polling_key(html: &str) -> Result<String, LoginError> {
-    capture_first(long_polling_key_regex(), html).ok_or_else(|| {
-        LoginError::OtpMissingLongPollingKey {
+    capture_first(long_polling_key_regex(), html)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| LoginError::OtpMissingLongPollingKey {
             snippet: snippet_for_diagnostics(html),
-        }
-    })
+        })
 }
 
 /// Extract the `(key, value)` pair from the TW-only inline JS literal
@@ -435,13 +479,26 @@ fn parse_unk_data(html: &str) -> Result<(String, String), LoginError> {
 /// Re-uses the same regex as P4.1's
 /// [`crate::core::parser::extract_service_account_create_time`] so we
 /// keep one source of truth for the pattern.
+///
+/// Needs no empty-capture guard (unlike its two sibling parsers): the
+/// shared regex is `ServiceAccountCreateTime: "([^"]+)"`, whose `+`
+/// already makes an empty match impossible.
 fn parse_screatetime_fallback(html: &str) -> Result<String, LoginError> {
     extract_service_account_create_time(html).ok_or(LoginError::OtpMissingCreateTime)
 }
 
 /// Extract the `m_strSecretCode` JS literal from step 2's response.
+///
+/// **Deliberate divergence from WPF** (see the "Empty captures" note
+/// in the module docs): the pattern's `'(.*)'` matches a literal
+/// `var m_strSecretCode = '';` and captures an empty string, which
+/// WPF would forward as `SecretCode=` on step 5's URL. Rejecting it
+/// here surfaces `OtpMissingSecretCode` at step 2 — the step that
+/// actually failed — instead of an opaque step-5 server rejection.
 fn parse_secret_code(html: &str) -> Result<String, LoginError> {
-    capture_first(secret_code_regex(), html).ok_or(LoginError::OtpMissingSecretCode)
+    capture_first(secret_code_regex(), html)
+        .filter(|s| !s.is_empty())
+        .ok_or(LoginError::OtpMissingSecretCode)
 }
 
 // -----------------------------------------------------------------------------
@@ -663,6 +720,47 @@ mod tests {
         assert!(matches!(
             parse_secret_code(html).unwrap_err(),
             LoginError::OtpMissingSecretCode
+        ));
+    }
+
+    // -------------------------------------------------------------------------
+    // Empty captures — see the module-level "Empty captures" note.
+    //
+    // Each of these pages *matches* its regex but captures "". Before
+    // the non-empty filter they returned `Ok("")`, which step 5 spliced
+    // into its URL as a bare `Param=` and the portal bounced with a
+    // generic "Query String Error" — attributing an upstream failure to
+    // the wrong step.
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn empty_secret_code_capture_is_rejected() {
+        let html = r#"<script>var m_strSecretCode = '';</script>"#;
+        assert!(matches!(
+            parse_secret_code(html).unwrap_err(),
+            LoginError::OtpMissingSecretCode
+        ));
+    }
+
+    #[test]
+    fn empty_long_polling_key_capture_is_rejected() {
+        let html = r#"<script>x = "GetResultByLongPolling&key=";</script>"#;
+        assert!(matches!(
+            parse_long_polling_key(html).unwrap_err(),
+            LoginError::OtpMissingLongPollingKey { .. }
+        ));
+    }
+
+    /// The `CreateTime` scrape needs no guard of its own — its regex
+    /// uses `([^"]+)`, so an empty value is a miss, not an empty
+    /// capture. Pinned here so a future loosening of that pattern to
+    /// `(.*)` fails loudly instead of silently reopening the hole.
+    #[test]
+    fn empty_screatetime_is_a_miss_not_an_empty_capture() {
+        let html = r#"x = ServiceAccountCreateTime: ""; y = 1;"#;
+        assert!(matches!(
+            parse_screatetime_fallback(html).unwrap_err(),
+            LoginError::OtpMissingCreateTime
         ));
     }
 
