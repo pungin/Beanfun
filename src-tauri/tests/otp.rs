@@ -816,3 +816,168 @@ async fn tw_v2_works_on_a_page_that_kept_only_the_handoff() {
         "the v2 request carries no secret code, so fetching one is a wasted round trip"
     );
 }
+
+// -----------------------------------------------------------------------------
+// Group G — the pre-v2 route, reached through the handoff
+// -----------------------------------------------------------------------------
+
+/// A page that hands over the pre-v2 parameters instead of a ticket.
+///
+/// Same `m_objData` literal as the migrated shape — the two are
+/// indistinguishable until the blob is decoded, which is the whole
+/// reason routing on the page's fields was wrong.
+fn step1_body_tw_handoff(payload: &str, tokens: Option<(&str, &str)>) -> String {
+    let tokens = match tokens {
+        Some((web_token, secret_code)) => {
+            format!("\"webToken\": \"{web_token}\", \"secretCode\": \"{secret_code}\", ")
+        }
+        None => String::new(),
+    };
+    format!(
+        "<script>\nvar m_objData = {{ \"region\": \"TW;Production\", \"sn\": \"SN-1234\", {tokens}\"data\": \"{payload}\" }};\n</script>"
+    )
+}
+
+/// The payload the un-migrated games hand over: `&&&&` between fields,
+/// and a `ppppp` that is 96 characters rather than the 64-character
+/// constant the WPF client pinned.
+fn legacy_plaintext(ppppp: &str) -> String {
+    format!(
+        "ppppp={ppppp}&&&&ServiceCode=600309&&&&ServiceRegion=A2&&&&ServiceAccount=A2_ACCT&&&&CreateTime=2010-08-18 20:28:29&&&&BeanfunUrl=https://tw.beanfun.com/;"
+    )
+}
+
+/// The blob's values reach the wire, and the retired-looking endpoint
+/// is the one asked.
+///
+/// This is the shape of upstream #376: every game but MapleStory hands
+/// over these parameters, and sending them to the v2 endpoint — or
+/// sending our own session's values to this one — is what produced a
+/// decryption error for data that had decrypted perfectly. The
+/// assertions are on the request as sent, because the decoder was never
+/// what was broken.
+#[tokio::test]
+async fn tw_handoff_with_the_pre_v2_payload_asks_the_endpoint_that_answers_it() {
+    let server = MockServer::start().await;
+    let client = client_for(&server, LoginRegion::TW);
+    let session = test_session(LoginRegion::TW);
+    let account = account_with(Some("2024-01-15 12:34:56"));
+
+    let ppppp = "F".repeat(96);
+    // Selector 6 with a table `n % 4` cannot reach, as in the v2 tests.
+    let payload = launch_payload(&legacy_plaintext(&ppppp), "1a2b3c4d", 6, TABLES[5]);
+
+    mount_step1(&server, &step1_body_tw_handoff(&payload, None)).await;
+    mount_step2(&server, "var m_strSecretCode = 'SECRET_OK';").await;
+    mount_step3_ok(&server).await;
+    mount_step5(&server, &make_envelope("ABCDEFGH", "OTP55555")).await;
+
+    let otp = get_otp(&client, &session, &account, SERVICE_CODE, SERVICE_REGION)
+        .await
+        .expect("a pre-v2 payload must still yield a password");
+    assert_eq!(otp, "OTP55555");
+
+    let requests = server.received_requests().await.unwrap_or_default();
+    assert!(
+        !requests
+            .iter()
+            .any(|r| r.url.path().ends_with("get_webstart_otp_v2.ashx")),
+        "a blob with no LaunchTicket has nothing to send to the v2 endpoint"
+    );
+
+    let step5 = requests
+        .iter()
+        .find(|r| r.url.path() == "/beanfun_block/generic_handlers/get_webstart_otp.ashx")
+        .expect("the pre-v2 endpoint was asked");
+    let query: std::collections::HashMap<_, _> = step5.url.query_pairs().into_owned().collect();
+
+    // Every value the blob supplied is the blob's, not ours.
+    assert_eq!(query["ppppp"], ppppp, "the live ppppp travels in the blob");
+    assert_eq!(
+        query["ServiceAccount"], "A2_ACCT",
+        "the account is the blob's, not the one we were called with"
+    );
+    assert_eq!(query["ServiceCode"], "600309");
+    assert_eq!(query["ServiceRegion"], "A2");
+    assert_eq!(query["CreateTime"], "2010-08-18 20:28:29");
+    assert_eq!(query["SN"], "SN-1234", "the handoff's sn keys the request");
+
+    // The space is `%20` on the wire, as WPF sends it — `query_pairs`
+    // would decode `+` to a space just the same, so the raw query is
+    // the only place this can be seen.
+    let raw = step5.url.query().unwrap_or_default();
+    assert!(
+        raw.contains("CreateTime=2010-08-18%2020:28:29"),
+        "CreateTime must be %20-encoded, got: {raw}"
+    );
+
+    // Without these the endpoint answers `Query String Error`, which is
+    // the failure this whole route was mistaken for.
+    for field in ["CV", "Hash", "arch"] {
+        assert!(
+            query.get(field).is_some_and(|v| !v.is_empty()),
+            "{field} must name the build asking"
+        );
+    }
+
+    // Nothing observed guarantees the page carries these, so they come
+    // from the flow that always had them.
+    assert_eq!(query["WebToken"], WEB_TOKEN, "falls back to the session");
+    assert_eq!(
+        query["SecretCode"], "SECRET_OK",
+        "falls back to step 2, which is what the pre-v2 flow always did"
+    );
+}
+
+/// When the page does declare them, they are used as declared.
+///
+/// The fallbacks above are a safety net, not the normal path: a page
+/// that says which token to use has more right to that answer than our
+/// session does, and fetching a secret code it already handed over is a
+/// round trip for nothing.
+#[tokio::test]
+async fn tw_handoff_prefers_the_tokens_the_page_declared() {
+    let server = MockServer::start().await;
+    let client = client_for(&server, LoginRegion::TW);
+    let session = test_session(LoginRegion::TW);
+    let account = account_with(Some("2024-01-15 12:34:56"));
+
+    let payload = launch_payload(&legacy_plaintext(&"a".repeat(96)), "1a2b3c4d", 3, TABLES[7]);
+    let page_token = "PAGE_WEB_TOKEN";
+    let page_secret = "PAGE_SECRET_CODE";
+
+    mount_step1(
+        &server,
+        &step1_body_tw_handoff(&payload, Some((page_token, page_secret))),
+    )
+    .await;
+    mount_step3_ok(&server).await;
+    mount_step5(&server, &make_envelope("ABCDEFGH", "OTP44444")).await;
+    // No step 2 mock on purpose: reaching for one would go unmatched
+    // and fail the exchange.
+
+    let otp = get_otp(&client, &session, &account, SERVICE_CODE, SERVICE_REGION)
+        .await
+        .expect("the page's own tokens must be enough");
+    assert_eq!(otp, "OTP44444");
+
+    let requests = server.received_requests().await.unwrap_or_default();
+    let step5 = requests
+        .iter()
+        .find(|r| r.url.path() == "/beanfun_block/generic_handlers/get_webstart_otp.ashx")
+        .expect("the pre-v2 endpoint was asked");
+    let query: std::collections::HashMap<_, _> = step5.url.query_pairs().into_owned().collect();
+
+    assert_eq!(query["WebToken"], page_token);
+    assert_eq!(query["SecretCode"], page_secret);
+    assert_ne!(
+        query["WebToken"], WEB_TOKEN,
+        "the session's token must not win over the page's"
+    );
+    assert!(
+        !requests
+            .iter()
+            .any(|r| r.url.path().ends_with("get_cookies.ashx")),
+        "the page already handed over a secret code"
+    );
+}
