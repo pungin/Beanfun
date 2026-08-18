@@ -184,7 +184,6 @@
 //! | --------------------------------------- | -------------------------------------- | --------------------------------------------- |
 //! | `PathEmpty`                             | `game.path_empty`                      | —                                             |
 //! | `PathNotFound { path }`                 | `game.path_not_found`                  | `path`                                        |
-//! | `PathNonAscii { path, ch, position }`   | `game.path_non_ascii`                  | `path` / `char` / `position`                  |
 //! | `LocaleRemulatorRelease { name, .. }`   | `game.locale_remulator_release_failed` | `resource`                                    |
 //! | `LocaleRemulatorSha256Mismatch { .. }`  | `game.locale_remulator_sha256_mismatch`| `resource`                                    |
 //! | `ShellExecute { code, .. }` (windows)   | `game.shellexecute_failed`             | `shellexecute_code`                           |
@@ -748,15 +747,6 @@ impl From<GameError> for CommandError {
             GameError::PathEmpty => CommandError::new("game.path_empty", message),
             GameError::PathNotFound { path } => CommandError::new("game.path_not_found", message)
                 .with_details(json!({ "path": path.display().to_string() })),
-            GameError::PathNonAscii {
-                path,
-                offending_char,
-                position,
-            } => CommandError::new("game.path_non_ascii", message).with_details(json!({
-                "path": path.display().to_string(),
-                "char": offending_char.to_string(),
-                "position": position,
-            })),
             GameError::LocaleRemulatorRelease { name, .. } => {
                 CommandError::new("game.locale_remulator_release_failed", message)
                     .with_details(json!({ "resource": name }))

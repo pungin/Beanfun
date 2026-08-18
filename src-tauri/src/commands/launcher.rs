@@ -201,10 +201,11 @@
 //! `executable_path` is `Option<String>` (rather than `PathBuf`) to
 //! avoid leaking the specta `PathBuf` quirks to the frontend and to
 //! let the UI treat missing paths uniformly. The conversion uses
-//! [`std::path::Path::to_string_lossy`] — in practice every game
-//! install path is ASCII so this is lossless; the docstring on
-//! [`GameProcessInfo::executable_path`] spells that out for
-//! pathological inputs.
+//! [`std::path::Path::to_string_lossy`], which is lossless for any
+//! path Windows can represent in UTF-16 — Chinese install paths
+//! included, and they are common (upstream #378). Only a genuinely
+//! ill-formed path substitutes replacement characters; the docstring
+//! on [`GameProcessInfo::executable_path`] spells that out.
 //!
 //! ## Blocking isolation (D5c)
 //!
