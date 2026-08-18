@@ -11,10 +11,28 @@
 //! ```
 //!
 //! and hands it to the native launcher over the `gamaniagames://` URL
-//! scheme. `data` carries the `LaunchTicket` that
-//! `get_webstart_otp_v2.ashx` requires — obfuscated, but present, so
-//! the value can be recovered without the launcher being installed.
-//! See `docs/OTP-PROTOCOL-CHANGE.md` for how this was established.
+//! scheme. `data` carries whatever that game's OTP request needs —
+//! obfuscated, but present, so it can be recovered without the
+//! launcher being installed. See `docs/OTP-PROTOCOL-CHANGE.md` for how
+//! this was established.
+//!
+//! # Two payloads
+//!
+//! There are two, and both are live:
+//!
+//! - **`LaunchTicket=…`** — a ticket for `get_webstart_otp_v2.ashx`.
+//!   Observed on MapleStory.
+//! - **`ppppp=…`** — the query parameters for the pre-v2
+//!   `get_webstart_otp.ashx`, alongside `ServiceCode`,
+//!   `ServiceRegion`, `ServiceAccount` and `CreateTime`, joined by
+//!   `&&&&`. Observed on CSO, Elsword and Mabinogi.
+//!
+//! Both kinds of page declare `m_objData`, so only the decoded
+//! contents distinguish them.
+//!
+//! Treating a `ppppp` payload as a failed `LaunchTicket` decode is
+//! what broke every game but MapleStory (upstream issue #376): the
+//! decode was fine, the acceptance test was too narrow.
 //!
 //! # Format
 //!
@@ -75,10 +93,10 @@ pub enum LaunchDataError {
     #[error("DES decryption of launch data failed: {0}")]
     Decrypt(String),
 
-    #[error("decrypted launch data has no LaunchTicket field")]
+    #[error("decrypted launch data carries neither a LaunchTicket nor a ppppp payload")]
     MissingTicket,
 
-    #[error("LaunchTicket is not 64 hex characters (got {0})")]
+    #[error("LaunchTicket field is present but empty")]
     MalformedTicket(String),
 }
 
@@ -88,29 +106,105 @@ impl From<wcdes::WcdesError> for LaunchDataError {
     }
 }
 
-/// Recover the `LaunchTicket` from a `m_objData.data` blob.
+/// The two payloads a `m_objData.data` blob is known to carry.
 ///
-/// The other decoded fields (`ServiceCode`, `ServiceRegion`,
-/// `ServiceAccount`, `BeanfunUrl`, `WebStartPatch`) are discarded —
-/// the v2 OTP request needs none of them, and the caller already holds
-/// its own copies.
-//
-// ponytail: returns the one field the caller uses. Widen to the full
-// field map if a future call site needs more than the ticket.
-pub fn decode_launch_ticket(data: &str) -> Result<String, LaunchDataError> {
+/// Which one a page hands over is per game — whether that game has
+/// been migrated to the v2 endpoint yet. **From the outside the two
+/// pages look identical**: both declare `m_objData`, so the blob has to
+/// be decoded before the route is known. That is why routing on the
+/// mere presence of the literal sent every un-migrated game to an
+/// endpoint with nothing to give it (upstream #376).
+///
+/// Independently measured across four titles by @ToooAir on that
+/// issue: MapleStory (`610074_T9`) carries a ticket; CSO
+/// (`610153_TN`), Elsword (`300148_AF`) and Mabinogi (`600309_A2`)
+/// carry the pre-v2 parameters. All four declare `m_objData`.
+#[derive(Debug, PartialEq, Eq)]
+pub enum LaunchPayload {
+    /// A ticket `get_webstart_otp_v2.ashx` takes directly.
+    Ticket(String),
+    /// The query parameters the pre-v2 `get_webstart_otp.ashx` wants.
+    Legacy(Box<LegacyOtpParams>),
+}
+
+/// Pre-v2 OTP query parameters, as carried inside the blob.
+///
+/// `ppppp` is the interesting one. The WPF client hardcoded a
+/// 64-character constant for it and nobody knew where the value came
+/// from; it is in fact supplied here, and the current one is 96
+/// characters. Reading it from the blob is correct whether it is
+/// global, per-session or per-launch, which is why nothing here caches
+/// or pins it.
+#[derive(Debug, PartialEq, Eq)]
+pub struct LegacyOtpParams {
+    pub ppppp: String,
+    pub service_code: String,
+    pub service_region: String,
+    pub service_account: String,
+    pub create_time: String,
+}
+
+/// Decode a `m_objData.data` blob into whichever payload it carries.
+pub fn decode_launch_data(data: &str) -> Result<LaunchPayload, LaunchDataError> {
     let plaintext = decode(data)?;
-    let ticket = plaintext
+    let fields = parse_fields(&plaintext);
+    let field = |name: &str| {
+        fields
+            .iter()
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| (*v).to_owned())
+    };
+
+    if let Some(ticket) = field("LaunchTicket") {
+        // Presence decides the route; length does not. Pinning it to
+        // the 64 characters seen so far would be the same over-narrow
+        // acceptance that made every `ppppp` game fail, and #376
+        // reports observed lengths moving elsewhere in this protocol.
+        if ticket.is_empty() {
+            return Err(LaunchDataError::MalformedTicket(ticket));
+        }
+        return Ok(LaunchPayload::Ticket(ticket));
+    }
+
+    match (
+        field("ppppp"),
+        field("ServiceCode"),
+        field("ServiceRegion"),
+        field("ServiceAccount"),
+        field("CreateTime"),
+    ) {
+        (
+            Some(ppppp),
+            Some(service_code),
+            Some(service_region),
+            Some(service_account),
+            Some(create_time),
+        ) => Ok(LaunchPayload::Legacy(Box::new(LegacyOtpParams {
+            ppppp,
+            service_code,
+            service_region,
+            service_account,
+            create_time,
+        }))),
+        _ => Err(LaunchDataError::MissingTicket),
+    }
+}
+
+/// Split the decoded plaintext into `key=value` pairs.
+///
+/// The separator is `&&&&`, but splitting on a single `&` and dropping
+/// the empty runs handles that and the single-`&` form alike, so one
+/// parser covers both payloads. Everything from the first `;` on is a
+/// trailer, not a field.
+fn parse_fields(plaintext: &str) -> Vec<(&str, &str)> {
+    plaintext
         .split(';')
         .next()
         .unwrap_or_default()
         .split('&')
-        .find_map(|pair| pair.strip_prefix("LaunchTicket="))
-        .ok_or(LaunchDataError::MissingTicket)?;
-
-    if ticket.len() != 64 || !ticket.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(LaunchDataError::MalformedTicket(ticket.to_owned()));
-    }
-    Ok(ticket.to_owned())
+        .filter(|segment| !segment.is_empty())
+        .filter_map(|pair| pair.split_once('='))
+        .collect()
 }
 
 /// Undo the substitution layer and decrypt, returning the raw
@@ -147,7 +241,14 @@ fn decode(data: &str) -> Result<String, LaunchDataError> {
         }
         tried.push(table_index);
         match decode_with(&rest, selector, table_index) {
-            Ok(plaintext) if plaintext.contains("LaunchTicket=") => {
+            // Either marker means the table was right. Testing only for
+            // `LaunchTicket=` silently discarded a perfectly good
+            // decode of the other payload as "wrong table", which is
+            // what made every `ppppp` game fail with a decryption
+            // error while MapleStory worked.
+            Ok(plaintext)
+                if plaintext.contains("LaunchTicket=") || plaintext.contains("ppppp=") =>
+            {
                 tracing::debug!(selector, table = table_index, "launch data table");
                 return Ok(plaintext);
             }
@@ -250,11 +351,55 @@ mod tests {
         for selector in 0..16 {
             let blob = encode(selector, key, &cipher_hex);
             assert_eq!(
-                decode_launch_ticket(&blob).unwrap(),
-                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                decode_launch_data(&blob).unwrap(),
+                LaunchPayload::Ticket(
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_owned()
+                ),
                 "selector {selector} failed"
             );
         }
+    }
+
+    /// The payload every non-MapleStory game was observed to hand over.
+    /// Field separator is `&&&&` and the `ppppp` is 96 characters, not
+    /// the 64-character constant the WPF client pinned — both shapes
+    /// taken from live blobs.
+    #[test]
+    fn legacy_payload_round_trips_through_every_selector() {
+        let ppppp = "F".repeat(96);
+        let plaintext = format!(
+            "ppppp={ppppp}&&&&ServiceCode=600309&&&&ServiceRegion=A2&&&&ServiceAccount=A205b371011500171132&&&&CreateTime=2010-08-18 20:28:29&&&&BeanfunUrl=https://tw.beanfun.com/&&&&WebStartPatch=http://tw.patch.beanfun.gamania.com/beanfun05/;"
+        );
+        let padded = format!("{plaintext}{}", "\0".repeat((8 - plaintext.len() % 8) % 8));
+        let key = "b034e744";
+        let cipher_hex = encrypt_hex(&padded, key).unwrap().to_lowercase();
+
+        for selector in 0..16 {
+            let blob = encode(selector, key, &cipher_hex);
+            let LaunchPayload::Legacy(params) = decode_launch_data(&blob).unwrap() else {
+                panic!("selector {selector}: expected the pre-v2 payload");
+            };
+            assert_eq!(params.ppppp, ppppp, "selector {selector}");
+            assert_eq!(params.service_code, "600309");
+            assert_eq!(params.service_region, "A2");
+            assert_eq!(params.service_account, "A205b371011500171132");
+            assert_eq!(params.create_time, "2010-08-18 20:28:29");
+        }
+    }
+
+    /// A decode that yields neither marker is a wrong table, and every
+    /// table being wrong is the one case that is genuinely a failure.
+    #[test]
+    fn a_payload_with_neither_marker_is_rejected() {
+        let plaintext = "SomethingElse=1&Other=2;xx";
+        let padded = format!("{plaintext}{}", "\0".repeat((8 - plaintext.len() % 8) % 8));
+        let key = "a1b2c3d4";
+        let cipher_hex = encrypt_hex(&padded, key).unwrap().to_lowercase();
+        let blob = encode(3, key, &cipher_hex);
+        assert_eq!(
+            decode_launch_data(&blob).unwrap_err(),
+            LaunchDataError::MissingTicket
+        );
     }
 
     /// The two real blob lengths observed in the wild — 553 from the
@@ -276,16 +421,13 @@ mod tests {
 
     #[test]
     fn empty_input_is_rejected() {
-        assert_eq!(
-            decode_launch_ticket("").unwrap_err(),
-            LaunchDataError::Empty
-        );
+        assert_eq!(decode_launch_data("").unwrap_err(), LaunchDataError::Empty);
     }
 
     #[test]
     fn non_hex_selector_is_rejected() {
         assert_eq!(
-            decode_launch_ticket("zzzz").unwrap_err(),
+            decode_launch_data("zzzz").unwrap_err(),
             LaunchDataError::BadSelector('z')
         );
     }
@@ -293,7 +435,7 @@ mod tests {
     #[test]
     fn character_outside_the_table_is_rejected() {
         // Selector 0 → table 0, which has no 'z'.
-        let err = decode_launch_ticket("0zzz").unwrap_err();
+        let err = decode_launch_data("0zzz").unwrap_err();
         assert!(
             matches!(err, LaunchDataError::UnmappableChar('z', 0)),
             "got {err:?}"
@@ -303,7 +445,7 @@ mod tests {
     #[test]
     fn blob_too_short_for_a_key_is_rejected() {
         // Table 0 characters only, but far fewer than offset + 8.
-        let err = decode_launch_ticket("0bac").unwrap_err();
+        let err = decode_launch_data("0bac").unwrap_err();
         assert!(
             matches!(err, LaunchDataError::TooShort { .. }),
             "got {err:?}"
