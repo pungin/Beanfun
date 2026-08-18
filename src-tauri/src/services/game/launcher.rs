@@ -132,47 +132,38 @@ pub enum ResolvedMode {
 // Path validation
 // ---------------------------------------------------------------------------
 
-/// Verify `path` is non-empty, exists, and contains no non-ASCII
-/// characters.
+/// Verify `path` is non-empty and exists.
 ///
-/// Implements the three preflight guards WPF runs before the
-/// process / kill / launch phase (`MainWindow.xaml.cs` L1748 +
-/// L1753-1762). Returning the offending character + position means
-/// the UI layer can produce a helpful error message like
-/// "position 12: '遊' is not ASCII — rename the folder or move the
-/// game to an ASCII-only path."
+/// The two preflight guards WPF runs before the process / kill /
+/// launch phase (`MainWindow.xaml.cs` L1748).
+///
+/// # Why a non-ASCII path is not a third guard
+///
+/// It used to be, and it stopped anyone whose game lived under a
+/// Chinese folder name from launching at all (upstream #378). WPF
+/// checks the same thing at L1753-1762, but what it does about it is
+/// show `MsgGamePathHaveWChar` and `break` — a warning, then the
+/// launch proceeds. Porting the check but not the `break` turned a
+/// caveat into a refusal, on a path the 5.x client would have started.
+///
+/// Nothing here needs the restriction either: the Normal path spawns
+/// through `std::process::Command` and the LocaleRemulator path
+/// through `ShellExecuteW`, both of which take UTF-16 and neither of
+/// which cares what code page the characters would have needed. If the
+/// game itself chokes further in, that is the game's error to give,
+/// and the frontend has already said so — `useGameLauncher` warns
+/// before it ever calls us.
 pub fn validate_path(path: &Path) -> Result<(), GameError> {
-    let as_str = match path.to_str() {
-        // `Path` can technically hold non-UTF8 bytes on Unix, but
-        // Windows paths round-trip UTF-8 cleanly and the game binary
-        // is Windows-only. An empty path also lands here.
-        Some(s) => s,
-        None => {
-            return Err(GameError::PathNonAscii {
-                path: path.to_path_buf(),
-                offending_char: '\u{FFFD}',
-                position: 0,
-            });
-        }
-    };
-
-    if as_str.is_empty() {
+    // Compared as `OsStr`: a Windows path that is not valid UTF-8 is
+    // still a perfectly good path to hand to a wide API, and asking it
+    // for a `&str` first would fail it for the wrong reason.
+    if path.as_os_str().is_empty() {
         return Err(GameError::PathEmpty);
     }
 
     if !path.exists() {
         return Err(GameError::PathNotFound {
             path: path.to_path_buf(),
-        });
-    }
-
-    if let Some((position, offending_char)) =
-        as_str.chars().enumerate().find(|(_, c)| (*c as u32) > 128)
-    {
-        return Err(GameError::PathNonAscii {
-            path: path.to_path_buf(),
-            offending_char,
-            position,
         });
     }
 
@@ -542,36 +533,34 @@ mod tests {
         assert_matches!(validate_path(&p), Ok(()));
     }
 
+    /// A Chinese folder name is where the game actually lives for a
+    /// large part of this audience, and refusing it stopped the launch
+    /// on paths the 5.x client started (upstream #378). WPF warns and
+    /// carries on; so do we.
     #[test]
-    fn validate_path_rejects_non_ascii_traditional_chinese() {
+    fn validate_path_accepts_a_traditional_chinese_path() {
         let dir = TempDir::new().unwrap();
-        let p = tempfile_with_name(&dir, "遊戲.exe");
-        let err = validate_path(&p).unwrap_err();
-        match err {
-            GameError::PathNonAscii { offending_char, .. } => {
-                assert!(
-                    (offending_char as u32) > 128,
-                    "offending char must have codepoint > 128"
-                );
-            }
-            other => panic!("expected PathNonAscii, got {other:?}"),
+        let p = tempfile_with_name(&dir, "楓之谷.exe");
+        assert_matches!(validate_path(&p), Ok(()));
+    }
+
+    #[test]
+    fn validate_path_accepts_other_non_ascii_paths() {
+        let dir = TempDir::new().unwrap();
+        for name in ["ゲーム.exe", "게임.exe", "game🎮.exe"] {
+            let p = tempfile_with_name(&dir, name);
+            assert_matches!(validate_path(&p), Ok(()));
         }
     }
 
+    /// A non-ASCII path that does not exist still fails, and fails as
+    /// *missing* — the reason a launch is refused has to be the real
+    /// one, or the user renames a folder that was never the problem.
     #[test]
-    fn validate_path_rejects_non_ascii_japanese() {
+    fn validate_path_still_reports_a_missing_non_ascii_path_as_missing() {
         let dir = TempDir::new().unwrap();
-        let p = tempfile_with_name(&dir, "ゲーム.exe");
-        let err = validate_path(&p).unwrap_err();
-        assert_matches!(err, GameError::PathNonAscii { .. });
-    }
-
-    #[test]
-    fn validate_path_rejects_non_ascii_emoji() {
-        let dir = TempDir::new().unwrap();
-        let p = tempfile_with_name(&dir, "game🎮.exe");
-        let err = validate_path(&p).unwrap_err();
-        assert_matches!(err, GameError::PathNonAscii { .. });
+        let p = dir.path().join("楓之谷").join("MapleStory.exe");
+        assert_matches!(validate_path(&p), Err(GameError::PathNotFound { .. }));
     }
 
     // ---- GameStartMode::try_from ----------------------------------------
@@ -793,19 +782,47 @@ mod tests {
         assert_matches!(launch_game(&req), Err(GameError::PathEmpty));
     }
 
+    /// The report in #378, run for real: a game under a Chinese folder
+    /// name, launched.
+    ///
+    /// `cmd.exe` copied into `楓之谷\` stands in for the game, so this
+    /// is an actual `CreateProcessW` against a non-ASCII path rather
+    /// than an assertion about the guard that used to stop it.
+    #[cfg(windows)]
     #[test]
-    fn launch_game_rejects_non_ascii_game_path() {
-        // Create a real file with a non-ASCII name so we reach the
-        // non-ASCII guard rather than the earlier PathNotFound arm.
+    fn launch_game_starts_a_game_under_a_chinese_folder_name() {
         let dir = TempDir::new().unwrap();
-        let game = tempfile_with_name(&dir, "遊戲.exe");
+        let folder = dir.path().join("楓之谷安裝檔").join("楓之谷");
+        std::fs::create_dir_all(&folder).unwrap();
+        let game = folder.join("MapleStory.exe");
+        std::fs::copy(r"C:\Windows\System32\cmd.exe", &game).expect("cmd.exe is copyable");
+
+        let req = LaunchRequest {
+            game_path: game,
+            command_line: "/c exit 0".to_string(),
+            mode: GameStartMode::Normal,
+            target_dir: std::env::temp_dir(),
+        };
+        launch_game(&req).expect("a Chinese path must not stop the launch");
+    }
+
+    /// Same claim where there is no `cmd.exe` to copy: the launch has
+    /// to get as far as trying to spawn, rather than being refused for
+    /// the name.
+    #[cfg(not(windows))]
+    #[test]
+    fn launch_game_does_not_refuse_a_non_ascii_game_path() {
+        let dir = TempDir::new().unwrap();
+        let game = tempfile_with_name(&dir, "楓之谷.exe");
         let req = LaunchRequest {
             game_path: game,
             command_line: String::new(),
             mode: GameStartMode::Normal,
             target_dir: PathBuf::from("."),
         };
-        assert_matches!(launch_game(&req), Err(GameError::PathNonAscii { .. }));
+        // A stub file is not executable, so a spawn failure is the
+        // expected outcome — what matters is that it reached the spawn.
+        assert_matches!(launch_game(&req), Ok(()) | Err(GameError::Spawn(_)));
     }
 
     #[test]

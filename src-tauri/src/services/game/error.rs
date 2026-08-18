@@ -13,7 +13,6 @@
 //! | ------------------------------- | ---------------------------------------------------------------------------------- |
 //! | [`PathEmpty`]                   | `MainWindow.xaml.cs` L1748 — `gamePath == ""` short-circuit                        |
 //! | [`PathNotFound`]                | `MainWindow.xaml.cs` L1748 — `!File.Exists(gamePath)` short-circuit                |
-//! | [`PathNonAscii`]                | `MainWindow.xaml.cs` L1753-1762 — UTF-16 code-unit `> 128` → `MsgGamePathHaveWChar`|
 //! | [`LocaleRemulatorRelease`]      | `App.xaml.cs` L144-151 + `MainWindow.xaml.cs` L1905-1909 (`ReleaseResource == -1`)  |
 //! | [`LocaleRemulatorSha256Mismatch`] | **Beanfun exclusive** — WPF only length-checked; SHA-256 rejection is new    |
 //! | [`ShellExecute`]                | `MainWindow.xaml.cs` L1935 `proc.Start()` throwing via `UseShellExecute = runas`   |
@@ -21,7 +20,6 @@
 //!
 //! [`PathEmpty`]: GameError::PathEmpty
 //! [`PathNotFound`]: GameError::PathNotFound
-//! [`PathNonAscii`]: GameError::PathNonAscii
 //! [`LocaleRemulatorRelease`]: GameError::LocaleRemulatorRelease
 //! [`LocaleRemulatorSha256Mismatch`]: GameError::LocaleRemulatorSha256Mismatch
 //! [`ShellExecute`]: GameError::ShellExecute
@@ -48,24 +46,6 @@ pub enum GameError {
     /// to the same dialog at L1748).
     #[error("game path does not exist: {}", .path.display())]
     PathNotFound { path: PathBuf },
-
-    /// Game path contains a non-ASCII character; the WPF game loader
-    /// refuses paths with any UTF-16 code unit > 128 because the
-    /// game binary passes the path through ANSI/CP950 code pages
-    /// internally and blows up on wide characters.
-    ///
-    /// `offending_char` and `position` are diagnostic: the UI can
-    /// show "position 3: '遊'" to help the user understand which
-    /// character triggered the refusal.
-    #[error(
-        "game path contains non-ASCII character {offending_char:?} at position {position}: {}",
-        .path.display()
-    )]
-    PathNonAscii {
-        path: PathBuf,
-        offending_char: char,
-        position: usize,
-    },
 
     /// Writing one of the five LocaleRemulator resource files to disk
     /// failed (permission denied, disk full, antivirus lock, …).
