@@ -146,6 +146,14 @@ namespace Beanfun
                     }
 
                     ClientIntegrity integrity = ClientIntegrity.Resolve();
+                    Console.WriteLine(
+                        "[OTP] handoff route="
+                            + (payload.LaunchTicket != null ? "v2" : "pre-v2")
+                            + " CV="
+                            + integrity.CV
+                            + " arch="
+                            + integrity.Arch
+                    );
 
                     if (payload.LaunchTicket != null)
                         return GetOtpV2(host, pageUrl, handoff, payload.LaunchTicket, integrity);

@@ -30,9 +30,15 @@ namespace Beanfun
     /// </summary>
     public class ClientIntegrity
     {
-        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(
-            typeof(ClientIntegrity)
-        );
+        /// <summary>
+        /// 這個分支引用了 log4net 卻從來沒設定過 appender，寫進去等於沒寫，
+        /// 所以診斷訊息跟這支檔案其他地方一樣走 Console — 從主控台啟動
+        /// （dotnet run）就看得到。
+        /// </summary>
+        private static void Log(string message)
+        {
+            Console.WriteLine("[ClientIntegrity] " + message);
+        }
 
         public string CV;
         public string Hash;
@@ -86,7 +92,7 @@ namespace Beanfun
                 var pinned = ReadPinned();
                 if (pinned != null)
                 {
-                    log.Info("ggm-hotfix: 使用本機釘選的值 cv=" + pinned.CV);
+                    Log("ggm-hotfix: 使用本機釘選的值 cv=" + pinned.CV);
                     return pinned;
                 }
 
@@ -98,7 +104,7 @@ namespace Beanfun
                 {
                     if (NamesNewerBuild(published.CV, local.CV))
                     {
-                        log.Info(
+                        Log(
                             "ggm-hotfix: 線上值比本機 GGM 新 local="
                                 + local.CV
                                 + " published="
@@ -115,7 +121,7 @@ namespace Beanfun
             }
             catch (Exception e)
             {
-                log.Warn("ClientIntegrity 解析失敗，改用編譯進來的常數", e);
+                Log("解析失敗，改用編譯進來的常數: " + e.Message);
             }
 
             // 3. 編譯進來的那組。
@@ -356,17 +362,17 @@ namespace Beanfun
                     {
                         // 連得到但不能用，值得記是哪個鏡像：CDN 快取過期看起來
                         // 跟 commit 發錯值一模一樣。
-                        log.Warn("ggm-hotfix: 發佈檔驗證未過 " + url);
+                        Log("ggm-hotfix: 發佈檔驗證未過 " + url);
                         continue;
                     }
                     WriteCache(body);
-                    log.Info("ggm-hotfix: 已取得發佈值 cv=" + values.CV + " from " + url);
+                    Log("ggm-hotfix: 已取得發佈值 cv=" + values.CV + " from " + url);
                     return values;
                 }
                 catch { }
             }
             fetchFailedThisRun = true;
-            log.Info("ggm-hotfix: 沒有鏡像回應，改用本機來源");
+            Log("ggm-hotfix: 沒有鏡像回應，改用本機來源");
             return null;
         }
 
@@ -380,7 +386,7 @@ namespace Beanfun
             }
             catch (Exception e)
             {
-                log.Warn("ggm-hotfix: 無法寫入快取", e);
+                Log("ggm-hotfix: 無法寫入快取: " + e.Message);
             }
         }
 
@@ -406,7 +412,7 @@ namespace Beanfun
                 string hash = (json.Value<string>("hash") ?? "").Trim().ToLowerInvariant();
                 if (!IsVersion(cv) || !IsSha256(hash))
                 {
-                    log.Warn("ggm-hotfix: 值未通過驗證 cv=" + cv + " hash_len=" + hash.Length);
+                    Log("ggm-hotfix: 值未通過驗證 cv=" + cv + " hash_len=" + hash.Length);
                     return null;
                 }
                 return new ClientIntegrity
