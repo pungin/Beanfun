@@ -598,6 +598,23 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
    */
   const appWindow = getCurrentWindow()
   let currentWidth = 560
+  /**
+   * The width the route we are navigating *to* wants, held until the
+   * observer re-attaches.
+   *
+   * `afterEach` used to write `currentWidth` directly. That runs
+   * synchronously, while `attachObserver` — which disconnects the old
+   * observer and re-measures against the new DOM — is deferred to the
+   * next paint. In between, the *old* observer is still live and the old
+   * page (or a half-mounted new one) is still in the DOM, so a fit landing
+   * in that gap measured the new route's width against the previous
+   * route's content and applied a size belonging to neither.
+   *
+   * Only Settings makes that visible: it is the one route whose width
+   * changes on entry (420/480 → 660), so it is the one transition where
+   * the two values can disagree.
+   */
+  let pendingWidth: number | null = null
   let observer: ResizeObserver | null = null
 
   /**
@@ -872,6 +889,11 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
    * (they fire in the same microtask as `observe()`).
    */
   function attachObserver(): void {
+    // Width and DOM change together, here — see `pendingWidth`.
+    if (pendingWidth !== null) {
+      currentWidth = pendingWidth
+      pendingWidth = null
+    }
     if (observer) observer.disconnect()
     const root = document.querySelector('[data-window-root]') as HTMLElement | null
     if (!root) return
@@ -925,7 +947,14 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
     // A route that is not the whole window must not drive its size.
     if (to.meta.fitsWindow === false) return
     const w = to.meta.windowWidth as number | undefined
-    if (w) currentWidth = w
+    if (w) pendingWidth = w
+    /*
+     * Forget what we last applied: it describes the route we are leaving.
+     * Keeping it means a mid-transition size can land within the guard's
+     * one-pixel tolerance of the correct one and suppress it, leaving the
+     * window at a size nothing asked for.
+     */
+    lastApplied = null
     scheduleAttach(attachObserver)
   })
 }
