@@ -2168,7 +2168,7 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
             disabled = disabled,
             "disabled WebView2 tracking prevention for social-login SDKs"
         );
-        crate::commands::cookie_native::register_new_window_handler(&window);
+        crate::commands::cookie_native::register_new_window_handler(window.as_ref());
     }
 
     // Live-test diagnostic (2026-04-18) — dump the jar state a
@@ -2218,7 +2218,7 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
         // writing the fresh cookies.
         tokio::time::sleep(Duration::from_millis(200)).await;
 
-        let seeded = crate::commands::cookie_native::seed_cookies_native(&window, &client);
+        let seeded = crate::commands::cookie_native::seed_cookies_native(window.as_ref(), &client);
         tracing::info!(
             step = "GamepassWebViewSeed.Summary",
             seeded = seeded,
@@ -2437,7 +2437,7 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
     {
         let _ = crate::commands::cookie_native::clear_all_cookies_native(&window);
         tokio::time::sleep(Duration::from_millis(200)).await;
-        let seeded = crate::commands::cookie_native::seed_cookies_native(&window, &client);
+        let seeded = crate::commands::cookie_native::seed_cookies_native(window.as_ref(), &client);
         tracing::info!(
             step = "RecaptchaWebView.Seed",
             seeded = seeded,

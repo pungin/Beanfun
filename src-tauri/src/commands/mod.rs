@@ -147,8 +147,10 @@ pub mod session;
 pub mod state;
 pub mod storage;
 pub mod system;
+pub mod tls_info;
 pub mod update;
 pub mod web_browser;
+pub mod webview_nav;
 
 use tauri_specta::{collect_commands, Builder};
 
@@ -326,6 +328,13 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
             // comment above for the full E0401 / runtime-agnostic
             // bindings rationale.
             web_browser::open_in_app_browser::<tauri::Wry>,
+            web_browser::browser_nav_state::<tauri::Wry>,
+            web_browser::browser_back::<tauri::Wry>,
+            web_browser::browser_forward::<tauri::Wry>,
+            web_browser::browser_reload::<tauri::Wry>,
+            web_browser::browser_navigate::<tauri::Wry>,
+            web_browser::browser_connection_info::<tauri::Wry>,
+            web_browser::browser_set_chrome_height::<tauri::Wry>,
             // web_browser (P12.4-followup-B-fix F9 — Member Center)
             //
             // Sibling of `open_in_app_browser` that builds the

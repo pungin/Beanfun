@@ -814,9 +814,9 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
     .await?;
 
     // Seed the session cookies (HK SSO) and keep popups in-window.
-    cookie_native::register_new_window_handler(&window);
+    cookie_native::register_new_window_handler(window.as_ref());
     if let Some(client) = client.as_ref() {
-        let seeded = cookie_native::seed_cookies_native(&window, client);
+        let seeded = cookie_native::seed_cookies_native(window.as_ref(), client);
         tracing::info!("classic: seeded {seeded} cookies into portal webview");
     }
 

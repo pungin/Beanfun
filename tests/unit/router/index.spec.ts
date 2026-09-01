@@ -35,7 +35,7 @@ vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn() } }))
  * Per-form behaviour tests live in their own D-step specs.
  */
 describe('router config', () => {
-  it('declares the root redirect, login shell, accounts page, settings, about, manage-account page, and catch-all', () => {
+  it('declares the root redirect, login shell, accounts page, settings, about, manage-account page, browser toolbar, and catch-all', () => {
     /*
      * P12.2 D9 added the stored-credential management page
      * (`/manage-account`) as a 5th top-level route, sandwiched
@@ -49,10 +49,17 @@ describe('router config', () => {
      * surfaces — both routes are intentionally `requiresAuth:
      * undefined` because WPF allowed these pages from the login
      * funnel too).
+     *
+     * `/browser-bar` is the 7th, sitting immediately before the
+     * catch-all. It is never navigated to from the main window — the
+     * in-app browser loads it as a child webview for its toolbar — so
+     * it carries `meta.fitsWindow: false` to stay out of the auto-fit
+     * observer that sizes a window to its content.
      */
-    expect(routes).toHaveLength(7)
+    expect(routes).toHaveLength(8)
 
-    const [root, login, accounts, settings, about, manageAccount, catchAll] = routes
+    const [root, login, accounts, settings, about, manageAccount, browserBarRoute, catchAll] =
+      routes
     expect(root.path).toBe('/')
     expect(root.redirect).toBe('/login')
 
@@ -80,6 +87,9 @@ describe('router config', () => {
      * route bounced pre-login users back to /login.
      */
     expect(manageAccount.meta?.requiresAuth).toBeUndefined()
+
+    expect(browserBarRoute.path).toBe('/browser-bar')
+    expect(browserBarRoute.meta?.fitsWindow).toBe(false)
 
     expect(catchAll.path).toBe('/:pathMatch(.*)*')
     expect(catchAll.redirect).toBe('/')

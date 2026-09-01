@@ -90,7 +90,7 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
 /// to flush before seeding; see that function's docs for why the
 /// clear and seed are deliberately not fused into one native call.
 pub fn seed_cookies_native<R: tauri::Runtime>(
-    window: &WebviewWindow<R>,
+    view: &tauri::Webview<R>,
     client: &BeanfunClient,
 ) -> usize {
     let store = client.cookie_store();
@@ -126,7 +126,7 @@ pub fn seed_cookies_native<R: tauri::Runtime>(
 
     let total = cookies.len();
 
-    let result = window.with_webview(move |webview| unsafe {
+    let result = view.with_webview(move |webview| unsafe {
         let core = match webview.controller().CoreWebView2() {
             Ok(c) => c,
             Err(e) => {
@@ -283,8 +283,8 @@ pub fn clear_all_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>) ->
 
 /// Register a `NewWindowRequested` handler on the WebView2 instance
 /// that redirects popup requests to navigate within the same window.
-pub fn register_new_window_handler<R: tauri::Runtime>(window: &WebviewWindow<R>) {
-    let result = window.with_webview(|webview| unsafe {
+pub fn register_new_window_handler<R: tauri::Runtime>(view: &tauri::Webview<R>) {
+    let result = view.with_webview(|webview| unsafe {
         use webview2_com::NewWindowRequestedEventHandler;
 
         let core = webview.controller().CoreWebView2().expect("CoreWebView2");

@@ -118,6 +118,7 @@ export function resizeWindow(width: number, height: number): void {
   )
 }
 
+import BrowserChrome from '../windows/BrowserChrome.vue'
 import LoginPage from '../pages/LoginPage.vue'
 import LoginRegionSelection from '../pages/LoginRegionSelection.vue'
 import IdPassForm from '../pages/IdPassForm.vue'
@@ -357,6 +358,20 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    /*
+     * The in-app browser's toolbar. Loaded by
+     * `commands::web_browser::open_url_in_webview` as a child webview
+     * of the browser window (`index.html#/browser-bar`), never
+     * navigated to from the main window.
+     *
+     * A route rather than a second HTML entry: one route costs nothing
+     * in the bundle and leaves the vite config alone.
+     */
+    path: '/browser-bar',
+    component: BrowserChrome,
+    meta: { fitsWindow: false },
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/',
   },
@@ -420,6 +435,17 @@ declare module 'vue-router' {
      * Desired window height in logical pixels for this route.
      */
     windowHeight?: number
+    /**
+     * Opt out of the auto-fit observer that sizes the window to its
+     * content height.
+     *
+     * Set by `/browser-bar`, which is not a page in the main window at
+     * all: it is a child webview occupying a fixed strip of the in-app
+     * browser window, sitting above the content view. Fitting that
+     * window to the toolbar's own height would collapse the window to
+     * the strip and take the page with it.
+     */
+    fitsWindow?: boolean
   }
 }
 
@@ -896,6 +922,8 @@ export function installRouterGuards(router: Router, deps: RouterGuardDeps): void
   }
 
   router.afterEach((to) => {
+    // A route that is not the whole window must not drive its size.
+    if (to.meta.fitsWindow === false) return
     const w = to.meta.windowWidth as number | undefined
     if (w) currentWidth = w
     scheduleAttach(attachObserver)

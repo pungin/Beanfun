@@ -2151,6 +2151,91 @@ async openInAppBrowser(url: string) : Promise<Result<null, CommandError>> {
 }
 },
 /**
+ * Where the content view is, and where it can go.
+ */
+async browserNavState(windowLabel: string) : Promise<Result<NavState, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("browser_nav_state", { windowLabel }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Go back one entry in the content view.
+ */
+async browserBack(windowLabel: string) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("browser_back", { windowLabel }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Go forward one entry in the content view.
+ */
+async browserForward(windowLabel: string) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("browser_forward", { windowLabel }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Reload the content view.
+ */
+async browserReload(windowLabel: string) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("browser_reload", { windowLabel }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Navigate the content view to `url`.
+ * 
+ * Validated by the same [`parse_and_validate`] the open command uses, so a
+ * typed address is held to the host allowlist exactly as a clicked one is —
+ * and an out-of-scope address comes back as `system.invalid_url`, which the
+ * frontend already knows to answer by handing the URL to the system browser.
+ */
+async browserNavigate(windowLabel: string, url: string) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("browser_navigate", { windowLabel, url }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Who answered for the page on screen, and with what certificate.
+ * 
+ * See [`crate::commands::tls_info`] for why this is a fresh handshake rather
+ * than a readback of the connection the page arrived over.
+ */
+async browserConnectionInfo(windowLabel: string) : Promise<Result<ConnectionInfo, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("browser_connection_info", { windowLabel }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Grow or shrink the toolbar so a panel it opens has somewhere to be drawn.
+ */
+async browserSetChromeHeight(windowLabel: string, height: number) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("browser_set_chrome_height", { windowLabel, height }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Open the Beanfun **Member Center** in a dedicated in-app webview
  * window. Mirrors WPF
  * `Pages/AccountList.xaml.cs::BF_btnMember_Click`.
@@ -2571,6 +2656,20 @@ password: string;
  */
 specialClick: boolean }
 /**
+ * The leaf certificate, reduced to what is worth reading.
+ */
+export type CertificateInfo = { subject: string; issuer: string; 
+/**
+ * RFC 2822, which `Date.parse` accepts, so the toolbar can render it
+ * in the user's own locale.
+ */
+validFrom: string; validTo: string; 
+/**
+ * SHA-256 of the DER, grouped in pairs — the value to compare against
+ * what a second machine sees when something looks wrong.
+ */
+fingerprint: string; serial: string }
+/**
  * Outcome of [`unconnected_game_change_password`].
  * 
  * The 5-step flow ends with one of:
@@ -2789,6 +2888,18 @@ message: string;
  * `code` before reading fields.
  */
 details: JsonValue | null }
+/**
+ * What the padlock panel draws.
+ */
+export type ConnectionInfo = { host: string; port: number; 
+/**
+ * False for plain http, which the panel calls out rather than decorates.
+ */
+encrypted: boolean; 
+/**
+ * None when the handshake failed; `error` then says why.
+ */
+certificate: CertificateInfo | null; error: string | null }
 /**
  * Atomic bundle returned by [`list_games`] — the INI map keyed by
  * `<service_code>_<service_region>` plus the ordered service
@@ -3038,6 +3149,10 @@ export type LoginRegion =
  * login host.
  */
 "HK"
+/**
+ * What the toolbar needs to draw itself: where we are, and where we can go.
+ */
+export type NavState = { url: string; title: string; canGoBack: boolean; canGoForward: boolean }
 /**
  * The safe-subset DTO returned by [`login_qr_start`] — everything
  * the frontend needs to render a QR scanner UI, and nothing more.
