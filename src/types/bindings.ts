@@ -2334,8 +2334,14 @@ async openClassicLogin(region: LoginRegion) : Promise<Result<null, CommandError>
 },
 /**
  * Check the local prerequisites for the classic launch.
+ * 
+ * Nothing here fails — every probe folds into a field on [`ClassicCheck`]. The
+ * `Result` is not optional though: an async command borrowing `State<'_, _>`
+ * has to return one, or the borrow outlives the future. `CommandError` rather
+ * than `()` because clippy's `result_unit_err` is denied in CI, and because
+ * every other command in this crate answers with the same type.
  */
-async classicSelfCheck() : Promise<Result<ClassicCheck, null>> {
+async classicSelfCheck() : Promise<Result<ClassicCheck, CommandError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("classic_self_check") };
 } catch (e) {
