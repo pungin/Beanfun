@@ -27,7 +27,7 @@ sha2 = "0.10"
 # Tauri core — `specta` feature wires Tauri's State / Window types into
 # the specta type-graph so `tauri-specta` can derive them. Required by
 # `tauri-specta` 2.0.0-rc.x (P10 chunk 10.1).
-tauri = { version = "2", features = ["specta", "tray-icon"] }
+tauri = { version = "2", features = ["specta", "tray-icon", "unstable"] }
 tauri-plugin-opener = "2"
 # Native file picker (open / save dialogs) — used by `pages/ManageAccount.vue`
 # (P12.2 D9) for plaintext Users.dat import / export, mirroring the WPF
@@ -144,6 +144,8 @@ zeroize = { version = "1", features = ["derive"] }
 
 # Random number generation (storage entropy salt — OsRng only; CSPRNG)
 rand = "0.8"
+native-tls = "0.2.18"
+x509-parser = "0.18.1"
 
 [target.'cfg(windows)'.dependencies]
 # Win32 API bindings — features will be expanded per phase (DPAPI in P5, WMI/PostMessage in P8/P9).

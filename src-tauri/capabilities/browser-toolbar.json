@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "browser-toolbar",
+  "description": "IPC for the in-app browser's toolbar webview only. Scoped by webview label, never by window: the browser window also holds the content webview, which renders a remote beanfun page and must not be able to invoke anything. Capability matching is webview-OR-window, so listing the window here would grant the remote page the same access.",
+  "windows": [],
+  "webviews": ["web-browser-*-bar"],
+  "permissions": ["core:default", "opener:default"]
+}

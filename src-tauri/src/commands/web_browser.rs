@@ -138,7 +138,9 @@ use std::sync::{
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use tauri::{webview::PageLoadEvent, AppHandle, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    webview::PageLoadEvent, AppHandle, LogicalPosition, LogicalSize, Manager, State, WebviewUrl,
+};
 use url::Url;
 
 use crate::commands::{error::CommandError, session::require_auth, state::AppState};
@@ -246,6 +248,83 @@ fn parse_and_validate(url: &str) -> Result<Url, CommandError> {
     Ok(parsed)
 }
 
+/// Toolbar height in logical pixels. Mirrored by `BAR_HEIGHT` in
+/// `src/windows/BrowserChrome.vue`; change both together or the strip
+/// and its contents disagree.
+pub(crate) const BAR_HEIGHT: f64 = 46.0;
+
+/// The toolbar webview's label for a given browser window.
+pub(crate) fn bar_label(window: &str) -> String {
+    format!("{window}-bar")
+}
+
+/// The content webview's label for a given browser window.
+pub(crate) fn view_label(window: &str) -> String {
+    format!("{window}-view")
+}
+
+/// How much of each browser window its toolbar currently occupies.
+///
+/// Normally [`BAR_HEIGHT`]. The connection panel raises it while open,
+/// because a webview paints nothing outside its own bounds — a panel
+/// hanging below the bar would be drawn where there are no pixels.
+/// Keyed by window label, because unlike the single-window case this
+/// command mints one window per click and two can be open at once.
+static CHROME_HEIGHTS: std::sync::Mutex<Option<std::collections::HashMap<String, f64>>> =
+    std::sync::Mutex::new(None);
+
+/// The toolbar height recorded for `window`, defaulting to [`BAR_HEIGHT`].
+fn chrome_height(window: &str) -> f64 {
+    CHROME_HEIGHTS
+        .lock()
+        .ok()
+        .and_then(|map| map.as_ref().and_then(|m| m.get(window).copied()))
+        .unwrap_or(BAR_HEIGHT)
+}
+
+/// Record a toolbar height for `window`.
+fn set_chrome_height_for(window: &str, height: f64) {
+    if let Ok(mut guard) = CHROME_HEIGHTS.lock() {
+        guard
+            .get_or_insert_with(std::collections::HashMap::new)
+            .insert(window.to_string(), height.max(BAR_HEIGHT));
+    }
+}
+
+/// Forget a window's toolbar height once it closes.
+fn forget_chrome_height(window: &str) {
+    if let Ok(mut guard) = CHROME_HEIGHTS.lock() {
+        if let Some(map) = guard.as_mut() {
+            map.remove(window);
+        }
+    }
+}
+
+/// Stack the toolbar above the content view at the window's current size.
+///
+/// `auto_resize` would have each webview fill the window, which is not the
+/// layout; the two are positioned by hand instead.
+pub(crate) fn relayout<R: tauri::Runtime>(window: &tauri::Window<R>) {
+    let Ok(size) = window.inner_size() else {
+        return;
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let logical = size.to_logical::<f64>(scale);
+    // However tall the panel is, the toolbar never eats the whole window.
+    let bar = chrome_height(window.label()).min((logical.height - 80.0).max(BAR_HEIGHT));
+    let content = (logical.height - bar).max(0.0);
+
+    let app = window.app_handle();
+    if let Some(view) = app.get_webview(&bar_label(window.label())) {
+        let _ = view.set_position(LogicalPosition::new(0.0, 0.0));
+        let _ = view.set_size(LogicalSize::new(logical.width, bar));
+    }
+    if let Some(view) = app.get_webview(&view_label(window.label())) {
+        let _ = view.set_position(LogicalPosition::new(0.0, bar));
+        let _ = view.set_size(LogicalSize::new(logical.width, content));
+    }
+}
+
 /// Build a unique [`WebviewWindow`] label for a fresh in-app browser
 /// instance.
 ///
@@ -328,54 +407,19 @@ async fn open_url_in_webview<R: tauri::Runtime>(
     let already_shown = Arc::new(AtomicBool::new(false));
     let already_shown_for_callback = already_shown.clone();
 
-    let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(about_blank))
+    // A plain window with two children rather than one webview filling it:
+    // the toolbar is real chrome, owning its own strip. An injected bar would
+    // sit inside the page, cover content, fight the site's fixed elements and
+    // only ever guess at history state.
+    let width = 850.0;
+    let height = 550.0 + BAR_HEIGHT;
+
+    let window = tauri::window::WindowBuilder::new(app, &label)
         .title(format!("Beanfun - {host_label}"))
-        .inner_size(850.0, 550.0)
+        .inner_size(width, height)
+        .min_inner_size(640.0, 400.0)
         .resizable(true)
         .visible(false)
-        // Without this every `target="_blank"` control on the page is
-        // dead — the opener plugin cancels the click and its `open_url`
-        // is denied here. See `commands::remote_page`.
-        .initialization_script(crate::commands::remote_page::KEEP_LINKS_IN_WINDOW)
-        // …`alert()` is dead for the same reason, and a popup that
-        // never comes back sends the page into a blocked iframe.
-        .initialization_script(crate::commands::remote_page::RESTORE_ALERT)
-        .initialization_script(crate::commands::remote_page::KEEP_POPUPS_ALIVE)
-        .on_page_load(move |window, payload| {
-            if payload.event() != PageLoadEvent::Finished {
-                return;
-            }
-            let url = payload.url().as_str();
-            if url == "about:blank" {
-                return;
-            }
-
-            // Idempotent: only the first page-load callback wins
-            // the race against the safety timer. Subsequent
-            // navigations within the same window (in-page link
-            // clicks, redirects after first paint) are no-op
-            // because `swap` returns `true` from the second hit
-            // onwards.
-            if already_shown_for_callback.swap(true, Ordering::SeqCst) {
-                return;
-            }
-            if let Err(err) = window.show() {
-                tracing::warn!(
-                    step = "InAppBrowser.PageReadyShowFailed",
-                    error = ?err,
-                    "first-paint show() failed; window remains hidden"
-                );
-                return;
-            }
-            // Best-effort focus — failure is non-fatal (e.g. user
-            // already tabbed away). Log nothing.
-            let _ = window.set_focus();
-            tracing::info!(
-                step = "InAppBrowser.PageReadyShown",
-                url = %crate::core::redact::redact_uri(payload.url().as_str()),
-                "in-app browser shown after first non-about:blank Finished event"
-            );
-        })
         .build()
         .map_err(|e| {
             CommandError::new(
@@ -383,6 +427,93 @@ async fn open_url_in_webview<R: tauri::Runtime>(
                 format!("Failed to create in-app browser window: {e}"),
             )
         })?;
+
+    // The toolbar is a route in the same SPA (hash router), not a second HTML
+    // entry — one route costs nothing in the bundle and keeps the vite config
+    // as it is.
+    window
+        .add_child(
+            tauri::webview::WebviewBuilder::new(
+                bar_label(&label),
+                WebviewUrl::App("index.html#/browser-bar".into()),
+            ),
+            LogicalPosition::new(0.0, 0.0),
+            LogicalSize::new(width, BAR_HEIGHT),
+        )
+        .map_err(|e| {
+            CommandError::new(
+                "ui.window_create_failed",
+                format!("Failed to create in-app browser toolbar: {e}"),
+            )
+        })?;
+
+    let webview = window
+        .add_child(
+            tauri::webview::WebviewBuilder::new(
+                view_label(&label),
+                WebviewUrl::External(about_blank),
+            )
+            // Without this every `target="_blank"` control on the page is
+            // dead — the opener plugin cancels the click and its `open_url`
+            // is denied here. See `commands::remote_page`.
+            .initialization_script(crate::commands::remote_page::KEEP_LINKS_IN_WINDOW)
+            // …`alert()` is dead for the same reason, and a popup that
+            // never comes back sends the page into a blocked iframe.
+            .initialization_script(crate::commands::remote_page::RESTORE_ALERT)
+            .initialization_script(crate::commands::remote_page::KEEP_POPUPS_ALIVE)
+            .on_page_load(move |window, payload| {
+                if payload.event() != PageLoadEvent::Finished {
+                    return;
+                }
+                let url = payload.url().as_str();
+                if url == "about:blank" {
+                    return;
+                }
+
+                // Idempotent: only the first page-load callback wins
+                // the race against the safety timer. Subsequent
+                // navigations within the same window (in-page link
+                // clicks, redirects after first paint) are no-op
+                // because `swap` returns `true` from the second hit
+                // onwards.
+                if already_shown_for_callback.swap(true, Ordering::SeqCst) {
+                    return;
+                }
+                if let Err(err) = window.window().show() {
+                    tracing::warn!(
+                        step = "InAppBrowser.PageReadyShowFailed",
+                        error = ?err,
+                        "first-paint show() failed; window remains hidden"
+                    );
+                    return;
+                }
+                // Best-effort focus — failure is non-fatal (e.g. user
+                // already tabbed away). Log nothing.
+                let _ = window.window().set_focus();
+                tracing::info!(
+                    step = "InAppBrowser.PageReadyShown",
+                    url = %crate::core::redact::redact_uri(payload.url().as_str()),
+                    "in-app browser shown after first non-about:blank Finished event"
+                );
+            }),
+            LogicalPosition::new(0.0, BAR_HEIGHT),
+            LogicalSize::new(width, height - BAR_HEIGHT),
+        )
+        .map_err(|e| {
+            CommandError::new(
+                "ui.window_create_failed",
+                format!("Failed to create in-app browser content view: {e}"),
+            )
+        })?;
+
+    // Keep the two stacked as the window is resized, and stop tracking its
+    // toolbar height once it is gone.
+    let layout_window = window.clone();
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::Resized(_) => relayout(&layout_window),
+        tauri::WindowEvent::Destroyed => forget_chrome_height(layout_window.label()),
+        _ => {}
+    });
 
     // No separate cookie seeding or navigate() needed — the window
     // was built with the target URL directly. Cookie seeding + reload
@@ -394,10 +525,10 @@ async fn open_url_in_webview<R: tauri::Runtime>(
     {
         // Register NewWindowRequested handler — redirect popups to
         // navigate within the same window (WPF parity).
-        super::cookie_native::register_new_window_handler(&window);
+        super::cookie_native::register_new_window_handler(&webview);
 
         if let Some(ref client) = client_opt {
-            let seeded = super::cookie_native::seed_cookies_native(&window, client);
+            let seeded = super::cookie_native::seed_cookies_native(&webview, client);
             tracing::info!(
                 step = "InAppBrowser.NativeSeed",
                 seeded = seeded,
@@ -409,7 +540,7 @@ async fn open_url_in_webview<R: tauri::Runtime>(
     // Brief yield to let the cookie manager flush.
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    if let Err(err) = window.navigate(target_url.clone()) {
+    if let Err(err) = webview.navigate(target_url.clone()) {
         let _ = window.close();
         return Err(CommandError::new(
             "ui.window_create_failed",
@@ -648,6 +779,161 @@ pub async fn open_gash_recharge_browser<R: tauri::Runtime>(
     let url_str = build_gash_recharge_url(&session);
     let target_url = parse_and_validate(&url_str)?;
     open_url_in_webview(&app, target_url, Some(client)).await
+}
+
+/// Error code for a toolbar command aimed at a window that is gone.
+const NO_SUCH_VIEW: &str = "ui.webview_not_found";
+
+/// The content webview belonging to `window_label`.
+///
+/// The toolbar addresses its sibling by window label rather than by a handle,
+/// because a window can close between the click and the command arriving.
+fn content_view<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    window_label: &str,
+) -> Result<tauri::Webview<R>, CommandError> {
+    app.get_webview(&view_label(window_label)).ok_or_else(|| {
+        CommandError::new(
+            NO_SUCH_VIEW,
+            format!("No in-app browser content view for window {window_label}"),
+        )
+    })
+}
+
+/// Run a blocking WebView2 call off the async workers.
+///
+/// The helpers in [`crate::commands::webview_nav`] block waiting on the main
+/// thread, which is fine from a worker and a deadlock from the main thread.
+async fn off_thread<T, F>(f: F) -> Result<T, CommandError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| CommandError::new(NO_SUCH_VIEW, format!("webview call failed: {e}")))?
+        .map_err(|e| CommandError::new(NO_SUCH_VIEW, e))
+}
+
+/// Where the content view is, and where it can go.
+#[tauri::command]
+#[specta::specta]
+pub async fn browser_nav_state<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window_label: String,
+) -> Result<crate::commands::webview_nav::NavState, CommandError> {
+    let view = content_view(&app, &window_label)?;
+    let mut state = off_thread(move || crate::commands::webview_nav::nav_state(&view)).await?;
+    // Member-centre and Gash URLs carry `web_token` in the query, and the
+    // address bar is the one place it would become visible — and screenshottable.
+    state.url = crate::core::redact::redact_uri(&state.url);
+    Ok(state)
+}
+
+/// Go back one entry in the content view.
+#[tauri::command]
+#[specta::specta]
+pub async fn browser_back<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window_label: String,
+) -> Result<(), CommandError> {
+    let view = content_view(&app, &window_label)?;
+    off_thread(move || crate::commands::webview_nav::go_back(&view)).await
+}
+
+/// Go forward one entry in the content view.
+#[tauri::command]
+#[specta::specta]
+pub async fn browser_forward<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window_label: String,
+) -> Result<(), CommandError> {
+    let view = content_view(&app, &window_label)?;
+    off_thread(move || crate::commands::webview_nav::go_forward(&view)).await
+}
+
+/// Reload the content view.
+#[tauri::command]
+#[specta::specta]
+pub async fn browser_reload<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window_label: String,
+) -> Result<(), CommandError> {
+    let view = content_view(&app, &window_label)?;
+    off_thread(move || crate::commands::webview_nav::reload(&view)).await
+}
+
+/// What a person typed, turned into something [`Url::parse`] accepts.
+///
+/// People type `tw.beanfun.com`, not `https://tw.beanfun.com`. Without this the
+/// address bar answers a bare host with "URL must include a scheme", which is
+/// both true and useless — the host is what they meant, and https is what they
+/// would have typed. `open_in_app_browser` does not get this treatment: its
+/// URLs come from code, where a missing scheme is a bug worth surfacing.
+fn address_bar_input(typed: &str) -> String {
+    let trimmed = typed.trim();
+    match trimmed.contains("://") {
+        true => trimmed.to_string(),
+        false => format!("https://{trimmed}"),
+    }
+}
+
+/// Navigate the content view to `url`.
+///
+/// Validated by the same [`parse_and_validate`] the open command uses, so a
+/// typed address is held to the host allowlist exactly as a clicked one is —
+/// and an out-of-scope address comes back as `system.invalid_url`, which the
+/// frontend already knows to answer by handing the URL to the system browser.
+#[tauri::command]
+#[specta::specta]
+pub async fn browser_navigate<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window_label: String,
+    url: String,
+) -> Result<(), CommandError> {
+    let target = parse_and_validate(&address_bar_input(&url))?;
+    let view = content_view(&app, &window_label)?;
+    let target_str = target.to_string();
+    off_thread(move || crate::commands::webview_nav::navigate(&view, &target_str)).await
+}
+
+/// Who answered for the page on screen, and with what certificate.
+///
+/// See [`crate::commands::tls_info`] for why this is a fresh handshake rather
+/// than a readback of the connection the page arrived over.
+#[tauri::command]
+#[specta::specta]
+pub async fn browser_connection_info<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window_label: String,
+) -> Result<crate::commands::tls_info::ConnectionInfo, CommandError> {
+    let view = content_view(&app, &window_label)?;
+    let state = off_thread(move || crate::commands::webview_nav::nav_state(&view)).await?;
+    let parsed = Url::parse(&state.url).map_err(|e| {
+        CommandError::new(
+            INVALID_URL_CODE,
+            format!("The page has no address to inspect: {e}"),
+        )
+    })?;
+
+    tauri::async_runtime::spawn_blocking(move || crate::commands::tls_info::inspect(&parsed))
+        .await
+        .map_err(|e| CommandError::new(NO_SUCH_VIEW, format!("connection check failed: {e}")))
+}
+
+/// Grow or shrink the toolbar so a panel it opens has somewhere to be drawn.
+#[tauri::command]
+#[specta::specta]
+pub async fn browser_set_chrome_height<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window_label: String,
+    height: f64,
+) -> Result<(), CommandError> {
+    set_chrome_height_for(&window_label, height);
+    if let Some(window) = app.get_window(&window_label) {
+        relayout(&window);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -907,6 +1193,23 @@ mod tests {
         assert!(
             !url.contains("web_token=&") && !url.ends_with("web_token="),
             "URL must not contain an empty web_token query value; got: {url}"
+        );
+    }
+
+    #[test]
+    fn a_typed_host_becomes_an_https_url() {
+        assert_eq!(
+            address_bar_input("tw.beanfun.com"),
+            "https://tw.beanfun.com"
+        );
+        assert_eq!(address_bar_input("  google.com "), "https://google.com");
+    }
+
+    #[test]
+    fn a_typed_url_with_a_scheme_is_left_alone() {
+        assert_eq!(
+            address_bar_input("http://tw.beanfun.com/x"),
+            "http://tw.beanfun.com/x"
         );
     }
 

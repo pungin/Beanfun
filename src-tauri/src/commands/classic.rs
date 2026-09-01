@@ -499,9 +499,17 @@ pub struct ClassicCheck {
 }
 
 /// Check the local prerequisites for the classic launch.
+///
+/// Nothing here fails — every probe folds into a field on [`ClassicCheck`]. The
+/// `Result` is not optional though: an async command borrowing `State<'_, _>`
+/// has to return one, or the borrow outlives the future. `CommandError` rather
+/// than `()` because clippy's `result_unit_err` is denied in CI, and because
+/// every other command in this crate answers with the same type.
 #[tauri::command]
 #[specta::specta]
-pub async fn classic_self_check(state: tauri::State<'_, AppState>) -> Result<ClassicCheck, ()> {
+pub async fn classic_self_check(
+    state: tauri::State<'_, AppState>,
+) -> Result<ClassicCheck, CommandError> {
     #[cfg(target_os = "windows")]
     {
         use winreg::enums::HKEY_CLASSES_ROOT;
@@ -814,9 +822,9 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
     .await?;
 
     // Seed the session cookies (HK SSO) and keep popups in-window.
-    cookie_native::register_new_window_handler(&window);
+    cookie_native::register_new_window_handler(window.as_ref());
     if let Some(client) = client.as_ref() {
-        let seeded = cookie_native::seed_cookies_native(&window, client);
+        let seeded = cookie_native::seed_cookies_native(window.as_ref(), client);
         tracing::info!("classic: seeded {seeded} cookies into portal webview");
     }
 
