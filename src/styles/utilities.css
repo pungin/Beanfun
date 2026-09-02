@@ -63,6 +63,25 @@
  * pattern when running in the custom-titlebar shell.
  * ========================================================================= */
 
+/*
+ * The window root fills the window, always.
+ *
+ * This used to be set only by `fitWindow`, as the restore half of its
+ * `height: auto` → measure → `height: 100vh` dance. Anything that grew
+ * the window before that first fit ran therefore left the root at its
+ * natural content height, and the rest of the window — transparent, by
+ * design — showed the desktop straight through. The announcement
+ * overlay does exactly that: it suspends window fitting and then
+ * enlarges the window, on launch, before any fit has happened.
+ *
+ * As a rule rather than a leftover, it holds whether a fit has run or
+ * not. `fitWindow`'s inline `auto` still wins during measurement, and
+ * its inline `100vh` afterwards is now merely redundant.
+ */
+[data-window-root] {
+  height: 100vh;
+}
+
 .bf-glass-window {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.45) 100%),
