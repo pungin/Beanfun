@@ -328,6 +328,13 @@ const zhTW = {
     altHint: '若驗證一直無法通過，可改用 QR Code 或 Gama Pass 登入。',
   },
   announcement: {
+    downloadSource: {
+      title: '下載來源提醒',
+      intro: '我們接獲回報，有非官方、疑似被重新打包的 Beanfun 啟動器在外流傳。',
+      rule: '開發團隊每次發佈，只會提供 GitHub 上該版本 exe 的下載連結。我們給的永遠是連結，不是檔案。',
+      tell: '所以，如果有人直接把執行檔傳給你，或者你從網盤、論壇轉載、聊天群組附件取得，那就不是我們發出的。Beanfun 與 MapleLink 各自獨立發佈，任何一邊都不會代另一邊派發檔案。',
+      act: '下載與使用前，請先確認來源安全可靠。不是從上面兩個位置取得的，請立即刪除並重新下載 —— 重新打包的版本可能已被植入其他程式，而你的帳號密碼會經過它。',
+    },
     title: '📢 開發狀態與雙線更新公告',
     intro:
       '本專案目前正進行底層現代化重構（採用 Rust + Vue + Tauri）。為提供社群更具彈性的選擇，本專案將與另一開源啟動器 MapleLink 維持雙線並行開發：',
@@ -648,6 +655,13 @@ const zhCN = {
     altHint: '若验证始终无法通过，可改用 QR Code 或 Gama Pass 登录。',
   },
   announcement: {
+    downloadSource: {
+      title: '下载来源提醒',
+      intro: '我们接获回报，有非官方、疑似被重新打包的 Beanfun 启动器在外流传。',
+      rule: '开发团队每次发布，只会提供 GitHub 上该版本 exe 的下载连结。我们给的永远是连结，不是档案。',
+      tell: '所以，如果有人直接把执行档传给你，或者你从网盘、论坛转载、聊天群组附件取得，那就不是我们发出的。Beanfun 与 MapleLink 各自独立发布，任何一边都不会代另一边派发档案。',
+      act: '下载与使用前，请先确认来源安全可靠。不是从上面两个位置取得的，请立即删除并重新下载 —— 重新打包的版本可能已被植入其他程式，而你的帐号密码会经过它。',
+    },
     title: '📢 开发状态与双线更新公告',
     intro:
       '本项目目前正进行底层现代化重构（采用 Rust + Vue + Tauri）。为提供社群更具弹性的选择，本项目将与另一开源启动器 MapleLink 维持双线并行开发：',
@@ -971,6 +985,14 @@ const enUS = {
     altHint: 'If verification keeps failing, try QR Code or Gama Pass sign-in instead.',
   },
   announcement: {
+    downloadSource: {
+      title: 'Where to download this',
+      intro:
+        'We have had reports of unofficial, seemingly repackaged copies of the Beanfun launcher circulating.',
+      rule: 'For every release, the development team gives out one thing: a link to that version’s exe on GitHub. What we hand over is always a link, never a file.',
+      tell: 'So if someone sent you the executable itself, or you got it from a file locker, a forum repost or a chat attachment, it did not come from us. Beanfun and MapleLink publish separately, and neither hands out files on the other’s behalf.',
+      act: 'Before you download it and before you run it, make sure the source is one you can trust. If it did not come from one of the two addresses above, delete it and download it again — a repackaged build can carry anything, and your account and password go through it.',
+    },
     title: '📢 Project Status & Dual-Track Update',
     intro:
       'This project is undergoing a ground-up modernisation (Rust + Vue + Tauri). To give the community a more flexible choice, it now runs in parallel with another open-source launcher, MapleLink:',

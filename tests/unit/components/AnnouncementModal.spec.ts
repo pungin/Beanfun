@@ -27,6 +27,7 @@ import {
   ANNOUNCEMENT_BANNER_KEY,
   ANNOUNCEMENT_SEEN_KEY,
   LATEST_ANNOUNCEMENT,
+  serializeIds,
   LEGACY_ANNOUNCEMENT_SEEN_KEY,
 } from '../../../src/constants/announcement'
 import { closeAnnouncementList, openAnnouncementList } from '../../../src/services/announcementUi'
@@ -37,8 +38,33 @@ const ok = <T>(data: T): Promise<Result<T, CommandError>> => Promise.resolve({ s
 const mockOpenUrl = vi.mocked(commands.openUrl)
 const mockSetConfig = vi.mocked(commands.setConfig)
 
-/** The shipped notice — `info`, so it is closable at once. */
+/** The shipped notice: the one the overlay opens on launch. */
 const CURRENT = LATEST_ANNOUNCEMENT
+
+/**
+ * Every id, as the component stores them.
+ *
+ * "Read the current one" is not the same as "nothing left to show" once
+ * more than one notice exists — the overlay opens the newest *unread*
+ * one, so seeding only `CURRENT.id` leaves the older notice to pop.
+ */
+const ALL_SEEN = serializeIds(ANNOUNCEMENTS.map((def) => def.id))
+
+/**
+ * Advance past the countdown so the overlay can be closed.
+ *
+ * Most cases here are about what happens once it is closable, not about
+ * the shipped notice's level; advancing keeps them true whichever level
+ * ships.
+ */
+async function settle(): Promise<void> {
+  // A one-second interval, so step it a second at a time and let Vue
+  // flush between ticks rather than jumping the whole way at once.
+  for (let i = 0; i <= (CURRENT.countdownSeconds ?? 0); i += 1) {
+    vi.advanceTimersByTime(1000)
+    await flushPromises()
+  }
+}
 
 let pinia: ReturnType<typeof createPinia>
 
@@ -48,6 +74,10 @@ function mountModal() {
 
 describe('AnnouncementModal', () => {
   beforeEach(() => {
+    // Paired with the `useRealTimers` below, which had been left without a
+    // partner since the shipped notice stopped having a countdown. The
+    // current one has ten seconds, and `settle` steps through them.
+    vi.useFakeTimers()
     pinia = createPinia()
     setActivePinia(pinia)
     // The modal defers its read-check until Config.xml has loaded.
@@ -70,14 +100,20 @@ describe('AnnouncementModal', () => {
     expect(wrapper.find(`[data-testid="announcement-body-${CURRENT.id}"]`).exists()).toBe(true)
   })
 
-  it('is closable at once at info level, and closing counts as read', async () => {
+  it('holds every close affordance for the countdown, then closing counts as read', async () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    // No countdown: the acknowledge button is live immediately…
+    // Locked: the acknowledge button is dead and the × is not offered.
+    expect(
+      (wrapper.get('[data-testid="announcement-dismiss"]').element as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(wrapper.find('[data-testid="announcement-close"]').exists()).toBe(false)
+
+    await settle()
+
     const btn = wrapper.get('[data-testid="announcement-dismiss"]')
     expect((btn.element as HTMLButtonElement).disabled).toBe(false)
-    // …and the × is offered too.
     expect(wrapper.find('[data-testid="announcement-close"]').exists()).toBe(true)
 
     await btn.trigger('click')
@@ -88,9 +124,10 @@ describe('AnnouncementModal', () => {
     expect(localStorage.getItem(ANNOUNCEMENT_SEEN_KEY)).toBe(CURRENT.id)
   })
 
-  it('closes from the × and still counts as read at info level', async () => {
+  it('closes from the × and still counts as read', async () => {
     const wrapper = mountModal()
     await flushPromises()
+    await settle()
 
     await wrapper.get('[data-testid="announcement-close"]').trigger('click')
     await flushPromises()
@@ -102,6 +139,7 @@ describe('AnnouncementModal', () => {
   it('closes from the backdrop', async () => {
     const wrapper = mountModal()
     await flushPromises()
+    await settle()
 
     await wrapper.get('[data-testid="announcement"]').trigger('click')
     await flushPromises()
@@ -110,18 +148,23 @@ describe('AnnouncementModal', () => {
   })
 
   it('does not re-open once read', async () => {
-    useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = CURRENT.id
+    useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = ALL_SEEN
     const wrapper = mountModal()
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="announcement-banner"]').exists()).toBe(true)
   })
 
-  it('treats a legacy app-version value as acknowledging the inaugural notice', async () => {
+  it('treats a legacy app-version value as acknowledging the inaugural notice only', async () => {
     useConfigStore().entries[LEGACY_ANNOUNCEMENT_SEEN_KEY] = '6.0.5'
     const wrapper = mountModal()
     await flushPromises()
-    expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
+
+    // The inaugural notice counts as read; anything published since does
+    // not, so the newest unread one still opens.
+    const inaugural = ANNOUNCEMENTS[ANNOUNCEMENTS.length - 1]
+    expect(wrapper.find(`[data-testid="announcement-body-${inaugural.id}"]`).exists()).toBe(false)
+    expect(wrapper.find(`[data-testid="announcement-body-${CURRENT.id}"]`).exists()).toBe(true)
   })
 
   it('waits for Config.xml to load before the read-check', async () => {
@@ -131,7 +174,7 @@ describe('AnnouncementModal', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(false)
 
-    config.entries[ANNOUNCEMENT_SEEN_KEY] = CURRENT.id
+    config.entries[ANNOUNCEMENT_SEEN_KEY] = ALL_SEEN
     config.loaded = true
     await flushPromises()
 
@@ -141,13 +184,13 @@ describe('AnnouncementModal', () => {
   it('opens external links from the body via openUrl', async () => {
     const wrapper = mountModal()
     await flushPromises()
-    await wrapper.get('[data-testid="announcement-maplelink"]').trigger('click')
-    expect(commands.openUrl).toHaveBeenCalledWith('https://github.com/lshw54/maplelink')
+    await wrapper.get('[data-testid="announcement-releases-beanfun"]').trigger('click')
+    expect(commands.openUrl).toHaveBeenCalledWith('https://github.com/pungin/Beanfun/releases')
   })
 
   describe('banner', () => {
     beforeEach(() => {
-      useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = CURRENT.id
+      useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = ALL_SEEN
     })
 
     it('opens the notice itself — no intermediate list', async () => {
@@ -181,7 +224,7 @@ describe('AnnouncementModal', () => {
 
   describe('archive', () => {
     beforeEach(() => {
-      useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = CURRENT.id
+      useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = ALL_SEEN
     })
 
     it('opens from the shared opener (Settings uses this) and lists subject + date', async () => {

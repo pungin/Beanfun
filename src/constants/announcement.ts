@@ -50,10 +50,31 @@ export const ANNOUNCEMENT_MAPLELINK_URL = 'https://github.com/lshw54/maplelink'
 export const ANNOUNCEMENT_MORE_INFO_URL = 'https://github.com/pungin/Beanfun/issues/323'
 
 /**
+ * The only places either project is published.
+ *
+ * Shown in full inside the download-source notice, not just linked: the
+ * address is the thing a reader compares their own copy against, and a
+ * button labelled "downloads page" gives them nothing to compare.
+ */
+export const ANNOUNCEMENT_BEANFUN_RELEASES_URL = 'https://github.com/pungin/Beanfun/releases'
+export const ANNOUNCEMENT_MAPLELINK_RELEASES_URL = 'https://github.com/lshw54/maplelink/releases'
+
+/**
  * Every announcement, **newest first**. The first entry is the one the
  * banner names.
  */
 export const ANNOUNCEMENTS: readonly AnnouncementDef[] = [
+  {
+    id: '2026-09-download-source',
+    // `pinned`: someone handed a repackaged build cannot tell it from
+    // ours, and the whole notice is one rule they need before they run
+    // it. Ten seconds, then closing counts as read — asked once, not
+    // every launch.
+    level: 'pinned',
+    date: '2026-09-03',
+    titleKey: 'announcement.downloadSource.title',
+    countdownSeconds: 10,
+  },
   {
     id: '2026-07-dual-line-development-notice',
     // Dropped from a 30-second lock to `info`: most people have read
