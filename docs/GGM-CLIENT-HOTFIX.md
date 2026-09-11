@@ -36,10 +36,11 @@ will cost you six hours if you get it wrong:
 | `launch data: ...` decode errors                 | the decoding algorithm changed, e.g. new tables → code change |
 | no `Otp.Tw.*` lines at all                       | this route was never taken; look elsewhere                    |
 
-Users **with GGM installed are unaffected** — they read their own copy
-and never consult the published file. So if every report comes from
-someone without GGM, that is strong confirmation the published or
-compiled-in pair has gone stale.
+Since #391 the published pair is what almost everyone sends, GGM
+installed or not — an install is only used where it names a strictly
+newer build than what we publish. So a stale published pair is felt by
+everybody at once, and a single report from a machine with no GGM is no
+longer evidence on its own.
 
 ## 2. Get the new values
 
@@ -111,13 +112,14 @@ minutes; no need to wait for them.
 ## 5. When users get it
 
 **Within six hours** — the local cache TTL. To take it immediately, a
-user can delete `ggm-client.json` from `%APPDATA%\Beanfun\` and retry, or
-install GGM, which bypasses this path entirely.
+user can delete `ggm-client.json` from `%APPDATA%\Beanfun\` and retry.
+Installing GGM no longer bypasses this: an install that is not newer than
+the published pair is not used.
 
 ## 6. If you publish a bad pair
 
 Everyone who was working breaks, because the published layer outranks
-the compiled-in one.
+both the compiled-in pair and the installed GGM.
 
 - Revert the commit and push, or restore the last known-good values.
 - **Users keep the bad values for up to six hours**, cache TTL. This is
@@ -127,21 +129,25 @@ the compiled-in one.
 
 ## 7. Test before pushing
 
-On a Windows machine with **no GGM installed**:
+On a Windows machine, GGM installed or not:
 
 1. delete `%APPDATA%\Beanfun\ggm-client.json`
 2. retrieve a password
 3. the log should show `ggm-hotfix: published values fetched cv=<new>`,
    then the retrieval succeeding
 
+A machine **with** GGM installed is the better test of the two: it proves
+the published pair is preferred, which is what most users now send.
+
 To try values on a branch first, point the first entry of `HOTFIX_URLS`
 in `services/beanfun/ggm_hotfix.rs` at that branch, then change it back.
 
 ## Things worth remembering
 
-- Users with GGM installed never touch the network for this. That
-  protects them from a bad publish — and means they cannot confirm a
-  good one for you.
+- Users with GGM installed take the published pair too, unless their
+  install is strictly newer. A bad publish therefore reaches them as
+  well; the upside is that a good one does too, and they can confirm
+  it.
 - We have **never actually seen beanfun refuse an old CV/Hash**. This is
   preventative. The first time it is really needed, take the extra
   minute on step 1 rather than swapping values because something broke.
@@ -153,15 +159,22 @@ in `services/beanfun/ggm_hotfix.rs` at that branch, then change it back.
 
 1. **Pinned** — `%APPDATA%\Beanfun\ggm-client.json` with `"override": true`.
    A deliberate choice; nothing overrides it.
-2. **Installed GGM or published — whichever names the newer build.** The
-   installed `GGMWebStart.dll` is this machine's own truth, and GGM updates
-   itself, but only when it runs; the people this app exists for launch from
-   here rather than the official site, so an install can sit at whatever
-   version it was last opened at. Comparing versions keeps a stale install
-   from being preferred over a fix, without letting a bad publish take down a
-   machine whose own install was fine. A tie goes to the installed file.
-3. **Compiled in** — ships with the app, so a machine with none of the above works.
+2. **Published** — the file above without the flag, fetched and cached. Read
+   off a real Game Manager and checked before it was pushed.
+3. **Installed GGM, only where it names a strictly newer build** than the pair
+   from step 2 or 4. That covers the hour or so between Gamania shipping a
+   build and the watcher publishing it, and any release nobody notices.
+4. **Compiled in** — ships with the app, for a machine that reaches no mirror
+   and has nothing cached. It takes step 3's comparison too.
 
-That ordering is the reason the lever works at all. Preferring the installed
-GGM outright would make the stalest machines — the ones most likely to be
-refused — the only ones a published fix could never reach.
+Until #391 the installed file came first on ties, on the grounds that it was
+the machine's own truth. It is — of a file the app cannot fully describe:
+beanfun is told an assembly version, and all Rust can read is the Win32
+version resource, so an install a patcher has moved on in place sends a
+well-formed pair for a build that does not exist. #391 was exactly that, and
+the reporter's password retrieval only worked once GGM was uninstalled.
+
+Preferring what we checked cuts the other way too: the stalest machines were
+the ones a published fix could never reach, and now it reaches them. The cost
+is that a bad publish is felt by everyone rather than only by users without
+GGM — which is step 6's problem, and ours to avoid.

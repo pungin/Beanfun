@@ -42,10 +42,10 @@
 //! # Resolution strategy
 //!
 //! [`ClientIntegrity::resolve`] describes the **locally installed** GGM,
-//! falling back to the bundled constants. Whether that description or a
-//! published one is used is decided by the caller — see
-//! `services::beanfun::otp::resolve_client_integrity`, which takes
-//! whichever names the newer build:
+//! falling back to the bundled constants. Whether that description is used at
+//! all is decided by the caller — see
+//! `services::beanfun::otp::pick_client_integrity`, which sends it only where
+//! it names a strictly newer build than the pair we published:
 //!
 //! 1. Locate `GGMWebStart.dll` — first via the `gamaniagames://` protocol
 //!    handler the installer registers (authoritative even for non-default
@@ -61,9 +61,17 @@
 //! was when it was last opened, which may be the version beanfun has since
 //! stopped accepting.
 //!
-//! That is why the caller compares this against the published pair instead of
-//! taking it on sight. The bundled constants remain the answer for a machine
-//! with neither, and go stale the next time Gamania ships a GGM build —
+//! Worse, what is read here is not quite what beanfun is told. GGM sends its
+//! assembly version; all that can be read back out of the DLL is the Win32
+//! version resource, read by `file_version` below. Where a patcher has moved the file
+//! on without moving that resource, the version and the hash describe
+//! different builds and the request is refused — issue #391, where password
+//! retrieval only started working once the reporter uninstalled GGM.
+//!
+//! That is why the caller prefers the published pair, which was read off a
+//! real Game Manager and checked, and only defers to this when the install is
+//! genuinely ahead. The bundled constants are the answer for a machine that
+//! reaches no mirror, and go stale the next time Gamania ships a GGM build —
 //! refreshing them is a release-time chore, not a runtime one.
 //!
 //! # Deliberately all-or-nothing
