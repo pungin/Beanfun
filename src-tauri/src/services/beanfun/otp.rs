@@ -543,10 +543,10 @@ async fn step_4_long_poll(
 
 /// Resolve the launcher identity off the async executor.
 ///
-/// [`ClientIntegrity::resolve`] reads and hashes a ~1.3 MB file; a cold
-/// cache makes that long enough to be worth handing to `spawn_blocking`.
-/// A join failure (runtime shutting down) degrades to the bundled
-/// constants rather than failing the OTP outright.
+/// [`ClientIntegrity::resolve_local`] reads and hashes a ~1.3 MB file; a
+/// cold cache makes that long enough to be worth handing to
+/// `spawn_blocking`. A join failure (runtime shutting down) leaves the
+/// installed GGM unread rather than failing the OTP outright.
 async fn resolve_client_integrity() -> ClientIntegrity {
     use crate::services::beanfun::ggm_hotfix;
 
@@ -560,22 +560,6 @@ async fn resolve_client_integrity() -> ClientIntegrity {
         return ClientIntegrity::from_published(&pinned);
     }
 
-    // 2 and 3. The GGM installed here, and what we published — whichever
-    //    describes the newer build.
-    //
-    //    GGM updates itself, but only when it runs, and the people this
-    //    app exists for are precisely the ones who never run it: they
-    //    launch from here, not from the official site. An install that
-    //    has sat untouched since Gamania last shipped reports what it was
-    //    then, and those are the values beanfun stops accepting — so
-    //    preferring it unconditionally would make the stalest machines
-    //    the only ones the hotfix lever could never reach.
-    //
-    //    Preferring the published pair unconditionally trades that for
-    //    the opposite hazard: a bad publish takes down users whose own
-    //    install was fine. Comparing versions avoids both. A tie goes to
-    //    the installed file, which is this machine's own truth rather
-    //    than a claim about it.
     let local = tokio::task::spawn_blocking(ClientIntegrity::resolve_local)
         .await
         .unwrap_or_else(|e| {
@@ -584,23 +568,72 @@ async fn resolve_client_integrity() -> ClientIntegrity {
         });
     let published = ggm_hotfix::published().await;
 
-    match (local, published) {
-        (Some(local), Some(published)) => {
-            if names_a_newer_build(&published.cv, &local.cv) {
-                tracing::info!(
-                    local = %local.cv,
-                    published = %published.cv,
-                    "published client-integrity is newer than the installed GGM"
-                );
-                ClientIntegrity::from_published(&published)
-            } else {
-                local
-            }
+    pick_client_integrity(local, published)
+}
+
+/// Choose between the pair we know beanfun accepts and whatever the GGM
+/// on this machine reports.
+///
+/// The known-good pair is what we published, or — when no mirror
+/// answered and nothing is cached — the pair compiled in. Both were read
+/// off a real Game Manager and checked before shipping, so they are the
+/// default; the installed GGM is only taken when it names a **strictly
+/// newer** build, which is the one case our pair cannot already cover.
+///
+/// # Why the installed file is not preferred (issue #391)
+///
+/// It reads like this machine's own truth, and it is — of a file we
+/// cannot fully describe. beanfun is told an *assembly* version, while
+/// all Rust can read out of the DLL is the Win32 version resource; the
+/// two agree in every build seen so far, and nothing guarantees they
+/// will. An
+/// install that a patcher has moved on in place, or one sitting at a
+/// build beanfun has stopped accepting, therefore produces a pair that
+/// looks perfectly well-formed and gets refused — which is exactly what
+/// #391 was: retrieval failed until the reporter uninstalled the Game
+/// Manager, on a machine where the compiled-in pair worked.
+///
+/// The hazard this trades against is a bad publish reaching users whose
+/// own install was fine. That is ours to avoid, it is visible the moment
+/// it happens, and `docs/GGM-CLIENT-HOTFIX.md` says how to pull it back;
+/// a stale install is invisible to us and the user has no way to know
+/// that GGM is what broke their password.
+///
+/// A tie goes to the known-good pair for the same reason: at equal
+/// versions the two describe the same build, and only one of them has
+/// been checked.
+fn pick_client_integrity(
+    local: Option<ClientIntegrity>,
+    published: Option<crate::services::beanfun::ggm_hotfix::PublishedValues>,
+) -> ClientIntegrity {
+    // 2, else 4: what we published, else what we shipped with.
+    let known = published
+        .as_ref()
+        .map(ClientIntegrity::from_published)
+        .unwrap_or_else(ClientIntegrity::fallback);
+
+    // 3. The installed GGM, when it has genuinely moved past us — the
+    //    hour or so between Gamania shipping a build and the watcher
+    //    publishing it, and any release we never notice at all.
+    match local {
+        Some(local) if names_a_newer_build(&local.cv, &known.cv) => {
+            tracing::info!(
+                local = %local.cv,
+                known = %known.cv,
+                "installed GGM is newer than the client-integrity values we know"
+            );
+            local
         }
-        (Some(local), None) => local,
-        (None, Some(published)) => ClientIntegrity::from_published(&published),
-        // 4. What we shipped with.
-        (None, None) => ClientIntegrity::fallback(),
+        Some(local) => {
+            tracing::debug!(
+                local = %local.cv,
+                known = %known.cv,
+                published = published.is_some(),
+                "using the known-good client-integrity values over the installed GGM"
+            );
+            known
+        }
+        None => known,
     }
 }
 
@@ -1202,18 +1235,14 @@ fn snippet_for_diagnostics(body: &str) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn a_newer_published_version_wins() {
-        // The case that motivated comparing at all: an install left alone
-        // since before Gamania's last release.
+    fn a_higher_version_names_a_newer_build() {
         assert!(names_a_newer_build("1.5.0.2", "1.4.9.9"));
         assert!(names_a_newer_build("1.5.1", "1.5.0.2"));
         assert!(names_a_newer_build("2.0", "1.9.9.9"));
     }
 
     #[test]
-    fn an_equal_or_older_published_version_does_not() {
-        // A tie goes to the installed file, and a publish that names an
-        // older build is a mistake that must not take working machines down.
+    fn an_equal_or_lower_version_does_not() {
         assert!(!names_a_newer_build("1.5.0.2", "1.5.0.2"));
         assert!(
             !names_a_newer_build("1.5.0", "1.5.0.0"),
@@ -1232,6 +1261,97 @@ mod tests {
     }
 
     use super::*;
+
+    // -------------------------------------------------------------------------
+    // pick_client_integrity
+    // -------------------------------------------------------------------------
+
+    /// A hash that is not the one we ship, standing in for whatever the
+    /// DLL on this machine happens to hash to.
+    const INSTALLED_HASH: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+
+    fn installed(cv: &str) -> ClientIntegrity {
+        ClientIntegrity {
+            cv: cv.to_string(),
+            hash: INSTALLED_HASH.to_string(),
+            arch: ClientIntegrity::fallback().arch,
+        }
+    }
+
+    fn published(cv: &str) -> crate::services::beanfun::ggm_hotfix::PublishedValues {
+        crate::services::beanfun::ggm_hotfix::PublishedValues {
+            cv: cv.to_string(),
+            hash: "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
+        }
+    }
+
+    #[test]
+    fn the_published_pair_wins_a_tie_with_the_installed_ggm() {
+        // Issue #391: an install reporting the version we publish still
+        // hashed to something beanfun refused, and retrieval only worked
+        // once the Game Manager was uninstalled. At equal versions the
+        // checked pair is the one to send.
+        let picked = pick_client_integrity(Some(installed("1.5.0.2")), Some(published("1.5.0.2")));
+        assert_eq!(picked.hash, published("1.5.0.2").hash);
+    }
+
+    #[test]
+    fn the_published_pair_wins_over_an_older_install() {
+        let picked = pick_client_integrity(Some(installed("1.4.0.0")), Some(published("1.5.0.2")));
+        assert_eq!(picked.cv, "1.5.0.2");
+        assert_eq!(picked.hash, published("1.5.0.2").hash);
+    }
+
+    #[test]
+    fn the_compiled_in_pair_wins_over_an_install_when_no_mirror_answered() {
+        // The other half of #391: with no cache and no reachable mirror
+        // the shipped pair still has to outrank an install that is no
+        // newer, or a blocked network hands the machine straight back to
+        // the values that fail.
+        let picked = pick_client_integrity(Some(installed("1.5.0.2")), None);
+        assert_eq!(picked, ClientIntegrity::fallback());
+
+        let picked = pick_client_integrity(Some(installed("1.0.0.0")), None);
+        assert_eq!(picked, ClientIntegrity::fallback());
+    }
+
+    #[test]
+    fn a_strictly_newer_install_is_still_preferred() {
+        // The window between Gamania shipping a build and the watcher
+        // publishing it — the only case our own pair cannot cover.
+        let picked = pick_client_integrity(Some(installed("1.5.1.0")), Some(published("1.5.0.2")));
+        assert_eq!(picked.cv, "1.5.1.0");
+        assert_eq!(picked.hash, INSTALLED_HASH);
+
+        let picked = pick_client_integrity(Some(installed("9.9.9.9")), None);
+        assert_eq!(picked.cv, "9.9.9.9");
+    }
+
+    #[test]
+    fn a_machine_without_ggm_takes_what_it_can_get() {
+        let picked = pick_client_integrity(None, Some(published("1.5.0.2")));
+        assert_eq!(picked.hash, published("1.5.0.2").hash);
+
+        assert_eq!(
+            pick_client_integrity(None, None),
+            ClientIntegrity::fallback(),
+        );
+    }
+
+    #[test]
+    fn the_arch_sent_is_always_this_process() {
+        // `arch` describes the binary asking, never the machine that
+        // produced a published pair.
+        let expected = ClientIntegrity::fallback().arch;
+        assert_eq!(
+            pick_client_integrity(None, Some(published("1.5.0.2"))).arch,
+            expected,
+        );
+        assert_eq!(
+            pick_client_integrity(Some(installed("9.9.9.9")), None).arch,
+            expected,
+        );
+    }
 
     // -------------------------------------------------------------------------
     // parse_long_polling_key

@@ -13,14 +13,18 @@
 //!
 //! 1. a `ggm-client.json` the user pinned themselves — an explicit
 //!    choice, so nothing overrides it;
-//! 2. the GGM installed on this machine, which follows its own updates;
-//! 3. a small file published alongside the app, cached here — one commit
+//! 2. a small file published alongside the app, cached here — one commit
 //!    fixes every user without them doing anything;
-//! 4. the pair compiled in, so a machine with none of the above works.
+//! 3. the GGM installed on this machine, but only where it names a
+//!    strictly newer build than either of those;
+//! 4. the pair compiled in, so a machine that reaches no mirror and has
+//!    no cache still works.
 //!
-//! Layer 3 is the hotfix lever. See `docs/GGM-CLIENT-HOTFIX.md` for the
+//! Layer 2 is the hotfix lever. See `docs/GGM-CLIENT-HOTFIX.md` for the
 //! runbook, including how to tell this failure apart from the ones that
-//! need a code change instead.
+//! need a code change instead, and
+//! `services::beanfun::otp::pick_client_integrity` for why the installed
+//! GGM sits below a pair we checked ourselves (issue #391).
 //!
 //! Nobody is expected to notice a new Game Manager by hand:
 //! `.github/workflows/ggm-watch.yml` asks beanfun hourly which build it
