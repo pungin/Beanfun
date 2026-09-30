@@ -86,7 +86,7 @@ pub fn disable_tracking_prevention_native<R: tauri::Runtime>(window: &WebviewWin
 ///
 /// This function only *adds* cookies. Callers that need a clean slate
 /// first (the GamePass re-login flow — issue #296) must call
-/// [`clear_all_cookies_native`] in a **separate** pass and wait for it
+/// [`clear_beanfun_cookies_native`] in a **separate** pass and wait for it
 /// to flush before seeding; see that function's docs for why the
 /// clear and seed are deliberately not fused into one native call.
 pub fn seed_cookies_native<R: tauri::Runtime>(
@@ -201,8 +201,20 @@ pub fn seed_cookies_native<R: tauri::Runtime>(
     total
 }
 
-/// Delete **every** cookie in the WebView2 profile of `window` via the
-/// native COM `ICoreWebView2CookieManager::DeleteAllCookies`.
+/// Hosts whose cookies the pre-seed clear removes. Matched as a
+/// domain suffix (`login.beanfun.com`, `.beanfun.com`, …).
+const CLEAR_DOMAIN_SUFFIXES: &[&str] = &["beanfun.com"];
+
+fn should_clear_domain(domain: &str) -> bool {
+    let d = domain.trim_start_matches('.').to_ascii_lowercase();
+    CLEAR_DOMAIN_SUFFIXES
+        .iter()
+        .any(|suffix| d == *suffix || d.ends_with(&format!(".{suffix}")))
+}
+
+/// Delete the **beanfun** cookies in the WebView2 profile of `window`
+/// via the native COM cookie manager, leaving every other host's
+/// cookies (notably `accounts.gamania.com`) untouched.
 ///
 /// # Why this is separate from [`seed_cookies_native`] (issue #296)
 ///
@@ -214,12 +226,24 @@ pub fn seed_cookies_native<R: tauri::Runtime>(
 /// stale token, the portal short-circuits the OAuth round-trip, and
 /// the harvest lifts a dead session. Restarting the .exe was the only
 /// recovery (it ends the WebView2 browser session, dropping the
-/// session cookies). Clearing the store before the next login makes
-/// every attempt start fresh — equivalent to a process restart.
+/// session cookies). Clearing the beanfun cookies before the next
+/// login makes every attempt start fresh — equivalent to a process
+/// restart as far as the portal is concerned.
+///
+/// # Why only beanfun domains (issue #394)
+///
+/// The first cut of the #296 fix used `DeleteAllCookies`, which also
+/// wiped the persistent "keep me signed in" cookies on
+/// `accounts.gamania.com`. Every GamePass window then behaved like an
+/// incognito tab: the saved-account picker was gone and the user was
+/// forced through the e-mail / phone entry page each time. The stale
+/// state that #296 needs cleared lives only on beanfun hosts, so the
+/// clear enumerates the store (`GetCookies` with a null URI returns
+/// every cookie in the profile) and deletes just those.
 ///
 /// # Why a dedicated pass instead of clearing inside the seed
 ///
-/// `DeleteAllCookies` and `AddOrUpdateCookie` are both fire-and-return
+/// `DeleteCookie` and `AddOrUpdateCookie` are both fire-and-return
 /// COM calls that queue work on the browser process; Microsoft does
 /// **not** document an ordering guarantee between a delete and an
 /// immediately-following add. Fusing them into one `with_webview`
@@ -227,14 +251,16 @@ pub fn seed_cookies_native<R: tauri::Runtime>(
 /// The caller therefore runs this clear in its own pass, waits a beat
 /// for it to flush, and only then calls [`seed_cookies_native`].
 ///
-/// Returns `true` if the `DeleteAllCookies` call was issued
+/// Returns `true` if the `GetCookies` enumeration was issued
 /// successfully, `false` on any COM failure (logged at WARN). A
 /// `false` return is best-effort — the caller still proceeds to seed.
-pub fn clear_all_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>) -> bool {
-    let issued = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+pub fn clear_beanfun_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>) -> bool {
+    let issued = Arc::new(AtomicBool::new(false));
     let issued_inner = issued.clone();
 
     let result = window.with_webview(move |webview| unsafe {
+        use webview2_com::GetCookiesCompletedHandler;
+
         let core = match webview.controller().CoreWebView2() {
             Ok(c) => c,
             Err(e) => {
@@ -259,16 +285,59 @@ pub fn clear_all_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>) ->
             }
         };
 
-        match manager.DeleteAllCookies() {
+        let manager_inner = manager.clone();
+        let handler = GetCookiesCompletedHandler::create(Box::new(move |hr, list| {
+            if let Err(e) = hr {
+                tracing::warn!(step = "NativeClear.Failed", error = ?e, "GetCookies failed");
+                return Ok(());
+            }
+            let Some(list) = list else {
+                tracing::warn!(step = "NativeClear.Failed", "GetCookies returned no list");
+                return Ok(());
+            };
+
+            let mut count = 0u32;
+            list.Count(&mut count)?;
+
+            let mut deleted = 0u32;
+            let mut kept = 0u32;
+            for i in 0..count {
+                let cookie = match list.GetValueAtIndex(i) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!(step = "NativeClear.Cookie", index = i, error = ?e, "GetValueAtIndex failed");
+                        continue;
+                    }
+                };
+                let mut domain = wv2_windows_core::PWSTR::null();
+                cookie.Domain(&mut domain)?;
+                let domain = domain.to_string().unwrap_or_default();
+                if should_clear_domain(&domain) {
+                    if let Err(e) = manager_inner.DeleteCookie(&cookie) {
+                        tracing::warn!(step = "NativeClear.Cookie", domain = %domain, error = ?e, "DeleteCookie failed");
+                    } else {
+                        deleted += 1;
+                    }
+                } else {
+                    kept += 1;
+                }
+            }
+
+            tracing::info!(
+                step = "NativeClear.Complete",
+                deleted = deleted,
+                kept = kept,
+                "beanfun cookies deleted from WebView2 profile"
+            );
+            Ok(())
+        }));
+
+        match manager.GetCookies(PCWSTR::null(), &handler) {
             Ok(()) => {
-                issued_inner.store(true, std::sync::atomic::Ordering::SeqCst);
-                tracing::info!(
-                    step = "NativeClear.Complete",
-                    "DeleteAllCookies issued on WebView2 profile"
-                );
+                issued_inner.store(true, Ordering::SeqCst);
             }
             Err(e) => {
-                tracing::warn!(step = "NativeClear.Failed", error = ?e, "DeleteAllCookies failed");
+                tracing::warn!(step = "NativeClear.Failed", error = ?e, "GetCookies failed");
             }
         }
     });
@@ -278,7 +347,28 @@ pub fn clear_all_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>) ->
         return false;
     }
 
-    issued.load(std::sync::atomic::Ordering::SeqCst)
+    issued.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+mod clear_domain_tests {
+    use super::should_clear_domain;
+
+    #[test]
+    fn beanfun_hosts_are_cleared() {
+        assert!(should_clear_domain("login.beanfun.com"));
+        assert!(should_clear_domain("tw.newlogin.beanfun.com"));
+        assert!(should_clear_domain(".beanfun.com"));
+        assert!(should_clear_domain("beanfun.com"));
+    }
+
+    #[test]
+    fn gamania_and_third_parties_are_kept() {
+        assert!(!should_clear_domain("accounts.gamania.com"));
+        assert!(!should_clear_domain(".gamania.com"));
+        assert!(!should_clear_domain(".google.com"));
+        assert!(!should_clear_domain("notbeanfun.com"));
+    }
 }
 
 /// Register a `NewWindowRequested` handler on the WebView2 instance

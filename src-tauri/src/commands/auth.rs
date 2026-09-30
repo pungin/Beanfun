@@ -1442,10 +1442,10 @@ fn parse_harvest_url(raw: &str) -> Url {
 ///
 /// # Why this exists (issue #296)
 ///
-/// The re-login fix wipes the WebView2 cookie store before seeding a
-/// fresh session (see [`open_gamepass_window`]). Because the clear
-/// happens inside a native COM closure with no return-value cookie
-/// dump, the only way to *prove on a live run* that no stale
+/// The re-login fix wipes the beanfun cookies from the WebView2 store
+/// before seeding a fresh session (see [`open_gamepass_window`]).
+/// Because the clear happens inside a native COM closure with no
+/// return-value cookie dump, the only way to *prove on a live run* that no stale
 /// `bfWebToken` survived a logout → re-login cycle is to read the
 /// WebView's own view of its cookies on the first page load (the
 /// `Login/Index` entry page, before the user authenticates).
@@ -1677,8 +1677,8 @@ async fn handle_gamepass_page_load<R: tauri::Runtime>(
     // Issue #296 diagnostic — dump the WebView's cookie names on EVERY
     // page load (this runs *before* the completion-URL filter below so
     // it also fires on the `Login/Index` entry page). A re-login that
-    // shows a stale `bfWebToken` here means the pre-seed
-    // `DeleteAllCookies` in `open_gamepass_window` did not take effect.
+    // shows a stale `bfWebToken` here means the pre-seed beanfun cookie
+    // clear in `open_gamepass_window` did not take effect.
     trace_webview_cookies("GamepassPageLoad.WebViewCookies", &window);
 
     if !should_try_gamepass_completion(&url) {
@@ -2179,8 +2179,8 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
     // from another tauri task) becomes obvious.
     trace_cookie_jar("GamepassWebViewSeed.JarDump", &client);
 
-    // ── Reset the shared WebView2 cookie store, then seed the fresh
-    // session cookies (issue #296).
+    // ── Reset the beanfun cookies in the shared WebView2 store, then
+    // seed the fresh session cookies (issue #296).
     //
     // WebView2 keeps ONE cookie store per user-data-folder, shared by
     // every window for the lifetime of the host *process*. A prior
@@ -2192,13 +2192,17 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
     // account data. Only restarting the .exe (which ends the WebView2
     // browser session and drops the session cookies) recovered.
     //
-    // Wiping the store before seeding makes every attempt start from a
-    // fresh-browser state, equivalent to a process restart.
+    // Wiping the beanfun cookies before seeding makes every attempt
+    // start from a fresh-browser state as far as the portal is
+    // concerned. Only beanfun hosts are touched: a blanket
+    // `DeleteAllCookies` also dropped the accounts.gamania.com "keep me
+    // signed in" cookies, so the GamePass saved-account picker vanished
+    // on every open (issue #394).
     #[cfg(target_os = "windows")]
     {
         // Two distinct native passes, NOT one fused closure.
         //
-        // `DeleteAllCookies` and `AddOrUpdateCookie` are both
+        // `DeleteCookie` and `AddOrUpdateCookie` are both
         // fire-and-return COM calls that queue work on the WebView2
         // browser process, and Microsoft documents no ordering
         // guarantee between a delete and an immediately-following add.
@@ -2208,11 +2212,11 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
         // the D5 seed fix cured. So: clear, wait for the delete to
         // flush, THEN seed, then wait for the seed to flush, then
         // navigate.
-        let cleared = crate::commands::cookie_native::clear_all_cookies_native(&window);
+        let cleared = crate::commands::cookie_native::clear_beanfun_cookies_native(&window);
         tracing::info!(
             step = "GamepassWebViewClear",
             cleared = cleared,
-            "issued DeleteAllCookies before seeding (issue #296)"
+            "issued beanfun cookie clear before seeding (issue #296 / #394)"
         );
         // Let the delete commit on the browser process before we start
         // writing the fresh cookies.
@@ -2435,7 +2439,7 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
     // COM dance as the GamePass / account-login windows).
     #[cfg(target_os = "windows")]
     {
-        let _ = crate::commands::cookie_native::clear_all_cookies_native(&window);
+        let _ = crate::commands::cookie_native::clear_beanfun_cookies_native(&window);
         tokio::time::sleep(Duration::from_millis(200)).await;
         let seeded = crate::commands::cookie_native::seed_cookies_native(window.as_ref(), &client);
         tracing::info!(
