@@ -7,8 +7,9 @@
  * CP2-era assertions (kept, with updated step expectations now that
  * `openGamepassWindow` fires immediately after `loginGamepassStart`):
  *
- * 1. `auth.loginGamepassStart` fires on mount (auto-start — mirrors
- *    the route-as-intent design; no "Open GamePass" click gate).
+ * 1. `auth.loginGamepassStart` fires on mount and `openGamepassWindow`
+ *    follows immediately with empty prefill (auto-start — mirrors the
+ *    route-as-intent design; no credential form, no click gate).
  * 2. HK pre-flight guard — redirects to `/login` + info toast
  *    without hitting either backend command.
  * 3. On `loginGamepassStart` + `openGamepassWindow` success,
@@ -29,7 +30,8 @@
  * 9. `gamepass-login-failed` event → `window-error` banner + step
  *    resets to `1` (STEP_PREPARED).
  * 10. `gamepass-login-cancelled` event → silent step reset to `0`
- *     (WPF parity, no banner / no toast).
+ *     (WPF parity, no banner / no toast) and NO automatic reopen —
+ *     Refresh is the way back in.
  * 11. `openGamepassWindow` error → `window-error` banner (step stays
  *     at `1` so the user can Refresh).
  * 12. Unmount detaches every registered listener (success / failed /
@@ -78,27 +80,6 @@ vi.mock('element-plus', () => ({
           },
           slots.default?.(),
         )
-    },
-  }),
-  ElInput: defineComponent({
-    name: 'ElInputStub',
-    props: {
-      modelValue: { type: String, default: '' },
-      type: { type: String, default: 'text' },
-      placeholder: { type: String, default: '' },
-      showPassword: { type: Boolean, default: false },
-    },
-    emits: ['update:modelValue'],
-    setup(props, { attrs, emit }) {
-      return () =>
-        h('input', {
-          ...attrs,
-          class: 'el-input-stub',
-          type: props.type,
-          value: props.modelValue,
-          placeholder: props.placeholder,
-          onInput: (e: Event) => emit('update:modelValue', (e.target as HTMLInputElement).value),
-        })
     },
   }),
   /*
@@ -313,32 +294,18 @@ describe('GamepassForm', () => {
     vi.useRealTimers()
   })
 
-  it('arms the session and shows the credential form on mount (no window yet)', async () => {
+  it('arms the session and opens the window immediately on mount (no prefill)', async () => {
     const ctx = mountForm()
     const wrapper = await ctx.mountIt()
     await flushPromises()
 
     expect(mockLoginGamepassStart).toHaveBeenCalledWith('TW')
-    // The window opens only after the user submits the credential form.
-    expect(mockOpenGamepassWindow).not.toHaveBeenCalled()
-    expect(wrapper.find('[data-testid="gamepass-creds"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="gamepass-steps"]').exists()).toBe(false)
-  })
-
-  it('opens the window with the entered credentials on submit', async () => {
-    const ctx = mountForm()
-    const wrapper = await ctx.mountIt()
-    await flushPromises()
-
-    await wrapper.find('[data-testid="gamepass-account"]').setValue('0981504933')
-    await wrapper.find('[data-testid="gamepass-password"]').setValue('pw123')
-    await wrapper.find('[data-testid="gamepass-creds"]').trigger('submit')
-    await flushPromises()
-
-    expect(mockOpenGamepassWindow).toHaveBeenCalledWith('0981504933', 'pw123')
+    expect(mockOpenGamepassWindow).toHaveBeenCalledTimes(1)
+    expect(mockOpenGamepassWindow).toHaveBeenCalledWith('', '')
     expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('2')
-    // Form swaps out for the step tracker once the window is open.
-    expect(wrapper.find('[data-testid="gamepass-creds"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gamepass-status"]').text()).toBe(
+      i18nMessages['zh-TW'].loginGamepass.windowOpenedHint,
+    )
   })
 
   it('redirects HK-configured users to /login with an info toast (pre-flight guard)', async () => {
@@ -352,7 +319,7 @@ describe('GamepassForm', () => {
     expect(mockOpenGamepassWindow).not.toHaveBeenCalled()
   })
 
-  it('shows the connection-lost banner on loginGamepassStart failure (no form)', async () => {
+  it('shows the connection-lost banner on loginGamepassStart failure (window not opened)', async () => {
     mockLoginGamepassStart.mockReset()
     mockLoginGamepassStart.mockReturnValueOnce(
       err({ code: 'beanfun.transport', message: 'net', details: null }),
@@ -365,12 +332,12 @@ describe('GamepassForm', () => {
     expect(wrapper.find('[data-testid="gamepass-connection-lost"]').text()).toBe(
       i18nMessages['zh-TW'].loginGamepass.connectionLost,
     )
-    // Arm failed → session not prepared → credential form is not shown.
-    expect(wrapper.find('[data-testid="gamepass-creds"]').exists()).toBe(false)
+    // Arm failed → session not prepared → the window must not open.
     expect(mockOpenGamepassWindow).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('0')
   })
 
-  it('shows the window-error banner on openGamepassWindow failure (form stays)', async () => {
+  it('shows the window-error banner on openGamepassWindow failure (step stays at 1)', async () => {
     mockOpenGamepassWindow.mockReset()
     mockOpenGamepassWindow.mockReturnValueOnce(
       err({ code: 'ui.window_create_failed', message: 'fail', details: null }),
@@ -379,19 +346,17 @@ describe('GamepassForm', () => {
     const ctx = mountForm()
     const wrapper = await ctx.mountIt()
     await flushPromises()
-    await wrapper.find('[data-testid="gamepass-creds"]').trigger('submit')
-    await flushPromises()
 
     expect(mockLoginGamepassStart).toHaveBeenCalledTimes(1)
     expect(mockOpenGamepassWindow).toHaveBeenCalledTimes(1)
     expect(wrapper.find('[data-testid="gamepass-window-error"]').text()).toBe(
       i18nMessages['zh-TW'].loginGamepass.windowError,
     )
-    // The form stays up so the user can retry.
-    expect(wrapper.find('[data-testid="gamepass-creds"]').exists()).toBe(true)
+    // Session stays armed so Refresh can retry the window.
+    expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('1')
   })
 
-  it('Refresh re-arms the session and clears the banner', async () => {
+  it('Refresh re-arms the session, reopens the window and clears the banner', async () => {
     mockLoginGamepassStart.mockReset()
     mockLoginGamepassStart
       .mockReturnValueOnce(err({ code: 'beanfun.transport', message: 'net', details: null }))
@@ -406,10 +371,10 @@ describe('GamepassForm', () => {
     await flushPromises()
 
     expect(mockLoginGamepassStart).toHaveBeenCalledTimes(2)
-    // Refresh only re-arms; the window opens via the credential form.
-    expect(mockOpenGamepassWindow).not.toHaveBeenCalled()
+    // The first arm failed, so this is the first (and only) open.
+    expect(mockOpenGamepassWindow).toHaveBeenCalledTimes(1)
     expect(wrapper.find('[data-testid="gamepass-connection-lost"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="gamepass-creds"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('2')
   })
 
   it('Back button ("返回一般登入") navigates to /login/id-pass without further backend calls', async () => {
@@ -457,9 +422,6 @@ describe('GamepassForm', () => {
     const ctx = mountForm()
     const wrapper = await ctx.mountIt()
     await flushPromises()
-    // Open the window first (the success event only arrives after that).
-    await wrapper.find('[data-testid="gamepass-creds"]').trigger('submit')
-    await flushPromises()
 
     const auth = useAuthStore()
     const account = useAccountStore()
@@ -488,11 +450,9 @@ describe('GamepassForm', () => {
     expect(ctx.router.currentRoute.value.path).toBe('/accounts')
   })
 
-  it('failed event surfaces the window-error banner and re-shows the form', async () => {
+  it('failed event surfaces the window-error banner and steps back to 1', async () => {
     const ctx = mountForm()
     const wrapper = await ctx.mountIt()
-    await flushPromises()
-    await wrapper.find('[data-testid="gamepass-creds"]').trigger('submit')
     await flushPromises()
     // Sanity: window opened → step tracker at 2.
     expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('2')
@@ -506,23 +466,24 @@ describe('GamepassForm', () => {
     expect(wrapper.find('[data-testid="gamepass-window-error"]').text()).toBe(
       i18nMessages['zh-TW'].loginGamepass.windowError,
     )
-    // Window closed → credential form returns so the user can retry.
-    expect(wrapper.find('[data-testid="gamepass-creds"]').exists()).toBe(true)
+    // Window closed → back to "prepared" so Refresh can retry.
+    expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('1')
   })
 
-  it('cancelled event silently re-arms and re-shows the credential form', async () => {
+  it('cancelled event silently resets to step 0 without reopening the window', async () => {
     const ctx = mountForm()
     const wrapper = await ctx.mountIt()
     await flushPromises()
-    await wrapper.find('[data-testid="gamepass-creds"]').trigger('submit')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="gamepass-steps"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('2')
 
     await fireEvent<null>('gamepass-login-cancelled', null)
     await flushPromises()
 
-    // WPF parity: silent — no banner, no toast; the form comes back.
-    expect(wrapper.find('[data-testid="gamepass-creds"]').exists()).toBe(true)
+    // WPF parity: silent — no banner, no toast. The window must NOT pop
+    // straight back up (that would trap the user); Refresh reopens it.
+    expect(wrapper.find('[data-testid="gamepass-steps"]').attributes('data-active')).toBe('0')
+    expect(mockLoginGamepassStart).toHaveBeenCalledTimes(1)
+    expect(mockOpenGamepassWindow).toHaveBeenCalledTimes(1)
     expect(wrapper.find('[data-testid="gamepass-window-error"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="gamepass-connection-lost"]').exists()).toBe(false)
     expect(elMessageInfo).not.toHaveBeenCalled()
