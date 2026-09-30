@@ -39,6 +39,7 @@ pub mod error;
 pub mod find;
 pub mod game;
 pub mod kill;
+pub mod login_locator;
 pub mod patcher;
 pub mod play_page;
 pub mod post_string;

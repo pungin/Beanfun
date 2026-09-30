@@ -70,6 +70,7 @@ use std::thread;
 use std::time::Duration;
 
 use super::error::ProcessError;
+use super::login_locator::{locate_account_field, Frame};
 use super::post_string::{
     client_to_screen, find_window, get_client_area_size, get_cursor_pos, post_key,
     post_message_raw, post_string, set_cursor_pos, set_foreground_window, Point, Size,
@@ -144,27 +145,6 @@ const CLICK_X_RATIO: f64 = 0.5;
 /// Vertical fraction of the client area to click at on the special-
 /// click branch (WPF L2207 `wndSize.Height * 0.4`).
 const CLICK_Y_RATIO: f64 = 0.4;
-
-/// Client-area size the WPF ratios were tuned against: MapleStory TW's
-/// default 1366 × 768 window.
-///
-/// # Why the click is clamped to this (issue #395)
-///
-/// The login screen is drawn at the client's native resolution,
-/// anchored to the top-left of the client area. When the player has
-/// enabled the game's "擴展UI模式" (extended UI mode) the client
-/// remembers a larger window on the *next* launch, but the login
-/// panel stays where it was — it does not scale or re-centre. A click
-/// at `0.4 × height` of the enlarged window therefore lands below the
-/// account field (the reporter: expanding down by more than one small
-/// UI element's height always failed, while modest horizontal growth
-/// survived because the account box is wide). Clamping the size fed to
-/// the ratios to the default resolution keeps the click on the account
-/// field regardless of how far the window has been enlarged, and is a
-/// no-op for windows at or below the default size.
-const BASE_CLIENT_WIDTH: i32 = 1366;
-/// See [`BASE_CLIENT_WIDTH`].
-const BASE_CLIENT_HEIGHT: i32 = 768;
 
 /// Primary MapleStory launcher window class (WPF L76 / L2158).
 pub const MAPLESTORY_PRIMARY_CLASS: &str = "MapleStoryClass";
@@ -281,6 +261,15 @@ pub trait PasteDriver {
     /// [`std::thread::sleep`]; tests typically record the duration
     /// and return immediately.
     fn sleep(&mut self, duration: Duration);
+
+    /// Screenshot `size` pixels of the screen at `origin` (screen
+    /// coordinates) for [`super::login_locator`]. `None` means the
+    /// capture is unavailable and the caller falls back to the ratio
+    /// click. Default implementation captures nothing so test drivers
+    /// only opt in when they exercise the locator path.
+    fn capture_screen_region(&mut self, _origin: Point, _size: Size) -> Option<Frame> {
+        None
+    }
 }
 
 /// Production driver — delegates every call to [`mod@super::post_string`]
@@ -338,6 +327,11 @@ impl PasteDriver for DefaultPasteDriver {
 
     fn sleep(&mut self, duration: Duration) {
         thread::sleep(duration);
+    }
+
+    #[cfg(target_os = "windows")]
+    fn capture_screen_region(&mut self, origin: Point, size: Size) -> Option<Frame> {
+        super::login_locator::capture_screen_region(origin, size)
     }
 }
 
@@ -458,17 +452,17 @@ fn find_target_window<D: PasteDriver>(
 /// )
 /// ```
 ///
-/// The size is clamped to [`BASE_CLIENT_WIDTH`] × [`BASE_CLIENT_HEIGHT`]
-/// first — see that constant for why (issue #395).
+/// Since issue #395 this is only the **fallback**: the primary path
+/// locates the account field from a screenshot of the client area
+/// ([`super::login_locator`]) because the ratio only matches the layout
+/// it was tuned on. See [`do_special_click`].
 ///
 /// Extracted so unit tests can pin the ratio contract (`0.5`, `0.4`)
-/// and the clamp without standing up a full driver.
+/// without standing up a full driver.
 fn compute_click_point(size: Size) -> Point {
-    let width = size.width.min(BASE_CLIENT_WIDTH);
-    let height = size.height.min(BASE_CLIENT_HEIGHT);
     Point {
-        x: (width as f64 * CLICK_X_RATIO) as i32,
-        y: (height as f64 * CLICK_Y_RATIO) as i32,
+        x: (size.width as f64 * CLICK_X_RATIO) as i32,
+        y: (size.height as f64 * CLICK_Y_RATIO) as i32,
     }
 }
 
@@ -501,14 +495,30 @@ fn do_special_click<D: PasteDriver>(
 
     let saved_cursor = driver.get_cursor_pos();
     let screen_origin = driver.client_to_screen(handle, Point { x: 0, y: 0 })?;
-    let click_point = compute_click_point(size);
+
+    // Issue #395 — the login panel's position and scale depend on the
+    // player's window / extended-UI settings, so a fixed fraction of
+    // the client area can miss the account box. A miss leaves focus
+    // wherever it was (after a logout: the password box) and the OTP
+    // ends up in the wrong field. Locate the box from a screenshot;
+    // only if that fails use the WPF ratio.
+    let located = driver
+        .capture_screen_region(screen_origin, size)
+        .as_ref()
+        .and_then(locate_account_field);
+    let click_point = located.unwrap_or_else(|| compute_click_point(size));
     tracing::info!(
         step = "AutoPaste.SpecialClick",
         client_width = size.width,
         client_height = size.height,
         click_x = click_point.x,
         click_y = click_point.y,
-        "clicking account field (size clamped to default resolution, #395)"
+        source = if located.is_some() {
+            "screenshot"
+        } else {
+            "ratio-fallback"
+        },
+        "clicking account field (#395)"
     );
 
     driver.set_cursor_pos(Point {
@@ -575,6 +585,7 @@ mod tests {
         PostString(String),
         PostMessageRaw(u32, usize, isize),
         Sleep(Duration),
+        CaptureScreenRegion(Point, Size),
     }
 
     /// Driver that records every call + lets tests plant canned
@@ -585,6 +596,9 @@ mod tests {
         client_area_size: Size,
         cursor_pos: Option<Point>,
         client_to_screen_result: Point,
+        /// Frame handed back from `capture_screen_region`; `None`
+        /// (the default) exercises the ratio fallback.
+        frame: Option<Frame>,
     }
 
     impl RecordingDriver {
@@ -598,6 +612,7 @@ mod tests {
                 },
                 cursor_pos: Some(Point { x: 42, y: 84 }),
                 client_to_screen_result: Point { x: 100, y: 200 },
+                frame: None,
             }
         }
     }
@@ -670,6 +685,11 @@ mod tests {
         fn sleep(&mut self, duration: Duration) {
             self.calls.push(Call::Sleep(duration));
         }
+
+        fn capture_screen_region(&mut self, origin: Point, size: Size) -> Option<Frame> {
+            self.calls.push(Call::CaptureScreenRegion(origin, size));
+            self.frame.clone()
+        }
     }
 
     // ----- pure helpers ---------------------------------------------
@@ -704,40 +724,6 @@ mod tests {
             height: 500,
         });
         assert_eq!(p, Point { x: 500, y: 200 });
-    }
-
-    #[test]
-    fn compute_click_point_matches_wpf_at_default_resolution() {
-        // 1366 × 768 is the size the ratios were tuned for; the clamp
-        // must be a no-op here.
-        let p = compute_click_point(Size {
-            width: 1366,
-            height: 768,
-        });
-        assert_eq!(p, Point { x: 683, y: 307 });
-    }
-
-    #[test]
-    fn compute_click_point_clamps_enlarged_window_to_default_resolution() {
-        // Issue #395: extended-UI mode enlarges the client area but the
-        // login panel stays anchored top-left at native size, so the
-        // click must not drift with the window.
-        let enlarged = compute_click_point(Size {
-            width: 1920,
-            height: 1080,
-        });
-        let default = compute_click_point(Size {
-            width: 1366,
-            height: 768,
-        });
-        assert_eq!(enlarged, default);
-
-        // Growth on one axis only is clamped on that axis only.
-        let taller = compute_click_point(Size {
-            width: 1366,
-            height: 900,
-        });
-        assert_eq!(taller, default);
     }
 
     #[test]
@@ -892,11 +878,13 @@ mod tests {
         // Pin only the prefix of the sequence — the body
         // (clear + type + submit) is covered by the non-special
         // test; here we verify the ESC + click detour.
-        let prefix_len = 10;
-        let click_point = compute_click_point(Size {
+        let prefix_len = 11;
+        let size = Size {
             width: 800,
             height: 600,
-        });
+        };
+        // No frame planted on the driver → ratio fallback.
+        let click_point = compute_click_point(size);
         let screen_origin = Point { x: 100, y: 200 };
 
         let expected_prefix = vec![
@@ -908,6 +896,7 @@ mod tests {
             Call::Sleep(ESCAPE_SETTLE),
             Call::GetCursorPos,
             Call::ClientToScreen(Point { x: 0, y: 0 }),
+            Call::CaptureScreenRegion(screen_origin, size),
             Call::SetCursorPos(Point {
                 x: screen_origin.x + click_point.x,
                 y: screen_origin.y + click_point.y,
@@ -923,6 +912,59 @@ mod tests {
             driver.calls[prefix_len + 1],
             Call::SetCursorPos(Point { x: 42, y: 84 })
         );
+    }
+
+    #[test]
+    fn paste_credentials_with_special_click_uses_located_account_field() {
+        // Issue #395: when the screenshot shows the login panel, the
+        // click goes to the located account box, not the WPF ratio.
+        let size = Size {
+            width: 800,
+            height: 600,
+        };
+        let mut bgra = vec![0u8; (size.width * size.height * 4) as usize];
+        let mut fill = |left: i32, top: i32, w: i32, h: i32, (r, g, b): (u8, u8, u8)| {
+            for y in top..top + h {
+                for x in left..left + w {
+                    let i = ((y * size.width + x) * 4) as usize;
+                    bgra[i] = b;
+                    bgra[i + 1] = g;
+                    bgra[i + 2] = r;
+                    bgra[i + 3] = 255;
+                }
+            }
+        };
+        fill(0, 0, 800, 600, (90, 180, 60)); // scenery
+        fill(250, 150, 300, 250, (255, 255, 255)); // login panel
+        fill(270, 300, 260, 45, (0, 255, 255)); // 「登入」 button
+        let mut driver = RecordingDriver::new();
+        driver.frame = Some(Frame { size, bgra });
+
+        let request = PasteRequest {
+            class_name: MAPLESTORY_PRIMARY_CLASS,
+            account: "acc",
+            password: "otp",
+            special_click: true,
+        };
+        paste_credentials_with(request, &mut driver).expect("paste succeeds");
+
+        // Button centre x = 270 + 130 = 400; account row = 300 - 0.29 × 260 ≈ 300 - 75.
+        let expected = Point { x: 400, y: 225 };
+        assert_ne!(
+            expected,
+            compute_click_point(size),
+            "test must not coincide with the ratio"
+        );
+        let screen_origin = Point { x: 100, y: 200 };
+        assert!(driver.calls.contains(&Call::SetCursorPos(Point {
+            x: screen_origin.x + expected.x,
+            y: screen_origin.y + expected.y,
+        })));
+        assert!(driver.calls.contains(&Call::PostMessageRaw(
+            WM_LBUTTONDOWN,
+            1,
+            pack_lbutton_pos(expected)
+        )));
     }
 
     #[test]
