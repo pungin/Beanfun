@@ -251,20 +251,48 @@ fn should_clear_domain(domain: &str) -> bool {
 /// The caller therefore runs this clear in its own pass, waits a beat
 /// for it to flush, and only then calls [`seed_cookies_native`].
 ///
-/// Returns `true` if the `GetCookies` enumeration was issued
-/// successfully, `false` on any COM failure (logged at WARN). A
-/// `false` return is best-effort — the caller still proceeds to seed.
-pub fn clear_beanfun_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>) -> bool {
-    let issued = Arc::new(AtomicBool::new(false));
-    let issued_inner = issued.clone();
+/// # Why the caller must await the returned receiver
+///
+/// `GetCookies` is asynchronous: the enumeration (and therefore every
+/// `DeleteCookie`) runs in a completion callback that lands *after*
+/// this function's `with_webview` closure returns. A live run showed
+/// the callback firing ~340 ms after the seed pass and ~200 ms after
+/// the navigation. On a second GamePass attempt in the same process
+/// the snapshot contains the previous `ASP.NET_SessionId` with the same
+/// name / domain / path as the freshly seeded one, so a late
+/// `DeleteCookie` would wipe the new session and reproduce the "No
+/// such auth key and secret code" failure. The returned receiver fires
+/// once the callback has finished deleting; the caller awaits it (with
+/// a timeout) before seeding.
+///
+/// The receiver resolves to `true` when the enumeration ran and the
+/// deletes were issued, `false` on any COM failure (logged at WARN).
+/// If the sender is dropped without firing the receiver errors — treat
+/// that as `false` and seed anyway.
+pub fn clear_beanfun_cookies_native<R: tauri::Runtime>(
+    window: &WebviewWindow<R>,
+) -> tokio::sync::oneshot::Receiver<bool> {
+    type Tx = Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<bool>>>>;
+    fn fire(tx: &Tx, ok: bool) {
+        if let Some(sender) = tx.lock().ok().and_then(|mut g| g.take()) {
+            let _ = sender.send(ok);
+        }
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+    let tx: Tx = Arc::new(std::sync::Mutex::new(Some(tx)));
+    let tx_outer = tx.clone();
 
     let result = window.with_webview(move |webview| unsafe {
         use webview2_com::GetCookiesCompletedHandler;
+
+        let tx = tx_outer;
 
         let core = match webview.controller().CoreWebView2() {
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!(step = "NativeClear", error = ?e, "CoreWebView2");
+                fire(&tx, false);
                 return;
             }
         };
@@ -273,6 +301,7 @@ pub fn clear_beanfun_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!(step = "NativeClear", error = ?e, "cast v2");
+                fire(&tx, false);
                 return;
             }
         };
@@ -281,23 +310,31 @@ pub fn clear_beanfun_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>
             Ok(m) => m,
             Err(e) => {
                 tracing::warn!(step = "NativeClear", error = ?e, "CookieManager");
+                fire(&tx, false);
                 return;
             }
         };
 
         let manager_inner = manager.clone();
+        let tx_cb = tx.clone();
         let handler = GetCookiesCompletedHandler::create(Box::new(move |hr, list| {
             if let Err(e) = hr {
                 tracing::warn!(step = "NativeClear.Failed", error = ?e, "GetCookies failed");
+                fire(&tx_cb, false);
                 return Ok(());
             }
             let Some(list) = list else {
                 tracing::warn!(step = "NativeClear.Failed", "GetCookies returned no list");
+                fire(&tx_cb, false);
                 return Ok(());
             };
 
             let mut count = 0u32;
-            list.Count(&mut count)?;
+            if let Err(e) = list.Count(&mut count) {
+                tracing::warn!(step = "NativeClear.Failed", error = ?e, "Count failed");
+                fire(&tx_cb, false);
+                return Ok(());
+            }
 
             let mut deleted = 0u32;
             let mut kept = 0u32;
@@ -305,16 +342,29 @@ pub fn clear_beanfun_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>
                 let cookie = match list.GetValueAtIndex(i) {
                     Ok(c) => c,
                     Err(e) => {
-                        tracing::warn!(step = "NativeClear.Cookie", index = i, error = ?e, "GetValueAtIndex failed");
+                        tracing::warn!(
+                            step = "NativeClear.Cookie",
+                            index = i,
+                            error = ?e,
+                            "GetValueAtIndex failed"
+                        );
                         continue;
                     }
                 };
                 let mut domain = wv2_windows_core::PWSTR::null();
-                cookie.Domain(&mut domain)?;
+                if let Err(e) = cookie.Domain(&mut domain) {
+                    tracing::warn!(step = "NativeClear.Cookie", index = i, error = ?e, "Domain failed");
+                    continue;
+                }
                 let domain = domain.to_string().unwrap_or_default();
                 if should_clear_domain(&domain) {
                     if let Err(e) = manager_inner.DeleteCookie(&cookie) {
-                        tracing::warn!(step = "NativeClear.Cookie", domain = %domain, error = ?e, "DeleteCookie failed");
+                        tracing::warn!(
+                            step = "NativeClear.Cookie",
+                            domain = %domain,
+                            error = ?e,
+                            "DeleteCookie failed"
+                        );
                     } else {
                         deleted += 1;
                     }
@@ -329,25 +379,22 @@ pub fn clear_beanfun_cookies_native<R: tauri::Runtime>(window: &WebviewWindow<R>
                 kept = kept,
                 "beanfun cookies deleted from WebView2 profile"
             );
+            fire(&tx_cb, true);
             Ok(())
         }));
 
-        match manager.GetCookies(PCWSTR::null(), &handler) {
-            Ok(()) => {
-                issued_inner.store(true, Ordering::SeqCst);
-            }
-            Err(e) => {
-                tracing::warn!(step = "NativeClear.Failed", error = ?e, "GetCookies failed");
-            }
+        if let Err(e) = manager.GetCookies(PCWSTR::null(), &handler) {
+            tracing::warn!(step = "NativeClear.Failed", error = ?e, "GetCookies failed");
+            fire(&tx, false);
         }
     });
 
     if let Err(e) = result {
         tracing::warn!(step = "NativeClear", error = ?e, "with_webview failed");
-        return false;
+        fire(&tx, false);
     }
 
-    issued.load(Ordering::SeqCst)
+    rx
 }
 
 #[cfg(test)]

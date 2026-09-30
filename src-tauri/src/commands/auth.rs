@@ -1432,6 +1432,25 @@ fn should_try_gamepass_completion(url: &Url) -> bool {
 /// Parse a harvest origin constant into a [`Url`] — infallible by
 /// construction because the constants are static HTTPS origins, but
 /// factored out so the assertion reads at every call site.
+/// Await the completion receiver from
+/// [`crate::commands::cookie_native::clear_beanfun_cookies_native`],
+/// bounded so a WebView2 hiccup can never stall the login flow.
+/// Returns `true` only when the clear reported success in time.
+#[cfg(target_os = "windows")]
+async fn await_cookie_clear(rx: tokio::sync::oneshot::Receiver<bool>) -> bool {
+    match tokio::time::timeout(Duration::from_secs(3), rx).await {
+        Ok(Ok(ok)) => ok,
+        Ok(Err(_)) => false,
+        Err(_) => {
+            tracing::warn!(
+                step = "GamepassWebViewClear.Timeout",
+                "cookie clear callback did not fire within 3s; seeding anyway"
+            );
+            false
+        }
+    }
+}
+
 fn parse_harvest_url(raw: &str) -> Url {
     Url::parse(raw).expect("GAMEPASS_HARVEST_URLS entry must be a valid absolute URL")
 }
@@ -2212,11 +2231,18 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
         // the D5 seed fix cured. So: clear, wait for the delete to
         // flush, THEN seed, then wait for the seed to flush, then
         // navigate.
-        let cleared = crate::commands::cookie_native::clear_beanfun_cookies_native(&window);
+        // The clear enumerates the store asynchronously, so wait for
+        // its completion callback (bounded) before seeding — otherwise
+        // a late `DeleteCookie` for the previous `ASP.NET_SessionId`
+        // would also remove the one we are about to seed.
+        let cleared = await_cookie_clear(
+            crate::commands::cookie_native::clear_beanfun_cookies_native(&window),
+        )
+        .await;
         tracing::info!(
             step = "GamepassWebViewClear",
             cleared = cleared,
-            "issued beanfun cookie clear before seeding (issue #296 / #394)"
+            "beanfun cookie clear finished before seeding (issue #296 / #394)"
         );
         // Let the delete commit on the browser process before we start
         // writing the fresh cookies.
@@ -2439,7 +2465,10 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
     // COM dance as the GamePass / account-login windows).
     #[cfg(target_os = "windows")]
     {
-        let _ = crate::commands::cookie_native::clear_beanfun_cookies_native(&window);
+        let _ = await_cookie_clear(
+            crate::commands::cookie_native::clear_beanfun_cookies_native(&window),
+        )
+        .await;
         tokio::time::sleep(Duration::from_millis(200)).await;
         let seeded = crate::commands::cookie_native::seed_cookies_native(window.as_ref(), &client);
         tracing::info!(
