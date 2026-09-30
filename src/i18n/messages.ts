@@ -305,11 +305,6 @@ const zhTW = {
       authenticate: '等待認證',
       complete: '登入完成',
     },
-    credsHint:
-      '輸入你的 Gama Pass（遊戲橘子通用）帳號 —— 手機號或 Email —— 與密碼，開啟後會自動帶入並推進到驗證碼步驟。留空則於視窗中自行登入。',
-    accountPlaceholder: '手機號碼或 Email',
-    passwordPlaceholder: '密碼',
-    openWindow: '開啟 Gama Pass 登入',
     windowOpenedHint: '請在開啟的視窗中完成驗證碼（2FA）以登入。',
     unsupportedHK: 'GamePass 登入僅支援台灣區，已返回登入入口。',
     connectionLost: '無法與 Beanfun 連線，請點選重新整理重試。',
@@ -632,11 +627,6 @@ const zhCN = {
       authenticate: '等待认证',
       complete: '登录完成',
     },
-    credsHint:
-      '输入你的 Gama Pass（游戏橘子通用）账号 —— 手机号或 Email —— 与密码，开启后会自动带入并推进到验证码步骤。留空则于窗口中自行登录。',
-    accountPlaceholder: '手机号码或 Email',
-    passwordPlaceholder: '密码',
-    openWindow: '开启 Gama Pass 登录',
     windowOpenedHint: '请在开启的窗口中完成验证码（2FA）以登录。',
     unsupportedHK: 'GamePass 登录仅支持台湾区，已返回登录入口。',
     connectionLost: '无法与 Beanfun 连接，请点选重新加载重试。',
@@ -960,11 +950,6 @@ const enUS = {
       authenticate: 'Wait for authentication',
       complete: 'Sign-in complete',
     },
-    credsHint:
-      'Enter your Gama Pass (Gamania universal) account — phone number or email — and password. It will be filled in and advanced to the verification-code step automatically. Leave blank to sign in manually in the window.',
-    accountPlaceholder: 'Phone number or email',
-    passwordPlaceholder: 'Password',
-    openWindow: 'Open Gama Pass sign-in',
     windowOpenedHint: 'Complete the verification code (2FA) in the window that opened to sign in.',
     unsupportedHK:
       'GamePass login is only available in Taiwan; redirected back to the login entry.',

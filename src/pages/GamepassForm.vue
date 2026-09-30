@@ -38,12 +38,20 @@
  * ```
  *   mount → HK guard → register listeners (success/failed/cancelled)
  *         → loginGamepassStart (step 0 → 1)
- *         → openGamepassWindow   (step 1 → 2)
+ *         → openGamepassWindow   (step 1 → 2, opened straight away with
+ *                                 no prefill — the user signs in or picks
+ *                                 a saved account inside the window)
  *         → user OAuths in the WebView window
  *         → on  gamepass-login-success  → applyGamepassSession + nav /accounts
  *         → on  gamepass-login-failed   → windowError banner, step back to 1
- *         → on  gamepass-login-cancelled → step back to 0, silent (WPF parity)
+ *         → on  gamepass-login-cancelled → step back to 0, silent (WPF parity);
+ *                                          Refresh re-arms and reopens
  * ```
+ *
+ * An earlier revision showed a Gama Pass credential form before the
+ * window so the backend could prefill the OAuth pages. It was removed:
+ * the window's own saved-account picker covers the common case (#394),
+ * and the extra page was one more step for everyone else.
  *
  * Listeners are registered **before** `openGamepassWindow` fires so
  * an eager `gamepass-login-success` (fast path where the harvest
@@ -84,7 +92,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ElButton, ElInput, ElMessage, ElStep, ElSteps } from 'element-plus'
+import { ElButton, ElMessage, ElStep, ElSteps } from 'element-plus'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { AUTH_ACTIONS, useAuthStore } from '../stores/auth'
@@ -141,16 +149,7 @@ const config = useConfigStore()
  */
 const step = ref<number>(STEP_INITIAL)
 
-/**
- * Gama Pass (Gamania OAuth) credentials — a **separate** account from the
- * beanfun email login: a phone number OR an email, plus its password. The
- * user fills these in the form before the WebView opens, and the backend
- * prefills + auto-advances the OAuth pages with them. Prefilled from the
- * beanfun `loginIntent` as a convenience when the two happen to match.
- */
-const gpAccount = ref<string>(auth.loginIntent?.accountId ?? '')
-const gpPassword = ref<string>(auth.loginIntent?.password ?? '')
-/** `true` once the WebView window has been opened — swaps form → tracker. */
+/** `true` while the WebView window is open — gates the status hint. */
 const windowOpened = ref(false)
 
 /**
@@ -236,19 +235,21 @@ async function registerEventListeners(): Promise<void> {
   })
   const cancelledUnlisten = await listen<null>(GAMEPASS_CANCELLED_EVENT, () => {
     if (disposed) return
-    // User closed the WebView. Re-arm a fresh session key and show the
-    // credential form again so they can retry.
+    // User closed the WebView. Silent (WPF parity) and deliberately
+    // NOT auto-restarted — since the window now opens straight from
+    // `doStart`, re-arming here would pop it right back up. Refresh
+    // re-arms + reopens on demand.
     windowOpened.value = false
     windowError.value = false
-    void doStart()
+    step.value = STEP_INITIAL
   })
   unlistenFns.push(successUnlisten, failedUnlisten, cancelledUnlisten)
 }
 
 /**
- * Arm the GamePass session key. Does NOT open the window — the user first
- * fills the credential form, then {@link openWindow} pops the WebView with
- * those values for prefill + auto-advance.
+ * Arm the GamePass session key, then open the WebView straight away —
+ * there is no intermediate form any more; the user signs in (or picks a
+ * saved account) inside the window.
  */
 async function doStart(): Promise<void> {
   if (disposed) return
@@ -260,6 +261,7 @@ async function doStart(): Promise<void> {
     await auth.loginGamepassStart(readRegion())
     if (disposed) return
     step.value = STEP_PREPARED
+    await openWindow()
   } catch (e) {
     if (disposed) return
     if (e instanceof CommandInvocationError) {
@@ -272,15 +274,15 @@ async function doStart(): Promise<void> {
 }
 
 /**
- * Open the GamePass WebView with the entered credentials for prefill +
- * auto-advance to the 2FA step. Empty credentials are allowed (manual login
- * in the window). The rest of the flow advances via `gamepass-login-*`.
+ * Open the GamePass WebView. The backend command still accepts prefill
+ * values; we pass none, so the window shows Gamania's own sign-in /
+ * saved-account page. The rest of the flow advances via `gamepass-login-*`.
  */
 async function openWindow(): Promise<void> {
   if (disposed || step.value < STEP_PREPARED) return
   windowError.value = false
   try {
-    await wrapCommand(commands.openGamepassWindow(gpAccount.value.trim(), gpPassword.value))
+    await wrapCommand(commands.openGamepassWindow('', ''))
     if (disposed) return
     windowOpened.value = true
     step.value = STEP_WINDOW_OPENED
@@ -355,48 +357,7 @@ async function goBack(): Promise<void> {
       <p class="gamepass-form__subtitle">{{ t('loginGamepass.subtitle') }}</p>
     </header>
 
-    <!-- Credential form: rendered from first paint (before the session
-         arms) so the window sizes to a stable height instead of jumping
-         empty → form. The Open button stays disabled until the session
-         key is ready. Empty values → manual login in the window. -->
-    <form
-      v-if="!windowOpened && !connectionLost"
-      class="gamepass-form__creds"
-      data-testid="gamepass-creds"
-      @submit.prevent="openWindow"
-    >
-      <p class="gamepass-form__creds-hint">{{ t('loginGamepass.credsHint') }}</p>
-      <el-input
-        v-model="gpAccount"
-        class="gamepass-form__field"
-        :placeholder="t('loginGamepass.accountPlaceholder')"
-        data-testid="gamepass-account"
-        autocomplete="off"
-      />
-      <el-input
-        v-model="gpPassword"
-        type="password"
-        class="gamepass-form__field"
-        :placeholder="t('loginGamepass.passwordPlaceholder')"
-        show-password
-        data-testid="gamepass-password"
-        autocomplete="off"
-      />
-      <el-button
-        type="primary"
-        size="large"
-        native-type="submit"
-        class="gamepass-form__open"
-        :loading="isStarting"
-        :disabled="step < STEP_PREPARED"
-        data-testid="gamepass-open"
-      >
-        {{ t('loginGamepass.openWindow') }}
-      </el-button>
-    </form>
-
     <el-steps
-      v-if="windowOpened"
       class="gamepass-form__steps"
       :active="step"
       align-center
@@ -471,30 +432,6 @@ async function goBack(): Promise<void> {
   margin: 0.375rem 0 0;
   font-size: 0.8125rem;
   color: #54443a;
-}
-
-.gamepass-form__creds {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.gamepass-form__creds-hint {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: #54443a;
-  text-align: center;
-}
-
-.gamepass-form__field {
-  width: 100%;
-}
-
-.gamepass-form__open {
-  width: 100%;
-  margin-top: 0.25rem;
-  font-weight: 700;
 }
 
 .gamepass-form__steps {
