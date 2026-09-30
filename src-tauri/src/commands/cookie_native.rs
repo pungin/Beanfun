@@ -397,27 +397,6 @@ pub fn clear_beanfun_cookies_native<R: tauri::Runtime>(
     rx
 }
 
-#[cfg(test)]
-mod clear_domain_tests {
-    use super::should_clear_domain;
-
-    #[test]
-    fn beanfun_hosts_are_cleared() {
-        assert!(should_clear_domain("login.beanfun.com"));
-        assert!(should_clear_domain("tw.newlogin.beanfun.com"));
-        assert!(should_clear_domain(".beanfun.com"));
-        assert!(should_clear_domain("beanfun.com"));
-    }
-
-    #[test]
-    fn gamania_and_third_parties_are_kept() {
-        assert!(!should_clear_domain("accounts.gamania.com"));
-        assert!(!should_clear_domain(".gamania.com"));
-        assert!(!should_clear_domain(".google.com"));
-        assert!(!should_clear_domain("notbeanfun.com"));
-    }
-}
-
 /// Register a `NewWindowRequested` handler on the WebView2 instance
 /// that redirects popup requests to navigate within the same window.
 pub fn register_new_window_handler<R: tauri::Runtime>(view: &tauri::Webview<R>) {
@@ -672,5 +651,26 @@ where
         Ok(Ok(())) => Ok(()),
         Ok(Err(e)) => Err(e),
         Err(_) => Err("WebMessageReceived registration timed out".to_string()),
+    }
+}
+
+#[cfg(test)]
+mod clear_domain_tests {
+    use super::should_clear_domain;
+
+    #[test]
+    fn beanfun_hosts_are_cleared() {
+        assert!(should_clear_domain("login.beanfun.com"));
+        assert!(should_clear_domain("tw.newlogin.beanfun.com"));
+        assert!(should_clear_domain(".beanfun.com"));
+        assert!(should_clear_domain("beanfun.com"));
+    }
+
+    #[test]
+    fn gamania_and_third_parties_are_kept() {
+        assert!(!should_clear_domain("accounts.gamania.com"));
+        assert!(!should_clear_domain(".gamania.com"));
+        assert!(!should_clear_domain(".google.com"));
+        assert!(!should_clear_domain("notbeanfun.com"));
     }
 }
