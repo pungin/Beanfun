@@ -145,6 +145,27 @@ const CLICK_X_RATIO: f64 = 0.5;
 /// click branch (WPF L2207 `wndSize.Height * 0.4`).
 const CLICK_Y_RATIO: f64 = 0.4;
 
+/// Client-area size the WPF ratios were tuned against: MapleStory TW's
+/// default 1366 × 768 window.
+///
+/// # Why the click is clamped to this (issue #395)
+///
+/// The login screen is drawn at the client's native resolution,
+/// anchored to the top-left of the client area. When the player has
+/// enabled the game's "擴展UI模式" (extended UI mode) the client
+/// remembers a larger window on the *next* launch, but the login
+/// panel stays where it was — it does not scale or re-centre. A click
+/// at `0.4 × height` of the enlarged window therefore lands below the
+/// account field (the reporter: expanding down by more than one small
+/// UI element's height always failed, while modest horizontal growth
+/// survived because the account box is wide). Clamping the size fed to
+/// the ratios to the default resolution keeps the click on the account
+/// field regardless of how far the window has been enlarged, and is a
+/// no-op for windows at or below the default size.
+const BASE_CLIENT_WIDTH: i32 = 1366;
+/// See [`BASE_CLIENT_WIDTH`].
+const BASE_CLIENT_HEIGHT: i32 = 768;
+
 /// Primary MapleStory launcher window class (WPF L76 / L2158).
 pub const MAPLESTORY_PRIMARY_CLASS: &str = "MapleStoryClass";
 
@@ -437,12 +458,17 @@ fn find_target_window<D: PasteDriver>(
 /// )
 /// ```
 ///
+/// The size is clamped to [`BASE_CLIENT_WIDTH`] × [`BASE_CLIENT_HEIGHT`]
+/// first — see that constant for why (issue #395).
+///
 /// Extracted so unit tests can pin the ratio contract (`0.5`, `0.4`)
-/// without standing up a full driver.
+/// and the clamp without standing up a full driver.
 fn compute_click_point(size: Size) -> Point {
+    let width = size.width.min(BASE_CLIENT_WIDTH);
+    let height = size.height.min(BASE_CLIENT_HEIGHT);
     Point {
-        x: (size.width as f64 * CLICK_X_RATIO) as i32,
-        y: (size.height as f64 * CLICK_Y_RATIO) as i32,
+        x: (width as f64 * CLICK_X_RATIO) as i32,
+        y: (height as f64 * CLICK_Y_RATIO) as i32,
     }
 }
 
@@ -476,6 +502,14 @@ fn do_special_click<D: PasteDriver>(
     let saved_cursor = driver.get_cursor_pos();
     let screen_origin = driver.client_to_screen(handle, Point { x: 0, y: 0 })?;
     let click_point = compute_click_point(size);
+    tracing::info!(
+        step = "AutoPaste.SpecialClick",
+        client_width = size.width,
+        client_height = size.height,
+        click_x = click_point.x,
+        click_y = click_point.y,
+        "clicking account field (size clamped to default resolution, #395)"
+    );
 
     driver.set_cursor_pos(Point {
         x: screen_origin.x + click_point.x,
@@ -670,6 +704,40 @@ mod tests {
             height: 500,
         });
         assert_eq!(p, Point { x: 500, y: 200 });
+    }
+
+    #[test]
+    fn compute_click_point_matches_wpf_at_default_resolution() {
+        // 1366 × 768 is the size the ratios were tuned for; the clamp
+        // must be a no-op here.
+        let p = compute_click_point(Size {
+            width: 1366,
+            height: 768,
+        });
+        assert_eq!(p, Point { x: 683, y: 307 });
+    }
+
+    #[test]
+    fn compute_click_point_clamps_enlarged_window_to_default_resolution() {
+        // Issue #395: extended-UI mode enlarges the client area but the
+        // login panel stays anchored top-left at native size, so the
+        // click must not drift with the window.
+        let enlarged = compute_click_point(Size {
+            width: 1920,
+            height: 1080,
+        });
+        let default = compute_click_point(Size {
+            width: 1366,
+            height: 768,
+        });
+        assert_eq!(enlarged, default);
+
+        // Growth on one axis only is clamped on that axis only.
+        let taller = compute_click_point(Size {
+            width: 1366,
+            height: 900,
+        });
+        assert_eq!(taller, default);
     }
 
     #[test]
