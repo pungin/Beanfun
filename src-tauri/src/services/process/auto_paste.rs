@@ -145,16 +145,49 @@ const CLICK_X_RATIO: f64 = 0.5;
 /// click branch (WPF L2207 `wndSize.Height * 0.4`).
 const CLICK_Y_RATIO: f64 = 0.4;
 
-/// Client aspect ratios (width / height) below this are the legacy 4:3
-/// resolutions (800 × 600, 1024 × 768), whose login screen fills the
-/// whole client — the WPF ratios apply to the full height.
-const LEGACY_4_3_MAX_ASPECT: f64 = 1.45;
-/// Client aspect ratios at or above this are 16:9 (or wider): the login
-/// screen fills the full height too.
-const WIDESCREEN_MIN_ASPECT: f64 = 1.70;
-/// Login-screen aspect ratio on every 16:9 resolution.
-const LOGIN_SCREEN_ASPECT: f64 = 16.0 / 9.0;
-
+/// Window resolutions the MapleStory TW client offers. With the game's
+/// extended UI mode the client can grow beyond the chosen resolution,
+/// but the login screen keeps rendering at that resolution anchored to
+/// the top-left corner. Largest first so [`login_screen_size`] can pick
+/// the biggest preset that fits inside a stretched client.
+const LOGIN_SCREEN_PRESETS: &[Size] = &[
+    Size {
+        width: 3840,
+        height: 2160,
+    },
+    Size {
+        width: 2732,
+        height: 1536,
+    },
+    Size {
+        width: 2560,
+        height: 1440,
+    },
+    Size {
+        width: 1920,
+        height: 1080,
+    },
+    Size {
+        width: 1600,
+        height: 900,
+    },
+    Size {
+        width: 1366,
+        height: 768,
+    },
+    Size {
+        width: 1280,
+        height: 720,
+    },
+    Size {
+        width: 1024,
+        height: 768,
+    },
+    Size {
+        width: 800,
+        height: 600,
+    },
+];
 /// Primary MapleStory launcher window class (WPF L76 / L2158).
 pub const MAPLESTORY_PRIMARY_CLASS: &str = "MapleStoryClass";
 
@@ -450,46 +483,63 @@ fn find_target_window<D: PasteDriver>(
 /// # Extended-UI mode (issue #395)
 ///
 /// The WPF ratios assume the login screen fills the client area. With
-/// the game's "擴展UI模式" (extended UI mode) the client gets an extra
-/// strip **below** the 16:9 game area (a 1920 × 1080 client becomes
-/// 1920 × 1238) while the login screen stays 16:9, anchored at the top.
-/// `0.4 × 1238 = 495` then lands 63 px under the account box
-/// (`0.4 × 1080 = 432`), the click misses, focus stays wherever it
+/// the game's "擴展UI模式" (extended UI mode) the player can stretch
+/// the client past the chosen resolution; the extra space goes to the
+/// right and the bottom while the login screen stays at the chosen
+/// resolution, anchored top-left. The reporter's 1920 × 1080 client
+/// became 1920 × 1238: `0.4 × 1238 = 495` lands 63 px under the account
+/// box (`0.4 × 1080 = 432`), the click misses, focus stays wherever it
 /// was — after a logout that is the password box — and the OTP ends
-/// up in the account field.
+/// up in the account field. Stretching sideways moves `0.5 × width`
+/// off the box the same way.
 ///
-/// So the vertical ratio is applied to the login screen's height,
-/// [`login_screen_height`], not the raw client height. For every 16:9
-/// client and for the legacy 4:3 resolutions the result is identical
-/// to WPF; only the "taller than 16:9" band changes. The horizontal
-/// ratio is unchanged (the strip does not alter the width).
+/// So both ratios are applied to the login screen's size,
+/// [`login_screen_size`], not the raw client size. For every
+/// unstretched client (a size the game actually offers) the result is
+/// identical to WPF.
 ///
 /// Extracted so unit tests can pin the ratio contract (`0.5`, `0.4`)
 /// and the extended-UI correction without standing up a full driver.
 fn compute_click_point(size: Size) -> Point {
+    let screen = login_screen_size(size);
     Point {
-        x: (size.width as f64 * CLICK_X_RATIO) as i32,
-        y: (login_screen_height(size) as f64 * CLICK_Y_RATIO) as i32,
+        x: (screen.width as f64 * CLICK_X_RATIO) as i32,
+        y: (screen.height as f64 * CLICK_Y_RATIO) as i32,
     }
 }
 
-/// Height of the login screen inside a client of `size` (see
+/// Size of the login screen inside a client of `size` (see
 /// [`compute_click_point`]).
 ///
-/// - 16:9 or wider (aspect ≥ [`WIDESCREEN_MIN_ASPECT`]): full height.
-/// - Legacy 4:3 (aspect < [`LEGACY_4_3_MAX_ASPECT`]): full height.
-/// - In between — a 16:9 resolution plus the extended-UI strip at the
-///   bottom — the login screen is `width × 9 / 16`, anchored top.
-fn login_screen_height(size: Size) -> i32 {
+/// The client only offers the fixed resolutions in
+/// [`LOGIN_SCREEN_PRESETS`], so:
+///
+/// - A client that *is* one of them is unstretched and the login
+///   screen fills it — the WPF case.
+/// - Any other size means extended-UI mode stretched the client, and
+///   the login screen is the largest preset that fits inside it (by
+///   area). Aspect ratio is deliberately not used: a diagonal drag can
+///   land on 16:9 again (2200 × 1238 is 1.777) and still be a stretched
+///   1920 × 1080.
+/// - A client smaller than every preset is returned as-is.
+///
+/// Known blind spot: a client stretched until a *larger* preset fits
+/// exactly inside it (a 1920 × 1080 player dragging to ≥ 2560 × 1440)
+/// is attributed to that larger preset. Nothing in the client size
+/// distinguishes the two cases.
+fn login_screen_size(size: Size) -> Size {
     if size.width <= 0 || size.height <= 0 {
-        return size.height;
+        return size;
     }
-    let aspect = size.width as f64 / size.height as f64;
-    if aspect >= WIDESCREEN_MIN_ASPECT || aspect < LEGACY_4_3_MAX_ASPECT {
-        size.height
-    } else {
-        ((size.width as f64 / LOGIN_SCREEN_ASPECT).round() as i32).min(size.height)
+    if LOGIN_SCREEN_PRESETS.contains(&size) {
+        return size;
     }
+    LOGIN_SCREEN_PRESETS
+        .iter()
+        .copied()
+        .filter(|preset| preset.width <= size.width && preset.height <= size.height)
+        .max_by_key(|preset| i64::from(preset.width) * i64::from(preset.height))
+        .unwrap_or(size)
 }
 
 /// Pack a client-area [`Point`] into the `lParam` shape
@@ -527,7 +577,8 @@ fn do_special_click<D: PasteDriver>(
         step = "AutoPaste.SpecialClick",
         client_width = size.width,
         client_height = size.height,
-        login_screen_height = login_screen_height(size),
+        login_screen_width = login_screen_size(size).width,
+        login_screen_height = login_screen_size(size).height,
         click_x = click_point.x,
         click_y = click_point.y,
         "clicking account field (#395)"
@@ -765,50 +816,65 @@ mod tests {
     }
 
     #[test]
-    fn compute_click_point_ignores_the_extended_ui_strip_below_the_login_screen() {
+    fn compute_click_point_ignores_extended_ui_margins_below_and_beside_the_login_screen() {
         // Issue #395, the reporter's exact numbers: 1920 × 1080 with
         // extended UI becomes 1920 × 1238. The login screen is still
-        // 1920 × 1080 at the top, so the click must be 0.4 × 1080.
-        let p = compute_click_point(Size {
+        // 1920 × 1080 at the top-left, so the click must be (960, 432).
+        let expected = Point { x: 960, y: 432 };
+        let base = Size {
             width: 1920,
-            height: 1238,
-        });
-        assert_eq!(p, Point { x: 960, y: 432 });
-        assert_eq!(
-            login_screen_height(Size {
-                width: 1920,
-                height: 1238
-            }),
-            1080
-        );
+            height: 1080,
+        };
+        // Dragged down, dragged right, dragged diagonally.
+        for (w, h) in [(1920, 1238), (2200, 1080), (2200, 1238), (2400, 1300)] {
+            let size = Size {
+                width: w,
+                height: h,
+            };
+            assert_eq!(login_screen_size(size), base, "{w}x{h}");
+            assert_eq!(compute_click_point(size), expected, "{w}x{h}");
+        }
 
-        // Same correction for the other 16:9 presets plus a strip.
-        let p = compute_click_point(Size {
-            width: 1366,
-            height: 926,
-        });
-        assert_eq!(p, Point { x: 683, y: 307 });
+        // Same correction for a smaller preset plus margins.
+        assert_eq!(
+            compute_click_point(Size {
+                width: 1400,
+                height: 926
+            }),
+            Point { x: 683, y: 307 }
+        );
     }
 
     #[test]
-    fn login_screen_height_never_exceeds_the_client() {
-        // Aspect inside the extended-UI band but the 16:9 height would
-        // overshoot — impossible in practice, but the min() keeps the
-        // click inside the window regardless.
-        assert_eq!(
-            login_screen_height(Size {
-                width: 1500,
-                height: 1000
-            }),
-            844
-        );
-        assert_eq!(
-            login_screen_height(Size {
-                width: 0,
-                height: 0
-            }),
-            0
-        );
+    fn login_screen_size_keeps_unstretched_presets_as_is() {
+        // Every preset the client offers is returned unchanged.
+        for (w, h) in [
+            (1366, 768),
+            (1600, 900),
+            (2560, 1440),
+            (1024, 768),
+            (800, 600),
+        ] {
+            let size = Size {
+                width: w,
+                height: h,
+            };
+            assert_eq!(login_screen_size(size), size, "{w}x{h}");
+        }
+    }
+
+    #[test]
+    fn login_screen_size_falls_back_to_the_client_when_no_preset_fits() {
+        let tiny = Size {
+            width: 700,
+            height: 500,
+        };
+        assert_eq!(login_screen_size(tiny), tiny);
+        let zero = Size {
+            width: 0,
+            height: 0,
+        };
+        assert_eq!(login_screen_size(zero), zero);
     }
 
     #[test]
