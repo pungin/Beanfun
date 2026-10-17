@@ -267,6 +267,9 @@ const zhTW = {
     qqCopied: 'QQ {number} 已複製',
     copyManually: '複製失敗，請手動複製。',
   },
+  equipCalculator: {
+    requiredLevel: '需求等級：',
+  },
   titleBar: {
     minimize: '最小化',
     close: '關閉',
@@ -721,6 +724,9 @@ const zhCN = {
     qqCopied: 'QQ {number} 已复制',
     copyManually: '复制失败，请手动复制。',
   },
+  equipCalculator: {
+    requiredLevel: '需求等级：',
+  },
   titleBar: {
     minimize: '最小化',
     close: '关闭',
@@ -1174,6 +1180,9 @@ const enUS = {
     authors: 'By Pungin, YCC3741 and lshw54',
     qqCopied: 'QQ {number} copied',
     copyManually: 'Unable to copy. Please copy the text manually.',
+  },
+  equipCalculator: {
+    requiredLevel: 'REQ LEV:',
   },
   titleBar: {
     minimize: 'Minimize',
