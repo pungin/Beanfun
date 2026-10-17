@@ -114,3 +114,125 @@ pub fn verify_digest(bytes: &[u8], expected: &str) -> Result<(), DownloadError> 
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn accepts_only_official_https_hosts_without_credentials_or_custom_ports() {
+        for url in [
+            "https://github.com/pungin/Beanfun/releases/download/v6.3.0.2610180000/Beanfun.exe",
+            "https://release-assets.githubusercontent.com/github-production-release-asset/example?token=example",
+            "https://objects.githubusercontent.com/github-production-release-asset/example",
+        ] {
+            assert!(allowed_url(&url.parse().unwrap()), "{url}");
+        }
+        for url in [
+            "http://github.com/pungin/Beanfun/asset",
+            "https://github.com.attacker.test/asset",
+            "https://attacker.test/asset",
+            "https://user:password@github.com/asset",
+            "https://github.com:444/asset",
+            "file:///tmp/Beanfun.exe",
+        ] {
+            assert!(!allowed_url(&url.parse().unwrap()), "{url}");
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_disallowed_urls_before_starting_a_request() {
+        assert!(matches!(
+            download_bytes(
+                "http://127.0.0.1/asset",
+                100,
+                None,
+                Duration::from_secs(1),
+                |_, _| {}
+            )
+            .await,
+            Err(DownloadError::InvalidUrl),
+        ));
+    }
+
+    #[tokio::test]
+    async fn downloads_exact_bytes_with_progress_and_rejects_wrong_size() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/asset"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(b"executable".to_vec()))
+            .mount(&server)
+            .await;
+        let client = Client::new();
+        let url: Url = format!("{}/asset", server.uri()).parse().unwrap();
+        let mut progress = Vec::new();
+        let bytes = download_with_client(&client, url.clone(), 100, Some(10), |n, total| {
+            progress.push((n, total))
+        })
+        .await
+        .unwrap();
+        assert_eq!(bytes, b"executable");
+        assert_eq!(progress.last(), Some(&(10, Some(10))));
+        assert!(matches!(
+            download_with_client(&client, url.clone(), 100, Some(9), |_, _| {}).await,
+            Err(DownloadError::SizeMismatch)
+        ));
+        assert!(matches!(
+            download_with_client(&client, url, 9, None, |_, _| {}).await,
+            Err(DownloadError::TooLarge { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn enforces_the_bound_on_chunked_responses_without_content_length() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0; 4096];
+            let _ = stream.read(&mut request).await.unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\n12345\r\n5\r\n67890\r\n0\r\n\r\n").await.unwrap();
+        });
+        let url = format!("http://{address}/asset").parse().unwrap();
+        assert!(matches!(
+            download_with_client(&Client::new(), url, 8, None, |_, _| {}).await,
+            Err(DownloadError::TooLarge { .. })
+        ));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn stalled_downloads_observe_the_client_deadline() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_delay(Duration::from_secs(1))
+                    .set_body_bytes(b"executable".to_vec()),
+            )
+            .mount(&server)
+            .await;
+        let client = Client::builder()
+            .timeout(Duration::from_millis(30))
+            .build()
+            .unwrap();
+        let error =
+            download_with_client(&client, server.uri().parse().unwrap(), 100, None, |_, _| {})
+                .await
+                .unwrap_err();
+        assert!(matches!(error, DownloadError::Network(error) if error.is_timeout()));
+    }
+
+    #[test]
+    fn rejects_tampered_bytes_and_does_not_accept_a_digest_of_another_artifact() {
+        let digest = format!("{:x}", Sha256::digest(b"executable"));
+        assert!(verify_digest(b"executable", &digest).is_ok());
+        assert!(matches!(
+            verify_digest(b"modified executable", &digest),
+            Err(DownloadError::DigestMismatch)
+        ));
+    }
+}
