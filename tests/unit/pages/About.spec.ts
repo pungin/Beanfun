@@ -3,6 +3,8 @@ import { flushPromises, shallowMount } from '@vue/test-utils'
 import { listen } from '@tauri-apps/api/event'
 import { ElMessage, ElMessageBox, ElProgress } from 'element-plus'
 import About from '../../../src/pages/About.vue'
+import UpdateConfirmation from '../../../src/components/UpdateConfirmation.vue'
+import UpdateFallback from '../../../src/components/UpdateFallback.vue'
 import { commands, type CommandError, type Result } from '../../../src/types/bindings'
 import type { AppUpdateProgress } from '../../../src/composables/useAppUpdate'
 import {
@@ -32,7 +34,7 @@ vi.mock('element-plus', async (importOriginal) => {
   return {
     ...original,
     ElMessage: Object.assign(vi.fn(), { error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
-    ElMessageBox: { confirm: vi.fn() },
+    ElMessageBox: { confirm: vi.fn(), alert: vi.fn() },
   }
 })
 vi.mock('../../../src/stores/ui', () => ({ useUiStore: () => state }))
@@ -58,9 +60,24 @@ beforeEach(() => {
       return releaseListener
     })
   vi.mocked(ElMessageBox.confirm).mockReset().mockResolvedValue('confirm')
+  vi.mocked(ElMessageBox.alert).mockReset().mockResolvedValue('confirm')
   vi.mocked(commands.prepareUpdate).mockReset().mockResolvedValue({ status: 'ok', data: null })
   vi.mocked(commands.installUpdate).mockReset().mockResolvedValue({ status: 'ok', data: null })
 })
+
+function expectUpdateFailure(code: string) {
+  expect(ElMessageBox.alert).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      type: UpdateFallback,
+      props: { reason: `errors.update.${code}`, releaseTag: 'v6.3.0.2610181200' },
+    }),
+    'appUpdate.failedTitle',
+    expect.objectContaining({ confirmButtonText: 'Close' }),
+  )
+  expect(ElMessage.error).not.toHaveBeenCalled()
+  expect(ElMessage.warning).not.toHaveBeenCalled()
+  expect(commands.openUrl).not.toHaveBeenCalled()
+}
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -113,7 +130,16 @@ describe('manual update checks', () => {
         expect(info).toHaveBeenCalledWith('NoUpdatesDetected')
         expect(warning).not.toHaveBeenCalled()
       } else {
-        expect(warning).toHaveBeenCalledWith('UpdateCheckFailed')
+        expect(ElMessageBox.alert).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            type: UpdateFallback,
+            props: { reason: 'errors.update.timeout', releaseTag: null },
+          }),
+          'UpdateCheckFailed',
+          expect.any(Object),
+        )
+        expect(wrapper.findComponent(UpdateFallback).props('releaseTag')).toBeNull()
+        expect(warning).not.toHaveBeenCalled()
         expect(info).not.toHaveBeenCalled()
       }
       expect(wrapper.get('[data-test="about-check-update"]').classes()).not.toContain(
@@ -152,7 +178,7 @@ describe('automatic update installation', () => {
     await flushPromises()
 
     expect(ElMessageBox.confirm).toHaveBeenCalledWith(
-      'appUpdate.confirmBody',
+      expect.objectContaining({ type: UpdateConfirmation }),
       'CheckUpdate',
       expect.objectContaining({ confirmButtonText: 'appUpdate.downloadAndRestart' }),
     )
@@ -197,31 +223,43 @@ describe('automatic update installation', () => {
     expect(listen).not.toHaveBeenCalled()
     expect(commands.prepareUpdate).not.toHaveBeenCalled()
     expect(commands.installUpdate).not.toHaveBeenCalled()
-    expect(state.leaveGuard?.()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('does not install a failed download and allows a fresh retry', async () => {
-    vi.mocked(commands.prepareUpdate).mockResolvedValueOnce({
-      status: 'error',
-      error: { code: 'update.download_failed', message: 'Download failed', details: null },
+    expect(commands.openUrl).not.toHaveBeenCalled()
+    expect(wrapper.findComponent(UpdateFallback).props()).toEqual({
+      releaseTag: 'v6.3.0.2610181200',
+      reason: null,
     })
-    const wrapper = shallowMount(About)
-    await wrapper.get('[data-test="about-check-update"]').trigger('click')
-    await flushPromises()
-    expect(ElMessage.error).toHaveBeenCalledWith('errors.update.download_failed')
-    expect(commands.installUpdate).not.toHaveBeenCalled()
     expect(state.leaveGuard?.()).toBe(true)
-    expect(releaseListener).toHaveBeenCalledOnce()
-    expect(wrapper.get('[data-test="about-update-status"]').text()).toContain('appUpdate.failed')
-
-    await wrapper.get('[data-test="about-check-update"]').trigger('click')
-    await flushPromises()
-    expect(commands.prepareUpdate).toHaveBeenCalledTimes(2)
-    expect(commands.installUpdate).toHaveBeenCalledOnce()
-    expect(releaseListener).toHaveBeenCalledTimes(2)
     wrapper.unmount()
   })
+
+  it.each(['download_failed', 'signature_invalid'] as const)(
+    'does not install after %s and allows a fresh retry',
+    async (code) => {
+      vi.mocked(commands.prepareUpdate).mockResolvedValueOnce({
+        status: 'error',
+        error: { code: `update.${code}`, message: 'Synthetic failure', details: null },
+      })
+      const wrapper = shallowMount(About)
+      await wrapper.get('[data-test="about-check-update"]').trigger('click')
+      await flushPromises()
+      expectUpdateFailure(code)
+      expect(commands.installUpdate).not.toHaveBeenCalled()
+      expect(state.leaveGuard?.()).toBe(true)
+      expect(releaseListener).toHaveBeenCalledOnce()
+      expect(wrapper.get('[data-test="about-update-status"]').text()).toContain('appUpdate.failed')
+      expect(wrapper.findComponent(UpdateFallback).props()).toEqual({
+        releaseTag: 'v6.3.0.2610181200',
+        reason: `errors.update.${code}`,
+      })
+
+      await wrapper.get('[data-test="about-check-update"]').trigger('click')
+      await flushPromises()
+      expect(commands.prepareUpdate).toHaveBeenCalledTimes(2)
+      expect(commands.installUpdate).toHaveBeenCalledOnce()
+      expect(releaseListener).toHaveBeenCalledTimes(2)
+      wrapper.unmount()
+    },
+  )
 
   it.each(['prepare', 'install'] as const)('releases the UI when %s IPC fails', async (stage) => {
     vi.mocked(
@@ -230,7 +268,7 @@ describe('automatic update installation', () => {
     const wrapper = shallowMount(About)
     await wrapper.get('[data-test="about-check-update"]').trigger('click')
     await flushPromises()
-    expect(ElMessage.error).toHaveBeenCalledWith(`errors.update.${stage}_failed`)
+    expectUpdateFailure(`${stage}_failed`)
     expect(state.leaveGuard?.()).toBe(true)
     expect(releaseListener).toHaveBeenCalledOnce()
     wrapper.unmount()
@@ -248,7 +286,7 @@ describe('automatic update installation', () => {
     const wrapper = shallowMount(About)
     await wrapper.get('[data-test="about-check-update"]').trigger('click')
     await flushPromises()
-    expect(ElMessage.error).toHaveBeenCalledWith('errors.update.multiple_instances')
+    expectUpdateFailure('multiple_instances')
     expect(state.leaveGuard?.()).toBe(true)
     expect(releaseListener).toHaveBeenCalledOnce()
     wrapper.unmount()
@@ -260,7 +298,7 @@ describe('automatic update installation', () => {
     await wrapper.get('[data-test="about-check-update"]').trigger('click')
     await flushPromises()
     expect(commands.prepareUpdate).not.toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('errors.update.prepare_failed')
+    expectUpdateFailure('prepare_failed')
     expect(state.leaveGuard?.()).toBe(true)
     wrapper.unmount()
   })
