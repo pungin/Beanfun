@@ -34,10 +34,7 @@
 
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { LogicalSize } from '@tauri-apps/api/dpi'
-
-import { setWindowFitSuspended } from '../services/windowFit'
+import { mainWindowGeometry } from '../services/mainWindowGeometry'
 import { announcementListOpen, closeAnnouncementList } from '../services/announcementUi'
 import { useConfigStore } from '../stores/config'
 import {
@@ -57,7 +54,7 @@ import {
 } from '../constants/announcement'
 import AnnouncementBody from './AnnouncementBody.vue'
 
-/** Logical size the window grows to while a notice is shown. */
+/** Established logical window size while an individual notice is shown. */
 const BIG_W = 640
 const BIG_H = 720
 
@@ -120,38 +117,29 @@ watch(
 )
 
 let timer: ReturnType<typeof setInterval> | null = null
-// Window size captured before growing, restored on close.
-let savedSize: Awaited<ReturnType<ReturnType<typeof getCurrentWindow>['innerSize']>> | null = null
+let releaseSizeOverride: (() => void) | null = null
+let unmounted = false
+
+// Only an individual notice owns a larger window. The archive retains the
+// page's normal sizing, and closing a notice restores the latest route demand.
+watch(
+  visible,
+  (open) => {
+    if (open) {
+      releaseSizeOverride ??= mainWindowGeometry().override({ width: BIG_W, height: BIG_H })
+    } else {
+      releaseSizeOverride?.()
+      releaseSizeOverride = null
+    }
+  },
+  { immediate: true, flush: 'post' },
+)
 
 function stopTimer(): void {
   if (timer !== null) {
     clearInterval(timer)
     timer = null
   }
-}
-
-async function growWindow(): Promise<void> {
-  // Best-effort: never let a window API hiccup block the notice.
-  try {
-    const win = getCurrentWindow()
-    savedSize = await win.innerSize()
-    // Hold the window at a fixed larger size — suspend the router's
-    // content-fit resizer first, or it snaps straight back.
-    setWindowFitSuspended(true)
-    await win.setSize(new LogicalSize(BIG_W, BIG_H))
-  } catch {
-    savedSize = null
-  }
-}
-
-async function restoreWindow(): Promise<void> {
-  try {
-    if (savedSize) await getCurrentWindow().setSize(savedSize)
-  } catch {
-    /* best-effort */
-  }
-  savedSize = null
-  setWindowFitSuspended(false)
 }
 
 /** Read an id list from localStorage, tolerating a hostile store. */
@@ -221,7 +209,6 @@ async function openOverlay(def: AnnouncementDef, withCountdown: boolean): Promis
       if (remaining.value <= 0) stopTimer()
     }, 1000)
   }
-  await growWindow()
 }
 
 /**
@@ -234,7 +221,6 @@ async function closeOverlay(intent: CloseIntent): Promise<void> {
   const def = current.value
   visible.value = false
   stopTimer()
-  await restoreWindow()
   if (closingCountsAsRead(def, intent)) await markSeen(def)
 }
 
@@ -280,6 +266,7 @@ function waitForConfigLoaded(timeoutMs = 5000): Promise<void> {
 
 onMounted(async () => {
   await waitForConfigLoaded()
+  if (unmounted) return
   seenIds.value = loadSeenIds()
   bannerDismissed.value = loadBannerDismissed()
   ready.value = true
@@ -288,7 +275,10 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   stopTimer()
+  releaseSizeOverride?.()
+  releaseSizeOverride = null
   if (typeof document !== 'undefined') {
     document.body.classList.remove('bf-ann-banner-open')
   }
