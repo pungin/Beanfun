@@ -42,6 +42,7 @@
  */
 
 import { computed, onMounted } from 'vue'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useI18n } from 'vue-i18n'
 import { ElConfigProvider, ElMessage } from 'element-plus'
 import enLocale from 'element-plus/dist/locale/en.mjs'
@@ -58,6 +59,7 @@ const { t } = useI18n()
 const account = useAccountStore()
 const config = useConfigStore()
 const ui = useUiStore()
+const isMainWindow = getCurrentWindow().label === 'main'
 
 /**
  * Map our internal locale code to the matching Element Plus locale
@@ -104,8 +106,8 @@ onMounted(async () => {
 <template>
   <el-config-provider :locale="elpLocale">
     <RouterView />
-    <AnnouncementModal />
-    <ClassicAccountPicker />
+    <AnnouncementModal v-if="isMainWindow" />
+    <ClassicAccountPicker v-if="isMainWindow" />
   </el-config-provider>
 </template>
 
