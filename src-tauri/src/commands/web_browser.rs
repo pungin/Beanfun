@@ -311,7 +311,9 @@ pub(crate) fn relayout<R: tauri::Runtime>(window: &tauri::Window<R>) {
     let scale = window.scale_factor().unwrap_or(1.0);
     let logical = size.to_logical::<f64>(scale);
     // However tall the panel is, the toolbar never eats the whole window.
-    let bar = chrome_height(window.label()).min((logical.height - 80.0).max(BAR_HEIGHT));
+    let bar = chrome_height(window.label())
+        .min((logical.height - 80.0).max(BAR_HEIGHT))
+        .min(logical.height.max(0.0));
     let content = (logical.height - bar).max(0.0);
 
     let app = window.app_handle();
@@ -428,6 +430,9 @@ async fn open_url_in_webview<R: tauri::Runtime>(
             )
         })?;
 
+    crate::window_geometry::initialise(&window)
+        .map_err(|error| CommandError::new("system.window_geometry_failed", error))?;
+
     // The toolbar is a route in the same SPA (hash router), not a second HTML
     // entry — one route costs nothing in the bundle and keeps the vite config
     // as it is.
@@ -479,7 +484,7 @@ async fn open_url_in_webview<R: tauri::Runtime>(
                 if already_shown_for_callback.swap(true, Ordering::SeqCst) {
                     return;
                 }
-                if let Err(err) = window.window().show() {
+                if let Err(err) = crate::window_geometry::show(&window.window()) {
                     tracing::warn!(
                         step = "InAppBrowser.PageReadyShowFailed",
                         error = ?err,
@@ -510,10 +515,14 @@ async fn open_url_in_webview<R: tauri::Runtime>(
     // toolbar height once it is gone.
     let layout_window = window.clone();
     window.on_window_event(move |event| match event {
-        tauri::WindowEvent::Resized(_) => relayout(&layout_window),
+        tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+            relayout(&layout_window)
+        }
         tauri::WindowEvent::Destroyed => forget_chrome_height(layout_window.label()),
         _ => {}
     });
+
+    relayout(&window);
 
     // No separate cookie seeding or navigate() needed — the window
     // was built with the target URL directly. Cookie seeding + reload
@@ -563,7 +572,7 @@ async fn open_url_in_webview<R: tauri::Runtime>(
             // Page-load callback already showed the window — common case.
             return;
         }
-        if let Err(err) = window_for_safety.show() {
+        if let Err(err) = crate::window_geometry::show(&window_for_safety) {
             tracing::warn!(
                 step = "InAppBrowser.SafetyShowFailed",
                 error = ?err,
