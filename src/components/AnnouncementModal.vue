@@ -59,6 +59,7 @@ const BIG_W = 640
 const BIG_H = 720
 
 defineOptions({ name: 'AnnouncementModal' })
+const emit = defineEmits<{ 'overlay-change': [busy: boolean] }>()
 
 const { t } = useI18n()
 const config = useConfigStore()
@@ -81,6 +82,13 @@ const locked = computed(() => remaining.value > 0)
 
 /** The archive dialog's open flag — Settings raises it from outside. */
 const listOpen = announcementListOpen()
+
+// Defer update prompts until the startup notice or announcement archive is closed.
+watch(
+  () => !ready.value || visible.value || listOpen.value,
+  (busy) => emit('overlay-change', busy),
+  { immediate: true },
+)
 
 /** Every announcement, newest first, with its read state. */
 const archive = computed(() =>

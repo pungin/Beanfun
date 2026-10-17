@@ -10,3 +10,6 @@ package-lock.json
 # File ships its own `/* prettier-ignore */` header but prettier's
 # CLI still flags it as unformatted, so ignore the whole path.
 src/types/bindings.ts
+
+# Preserve upstream public signing fixtures byte for byte.
+src-tauri/src/services/updater/fixtures/

@@ -267,6 +267,18 @@ const zhTW = {
     qqCopied: 'QQ {number} 已複製',
     copyManually: '複製失敗，請手動複製。',
   },
+  appUpdate: {
+    downloadAndRestart: '下載並重新啟動',
+    confirmBody:
+      '發現新版本 {version}，目前版本為 {current}。\n\n{notes}\n\n下載完成並驗證後，Beanfun 將關閉、安裝更新並重新啟動。帳號與設定會保留。是否繼續？',
+    preparing: '正在準備更新…',
+    downloading: '正在下載更新…',
+    verifying: '正在驗證更新…',
+    ready: '更新已準備完成。',
+    installing: '正在安裝更新，Beanfun 即將重新啟動…',
+    failed: '更新未完成，請排除錯誤後再次按「檢查更新」。',
+    keepOpen: '請保持程式開啟，更新完成後會自動重新啟動。',
+  },
   equipCalculator: {
     requiredLevel: '需求等級：',
   },
@@ -665,12 +677,25 @@ const zhTW = {
       json_decode_failed: '伺服器回應格式錯誤，請稍後再試。',
     },
     update: {
+      trust_unavailable: '無法取得可信的更新驗證資料，請檢查網路連線與系統時間後重試。',
+      prepare_failed: '無法準備更新，請重新嘗試。',
+      install_failed:
+        '無法安裝更新。請關閉其他 Beanfun 執行個體，並確認程式資料夾的存取權限後重試。',
+      busy: '更新已在進行中，請稍候。',
+      release_changed: '最新版本已變更，請重新檢查更新。',
+      platform_unsupported: '自動更新僅支援 Windows。',
+      not_configured: '此版本尚未設定自動更新，請從 GitHub 安裝最新版本。',
+      invalid_manifest: '更新資訊無效，請稍後再試。',
+      signature_invalid: '更新檔案驗證失敗，已停止安裝。請重新嘗試。',
+      multiple_instances: '請先關閉其他 Beanfun 視窗，再重新更新。',
+      download_failed: '更新下載失敗，請檢查網路連線後重試。',
       body_too_large: '伺服器回應過大，無法處理。',
       probe_failed: '無法取得更新資訊，請檢查網路連線後再試。',
       fetch_failed: '無法取得更新資訊，請檢查網路連線後再試。',
       json_decode_failed: '更新資訊格式錯誤，請稍後再試。',
       unsupported_tag: '無法辨識更新版本，請至 GitHub 查看最新版本。',
       timeout: '檢查更新逾時，請稍後再試。',
+      not_allowed: '此視窗無法執行更新，請從主視窗的「關於」頁面操作。',
     },
     registry: {
       open_key_failed: '無法開啟遊戲的 Windows 登錄項目。',
@@ -724,6 +749,18 @@ const zhCN = {
     authors: '作者：Pungin、YCC3741 和 lshw54',
     qqCopied: 'QQ {number} 已复制',
     copyManually: '复制失败，请手动复制。',
+  },
+  appUpdate: {
+    downloadAndRestart: '下载并重新启动',
+    confirmBody:
+      '发现新版本 {version}，当前版本为 {current}。\n\n{notes}\n\n下载完成并验证后，Beanfun 将关闭、安装更新并重新启动。账号与设置会保留。是否继续？',
+    preparing: '正在准备更新…',
+    downloading: '正在下载更新…',
+    verifying: '正在验证更新…',
+    ready: '更新已准备完成。',
+    installing: '正在安装更新，Beanfun 即将重新启动…',
+    failed: '更新未完成，请排除错误后再次点击“检查更新”。',
+    keepOpen: '请保持程序打开，更新完成后会自动重新启动。',
   },
   equipCalculator: {
     requiredLevel: '需求等级：',
@@ -1123,12 +1160,24 @@ const zhCN = {
       json_decode_failed: '服务器响应格式错误，请稍后重试。',
     },
     update: {
+      trust_unavailable: '无法取得可信的更新验证数据，请检查网络连接与系统时间后重试。',
+      prepare_failed: '无法准备更新，请重新尝试。',
+      install_failed: '无法安装更新。请关闭其他 Beanfun 实例，并确认程序文件夹的访问权限后重试。',
+      busy: '更新已在进行中，请稍候。',
+      release_changed: '最新版本已变更，请重新检查更新。',
+      platform_unsupported: '自动更新仅支持 Windows。',
+      not_configured: '此版本尚未设置自动更新，请从 GitHub 安装最新版本。',
+      invalid_manifest: '更新信息无效，请稍后再试。',
+      signature_invalid: '更新文件验证失败，已停止安装。请重新尝试。',
+      multiple_instances: '请先关闭其他 Beanfun 窗口，再重新更新。',
+      download_failed: '更新下载失败，请检查网络连接后重试。',
       body_too_large: '服务器响应过大，无法处理。',
       probe_failed: '无法获取更新信息，请检查网络连接后重试。',
       fetch_failed: '无法获取更新信息，请检查网络连接后重试。',
       json_decode_failed: '更新信息格式错误，请稍后重试。',
       unsupported_tag: '无法识别更新版本，请到 GitHub 查看最新版本。',
       timeout: '检查更新超时，请稍后重试。',
+      not_allowed: '此窗口无法执行更新，请从主窗口的“关于”页面操作。',
     },
     registry: {
       open_key_failed: '无法打开游戏的 Windows 注册表项。',
@@ -1182,6 +1231,19 @@ const enUS = {
     authors: 'By Pungin, YCC3741 and lshw54',
     qqCopied: 'QQ {number} copied',
     copyManually: 'Unable to copy. Please copy the text manually.',
+  },
+  appUpdate: {
+    downloadAndRestart: 'Download and restart',
+    confirmBody:
+      'Version {version} is available. Current version: {current}.\n\n{notes}\n\nAfter downloading and verifying the update, Beanfun will close, install the update and restart. Your accounts and settings will be kept. Continue?',
+    preparing: 'Preparing the update…',
+    downloading: 'Downloading the update…',
+    verifying: 'Verifying the update…',
+    ready: 'The update is ready.',
+    installing: 'Installing the update. Beanfun will restart shortly…',
+    failed:
+      'The update did not finish. Resolve the error, then select Check for updates to try again.',
+    keepOpen: 'Keep the app open. It will restart automatically after the update.',
   },
   equipCalculator: {
     requiredLevel: 'REQ LEV:',
@@ -1619,6 +1681,22 @@ const enUS = {
       json_decode_failed: 'The server response has an invalid format. Please try again later.',
     },
     update: {
+      trust_unavailable:
+        'Trusted update verification data could not be retrieved. Check your connection and system clock, then try again.',
+      prepare_failed: 'The update could not be prepared. Please try again.',
+      install_failed:
+        'The update could not be installed. Close the other Beanfun instances, check the app folder permissions and try again.',
+      busy: 'An update is already in progress. Please wait.',
+      release_changed: 'The latest release has changed. Please check for updates again.',
+      platform_unsupported:
+        'Automatic updates are not supported by this build or operating system.',
+      not_configured:
+        'Automatic updates are not configured in this build. Please install the latest version from GitHub.',
+      invalid_manifest: 'The update information is invalid. Please try again later.',
+      signature_invalid:
+        'The update could not be verified, so installation was stopped. Please try again.',
+      multiple_instances: 'Close the other Beanfun instances, then try the update again.',
+      download_failed: 'The update could not be downloaded. Check your connection and try again.',
       body_too_large: 'The server response is too large to process.',
       probe_failed:
         'Unable to retrieve update information. Please check your connection and try again.',
@@ -1628,6 +1706,8 @@ const enUS = {
       unsupported_tag:
         'The update version was not recognised. Please check the latest release on GitHub.',
       timeout: 'The update check timed out. Please try again later.',
+      not_allowed:
+        'Updates cannot be started from this window. Use the About page in the main window.',
     },
     registry: {
       open_key_failed: "Unable to open the game's Windows registry key.",

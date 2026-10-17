@@ -301,6 +301,8 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
             storage::backup_restore,
             // update (P10.3 — D4)
             update::check_update,
+            update::prepare_update::<tauri::Wry>,
+            update::install_update::<tauri::Wry>,
             // launcher (P10.3 — D5a launch)
             launcher::launch_game,
             // launcher (P10.3 — D5b path)

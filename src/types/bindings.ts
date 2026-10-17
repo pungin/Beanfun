@@ -1708,6 +1708,29 @@ async checkUpdate(channel: Channel, localVersion: string | null) : Promise<Resul
 }
 },
 /**
+ * Recheck the chosen channel/release, download its matching package and verify its signature.
+ * The renderer supplies only a channel and expected tag; URLs, paths and keys stay in Rust.
+ */
+async prepareUpdate(channel: Channel, tagName: string) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("prepare_update", { channel, tagName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Install only the package previously verified and retained by this process.
+ */
+async installUpdate() : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("install_update") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Launch the configured game binary with the current account
  * credentials.
  * 

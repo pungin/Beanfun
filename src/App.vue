@@ -21,6 +21,9 @@
  *    registered locale applier for vue-i18n. Either step
  *    soft-fails to defaults — a corrupt Config.xml entry must
  *    never soft-brick boot.
+ * 4. Start one background update check in the main window when the
+ *    loaded notification preference permits it. It does not delay
+ *    startup, and a download always requires confirmation.
  *
  * All three calls run sequentially; `ui.applyAll()` reads from the
  * cache `config.loadAll()` populates so step 1 must finish before
@@ -41,9 +44,11 @@
  * and Element Plus's component-level translations in one shot.
  */
 
-import { computed, onMounted } from 'vue'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { computed, onMounted, provide, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { ElConfigProvider, ElMessage } from 'element-plus'
 import enLocale from 'element-plus/dist/locale/en.mjs'
 import zhCnLocale from 'element-plus/dist/locale/zh-cn.mjs'
@@ -54,12 +59,27 @@ import ClassicAccountPicker from './windows/ClassicAccountPicker.vue'
 import { useAccountStore } from './stores/account'
 import { useConfigStore } from './stores/config'
 import { useUiStore, type AppLocale } from './stores/ui'
+import {
+  APP_UPDATE_CONTROLLER,
+  createAppUpdateController,
+} from './composables/useAppUpdateController'
 
 const { t } = useI18n()
 const account = useAccountStore()
 const config = useConfigStore()
 const ui = useUiStore()
 const isMainWindow = getCurrentWindow().label === 'main'
+const router = useRouter()
+const announcementBusy = ref(true)
+const updates = createAppUpdateController({
+  promptBlocked: announcementBusy,
+  async showUpdatePage() {
+    if (router.currentRoute.value.path === '/about') return true
+    const failure = await router.push('/about')
+    return !failure && router.currentRoute.value.path === '/about'
+  },
+})
+provide(APP_UPDATE_CONTROLLER, updates)
 
 /**
  * Map our internal locale code to the matching Element Plus locale
@@ -100,13 +120,24 @@ onMounted(async () => {
   }
 
   ui.applyAll()
+
+  // Other webviews share this entry point; only the main window checks for updates.
+  if (config.loaded && ui.askUpdate && isMainWindow) {
+    try {
+      if (getCurrentWebview().label === 'main') {
+        void updates.checkForUpdate(true)
+      }
+    } catch (error) {
+      console.warn('[App] startup update check unavailable', error)
+    }
+  }
 })
 </script>
 
 <template>
   <el-config-provider :locale="elpLocale">
     <RouterView />
-    <AnnouncementModal v-if="isMainWindow" />
+    <AnnouncementModal v-if="isMainWindow" @overlay-change="announcementBusy = $event" />
     <ClassicAccountPicker v-if="isMainWindow" />
   </el-config-provider>
 </template>
