@@ -247,5 +247,5 @@ jobs:
           # atomic — otherwise every local `cargo build` regenerates the
           # lock and blocks the next `git pull` (#314 follow-up).
           git add src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json package.json
-          git commit -m "Bump version to ${{ steps.prep_version.outputs.semantic_version }} for release ${{ steps.prep_version.outputs.tag_name }}"
+          git commit -m "Bump version to ${{ steps.prep_version.outputs.semantic_version }} for release ${{ steps.prep_version.outputs.tag_name }}" --trailer "Co-authored-by: YCC3741 <mo0307b1006@gmail.com>"
           git push
