@@ -262,6 +262,11 @@ const zhTW = {
   app: {
     configLoadFailed: 'Config.xml 載入失敗，使用預設設定。',
   },
+  about: {
+    authors: '作者：Pungin、YCC3741 與 lshw54',
+    qqCopied: 'QQ {number} 已複製',
+    copyManually: '複製失敗，請手動複製。',
+  },
   titleBar: {
     minimize: '最小化',
     close: '關閉',
@@ -711,6 +716,11 @@ const zhCN = {
   app: {
     configLoadFailed: 'Config.xml 加载失败，使用默认设置。',
   },
+  about: {
+    authors: '作者：Pungin、YCC3741 和 lshw54',
+    qqCopied: 'QQ {number} 已复制',
+    copyManually: '复制失败，请手动复制。',
+  },
   titleBar: {
     minimize: '最小化',
     close: '关闭',
@@ -1159,6 +1169,11 @@ const zhCN = {
 const enUS = {
   app: {
     configLoadFailed: 'Unable to load Config.xml. Using the default settings.',
+  },
+  about: {
+    authors: 'By Pungin, YCC3741 and lshw54',
+    qqCopied: 'QQ {number} copied',
+    copyManually: 'Unable to copy. Please copy the text manually.',
   },
   titleBar: {
     minimize: 'Minimize',
