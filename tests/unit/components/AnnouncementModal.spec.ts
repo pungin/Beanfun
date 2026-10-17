@@ -10,6 +10,11 @@ import type { CommandError, Result } from '../../../src/types/bindings'
 
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn(), warning: vi.fn() } }))
 
+const geometry = vi.hoisted(() => ({ override: vi.fn(), release: vi.fn() }))
+vi.mock('../../../src/services/mainWindowGeometry', () => ({
+  mainWindowGeometry: () => ({ override: geometry.override }),
+}))
+
 vi.mock('../../../src/types/bindings', () => ({
   commands: {
     version: vi.fn(),
@@ -84,6 +89,8 @@ describe('AnnouncementModal', () => {
     useConfigStore().loaded = true
     localStorage.clear()
     closeAnnouncementList()
+    geometry.override.mockReset().mockReturnValue(geometry.release)
+    geometry.release.mockReset()
     for (const fn of Object.values(commands) as ReturnType<typeof vi.fn>[]) fn.mockReset()
     mockOpenUrl.mockReturnValue(ok(null))
     mockSetConfig.mockReturnValue(ok(null))
@@ -98,6 +105,32 @@ describe('AnnouncementModal', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement"]').exists()).toBe(true)
     expect(wrapper.find(`[data-testid="announcement-body-${CURRENT.id}"]`).exists()).toBe(true)
+  })
+
+  it('holds a coordinator override and releases it on unmount', async () => {
+    const wrapper = mountModal()
+    await flushPromises()
+    expect(geometry.override).toHaveBeenCalledExactlyOnceWith({ width: 640, height: 720 })
+    wrapper.unmount()
+    expect(geometry.release).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the archive at the current route size and grows only a selected notice', async () => {
+    useConfigStore().entries[ANNOUNCEMENT_SEEN_KEY] = ALL_SEEN
+    const wrapper = mountModal()
+    await flushPromises()
+    expect(geometry.override).not.toHaveBeenCalled()
+    openAnnouncementList()
+    await flushPromises()
+    expect(geometry.override).not.toHaveBeenCalled()
+    await wrapper.get(`[data-testid="announcement-history-${CURRENT.id}"]`).trigger('click')
+    await flushPromises()
+    expect(geometry.override).toHaveBeenCalledExactlyOnceWith({ width: 640, height: 720 })
+    await wrapper.get('[data-testid="announcement-close"]').trigger('click')
+    await flushPromises()
+    expect(geometry.release).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+    expect(geometry.release).toHaveBeenCalledTimes(1)
   })
 
   it('holds every close affordance for the countdown, then closing counts as read', async () => {
