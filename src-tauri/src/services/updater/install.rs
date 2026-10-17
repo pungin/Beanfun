@@ -895,3 +895,437 @@ mod windows_support {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn transaction_fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let root = tempfile::tempdir().expect("temporary directory");
+        let target = root.path().join("Beanfun.exe");
+        let stage = root.path().join("stage");
+        fs::create_dir(&stage).unwrap();
+        fs::write(&target, b"original application").unwrap();
+        fs::write(stage.join(PAYLOAD_NAME), b"updated application").unwrap();
+        fs::write(root.path().join("Config.xml"), b"settings remain intact").unwrap();
+        fs::write(root.path().join("Users.dat"), b"accounts remain intact").unwrap();
+        (root, target, stage)
+    }
+
+    #[test]
+    fn replacement_preserves_backup_and_user_data() {
+        let (root, target, stage) = transaction_fixture();
+        replace_and_restart(
+            &target,
+            &stage,
+            &sha256(b"original application"),
+            &sha256(b"updated application"),
+            |path| {
+                assert_eq!(fs::read(path)?, b"updated application");
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(stage.join(BACKUP_NAME)).unwrap(),
+            b"original application"
+        );
+        assert_eq!(
+            fs::read(root.path().join("Config.xml")).unwrap(),
+            b"settings remain intact"
+        );
+        assert_eq!(
+            fs::read(root.path().join("Users.dat")).unwrap(),
+            b"accounts remain intact"
+        );
+    }
+
+    #[test]
+    fn failed_restart_restores_and_restarts_previous_version() {
+        let (_root, target, stage) = transaction_fixture();
+        let mut launches = 0;
+        let error = replace_and_restart(
+            &target,
+            &stage,
+            &sha256(b"original application"),
+            &sha256(b"updated application"),
+            |path| {
+                launches += 1;
+                if launches == 1 {
+                    return Err(io::Error::other("simulated loader error"));
+                }
+                assert_eq!(fs::read(path)?, b"original application");
+                Ok(())
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(error, InstallError::Restart(_)));
+        assert_eq!(launches, 2);
+        assert_eq!(fs::read(&target).unwrap(), b"original application");
+        assert_eq!(
+            fs::read(stage.join(BACKUP_NAME)).unwrap(),
+            b"original application"
+        );
+        assert_eq!(
+            fs::read(stage.join("failed.exe")).unwrap(),
+            b"updated application"
+        );
+    }
+
+    #[test]
+    fn missing_replacement_restores_original() {
+        let (_root, target, stage) = transaction_fixture();
+        fs::rename(stage.join(PAYLOAD_NAME), stage.join("missing.exe")).unwrap();
+        assert!(replace_and_restart(
+            &target,
+            &stage,
+            &sha256(b"original application"),
+            &sha256(b"updated application"),
+            |_| Ok(())
+        )
+        .is_err());
+        assert_eq!(fs::read(target).unwrap(), b"original application");
+        assert_eq!(
+            fs::read(stage.join(BACKUP_NAME)).unwrap(),
+            b"original application"
+        );
+    }
+
+    #[test]
+    fn changed_original_is_never_overwritten() {
+        let (_root, target, stage) = transaction_fixture();
+        fs::write(&target, b"another executable").unwrap();
+        assert!(replace_and_restart(
+            &target,
+            &stage,
+            &sha256(b"original application"),
+            &sha256(b"updated application"),
+            |_| panic!("must not launch")
+        )
+        .is_err());
+        assert_eq!(fs::read(target).unwrap(), b"another executable");
+        assert!(!stage.join(BACKUP_NAME).exists());
+    }
+
+    #[test]
+    fn existing_backup_is_never_overwritten() {
+        let (_root, target, stage) = transaction_fixture();
+        fs::write(stage.join(BACKUP_NAME), b"earlier recovery copy").unwrap();
+        assert!(replace_and_restart(
+            &target,
+            &stage,
+            &sha256(b"original application"),
+            &sha256(b"updated application"),
+            |_| panic!("must not launch")
+        )
+        .is_err());
+        assert_eq!(
+            fs::read(stage.join(BACKUP_NAME)).unwrap(),
+            b"earlier recovery copy"
+        );
+        assert_eq!(fs::read(target).unwrap(), b"original application");
+    }
+
+    #[test]
+    fn staging_does_not_modify_the_original() {
+        let (_root, target, _stage) = transaction_fixture();
+        let prepared = stage_download(
+            &target,
+            b"new download",
+            b"manifest",
+            b"bundle",
+            _root.path(),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"original application");
+        let plan: UpdatePlan =
+            serde_json::from_slice(&fs::read(prepared.stage.join("plan.json")).unwrap()).unwrap();
+        assert!(validate_plan(
+            &prepared.stage,
+            &prepared.stage.join(HELPER_NAME),
+            &prepared.nonce,
+            &plan
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn plan_cannot_escape_the_original_directory() {
+        let (_root, target, _stage) = transaction_fixture();
+        let prepared = stage_download(
+            &target,
+            b"new download",
+            b"manifest",
+            b"bundle",
+            _root.path(),
+        )
+        .unwrap();
+        let mut plan: UpdatePlan =
+            serde_json::from_slice(&fs::read(prepared.stage.join("plan.json")).unwrap()).unwrap();
+        plan.target_name = PathBuf::from("../another.exe");
+        assert!(validate_plan(
+            &prepared.stage,
+            &prepared.stage.join(HELPER_NAME),
+            &prepared.nonce,
+            &plan
+        )
+        .is_err());
+        plan.target_name = target.clone();
+        assert!(validate_plan(
+            &prepared.stage,
+            &prepared.stage.join(HELPER_NAME),
+            &prepared.nonce,
+            &plan
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn non_executable_downloads_are_rejected() {
+        assert!(validate_executable(b"<html>not an executable</html>").is_err());
+        let mut payload = vec![0; 128];
+        payload[..2].copy_from_slice(b"MZ");
+        payload[60..64].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(validate_executable(&payload).is_err());
+    }
+
+    #[test]
+    fn plan_rejects_wrong_nonce_and_modified_helper() {
+        let (_root, target, _stage) = transaction_fixture();
+        let prepared = stage_download(
+            &target,
+            b"new download",
+            b"manifest",
+            b"bundle",
+            _root.path(),
+        )
+        .unwrap();
+        let helper = prepared.stage.join(HELPER_NAME);
+        let plan: UpdatePlan =
+            serde_json::from_slice(&fs::read(prepared.stage.join("plan.json")).unwrap()).unwrap();
+        assert!(validate_plan(
+            &prepared.stage,
+            &helper,
+            "00000000000000000000000000000000",
+            &plan
+        )
+        .is_err());
+        fs::write(&helper, b"different executable").unwrap();
+        assert!(validate_plan(&prepared.stage, &helper, &prepared.nonce, &plan).is_err());
+    }
+
+    #[test]
+    fn modified_helper_is_rejected_before_process_creation() {
+        let (root, target, _stage) = transaction_fixture();
+        let prepared = stage_download(
+            &target,
+            b"new download",
+            b"manifest",
+            b"bundle",
+            root.path(),
+        )
+        .unwrap();
+        fs::write(prepared.stage.join(HELPER_NAME), b"substituted helper").unwrap();
+        assert!(matches!(
+            prepared.launch(),
+            Err(InstallError::InvalidPlan(_))
+        ));
+        assert_eq!(fs::read(target).unwrap(), b"original application");
+    }
+
+    #[test]
+    fn substituted_release_metadata_is_rejected_before_helper_launch() {
+        for filename in ["latest.json", "latest.json.sigstore.json"] {
+            let (root, target, _stage) = transaction_fixture();
+            let prepared = stage_download(
+                &target,
+                b"new download",
+                b"approved manifest",
+                b"approved bundle",
+                root.path(),
+            )
+            .unwrap();
+            fs::write(prepared.stage.join(filename), b"another release").unwrap();
+            assert!(matches!(
+                prepared.launch(),
+                Err(InstallError::InvalidPlan(_))
+            ));
+            assert_eq!(fs::read(target).unwrap(), b"original application");
+        }
+    }
+
+    #[test]
+    fn failed_recovery_keeps_a_manual_backup() {
+        let (_root, target, stage) = transaction_fixture();
+        let error = replace_and_restart(
+            &target,
+            &stage,
+            &sha256(b"original application"),
+            &sha256(b"updated application"),
+            |_| Err(io::Error::other("simulated failure for both versions")),
+        )
+        .unwrap_err();
+        assert!(matches!(error, InstallError::Recovery { .. }));
+        assert_eq!(fs::read(&target).unwrap(), b"original application");
+        assert_eq!(
+            fs::read(stage.join(BACKUP_NAME)).unwrap(),
+            b"original application"
+        );
+    }
+
+    #[test]
+    fn payload_changed_after_authentication_is_never_started() {
+        let (_root, target, stage) = transaction_fixture();
+        let authenticated_hash = sha256(b"updated application");
+        fs::write(stage.join(PAYLOAD_NAME), b"untrusted replacement").unwrap();
+        let mut launches = 0;
+        let error = replace_and_restart(
+            &target,
+            &stage,
+            &sha256(b"original application"),
+            &authenticated_hash,
+            |path| {
+                launches += 1;
+                assert_eq!(fs::read(path)?, b"original application");
+                Ok(())
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(error, InstallError::Restart(_)));
+        assert_eq!(launches, 1);
+        assert_eq!(fs::read(&target).unwrap(), b"original application");
+        assert_eq!(
+            fs::read(stage.join("failed.exe")).unwrap(),
+            b"untrusted replacement"
+        );
+    }
+
+    #[test]
+    fn tampered_backup_is_never_restarted() {
+        let (_root, target, stage) = transaction_fixture();
+        let mut launches = 0;
+        let error = replace_and_restart(
+            &target,
+            &stage,
+            &sha256(b"original application"),
+            &sha256(b"updated application"),
+            |_| {
+                launches += 1;
+                fs::write(stage.join(BACKUP_NAME), b"tampered recovery executable")?;
+                Err(io::Error::other("simulated startup failure"))
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(error, InstallError::Recovery { .. }));
+        assert_eq!(launches, 1);
+        assert!(!target.exists());
+        assert_eq!(
+            fs::read(stage.join(BACKUP_NAME)).unwrap(),
+            b"tampered recovery executable"
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn executable_cannot_be_written_or_replaced_during_launch() {
+        let (_root, target, stage) = transaction_fixture();
+        start_verified(&target, &sha256(b"original application"), &mut |path| {
+            assert!(fs::write(path, b"tampered").is_err());
+            assert!(fs::rename(path, stage.join("stolen.exe")).is_err());
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(fs::read(target).unwrap(), b"original application");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn verified_file_lock_allows_windows_to_start_the_same_executable() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("Beanfun helper fixture with spaces.exe");
+        // Launch only a copy of this test runner in listing mode. This checks
+        // real CreateProcess sharing behaviour without opening the application.
+        let bytes = fs::read(std::env::current_exe().unwrap()).unwrap();
+        fs::write(&target, &bytes).unwrap();
+        let _guard = lock_verified_executable(&target, &sha256(&bytes)).unwrap();
+        let mut command = Command::new(&target);
+        command.arg("--list");
+        configure_process(&mut command);
+        assert!(command.spawn().unwrap().wait().unwrap().success());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn helper_refuses_a_plan_naming_an_unrelated_parent() {
+        let (_root, target, _stage) = transaction_fixture();
+        assert!(matches!(
+            ParentProcess::open(u32::MAX, &target),
+            Err(InstallError::InvalidPlan(_))
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn installed_copy_elsewhere_does_not_classify_portable_as_nsis() {
+        let root = tempfile::tempdir().unwrap();
+        let installed = root.path().join("installed");
+        let portable = root.path().join("portable");
+        fs::create_dir(&installed).unwrap();
+        fs::create_dir(&portable).unwrap();
+        fs::write(installed.join("beanfun.exe"), b"installed").unwrap();
+        fs::write(installed.join("uninstall.exe"), b"uninstaller").unwrap();
+        fs::write(portable.join("Beanfun.exe"), b"portable").unwrap();
+        let location = format!("\"{}\"", installed.display());
+        let icon = format!("\"{}\"", installed.join("beanfun.exe").display());
+        let uninstaller = format!("\"{}\"", installed.join("uninstall.exe").display());
+        assert!(windows_support::registration_matches(
+            &installed.join("beanfun.exe"),
+            &location,
+            &icon,
+            &uninstaller
+        ));
+        assert!(!windows_support::registration_matches(
+            &portable.join("Beanfun.exe"),
+            &location,
+            &icon,
+            &uninstaller
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "Child-process fixture for the NSIS instance check only"]
+    fn instance_check_child_fixture() {
+        std::thread::sleep(Duration::from_secs(30));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn nsis_refuses_another_portable_copy_that_it_would_close_by_name() {
+        let root = tempfile::tempdir().unwrap();
+        let other = root.path().join("other");
+        fs::create_dir(&other).unwrap();
+        let target = root.path().join("Beanfun.exe");
+        fs::write(&target, b"installed application").unwrap();
+        let child_path = other.join("Beanfun.exe");
+        fs::copy(std::env::current_exe().unwrap(), &child_path).unwrap();
+        let mut command = Command::new(&child_path);
+        command.args([
+            "--exact",
+            "services::updater::install::tests::instance_check_child_fixture",
+            "--ignored",
+        ]);
+        configure_process(&mut command);
+        let mut child = command.spawn().unwrap();
+        let portable_result = ensure_no_other_instances(&target, std::process::id());
+        let installed_result =
+            windows_support::ensure_no_other_named_instances(&target, std::process::id());
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(portable_result.is_ok());
+        assert!(matches!(
+            installed_result,
+            Err(InstallError::OtherInstances)
+        ));
+    }
+}
