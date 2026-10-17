@@ -1,59 +1,52 @@
-/**
- * Specs for the content-fit resizer's idempotence (issue #367).
- *
- * The resizer measures content in CSS px and applies the result in
- * rounded logical px, so a fixed point is not guaranteed: a height that
- * rounds to H can measure back as H±1. Re-applying that echo fires the
- * ResizeObserver, which fits again, which re-applies — the window
- * jitters by a pixel for as long as the page is open.
- *
- * These tests pin the guard that breaks the cycle: apply only what is
- * not already applied.
- */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
-const setSize = vi.fn()
-const setZoom = vi.fn()
-
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ setSize }),
+const mocks = vi.hoisted(() => ({
+  resize: vi.fn<(width: number, height: number) => Promise<{ status: 'ok'; data: null }>>(
+    async () => ({ status: 'ok', data: null }),
+  ),
+  zoom: vi.fn(async () => {}),
+  monitor: vi.fn(async () => ({ workArea: { size: { width: 1280, height: 900 } } })),
+  scaleFactor: vi.fn(async () => 1),
+  onScaleChanged: vi.fn(async () => vi.fn()),
+  onMoved: vi.fn(async () => vi.fn()),
 }))
-vi.mock('@tauri-apps/api/webview', () => ({
-  getCurrentWebview: () => ({ setZoom }),
-}))
+vi.mock('../../../src/types/bindings', () => ({ commands: { resizeMainWindow: mocks.resize } }))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn() } }))
+vi.mock('@tauri-apps/api/window', () => ({
+  currentMonitor: mocks.monitor,
+  getCurrentWindow: () => ({
+    label: 'main',
+    scaleFactor: mocks.scaleFactor,
+    onScaleChanged: mocks.onScaleChanged,
+    onMoved: mocks.onMoved,
+  }),
+}))
+vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ setZoom: mocks.zoom }) }))
 
-import { createAppRouter, installRouterGuards } from '../../../src/router'
-import { setWindowFitSuspended } from '../../../src/services/windowFit'
+import { installWindowAutoFit } from '../../../src/services/windowAutoFit'
+import { routes as applicationRoutes } from '../../../src/router'
+import {
+  mainWindowGeometry,
+  resetMainWindowGeometryForTests,
+} from '../../../src/services/mainWindowGeometry'
 
-/** Fires whatever the resizer observed, on demand. */
 let notifyResize: (() => void) | null = null
-
-/** Content height the fake `[data-window-root]` reports. */
 let contentHeight = 500
-
-function installDom(): void {
-  document.body.innerHTML = '<main data-window-root></main>'
-  const root = document.querySelector('[data-window-root]') as HTMLElement
-  Object.defineProperty(root, 'scrollHeight', { get: () => contentHeight, configurable: true })
-}
+let dispose: (() => void) | undefined
+let disconnect = vi.fn()
 
 beforeEach(() => {
-  setSize.mockClear()
-  setZoom.mockClear()
-  notifyResize = null
+  vi.useFakeTimers()
+  vi.clearAllMocks()
+  resetMainWindowGeometryForTests()
   contentHeight = 500
-  setWindowFitSuspended(false)
-  installDom()
-
-  // Run scheduled work immediately so a fit is synchronous with the
-  // notification that triggered it.
-  vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
-    cb(0)
-    return 1
-  }) as typeof requestAnimationFrame)
-  vi.stubGlobal('cancelAnimationFrame', () => {})
+  notifyResize = null
+  disconnect = vi.fn()
+  document.body.innerHTML = '<main data-window-root><div data-window-content></div></main>'
+  const root = document.querySelector('[data-window-root]') as HTMLElement
+  Object.defineProperty(root, 'scrollHeight', { get: () => contentHeight, configurable: true })
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -61,70 +54,198 @@ beforeEach(() => {
         notifyResize = cb
       }
       observe(): void {}
-      disconnect(): void {}
+      disconnect = disconnect
     },
   )
 })
 
 afterEach(() => {
+  dispose?.()
+  dispose = undefined
+  vi.useRealTimers()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
   document.body.innerHTML = ''
 })
 
-async function install(): Promise<void> {
-  const router = createAppRouter()
-  installRouterGuards(router, { isAuthenticated: () => true, clearSession: () => {} })
-  await router.push('/settings')
-  await router.isReady()
+async function settle(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(180)
+  await flushPromises()
+  await mainWindowGeometry().whenIdle()
 }
 
-describe('content-fit resizer idempotence (#367)', () => {
-  it('resizes once for a given content height, however often it is notified', async () => {
-    await install()
-    const afterFirstFit = setSize.mock.calls.length
-    expect(afterFirstFit).toBeGreaterThan(0)
+async function install() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/settings', component: {}, meta: { windowWidth: 660 } },
+      { path: '/about', component: {}, meta: { windowWidth: 420 } },
+      { path: '/manage-account', component: {}, meta: { windowWidth: 880 } },
+      { path: '/browser-bar', component: {}, meta: { fitsWindow: false } },
+    ],
+  })
+  dispose = installWindowAutoFit(router)
+  await router.push('/settings')
+  await settle()
+  return router
+}
 
-    // Every notification re-measures the same content. Without the
-    // guard each one issues another setSize, and each setSize provokes
-    // the next notification — the jitter loop.
+describe('main-window content measurement', () => {
+  it('preserves measured dimensions through every directed main-route transition and return', async () => {
+    const catalogue = createRouter({ history: createMemoryHistory(), routes: applicationRoutes })
+      .getRoutes()
+      .filter((route) => route.meta.windowWidth !== undefined && route.meta.fitsWindow !== false)
+    expect(catalogue).toHaveLength(12)
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: catalogue.map(({ path, meta }) => ({ path, meta, component: {} })),
+    })
+    dispose = installWindowAutoFit(router)
+    let transitions = 0
+    for (const [sourceIndex, source] of catalogue.entries()) {
+      const sourceHeight = 240 + sourceIndex * 23
+      contentHeight = sourceHeight
+      await router.push(source.path)
+      await settle()
+      for (const [targetIndex, target] of catalogue.entries()) {
+        if (source.path === target.path) continue
+        contentHeight = 240 + targetIndex * 23
+        await router.push(target.path)
+        await settle()
+        expect(mocks.resize).toHaveBeenLastCalledWith(target.meta.windowWidth, contentHeight)
+        contentHeight = sourceHeight
+        await router.push(source.path)
+        await settle()
+        expect(mocks.resize).toHaveBeenLastCalledWith(source.meta.windowWidth, sourceHeight)
+        transitions += 1
+      }
+    }
+    expect(transitions).toBe(132)
+  })
+
+  it('keeps the one-pixel idempotence guard across repeated content notifications', async () => {
+    await install()
+    const count = mocks.resize.mock.calls.length
+    expect(count).toBeGreaterThan(0)
+    contentHeight += 1
     for (let i = 0; i < 5; i += 1) notifyResize?.()
-
-    expect(setSize.mock.calls.length).toBe(afterFirstFit)
+    await settle()
+    expect(mocks.resize).toHaveBeenCalledTimes(count)
+    expect(mocks.zoom).toHaveBeenCalledTimes(1)
   })
 
-  it('still resizes when the content genuinely changes', async () => {
+  it('resizes for genuine content changes', async () => {
     await install()
-    const before = setSize.mock.calls.length
-
-    contentHeight = 900
+    contentHeight = 700
     notifyResize?.()
-
-    expect(setSize.mock.calls.length).toBeGreaterThan(before)
+    await settle()
+    expect(mocks.resize).toHaveBeenLastCalledWith(660, 700)
   })
 
-  it('does not re-apply the same zoom', async () => {
+  it('remeasures the new layout after applying a route width', async () => {
+    mocks.resize.mockImplementationOnce(async () => {
+      contentHeight = 410
+      return { status: 'ok', data: null }
+    })
     await install()
-    const before = setZoom.mock.calls.length
-
-    for (let i = 0; i < 3; i += 1) notifyResize?.()
-
-    expect(setZoom.mock.calls.length).toBe(before)
+    await settle()
+    expect(mocks.resize).toHaveBeenLastCalledWith(660, 410)
   })
 
-  it('re-applies after an overlay held the window at its own size', async () => {
+  it('keeps a single resize and DPI subscription while navigating', async () => {
+    const add = vi.spyOn(window, 'addEventListener')
+    const router = await install()
+    await router.push('/about')
+    await settle()
+    await router.push('/manage-account')
+    await settle()
+    expect(add.mock.calls.filter(([event]) => event === 'resize')).toHaveLength(1)
+    expect(mocks.onScaleChanged).toHaveBeenCalledTimes(1)
+    expect(mocks.onMoved).toHaveBeenCalledTimes(1)
+  })
+
+  it('disconnects observers and cancels pending work on fitsWindow:false', async () => {
+    const router = await install()
+    const count = mocks.resize.mock.calls.length
+    contentHeight = 700
+    notifyResize?.()
+    await router.push('/browser-bar')
+    window.dispatchEvent(new Event('resize'))
+    await settle()
+    expect(mocks.resize).toHaveBeenCalledTimes(count)
+    expect(disconnect).toHaveBeenCalled()
+  })
+
+  it('restores the final route after an override closes during navigation', async () => {
+    const router = await install()
+    const release = mainWindowGeometry().override({ width: 640, height: 720 })
+    await mainWindowGeometry().whenIdle()
+    await router.push('/about')
+    await router.push('/manage-account')
+    contentHeight = 600
+    release()
+    await settle()
+    expect(mocks.resize).toHaveBeenLastCalledWith(880, 600)
+  })
+
+  it('still fits an occluded window when animation frames never fire', async () => {
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    )
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
     await install()
-    const before = setSize.mock.calls.length
+    expect(mocks.resize).toHaveBeenLastCalledWith(660, 500)
+  })
 
-    // While suspended the overlay resizes the window itself, so what we
-    // last applied is stale — the restoring fit must not be skipped as
-    // "already applied".
-    setWindowFitSuspended(true)
-    notifyResize?.()
-    expect(setSize.mock.calls.length).toBe(before)
+  it('waits for an app that mounts after the initial paint backstop', async () => {
+    document.body.innerHTML = ''
+    await install()
+    expect(mocks.resize).not.toHaveBeenCalled()
+    const root = document.createElement('main')
+    root.dataset.windowRoot = ''
+    Object.defineProperty(root, 'scrollHeight', { value: 500 })
+    document.body.appendChild(root)
+    await settle()
+    await settle()
+    expect(mocks.resize).toHaveBeenLastCalledWith(660, 500)
+  })
 
-    setWindowFitSuspended(false)
-    notifyResize?.()
+  it('disposes a late native event subscription after the owner is stopped', async () => {
+    let finish!: (stop: () => void) => void
+    const stop = vi.fn()
+    mocks.onMoved.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    await install()
+    dispose?.()
+    finish(stop)
+    await flushPromises()
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
 
-    expect(setSize.mock.calls.length).toBeGreaterThan(before)
+  it('preserves the screen CSS work area when accessibility scaling differs from native logical pixels', async () => {
+    mocks.monitor.mockResolvedValue({ workArea: { size: { width: 1200, height: 900 } } })
+    mocks.scaleFactor.mockResolvedValueOnce(1.5)
+    vi.stubGlobal('devicePixelRatio', 2.25)
+    // Native logical area is 800 by 600. At 150% text scaling, the
+    // screen API reports approximately 533 by 400 CSS pixels instead.
+    vi.stubGlobal('screen', { availWidth: 533, availHeight: 400 })
+    await install()
+    const first = mocks.resize.mock.calls[0]
+    expect(first).toEqual([752, 570])
+    expect(mocks.zoom.mock.calls[0]).toEqual([0.76])
+    expect(mocks.monitor).not.toHaveBeenCalled()
+  })
+
+  it('retains the original work-area fallback when the screen API is unavailable', async () => {
+    mocks.monitor.mockResolvedValue({ workArea: { size: { width: 400, height: 300 } } })
+    vi.stubGlobal('screen', { availWidth: 0, availHeight: 0 })
+    await install()
+    expect(mocks.resize).toHaveBeenLastCalledWith(660, 500)
+    expect(mocks.zoom).toHaveBeenLastCalledWith(1)
+    expect(mocks.monitor).not.toHaveBeenCalled()
   })
 })
