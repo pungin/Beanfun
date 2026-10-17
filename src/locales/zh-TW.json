@@ -298,6 +298,7 @@
   "WrongAuthInfo": "資料錯誤，請重新輸入",
   "UpdateCheck": "更新檢測",
   "NoUpdatesDetected": "未檢測到有更新。",
+  "UpdateCheckFailed": "無法檢查更新，請確認網路連線後再試一次。",
   "NewVersionDetected": "檢測到新版本 {0} 當前: {1}\\r\\n\\r\\n{2}\\r\\n\\r\\n是否打開下載頁面？",
   "Language": "程式語言",
   "LoginMode": "登入方式",

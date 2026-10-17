@@ -7,8 +7,7 @@
 //! 2. Direct probe OK + up-to-date ⇒ `None`
 //! 3. Direct fail → first proxy succeeds ⇒ fetch goes via that proxy
 //! 4. First two proxies fail → third succeeds ⇒ fetch via third
-//! 5. Every probe target fails ⇒ `None` (fetch attempt against direct
-//!    URL still 500s so fallback is `None`-safe)
+//! 5. Every probe target fails and the direct fetch fails ⇒ typed error
 //! 6. Stable channel skips prerelease releases
 //! 7. Beta channel returns prerelease releases
 //! 8. Pre-5.8-style local version (`"5.7.0(2503010000)"`) compared via
@@ -97,6 +96,7 @@ async fn direct_ok_with_newer_release_returns_update_info_without_proxy() {
         "test-ua",
     )
     .await
+    .expect("request succeeds")
     .expect("newer release must be detected");
 
     assert_eq!(got.tag_name, "v5.8.4.2604020000");
@@ -129,7 +129,7 @@ async fn direct_ok_with_no_newer_release_returns_none() {
     .await;
 
     assert!(
-        got.is_none(),
+        got.unwrap().is_none(),
         "identical version must be reported as up-to-date"
     );
 }
@@ -160,6 +160,7 @@ async fn direct_fail_falls_through_to_first_proxy_and_fetches_through_it() {
         "test-ua",
     )
     .await
+    .expect("request succeeds")
     .expect("proxy fallback must produce UpdateInfo");
 
     assert_eq!(got.tag_name, "v5.8.4.2604020000");
@@ -204,6 +205,7 @@ async fn first_two_proxies_fail_then_third_succeeds() {
         "test-ua",
     )
     .await
+    .expect("request succeeds")
     .expect("third proxy must be selected and used");
 
     assert_eq!(got.tag_name, "v5.9.0.2604030000");
@@ -219,13 +221,12 @@ async fn first_two_proxies_fail_then_third_succeeds() {
 }
 
 #[tokio::test]
-async fn all_probes_fail_returns_none() {
+async fn all_probes_and_direct_fetch_fail_returns_error() {
     let direct = MockServer::start().await;
     mount_probe(&direct, 503).await;
     // Fetch will still fire against `{empty}{fetch_url}` = `fetch_url`
     // (per proxy_probe_at's "all failed ⇒ empty prefix" convention),
-    // so ensure the direct-URL's GET also fails to lock the downstream
-    // None.
+    // so ensure the direct GET also fails and reaches the caller as an error.
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(503))
         .mount(&direct)
@@ -245,7 +246,10 @@ async fn all_probes_fail_returns_none() {
     )
     .await;
 
-    assert!(got.is_none(), "every probe failing must collapse to None");
+    assert!(
+        got.is_err(),
+        "a failed fetch must remain distinguishable from no update"
+    );
 }
 
 #[tokio::test]
@@ -272,6 +276,7 @@ async fn stable_channel_skips_prerelease_and_returns_first_stable() {
         "test-ua",
     )
     .await
+    .expect("request succeeds")
     .expect("stable must find v5.8.4");
 
     assert_eq!(
@@ -302,6 +307,7 @@ async fn beta_channel_picks_prerelease_when_newest() {
         "test-ua",
     )
     .await
+    .expect("request succeeds")
     .expect("beta must find v5.9.0 beta");
 
     assert_eq!(
@@ -334,6 +340,7 @@ async fn pre_5_8_display_form_local_compares_correctly_against_new_timestamp_rem
         "test-ua",
     )
     .await
+    .expect("request succeeds")
     .expect("pre-5.8 display form must still detect newer remote");
 
     assert_eq!(got.tag_name, "v5.8.0.2604011114");

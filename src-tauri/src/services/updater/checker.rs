@@ -6,7 +6,7 @@
 //! # WPF parity
 //!
 //! Mirrors `Beanfun/Update/ApplicationUpdater.cs` `RunCheck` (L114-199)
-//! structurally, with two deliberate departures:
+//! structurally, with deliberate departures for UI separation and error reporting:
 //!
 //! - **No UI**: the original `MessageBox.Show` / `Process.Start` calls
 //!   (L150-191) are **not** in this layer. This module only produces
@@ -17,7 +17,7 @@
 //!   About-page click" lives in the Tauri command layer; service is
 //!   single-call.
 //!
-//! Everything else matches WPF byte-for-byte:
+//! The release selection and version comparison follow WPF:
 //!
 //! | WPF line          | Behaviour                                               | This module                            |
 //! | ----------------- | ------------------------------------------------------- | -------------------------------------- |
@@ -30,24 +30,13 @@
 //! | L145              | `newVerDisplay = "{major}.{minor}.{patch}({timestamp})"` | [`UpdateInfo::from_release`]          |
 //! | L148              | `IsNewerVersion(App.AssemblyVersion, …)` gate           | [`super::is_newer_version`]            |
 //! | L169-172          | `downloadUrl = (assets[0] ? proxy+url : tag page)`      | [`UpdateInfo::from_release`]           |
-//! | L195-198          | `catch Exception → Debug.WriteLine` silent              | each `.ok()?` + `tracing::warn!`       |
+//! | L195-198          | `catch Exception → Debug.WriteLine` silent              | typed errors returned to the caller       |
 //!
-//! # Silent-on-error policy
+//! # Error reporting
 //!
-//! WPF's entire `RunCheck` body sits inside `try { … } catch (Exception
-//! ex) { Debug.WriteLine("Update check failed: " + ex.Message); }`
-//! (L119-198). Any fault — network, proxy loop, JSON decode, regex
-//! mismatch — is silently swallowed and the function returns without
-//! surfacing anything to the UI. We preserve the same behaviour by
-//! returning `Option<UpdateInfo>` where `None` means "no update
-//! available **or** something went wrong silently", matching the WPF
-//! `show ? "No Updates Found" : no-op` UX contract.
-//!
-//! Tests and future discriminating callers can still drop down one
-//! layer and call [`super::fetch_releases_at`] / [`super::parse_tag`]
-//! / [`super::proxy_probe_at`] directly to get typed
-//! [`super::UpdaterError`] values. The collapse-to-`None` happens only
-//! at this top-level composition site.
+//! A successful check without a newer release returns `Ok(None)`.
+//! Network and parsing failures remain typed errors so a manual check can
+//! distinguish a failed request from an up-to-date installation.
 //!
 //! # `download_url` proxy asymmetry
 //!
@@ -165,7 +154,10 @@ impl UpdateInfo {
 /// (typically the display form `X.Y.Z(timestamp)` produced by WPF's
 /// `App.ConvertVersion` equivalent — see the `parser` module docs for
 /// the two-path comparator and when each path triggers).
-pub async fn check_update(channel: Channel, local_version: &str) -> Option<UpdateInfo> {
+pub async fn check_update(
+    channel: Channel,
+    local_version: &str,
+) -> Result<Option<UpdateInfo>, UpdaterError> {
     let proxy_prefix = proxy_probe().await;
     let ua = production_user_agent();
     run_check(
@@ -197,7 +189,7 @@ pub async fn check_update_at(
     channel: Channel,
     local_version: &str,
     user_agent: &str,
-) -> Option<UpdateInfo> {
+) -> Result<Option<UpdateInfo>, UpdaterError> {
     let proxy_prefix = proxy_probe_at(probe_direct_url, probe_proxies).await;
     run_check(
         &proxy_prefix,
@@ -224,16 +216,10 @@ async fn run_check(
     user_agent: &str,
     channel: Channel,
     local_version: &str,
-) -> Option<UpdateInfo> {
+) -> Result<Option<UpdateInfo>, UpdaterError> {
     let fetch_url = format!("{proxy_prefix}{api_releases_url}");
 
-    let releases = match fetch_releases_at(&fetch_url, user_agent).await {
-        Ok(rs) => rs,
-        Err(err) => {
-            log_and_discard("fetch_releases", err);
-            return None;
-        }
-    };
+    let releases = fetch_releases_at(&fetch_url, user_agent).await?;
 
     let release = match select_release(&releases, channel) {
         Some(r) => r,
@@ -243,17 +229,11 @@ async fn run_check(
                 release_count = releases.len(),
                 "update check: no release matched channel filter (up-to-date or empty feed)"
             );
-            return None;
+            return Ok(None);
         }
     };
 
-    let parsed = match parse_tag(&release.tag_name) {
-        Ok(p) => p,
-        Err(err) => {
-            log_and_discard("parse_tag", err);
-            return None;
-        }
-    };
+    let parsed = parse_tag(&release.tag_name)?;
 
     if !is_newer_version(local_version, &parsed) {
         tracing::info!(
@@ -261,22 +241,14 @@ async fn run_check(
             remote = %release.tag_name,
             "update check: local version is up-to-date"
         );
-        return None;
+        return Ok(None);
     }
 
-    Some(UpdateInfo::from_release(release, &parsed, proxy_prefix))
-}
-
-/// Log a non-fatal updater error at `warn` level and drop it on the
-/// floor. Matches the WPF `catch Exception → Debug.WriteLine` pattern
-/// (L195-198) — see the module-level "Silent-on-error policy" section
-/// for the rationale.
-fn log_and_discard(stage: &str, err: UpdaterError) {
-    tracing::warn!(
-        stage = stage,
-        error = %err,
-        "update check: silent failure"
-    );
+    Ok(Some(UpdateInfo::from_release(
+        release,
+        &parsed,
+        proxy_prefix,
+    )))
 }
 
 /// WPF-matching `User-Agent` string used by the production
@@ -425,6 +397,7 @@ mod tests {
             "test-ua",
         )
         .await
+        .expect("request succeeds")
         .expect("new version must be detected");
 
         assert_eq!(got.tag_name, "v5.8.4.2604020000");
@@ -458,13 +431,13 @@ mod tests {
         .await;
 
         assert!(
-            got.is_none(),
+            got.unwrap().is_none(),
             "same-timestamp display form must short-circuit to None"
         );
     }
 
     #[tokio::test]
-    async fn check_update_at_returns_none_when_tag_does_not_match_regex() {
+    async fn check_update_at_reports_an_unsupported_tag() {
         let server = MockServer::start().await;
         mount_probe_ok(&server).await;
         mount_releases(
@@ -483,15 +456,15 @@ mod tests {
         )
         .await;
 
-        assert!(got.is_none(), "unparseable tag must swallow to None");
+        assert!(matches!(got, Err(UpdaterError::UnsupportedTag(_))));
     }
 
     #[tokio::test]
-    async fn check_update_at_returns_none_on_fetch_failure() {
+    async fn check_update_at_reports_fetch_failure() {
         let server = MockServer::start().await;
         mount_probe_ok(&server).await;
         // Releases endpoint returns 500 — fetch_releases_at surfaces
-        // UpdaterError::Fetch, check_update_at should swallow.
+        // UpdaterError::Fetch must reach the caller.
         Mock::given(method("GET"))
             .and(path("/releases"))
             .respond_with(ResponseTemplate::new(500))
@@ -508,7 +481,7 @@ mod tests {
         )
         .await;
 
-        assert!(got.is_none());
+        assert!(matches!(got, Err(UpdaterError::Fetch(_))));
     }
 
     #[tokio::test]
@@ -527,6 +500,9 @@ mod tests {
         )
         .await;
 
-        assert!(got.is_none(), "empty releases list must return None");
+        assert!(
+            got.unwrap().is_none(),
+            "empty releases list must return None"
+        );
     }
 }

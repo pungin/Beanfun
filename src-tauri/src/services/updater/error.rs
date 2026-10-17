@@ -1,14 +1,7 @@
 //! Typed failure surface for the updater pipeline.
 //!
-//! Each failure mode maps to one WPF catch site in
-//! `Beanfun/Update/ApplicationUpdater.cs` — the difference is that we
-//! never throw the compound error away. The top-level `check_update`
-//! entry point (added in chunk 7.3) will funnel everything into an
-//! `Option<UpdateInfo>` + `tracing::warn!` log to match WPF
-//! `catch (Exception) { Debug.WriteLine }` (L195-198), but
-//! `fetch_releases_at` / `proxy_probe_at` / `parse_tag` /
-//! `is_newer_version` return typed errors so tests and future
-//! discriminating callers can branch on the actual cause.
+//! Network and parsing errors remain distinguishable from a successful check
+//! without a newer release. The command layer maps them to IPC errors.
 //!
 //! # Variants
 //!

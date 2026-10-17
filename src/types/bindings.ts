@@ -1675,11 +1675,8 @@ async backupRestore(password: string, ciphertext: string) : Promise<Result<Accou
  * Check whether a newer Beanfun release is available on the
  * upstream GitHub releases feed.
  * 
- * Returns `Some(UpdateInfo)` when a newer release was found,
- * `None` for "no update available" or "check failed" (indistinguishable
- * to the caller — this is intentional, matching WPF's silent-on-
- * failure contract so the UI never shows an error for a passive
- * background check).
+ * Returns `Ok(Some(UpdateInfo))` for a newer release, `Ok(None)` when
+ * up to date, and a typed error when the check fails or exceeds its deadline.
  * 
  * # Parameters
  * 
@@ -1701,8 +1698,13 @@ async backupRestore(password: string, ciphertext: string) : Promise<Result<Accou
  * is the escape hatch — exposing that through the command surface
  * is YAGNI until a user-visible feature requests it.
  */
-async checkUpdate(channel: Channel, localVersion: string | null) : Promise<UpdateInfo | null> {
-    return await TAURI_INVOKE("check_update", { channel, localVersion });
+async checkUpdate(channel: Channel, localVersion: string | null) : Promise<Result<UpdateInfo | null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("check_update", { channel, localVersion }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 },
 /**
  * Launch the configured game binary with the current account
