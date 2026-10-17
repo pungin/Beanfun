@@ -1,16 +1,9 @@
 //! Application-update command — thin wrapper over
 //! [`crate::services::updater::check_update`].
 //!
-//! Ports the WPF `ApplicationUpdater.CheckUpdate()` top-level entry
-//! point (`Beanfun/Update/ApplicationUpdater.cs` L18-60) to the
-//! Tauri IPC boundary. The service layer already collapses every
-//! failure mode into `Option::None` to match WPF's silent
-//! `catch (Exception) { Debug.WriteLine }` policy at L195-198;
-//! this command keeps that shape verbatim — the return type is a
-//! bare `Option<UpdateInfo>` rather than `Result<_, CommandError>`
-//! so the frontend can treat "no newer release" and "check failed"
-//! identically (both manifest as `null`), matching what the
-//! original "Check for updates" button does.
+//! Manual checks return typed failures rather than treating a failed request
+//! as an up-to-date installation. A 30-second deadline bounds the entire
+//! probe-and-fetch operation, including all fallback proxies.
 //!
 //! # Local-version source
 //!
@@ -29,16 +22,14 @@
 //! behaviour until the P12 release pipeline aligns crate versions
 //! with the upstream tag scheme.
 
+use super::error::CommandError;
 use crate::services::updater::{self, Channel, UpdateInfo};
 
 /// Check whether a newer Beanfun release is available on the
 /// upstream GitHub releases feed.
 ///
-/// Returns `Some(UpdateInfo)` when a newer release was found,
-/// `None` for "no update available" or "check failed" (indistinguishable
-/// to the caller — this is intentional, matching WPF's silent-on-
-/// failure contract so the UI never shows an error for a passive
-/// background check).
+/// Returns `Ok(Some(UpdateInfo))` for a newer release, `Ok(None)` when
+/// up to date, and a typed error when the check fails or exceeds its deadline.
 ///
 /// # Parameters
 ///
@@ -61,10 +52,19 @@ use crate::services::updater::{self, Channel, UpdateInfo};
 /// is YAGNI until a user-visible feature requests it.
 #[tauri::command]
 #[specta::specta]
-pub async fn check_update(channel: Channel, local_version: Option<String>) -> Option<UpdateInfo> {
+pub async fn check_update(
+    channel: Channel,
+    local_version: Option<String>,
+) -> Result<Option<UpdateInfo>, CommandError> {
     let default_version = env!("CARGO_PKG_VERSION");
     let version = local_version.as_deref().unwrap_or(default_version);
-    updater::check_update(channel, version).await
+    tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        updater::check_update(channel, version),
+    )
+    .await
+    .map_err(|_| CommandError::new("update.timeout", "Update check timed out"))?
+    .map_err(Into::into)
 }
 
 #[cfg(test)]

@@ -298,6 +298,7 @@
   "WrongAuthInfo": "Incorrect data. Please re-enter.",
   "UpdateCheck": "Update Check",
   "NoUpdatesDetected": "No updates detected.",
+  "UpdateCheckFailed": "Unable to check for updates. Please check your connection and try again.",
   "NewVersionDetected": "New version {0} detected. Current: {1}\\r\\n\\r\\n{2}\\r\\n\\r\\nOpen the download page?",
   "Language": "Language",
   "LoginMode": "LoginMode",

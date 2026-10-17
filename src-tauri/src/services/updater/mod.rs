@@ -8,12 +8,8 @@
 //!   `ConfigAppSettings` reads. Those land in P10 Tauri commands +
 //!   P11 Vue UI once the top-level `check_update` entry point from
 //!   chunk 7.3 returns a structured `UpdateInfo`.
-//! - Top-level `check_update` (chunk 7.3) will funnel everything into
-//!   an `Option<UpdateInfo>` + `tracing::warn!` log to match WPF
-//!   `catch (Exception) { Debug.WriteLine }` (L195-198); lower
-//!   layers (`proxy_probe_at` / `fetch_releases_at` / `parse_tag` /
-//!   `is_newer_version`) return `Result<_, UpdaterError>` for tests
-//!   and discriminating callers.
+//! - Top-level checks preserve typed errors so callers can distinguish a
+//!   failed check from a successful response without a newer release.
 //!
 //! # Layers (P7 complete)
 //!
@@ -38,10 +34,7 @@
 //!        └─ UpdateInfo::from_release(release, parsed, prefix)
 //! ```
 //!
-//! Top-level `check_update` collapses all errors into `Option::None`
-//! (matching WPF `catch Exception → Debug.WriteLine` silent policy
-//! at L195-198); lower layers preserve typed [`UpdaterError`] for
-//! tests and diagnostics.
+//! Top-level checks return typed errors separately from an absent update.
 
 pub mod checker;
 pub mod error;

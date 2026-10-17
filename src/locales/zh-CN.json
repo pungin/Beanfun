@@ -269,6 +269,7 @@
   "WrongAuthInfo": "资料错误，请重新输入",
   "UpdateCheck": "更新检测",
   "NoUpdatesDetected": "未检测到有更新。",
+  "UpdateCheckFailed": "无法检查更新，请确认网络连接后重试。",
   "NewVersionDetected": "检测到新版本 {0} 当前: {1}\\r\\n\\r\\n{2}\\r\\n\\r\\n是否打开下载页面？",
   "Language": "程序语言",
   "LoginMode": "登入方式",

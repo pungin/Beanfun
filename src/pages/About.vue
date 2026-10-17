@@ -120,18 +120,18 @@ const checkingUpdate = ref<boolean>(false)
  *   in the system browser via `commands.openUrl`.
  * - `None` → `ElMessage.info` with `NoUpdatesDetected` (matches
  *   WPF `show=true` branch L185-191).
- * - Backend rejection (network failure, GitHub rate limit) →
- *   silent log + generic info toast. WPF's catch-all (L194-197)
- *   only `Debug.WriteLine`s the failure with no UI surface; we
- *   surface a low-key info toast so a user-initiated check at
- *   least gets a "we tried" acknowledgement instead of a silent
- *   no-op.
+ * - Failed checks show a warning rather than an up-to-date message.
  */
 async function handleCheckUpdate(): Promise<void> {
   if (checkingUpdate.value) return
   checkingUpdate.value = true
   try {
-    const info = await commands.checkUpdate(ui.updateChannel, null)
+    const outcome = await commands.checkUpdate(ui.updateChannel, null)
+    if (outcome.status === 'error') {
+      ElMessage.warning(t('UpdateCheckFailed'))
+      return
+    }
+    const info = outcome.data
     if (info === null) {
       ElMessage.info(t('NoUpdatesDetected'))
       return
@@ -165,7 +165,7 @@ async function handleCheckUpdate(): Promise<void> {
     await safeInvoke(commands.openUrl(info.download_url))
   } catch (err) {
     console.warn('[About] update check failed', err)
-    ElMessage.info(t('NoUpdatesDetected'))
+    ElMessage.warning(t('UpdateCheckFailed'))
   } finally {
     checkingUpdate.value = false
   }
