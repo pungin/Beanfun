@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "baseBranchPatterns": ["code"],
+  "enabledManagers": ["github-actions"],
+  "includePaths": [".github/workflows/ci.yml"],
+  "dependencyDashboard": false,
+  "timezone": "Asia/Taipei",
+  "schedule": ["* * 1 * *"],
+  "automerge": false,
+  "platformAutomerge": false,
+  "reviewers": ["YCC3741"],
+  "commitTrailers": ["Co-authored-by: YCC3741 <mo0307b1006@gmail.com>"],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "ci",
+  "packageRules": [
+    {
+      "description": ["Leave dependency and action updates to the existing automation."],
+      "matchPackageNames": ["*"],
+      "enabled": false
+    },
+    {
+      "description": ["Maintain only the pinned Rust compiler used by CI and cache warming."],
+      "matchDatasources": ["rust-version"],
+      "matchPackageNames": ["rust"],
+      "enabled": true
+    }
+  ]
+}
