@@ -463,4 +463,6 @@
   <system:String x:Key="AdvanceCheckCaptchaLabel">圖形驗證碼：</system:String>
   <system:String x:Key="AdvanceCheckConfirm">確定</system:String>
   <system:String x:Key="AdvanceCheckCancel">取消</system:String>
+  <!-- Update checks. -->
+  <system:String x:Key="UpdateCheckFailed">無法檢查更新，請確認網路連線後再試一次。</system:String>
 </ResourceDictionary>

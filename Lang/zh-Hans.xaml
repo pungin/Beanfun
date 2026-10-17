@@ -442,4 +442,36 @@
   <system:String x:Key="AdvanceCheckCaptchaLabel">图形验证码：</system:String>
   <system:String x:Key="AdvanceCheckConfirm">确定</system:String>
   <system:String x:Key="AdvanceCheckCancel">取消</system:String>
+  <!-- Shared controls and calculator labels. -->
+  <system:String x:Key="Minimize">最小化</system:String>
+  <system:String x:Key="Version">版本</system:String>
+  <system:String x:Key="Back">返回</system:String>
+  <system:String x:Key="Logout">登出</system:String>
+  <system:String x:Key="Tools">工具</system:String>
+  <system:String x:Key="CustomerService">客服中心</system:String>
+  <system:String x:Key="Cancel">取消</system:String>
+  <system:String x:Key="HongKong">香港</system:String>
+  <system:String x:Key="Yes">是</system:String>
+  <system:String x:Key="No">否</system:String>
+  <system:String x:Key="UpdateChannel">更新通道</system:String>
+  <system:String x:Key="IAgree">我同意</system:String>
+  <system:String x:Key="Weapon">武器</system:String>
+  <system:String x:Key="Glove">手套</system:String>
+  <system:String x:Key="Armor">其他防具</system:String>
+  <system:String x:Key="ScrollBlack">黑暗卷</system:String>
+  <system:String x:Key="ScrollV">V卷</system:String>
+  <system:String x:Key="ScrollX">X卷</system:String>
+  <system:String x:Key="ScrollRed">Red卷</system:String>
+  <system:String x:Key="ScrollSuMin">宿命卷</system:String>
+  <system:String x:Key="GloryMin">最低</system:String>
+  <system:String x:Key="GloryAverage">平均</system:String>
+  <system:String x:Key="GloryMax">最高</system:String>
+  <system:String x:Key="PerfectCoreNeedSkills">需要的技能</system:String>
+  <system:String x:Key="PerfectCoreMyCores">已有核心</system:String>
+  <system:String x:Key="Main">主</system:String>
+  <system:String x:Key="Secondary">副</system:String>
+  <system:String x:Key="Others">其他</system:String>
+  <system:String x:Key="Normal">正常</system:String>
+  <!-- Update checks. -->
+  <system:String x:Key="UpdateCheckFailed">无法检查更新，请确认网络连接后重试。</system:String>
 </ResourceDictionary>

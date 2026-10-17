@@ -538,4 +538,6 @@
   <system:String x:Key="AdvanceCheckCaptchaLabel">Captcha:</system:String>
   <system:String x:Key="AdvanceCheckConfirm">Confirm</system:String>
   <system:String x:Key="AdvanceCheckCancel">Cancel</system:String>
+  <!-- Update checks. -->
+  <system:String x:Key="UpdateCheckFailed">Unable to check for updates. Please check your connection and try again.</system:String>
 </ResourceDictionary>
