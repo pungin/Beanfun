@@ -2129,6 +2129,7 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
     )
     .title("GamePass 登入")
     .inner_size(900.0, 700.0)
+    .visible(false)
     .resizable(true)
     // Same dead-`target="_blank"` problem as the in-app browser — the
     // sign-in page's help / register links are exactly that shape.
@@ -2158,6 +2159,10 @@ pub async fn open_gamepass_window<R: tauri::Runtime>(
             format!("Failed to create GamePass webview window: {e}"),
         )
     })?;
+
+    crate::window_geometry::initialise_webview(&window)
+        .and_then(|_| crate::window_geometry::show_webview(&window))
+        .map_err(|error| CommandError::new("system.window_geometry_failed", error))?;
 
     window.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) {
@@ -2411,6 +2416,7 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
         WebviewUrl::External(about_blank),
     )
     .title("驗證 / reCAPTCHA")
+    .visible(false)
     // Wide/tall enough that reCAPTCHA's image-challenge popup (bframe, up to
     // ~400px wide but offset from the anchor) isn't clipped on the right/
     // bottom. Min size keeps it usable if the user shrinks it.
@@ -2438,6 +2444,10 @@ pub async fn open_recaptcha_window<R: tauri::Runtime>(
             format!("Failed to create reCAPTCHA webview window: {e}"),
         )
     })?;
+
+    crate::window_geometry::initialise_webview(&window)
+        .and_then(|_| crate::window_geometry::show_webview(&window))
+        .map_err(|error| CommandError::new("system.window_geometry_failed", error))?;
 
     window.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) {
