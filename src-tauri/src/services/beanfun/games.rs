@@ -290,17 +290,20 @@ pub fn image_base_url(region: LoginRegion) -> &'static str {
 ///   [`ensure_success`]).
 pub async fn list_games(client: &BeanfunClient) -> Result<GameInfoBundle, LoginError> {
     let ini_url = client.portal_url("beanfun_block/generic_handlers/get_service_ini.ashx")?;
-    let ini_resp = client.http().get(ini_url).send().await?;
-    ensure_success(&ini_resp, "get_service_ini.ashx")?;
-    let ini_body = client.bounded_text(ini_resp).await?;
-    let ini = parse_service_ini(&ini_body);
-
     let zone_url = client.portal_url("game_zone/")?;
-    let zone_resp = client.http().get(zone_url).send().await?;
-    ensure_success(&zone_resp, "game_zone/")?;
-    let zone_body = client.bounded_text(zone_resp).await?;
-    let services = parse_service_list(&zone_body)?;
-
+    let fetch_ini = async {
+        let response = client.http().get(ini_url).send().await?;
+        ensure_success(&response, "get_service_ini.ashx")?;
+        let body = client.bounded_text(response).await?;
+        Ok::<_, LoginError>(parse_service_ini(&body))
+    };
+    let fetch_services = async {
+        let response = client.http().get(zone_url).send().await?;
+        ensure_success(&response, "game_zone/")?;
+        let body = client.bounded_text(response).await?;
+        parse_service_list(&body)
+    };
+    let (ini, services) = tokio::try_join!(fetch_ini, fetch_services)?;
     Ok(GameInfoBundle { ini, services })
 }
 
