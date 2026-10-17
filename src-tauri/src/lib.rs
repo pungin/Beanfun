@@ -29,6 +29,7 @@ pub mod commands;
 pub mod core;
 pub mod services;
 pub mod tray;
+pub mod window_geometry;
 
 use std::path::{Path, PathBuf};
 
@@ -716,22 +717,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        // Remember-window-position: restores the user's last screen
-        // position on launch (e.g. after dragging Beanfun onto a
-        // secondary monitor). `StateFlags::POSITION` intentionally
-        // *excludes* SIZE / MAXIMIZED / DECORATIONS — `tauri.conf.json`
-        // ships `resizable: false` and the router's per-route
-        // `fitWindow` (`src/router/index.ts`) is the canonical owner
-        // of the window's width/height. Persisting size here would
-        // race those handlers and the user would see the window snap
-        // to the saved size before snapping again to the route-driven
-        // size on the first navigation. The state file lives under
-        // the standard `appConfigDir` (Windows: `%APPDATA%\tw.beanfun.app\`).
-        .plugin(
-            tauri_plugin_window_state::Builder::new()
-                .with_state_flags(tauri_plugin_window_state::StateFlags::POSITION)
-                .build(),
-        )
+        // Main placement remembers user movement only. Automatically clamped
+        // positions and standalone popup placements are never persisted.
+        .manage(window_geometry::WindowGeometryManager::default())
         .manage(app_state)
         // Tauri-managed handle to the tray ID so commands (e.g.
         // `system::minimize_main_window`) can drive the tray without
@@ -751,6 +739,7 @@ pub fn run() {
                     .inner_size(560.0, 480.0)
                     .decorations(false)
                     .transparent(true)
+                    .visible(false)
                     .resizable(false);
             if let Some(dir) = webview_data_dir.clone() {
                 win_builder = win_builder.data_directory(dir);
@@ -763,7 +752,10 @@ pub fn run() {
             {
                 win_builder = win_builder.additional_browser_args(&browser_args);
             }
-            win_builder.build()?;
+            let main = win_builder.build()?;
+            let native = app.get_window("main").ok_or("main window was not registered")?;
+            window_geometry::initialise(&native).map_err(std::io::Error::other)?;
+            main.show()?;
 
             if let Some(tray_id) = tray::build_tray(app) {
                 *tray_state_for_setup.lock().unwrap() = Some(tray_id);
@@ -788,6 +780,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(move |window, event| {
+            window_geometry::on_window_event(window, event);
             if window.label() != "main" {
                 return;
             }
