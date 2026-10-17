@@ -65,6 +65,40 @@ describe('coreItemToString', () => {
 })
 
 describe('findPerfectCores', () => {
+  it('matches exhaustive mask order across varied inputs, including duplicate mains', () => {
+    let seed = 42
+    const random = (): number => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      return seed
+    }
+    for (let trial = 0; trial < 120; trial++) {
+      const items = Array.from({ length: random() % 10 }, () =>
+        core(String(random() % 6), String(random() % 6), String(random() % 6)),
+      )
+      const skills = Array.from({ length: random() % 7 }, (_, i) => String(i))
+      const expected: CoreItem[][] = []
+      for (let mask = 0; mask < 2 ** items.length; mask++) {
+        const group = items.filter((_, i) => mask & (1 << i))
+        if (group.length !== mustCoreCount(skills.length)) continue
+        if (new Set(group.map((item) => item.skill1)).size !== group.length) continue
+        if (
+          skills.every(
+            (skill) =>
+              group.filter((item) => [item.skill1, item.skill2, item.skill3].includes(skill))
+                .length >= 2,
+          )
+        )
+          expected.push(group)
+      }
+      expect(findPerfectCores(items, skills)).toEqual(expected)
+    }
+  })
+
+  it('rejects large impossible inputs before enumerating combinations', () => {
+    const items = Array.from({ length: 60 }, (_, i) => core(String(i), 'A', 'B'))
+    expect(findPerfectCores(items, ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'])).toEqual([])
+  })
+
   it('treats every distinct-skill1 subset of size 2 as perfect when must-skills is empty', () => {
     /*
      * WPF parity: with `MustSkills` empty, the perfect check

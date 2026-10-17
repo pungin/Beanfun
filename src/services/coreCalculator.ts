@@ -2,14 +2,9 @@
  * Pure helpers for the MapleStory perfect-core calculator
  * (P12.5 D4).
  *
- * Mirrors the logic of `Beanfun/Windows/CoreCalculator.xaml.cs`
- * verbatim so a player who memorised the WPF tool's behaviour
- * (which combinations it lists, in what order, with what
- * dedup rule) sees the same output here. Every numeric formula,
- * inequality bound, and traversal order is preserved literally;
- * only the data structures change shape (C# `bool[]` →
- * `Uint8Array`, `Dictionary<string,bool>` → `Set<string>`,
- * `ObservableCollection<T>` → readonly TS arrays).
+ * Preserves the combinations, ordering and distinct-main-skill rule of
+ * `Beanfun/Windows/CoreCalculator.xaml.cs`. Prefix coverage bounds avoid
+ * enumerating branches that cannot produce a valid combination.
  *
  * # Why this lives in `services/` instead of `composables/`
  *
@@ -24,15 +19,9 @@
  *
  * # Why we re-implement (not import a generic combinations crate)
  *
- * The WPF algorithm is more than "pick K out of N"; it
- * **deduplicates by `skill1`** while iterating, so a candidate
- * subset that happens to contain two cores with the same main
- * skill is implicitly truncated and rejected. A generic
- * combinations iterator would have to be wrapped in a custom
- * filter that re-implements that dedup — at which point we
- * have the same code with an extra layer of indirection. The
- * literal port keeps the behaviour identical to WPF and lets
- * the docblock spell out the dedup rule once.
+ * Main-skill uniqueness is checked during traversal, before descending
+ * into a branch. A generic combinations iterator would perform this
+ * check only after generating combinations that are already invalid.
  */
 
 /**
@@ -105,48 +94,9 @@ export function coreItemToString(item: CoreItem, mainLabel: string): string {
 }
 
 /**
- * Enumerate every "perfect core" subset of `coreItems` that
- * covers each must-skill at least twice while using exactly
- * {@link mustCoreCount}`(mustSkills.length)` cores with
- * pair-wise distinct main skills.
- *
- * Direct port of `btn_Calculator_Click` L123-203. The
- * iteration uses the same `bool[] zero` mask scheme WPF does,
- * which is essentially Knuth's "advance the rightmost
- * shiftable 1" combination iterator — preserved literally so
- * the result order matches WPF rev-by-rev.
- *
- * # Algorithm sketch
- *
- * 1. Initialise `zero` to `[true × mustCount, false × rest]`.
- * 2. Each iteration:
- *    a. Walk `zero` left→right; collect a deduplicated `sub`
- *       of the picked cores keyed by `skill1`. If two
- *       picked cores share `skill1`, only the first is
- *       added — `sub.length < mustCount` then trips the
- *       perfect-check off and the candidate is silently
- *       rejected.
- *    b. During the same walk, find the leftmost
- *       `(true → false)` boundary (`per1 && !zero[i]`),
- *       flip `zero[i]` true, and call that index `index`.
- *       Track `leftCount` = the number of `true`s seen
- *       before that boundary.
- *    c. Reset `zero[0..index)` to `[true × leftCount,
- *       false × rest]`. This is the "advance" step that
- *       walks lexicographically through subsets.
- *    d. If `sub.length === mustCount`, count must-skill
- *       occurrences across the three slots of all cores in
- *       `sub`. Push to `result` iff every must-skill
- *       appears ≥ 2 times.
- *    e. If `index === -1` after the walk (no further
- *       advance possible), break.
- *
- * # Complexity
- *
- * O(C(N, K) × K × M) where N = cores, K = mustCount, M =
- * mustSkills.length. The WPF algo is the same and has been
- * shipped against player-realistic N (≤ ~30) for years; no
- * pruning is needed.
+ * Enumerate valid groups in the original mask order (largest index first).
+ * Prefix coverage counts prune branches that cannot cover a required skill;
+ * duplicate main skills are rejected before descending into a branch.
  */
 export function findPerfectCores(
   coreItems: readonly CoreItem[],
@@ -154,78 +104,57 @@ export function findPerfectCores(
 ): CoreItem[][] {
   const result: CoreItem[][] = []
   const mustCount = mustCoreCount(mustSkills.length)
-  const size = coreItems.length
+  if (coreItems.length < mustCount) return result
 
-  /*
-   * Initial mask: first `mustCount` indices selected. Using
-   * `Uint8Array` instead of `boolean[]` saves one allocation
-   * per iteration; WPF used `bool[]` for the same purpose.
-   * Treat 0 as false / 1 as true throughout.
-   */
-  const zero = new Uint8Array(size)
-  for (let i = 0; i < size; i++) {
-    zero[i] = i < mustCount ? 1 : 0
+  const multiplicities = new Map<string, number>()
+  for (const skill of mustSkills) {
+    multiplicities.set(skill, (multiplicities.get(skill) ?? 0) + 1)
+  }
+  const skills = [...multiplicities.keys()]
+  const thresholds = skills.map((skill) => Math.ceil(2 / multiplicities.get(skill)!))
+  // Snapshot skill data before traversing reactive input.
+  const inputs = coreItems.map((item) => ({
+    main: item.skill1,
+    skills: new Set([item.skill1, item.skill2, item.skill3]),
+  }))
+  if (new Set(inputs.map((item) => item.main)).size < mustCount) return result
+  const coverage = inputs.map((item) =>
+    skills.flatMap((skill, index) => (item.skills.has(skill) ? [index] : [])),
+  )
+  const prefixes = [new Uint32Array(skills.length)]
+  for (const covered of coverage) {
+    const next = prefixes[prefixes.length - 1].slice()
+    for (const skill of covered) next[skill]++
+    prefixes.push(next)
   }
 
-  for (;;) {
-    const sub: CoreItem[] = []
-    const keys = new Set<string>()
-    let index = -1
-    let per1 = false
-    let leftCount = -1
-
-    for (let i = 0; i < size; i++) {
-      if (zero[i] === 1) {
-        const item = coreItems[i]
-        if (!keys.has(item.skill1)) {
-          keys.add(item.skill1)
-          sub.push(item)
-        }
-      }
-      if (index === -1) {
-        if (per1 && zero[i] === 0) {
-          zero[i] = 1
-          index = i
-        } else {
-          per1 = zero[i] === 1
-          if (per1) leftCount++
-        }
+  const counts = new Uint32Array(skills.length)
+  const mains = new Set<string>()
+  const chosen: number[] = []
+  function visit(limit: number, remaining: number): void {
+    if (limit < remaining) return
+    for (let skill = 0; skill < skills.length; skill++) {
+      if (counts[skill] + Math.min(remaining, prefixes[limit][skill]) < thresholds[skill]) {
+        return
       }
     }
-
-    /*
-     * Reset the prefix `[0..index)` to `[true × leftCount,
-     * false × rest]` so the next iteration picks the next
-     * lexicographic subset. When `index === -1` (loop body
-     * found no `1 → 0` boundary), this loop is a no-op and
-     * the outer loop exits below.
-     */
-    for (let i = 0; i < index; i++) {
-      zero[i] = i < leftCount ? 1 : 0
+    if (remaining === 0) {
+      result.push([...chosen].reverse().map((index) => coreItems[index]))
+      return
     }
-
-    if (sub.length === mustCount) {
-      const occurrences = new Map<string, number>()
-      for (const skill of mustSkills) {
-        for (const item of sub) {
-          if (skill === item.skill1 || skill === item.skill2 || skill === item.skill3) {
-            occurrences.set(skill, (occurrences.get(skill) ?? 0) + 1)
-          }
-        }
-      }
-      let isPerfect = true
-      for (const skill of mustSkills) {
-        if ((occurrences.get(skill) ?? 0) < 2) {
-          isPerfect = false
-          break
-        }
-      }
-      if (isPerfect) result.push(sub)
+    for (let index = remaining - 1; index < limit; index++) {
+      const main = inputs[index].main
+      if (mains.has(main)) continue
+      mains.add(main)
+      chosen.push(index)
+      for (const skill of coverage[index]) counts[skill]++
+      visit(index, remaining - 1)
+      for (const skill of coverage[index]) counts[skill]--
+      chosen.pop()
+      mains.delete(main)
     }
-
-    if (index === -1) break
   }
-
+  visit(coreItems.length, mustCount)
   return result
 }
 
