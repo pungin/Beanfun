@@ -5,7 +5,14 @@ on:
     branches: [code]
   pull_request:
     branches: [code]
+  schedule:
+    # Keep the default-branch cache in use at intervals of at most five days.
+    - cron: '17 3 */5 * *'
   workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -26,6 +33,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4
         id: filter
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         with:
           filters: |
             frontend:
@@ -41,6 +49,11 @@ jobs:
               - 'eslint.config.js'
               - '.prettierrc.json'
             rust:
+              - '.github/workflows/ci.yml'
+              - '.cargo/**'
+              - 'rust-toolchain*'
+              - 'src-tauri/.cargo/**'
+              - 'src-tauri/rust-toolchain*'
               - 'src-tauri/src/**'
               - 'src-tauri/tests/**'
               - 'src-tauri/Cargo.toml'
@@ -89,7 +102,7 @@ jobs:
   rust:
     name: 'Rust: fmt / Clippy / Test'
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: windows-latest
     timeout-minutes: 25
     defaults:
@@ -99,15 +112,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install Rust (stable)
+      - name: Install pinned Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: '1.99.1'
           components: rustfmt, clippy
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          # PRs restore the code branch cache without storing isolated copies.
+          save-if: ${{ github.ref == 'refs/heads/code' }}
 
       - name: cargo fmt
         run: cargo fmt --all -- --check
