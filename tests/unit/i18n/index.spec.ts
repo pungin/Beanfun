@@ -26,6 +26,7 @@ import { FRONTEND_ONLY_MESSAGES } from '../../../src/i18n/messages'
 import {
   __resetInvokeRegistriesForTesting,
   surfaceCommandError,
+  translateCommandError,
 } from '../../../src/services/invoke'
 import { __resetUiAppliersForTesting, SUPPORTED_LOCALES, useUiStore } from '../../../src/stores/ui'
 
@@ -182,6 +183,19 @@ describe('wireI18n', () => {
     consoleErrorSpy.mockRestore()
   })
 
+  it('translates newly covered errors in every locale without producing a toast', () => {
+    const i18n = createAppI18n()
+    wireI18n(i18n)
+    for (const locale of SUPPORTED_LOCALES) {
+      setLocale(i18n, locale)
+      expect(
+        translateCommandError({ code: 'config.io_failed', message: 'raw error', details: null }),
+      ).toBe(i18nMessages[locale].errors.config.io_failed)
+      expect(i18n.global.t('about.qqCopied', { number: '123456' })).toContain('123456')
+    }
+    expect(elMessageError).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
+  })
 
   it('registers a locale applier so ui.setLanguage flips the i18n locale', async () => {
     const i18n = createAppI18n()
