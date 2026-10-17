@@ -274,7 +274,10 @@ pub async fn get_otp(
     let secret_code = step_2_get_secret_code(client).await?;
     step_3_record_start(client, account, &step1, service_code, service_region).await?;
     step_4_long_poll(client, &step1.long_polling_key).await?;
-    let integrity = resolve_client_integrity().await;
+    let integrity = match client.config().region {
+        LoginRegion::TW => Some(resolve_client_integrity().await),
+        LoginRegion::HK => None,
+    };
 
     let url = build_get_webstart_otp_url(
         client,
@@ -288,10 +291,7 @@ pub async fn get_otp(
         // The suffix is a Game Manager convention, and the Game Manager
         // is a TW/OATW product; HK's legacy endpoint has not been
         // observed to want it, so its request stays as it was.
-        match client.config().region {
-            LoginRegion::TW => Some(&integrity),
-            LoginRegion::HK => None,
-        },
+        integrity.as_ref(),
     )?;
     let envelope = step_5_get_otp(client, &url).await?;
 
