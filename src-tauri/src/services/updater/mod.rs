@@ -37,10 +37,14 @@
 //! Top-level checks return typed errors separately from an absent update.
 
 pub mod checker;
+pub mod download;
 pub mod error;
 pub mod github;
+pub mod install;
+pub mod manifest;
 pub mod parser;
 pub mod proxy_probe;
+pub mod verification;
 
 pub use checker::{check_update, check_update_at, UpdateInfo};
 pub use error::UpdaterError;
