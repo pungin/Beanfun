@@ -95,7 +95,7 @@ import {
 } from '@element-plus/icons-vue'
 
 import { commands, type LoginRegion } from '../types/bindings'
-import { safeInvoke } from '../services/invoke'
+import { safeInvoke, translateCommandError } from '../services/invoke'
 
 defineOptions({ name: 'MapleToolsDialog' })
 
@@ -191,15 +191,8 @@ async function handleRecycling(): Promise<void> {
 
   const result = await safeInvoke(commands.cleanMapleGameCache(props.gamePath))
   if (!result.ok) {
-    /*
-     * Backend pre-flight failures (missing dir, file-as-path,
-     * read_dir failure) come back as typed `maple_cache.*` codes.
-     * Surface the (translated where available) message — the
-     * `errors.maple_cache.*` namespace in `messages.ts` D8 will
-     * map them to friendly copy; until then `result.error.message`
-     * is the typed Rust-side description (safe to show).
-     */
-    ElMessage.error(result.error.message)
+    // Translate structured pre-flight errors before displaying them.
+    ElMessage.error(translateCommandError(result.error))
     return
   }
 
