@@ -212,3 +212,185 @@ impl UpdateRequest {
         Ok(artifact.clone())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::updater::GitHubAsset;
+    use serde_json::{json, Value};
+
+    const COMMIT: &str = "1234567890abcdef1234567890abcdef12345678";
+
+    fn release() -> GitHubRelease {
+        let base = "https://github.com/pungin/Beanfun/releases/download/v6.3.0.2610180000/";
+        GitHubRelease {
+            name: "6.3.0".into(),
+            tag_name: "v6.3.0.2610180000".into(),
+            prerelease: false,
+            body: String::new(),
+            assets: [
+                "latest.json.sigstore.json",
+                "latest.json",
+                "Beanfun_6.3.0_x64-setup.exe",
+                "Beanfun.exe",
+            ]
+            .into_iter()
+            .map(|name| GitHubAsset {
+                browser_download_url: format!("{base}{name}"),
+            })
+            .collect(),
+        }
+    }
+
+    fn manifest() -> Value {
+        let base = release_base(&release().tag_name);
+        json!({
+            "schema_version": 1,
+            "version": "6.3.0",
+            "tag": release().tag_name,
+            "source_commit": COMMIT,
+            "pub_date": "2026-10-18T00:00:00Z",
+            "notes": "Release notes",
+            "platforms": {
+                "windows-x86_64-portable": {
+                    "url": format!("{base}Beanfun.exe"),
+                    "sha256": "a".repeat(64),
+                    "size": 100,
+                },
+                "windows-x86_64": {
+                    "url": format!("{base}Beanfun_6.3.0_x64-setup.exe"),
+                    "sha256": "b".repeat(64),
+                    "size": 200,
+                }
+            }
+        })
+    }
+
+    fn portable_request() -> UpdateRequest {
+        let release = release();
+        request_for_release(
+            &release,
+            &release.tag_name,
+            "6.2.1",
+            InstallationKind::Portable,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn selects_the_correct_distribution_independently_of_asset_order() {
+        let release = release();
+        for (kind, name, target) in [
+            (
+                InstallationKind::Portable,
+                "Beanfun.exe",
+                "windows-x86_64-portable",
+            ),
+            (
+                InstallationKind::Nsis,
+                "Beanfun_6.3.0_x64-setup.exe",
+                "windows-x86_64",
+            ),
+        ] {
+            let req = request_for_release(&release, &release.tag_name, "6.2.1", kind).unwrap();
+            assert!(req.download_url.ends_with(name));
+            assert_eq!(req.target, target);
+            assert_eq!(req.version, "6.3.0");
+            let artifact = req
+                .validate(&serde_json::to_vec(&manifest()).unwrap(), COMMIT)
+                .unwrap();
+            assert_eq!(artifact.url, req.download_url);
+        }
+    }
+
+    #[test]
+    fn rejects_missing_artifacts_and_attestations() {
+        let full = release();
+        for missing in ["latest.json", "Beanfun.exe", "latest.json.sigstore.json"] {
+            let mut release = full.clone();
+            release
+                .assets
+                .retain(|a| !a.browser_download_url.ends_with(missing));
+            assert_eq!(
+                request_for_release(
+                    &release,
+                    &release.tag_name,
+                    "6.2.1",
+                    InstallationKind::Portable
+                ),
+                Err(ManifestError::InvalidManifest),
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_a_changed_release_or_non_upgrade() {
+        let release = release();
+        for (tag, local) in [
+            ("v6.2.2.2610170000", "6.2.1"),
+            (&*release.tag_name, "6.3.0"),
+            (&*release.tag_name, "7.0.0"),
+        ] {
+            assert_eq!(
+                request_for_release(&release, tag, local, InstallationKind::Portable),
+                Err(ManifestError::ReleaseChanged),
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_manifest_routing_version_and_commit_substitution() {
+        let request = portable_request();
+        for (path, value) in [
+            ("/schema_version", json!(2)),
+            ("/version", json!("6.4.0")),
+            ("/tag", json!("v6.3.0.2610190000")),
+            ("/source_commit", json!("0".repeat(40))),
+            ("/pub_date", json!("invalid date")),
+            ("/platforms/windows-x86_64-portable/url", json!("https://attacker.example/Beanfun.exe")),
+            ("/platforms/windows-x86_64/url", json!("https://github.com/pungin/Beanfun/releases/download/v6.3.0.2610180000/Beanfun.exe")),
+        ] {
+            let mut manifest = manifest();
+            *manifest.pointer_mut(path).unwrap() = value;
+            assert_eq!(request.validate(&serde_json::to_vec(&manifest).unwrap(), COMMIT), Err(ManifestError::InvalidManifest), "{path}");
+        }
+    }
+
+    #[test]
+    fn rejects_unbounded_or_malformed_artifact_metadata() {
+        let request = portable_request();
+        for (path, value) in [
+            ("/platforms/windows-x86_64-portable/size", json!(0)),
+            (
+                "/platforms/windows-x86_64-portable/size",
+                json!(MAX_EXECUTABLE_BYTES + 1),
+            ),
+            ("/platforms/windows-x86_64-portable/size", json!(-1)),
+            (
+                "/platforms/windows-x86_64-portable/sha256",
+                json!("a".repeat(63)),
+            ),
+            (
+                "/platforms/windows-x86_64-portable/sha256",
+                json!("G".repeat(64)),
+            ),
+        ] {
+            let mut manifest = manifest();
+            *manifest.pointer_mut(path).unwrap() = value;
+            assert_eq!(
+                request.validate(&serde_json::to_vec(&manifest).unwrap(), COMMIT),
+                Err(ManifestError::InvalidManifest),
+                "{path}"
+            );
+        }
+        let mut missing = manifest();
+        missing["platforms"]
+            .as_object_mut()
+            .unwrap()
+            .remove("windows-x86_64");
+        assert_eq!(
+            request.validate(&serde_json::to_vec(&missing).unwrap(), COMMIT),
+            Err(ManifestError::InvalidManifest)
+        );
+    }
+}
