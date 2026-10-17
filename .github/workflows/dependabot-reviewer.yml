@@ -1,0 +1,62 @@
+name: Dependabot reviewer
+
+on:
+  pull_request_target:
+    branches: [code]
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: dependabot-reviewer-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  request-review:
+    if: >-
+      github.repository == 'pungin/Beanfun' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # This privileged event must only use the API, never check out or run PR code.
+      - name: Request the maintainer's review
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const reviewer = 'YCC3741'
+            const pullRequest = { ...context.repo, pull_number: context.issue.number }
+            const { data: pull } = await github.rest.pulls.get(pullRequest)
+
+            // Recheck the current state in case the PR changed whilst this run was queued.
+            if (
+              pull.state !== 'open' ||
+              pull.draft ||
+              pull.base.ref !== 'code' ||
+              pull.user.login !== 'dependabot[bot]' ||
+              pull.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`
+            ) {
+              core.info('Skipping a pull request that is no longer eligible.')
+              return
+            }
+
+            const isReviewer = user => user?.login?.toLowerCase() === reviewer.toLowerCase()
+            if (pull.requested_reviewers.some(isReviewer)) {
+              core.info(`A review from ${reviewer} has already been requested.`)
+              return
+            }
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              ...pullRequest,
+              per_page: 100,
+            })
+            if (reviews.some(review => isReviewer(review.user) && review.state !== 'PENDING')) {
+              core.info(`${reviewer} has already submitted a review.`)
+              return
+            }
+
+            await github.rest.pulls.requestReviewers({ ...pullRequest, reviewers: [reviewer] })
+            core.info(`Requested a review from ${reviewer}.`)
