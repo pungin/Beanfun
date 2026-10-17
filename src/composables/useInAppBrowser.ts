@@ -54,7 +54,7 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 
 import { commands } from '../types/bindings'
-import { safeInvoke } from '../services/invoke'
+import { safeInvoke, translateCommandError } from '../services/invoke'
 
 /**
  * Backend `CommandError.code` returned when the requested URL is
@@ -126,7 +126,7 @@ export function useInAppBrowser(): UseInAppBrowserReturn {
       ElMessage.info(t('inAppBrowser.fallbackToSystem'))
       const fallback = await safeInvoke(commands.openUrl(url))
       if (!fallback.ok) {
-        ElMessage.error(fallback.error.message)
+        ElMessage.error(translateCommandError(fallback.error))
       }
       return
     }
@@ -139,7 +139,7 @@ export function useInAppBrowser(): UseInAppBrowserReturn {
      * and-forget and a thrown `CommandInvocationError` here would
      * be swallowed by the void-returning button handlers.
      */
-    ElMessage.error(result.error.message || t('inAppBrowser.openFailed'))
+    ElMessage.error(translateCommandError(result.error) || t('inAppBrowser.openFailed'))
   }
 
   return { open }

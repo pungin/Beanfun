@@ -16,7 +16,7 @@
  *    with the `inAppBrowser.fallbackToSystem` localized string,
  *    then `commands.openUrl` called with the same URL.
  * 3. Other backend error code (e.g. `ui.window_create_failed`)
- *    → error toast with the backend's `message`, no fallback.
+ *    → error toast with the translated message, no fallback.
  * 4. Empty / non-http URL → error toast with the
  *    `inAppBrowser.invalidUrl` string, no IPC fired.
  *
@@ -58,7 +58,8 @@ vi.mock('../../../src/types/bindings', () => ({
 
 import { commands } from '../../../src/types/bindings'
 import { useInAppBrowser } from '../../../src/composables/useInAppBrowser'
-import { createAppI18n, i18nMessages } from '../../../src/i18n'
+import { __resetInvokeRegistriesForTesting } from '../../../src/services/invoke'
+import { createAppI18n, i18nMessages, wireI18n } from '../../../src/i18n'
 
 const mockOpenInAppBrowser = vi.mocked(commands.openInAppBrowser)
 const mockOpenUrl = vi.mocked(commands.openUrl)
@@ -79,6 +80,7 @@ const DISALLOWED_URL = 'https://event.beanfun.com/customerservice/PluginReportin
  */
 function mountHarness(): { open: (url: string) => Promise<void> } {
   const i18n = createAppI18n()
+  wireI18n(i18n)
   const openRef = ref<((url: string) => Promise<void>) | null>(null)
 
   const Host = defineComponent({
@@ -155,7 +157,7 @@ describe('useInAppBrowser', () => {
     /*
      * Any non-`system.invalid_url` failure is a real Tauri
      * builder error (e.g. WebView2 init failed). The composable
-     * surfaces the backend's `message` directly — no fallback,
+     * surfaces the translated message — no fallback,
      * because the user already explicitly asked for the in-app
      * window and we'd be hiding the failure if we silently
      * popped the system browser instead.
@@ -174,7 +176,9 @@ describe('useInAppBrowser', () => {
     expect(mockOpenInAppBrowser).toHaveBeenCalledTimes(1)
     expect(mockOpenUrl).not.toHaveBeenCalled()
     expect(elMessageError).toHaveBeenCalledTimes(1)
-    expect(elMessageError).toHaveBeenCalledWith('Failed to create in-app browser window: x')
+    expect(elMessageError).toHaveBeenCalledWith(
+      i18nMessages['zh-TW'].errors.ui.window_create_failed,
+    )
     expect(elMessageInfo).not.toHaveBeenCalled()
   })
 
@@ -199,3 +203,5 @@ describe('useInAppBrowser', () => {
     expect(elMessageError).toHaveBeenLastCalledWith(i18nMessages['zh-TW'].inAppBrowser.invalidUrl)
   })
 })
+
+afterEach(() => __resetInvokeRegistriesForTesting())
