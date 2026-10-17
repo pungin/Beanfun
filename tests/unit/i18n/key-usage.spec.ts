@@ -37,17 +37,9 @@
  *   is ported, its keys naturally stop being "dead" because the
  *   ported view consumes them.
  *
- * - **Why scan only `pages/composables/components/stores/windows`**:
- *   those are the only directories where `useI18n().t(...)` is
- *   legitimately called. Excluding `services/` skips `invoke.ts`
- *   whose docblock text would create false positives; excluding
- *   `i18n/messages.ts` skips its own declarations. `types/bindings.ts`
- *   is auto-generated and lives outside the scan scope by directory,
- *   not allowlist. `windows/` was added in P12.2 D8 when
- *   `windows/AddAccount.vue` / `ChangeAccount.vue` introduced the
- *   first dialog-scoped frontend-only keys (`addAccountDialog.*` /
- *   `changeAccountDialog.*`); D3-D6 dialogs only consumed WPF
- *   flat keys so `windows/` had no audit value before D8.
+ * - **Scan scope**: application pages, composables, components, stores,
+ *   windows and the root App.vue shell. Message declarations and generated
+ *   bindings are excluded; comments are stripped before scanning.
  *
  * - **Why a separate spec from `index.spec.ts`**: `index.spec.ts`
  *   is concerned with the runtime i18n bootstrap (message loading,
@@ -82,12 +74,10 @@ import { FRONTEND_ONLY_MESSAGES } from '../../../src/i18n/messages'
  * `Record<absolutePath, fileContents>` — vite's preferred way of
  * doing build-time file enumeration without a Node `fs` round-trip.
  *
- * The pattern intentionally stays narrow (only the four directories
- * where Vue components and Pinia stores live); see the module
- * docblock "Why scan only…" section for the rationale.
+ * Include App.vue because it displays startup warnings.
  */
 const APP_SOURCES = import.meta.glob(
-  '/src/{pages,composables,components,stores,windows}/**/*.{vue,ts}',
+  ['/src/{pages,composables,components,stores,windows}/**/*.{vue,ts}', '/src/App.vue'],
   {
     query: '?raw',
     import: 'default',
