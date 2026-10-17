@@ -126,8 +126,10 @@ pub fn build_tray(app: &App<Wry>) -> Option<TrayIconId> {
         {
             let app = tray.app_handle();
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
                 let _ = window.unminimize();
+                if let Err(error) = crate::window_geometry::show_webview(&window) {
+                    tracing::warn!(%error, "could not restore main window within the work area");
+                }
                 let _ = window.set_focus();
             }
             let _ = tray.set_visible(false);
