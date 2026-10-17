@@ -1,0 +1,16 @@
+/* Keep the actions visible when the app window is short or text is enlarged. */
+.app-update-confirm.el-message-box {
+  display: inline-flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 32px);
+}
+
+.app-update-confirm .el-message-box__content {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.app-update-confirm .el-message-box__header,
+.app-update-confirm .el-message-box__btns {
+  flex-shrink: 0;
+}
