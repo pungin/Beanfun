@@ -19,27 +19,11 @@
  * | `Github_Click` `Hyperlink` ("Github")       | `<a @click="handleGithub">Github</a>` → links to repo root |
  * | `Button_Click` Back button                  | `<el-button @click="handleBack">{{ t('Back') }}</el-button>` |
  *
- * # Update-check flow (D7 wiring)
+ * # Update flow
  *
- * `UpdateCheck_Click` in WPF calls `App.MainWnd.CheckUpdates(true)`,
- * which spawns a background thread that fetches GitHub releases,
- * compares versions, and either shows a `NewVersionDetected` /
- * `NoUpdatesDetected` MessageBox. We mirror the same control flow
- * in the SPA via the existing `commands.checkUpdate` IPC (P10.3
- * already implements the GitHub fetch + version comparison server-
- * side, returning `Some(UpdateInfo)` for a newer release or `None`
- * otherwise — see `services/updater/checker.rs`):
- *
- * 1. Disable the link while a check is in flight.
- * 2. Fire `commands.checkUpdate(channel, null)` with the user's
- *    saved `updateChannel` preference.
- * 3. `Some(UpdateInfo)` → confirm dialog with body text + OK opens
- *    `download_url` via `commands.openUrl` (mirrors WPF
- *    `MessageBox.OK → Process.Start(downloadUrl)`).
- * 4. `None` → info toast (`NoUpdatesDetected`). WPF showed an OK
- *    MessageBox; an `ElMessage.info` is the equivalent low-noise
- *    affordance for the explicit-user-initiated "I checked, found
- *    nothing" case.
+ * Check the selected Stable or Beta channel, request confirmation,
+ * then download and verify the matching release through the backend.
+ * Installation restarts the app; progress remains visible until exit.
  *
  * # Why not embed the WPF mini-markup parser inline
  *
@@ -57,13 +41,14 @@
 
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
-import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { ElButton, ElIcon, ElMessage, ElMessageBox, ElProgress } from 'element-plus'
 import { ArrowLeft, InfoFilled, Message } from '@element-plus/icons-vue'
 
 import { useUiStore } from '../stores/ui'
 import { commands } from '../types/bindings'
 import { safeInvoke } from '../services/invoke'
+import { useAppUpdate } from '../composables/useAppUpdate'
 import iconUrl from '../assets/icon.png'
 import TitleBar from '../components/TitleBar.vue'
 
@@ -106,27 +91,37 @@ async function loadVersion(): Promise<void> {
 
 /* --------------- update check --------------- */
 
-const checkingUpdate = ref<boolean>(false)
+const checkingUpdate = ref(false)
+const { isUpdating, phase, percentage, downloadAndInstall } = useAppUpdate()
+const updateBusy = computed(() => checkingUpdate.value || isUpdating.value)
+const updateStatus = computed(() => {
+  switch (phase.value) {
+    case 'preparing':
+      return t('appUpdate.preparing')
+    case 'downloading':
+      return t('appUpdate.downloading')
+    case 'verifying':
+      return t('appUpdate.verifying')
+    case 'ready':
+      return t('appUpdate.ready')
+    case 'installing':
+      return t('appUpdate.installing')
+    case 'failed':
+      return t('appUpdate.failed')
+    default:
+      return ''
+  }
+})
 
-/**
- * Fetch the latest release info from the configured channel and
- * present the user with the WPF-equivalent dialog.
- *
- * # Behaviour
- *
- * - `Some(UpdateInfo)` from backend → `ElMessageBox.confirm` with
- *   the localized `NewVersionDetected` body (interpolates new /
- *   current versions + release body). OK → open `download_url`
- *   in the system browser via `commands.openUrl`.
- * - `None` → `ElMessage.info` with `NoUpdatesDetected` (matches
- *   WPF `show=true` branch L185-191).
- * - Failed checks show a warning rather than an up-to-date message.
- */
+onBeforeRouteLeave(() => !isUpdating.value)
+
 async function handleCheckUpdate(): Promise<void> {
-  if (checkingUpdate.value) return
+  if (updateBusy.value) return
   checkingUpdate.value = true
+  // Keep the channel tied to the release the user approved.
+  const channel = ui.updateChannel
   try {
-    const outcome = await commands.checkUpdate(ui.updateChannel, null)
+    const outcome = await commands.checkUpdate(channel, null)
     if (outcome.status === 'error') {
       ElMessage.warning(t('UpdateCheckFailed'))
       return
@@ -137,32 +132,21 @@ async function handleCheckUpdate(): Promise<void> {
       return
     }
 
-    /*
-     * The locale string uses `\r\n` literal escapes inside the
-     * JSON (WPF `Regex.Unescape` decoded these at runtime). Vue
-     * i18n returns the raw escape, so we collapse `\r\n` /
-     * `\n` to real newlines before piping into the dialog body.
-     * `ElMessageBox.confirm` accepts a string argument and
-     * pre-wraps `\n` to <br> automatically when `dangerouslyUseHTMLString`
-     * is unset, so plain newlines is sufficient.
-     */
-    const rawBody = t('NewVersionDetected', [
-      info.new_version_display,
-      versionString.value,
-      info.body,
-    ])
-    const body = rawBody.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n')
-
+    const body = t('appUpdate.confirmBody', {
+      version: info.new_version_display,
+      current: versionString.value,
+      notes: info.body,
+    })
     try {
       await ElMessageBox.confirm(body, t('CheckUpdate'), {
-        confirmButtonText: t('Yes'),
-        cancelButtonText: t('No'),
+        confirmButtonText: t('appUpdate.downloadAndRestart'),
+        cancelButtonText: t('Cancel'),
         type: 'info',
       })
     } catch {
       return
     }
-    await safeInvoke(commands.openUrl(info.download_url))
+    await downloadAndInstall(channel, info.tag_name)
   } catch (err) {
     console.warn('[About] update check failed', err)
     ElMessage.warning(t('UpdateCheckFailed'))
@@ -231,6 +215,7 @@ async function handleGithub(): Promise<void> {
  * rationale.
  */
 function handleBack(): void {
+  if (isUpdating.value) return
   if (window.history.length > 1) {
     router.back()
     return
@@ -297,7 +282,8 @@ onMounted(() => {
               <a
                 href="#"
                 class="about__check-update"
-                :class="{ 'about__check-update--disabled': checkingUpdate }"
+                :class="{ 'about__check-update--disabled': updateBusy }"
+                :aria-disabled="updateBusy"
                 data-test="about-check-update"
                 @click.prevent="handleCheckUpdate"
               >
@@ -306,6 +292,23 @@ onMounted(() => {
             </p>
           </div>
         </header>
+
+        <section
+          v-if="phase !== 'idle'"
+          class="about__update bf-glass-panel"
+          aria-live="polite"
+          data-test="about-update-status"
+        >
+          <p>{{ updateStatus }}</p>
+          <el-progress
+            v-if="phase === 'downloading'"
+            :percentage="percentage ?? 0"
+            :indeterminate="percentage === null"
+            :show-text="percentage !== null"
+            data-test="about-update-progress"
+          />
+          <p v-if="isUpdating" class="about__update-hint">{{ t('appUpdate.keepOpen') }}</p>
+        </section>
 
         <!-- Body: about text + contact + footer -->
         <section class="about__body bf-glass-panel">
@@ -372,6 +375,7 @@ onMounted(() => {
             <el-button
               class="bf-btn-secondary about__back-btn"
               data-test="about-back"
+              :disabled="isUpdating"
               @click="handleBack"
             >
               <el-icon><ArrowLeft /></el-icon>
@@ -473,6 +477,19 @@ onMounted(() => {
 .about__check-update--disabled {
   pointer-events: none;
   opacity: 0.5;
+}
+
+.about__update {
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+}
+
+.about__update p {
+  margin: 0 0 0.5rem;
+}
+
+.about__update-hint {
+  color: var(--bf-on-surface-variant);
 }
 
 /* --------------- body --------------- */
