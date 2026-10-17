@@ -31,9 +31,18 @@ env:
 jobs:
   build:
     name: 'Build Beanfun.exe + NSIS Installer & Create Release'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/code' &&
+      github.repository == 'pungin/Beanfun' &&
+      github.repository_id == '155946625' &&
+      github.repository_owner_id == '11711288' &&
+      github.event.repository.private == false
     runs-on: windows-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout
@@ -100,6 +109,7 @@ jobs:
           "semantic_version=$semVer" >> $env:GITHUB_OUTPUT
           "info_version=$infoVersion" >> $env:GITHUB_OUTPUT
           "build_datetime=$buildDateTime" >> $env:GITHUB_OUTPUT
+          "published_at=$($utcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))" >> $env:GITHUB_OUTPUT
 
       - name: Update version in Cargo.toml, tauri.conf.json, package.json
         shell: pwsh
@@ -157,7 +167,7 @@ jobs:
 
           $repoUrl = "${{ github.server_url }}/${{ github.repository }}"
 
-          $lastRelease = gh api repos/${{ github.repository }}/releases --paginate 2>$null | ConvertFrom-Json | Sort-Object created_at -Descending | Select-Object -First 1
+          $lastRelease = gh api repos/${{ github.repository }}/releases --paginate 2>$null | ConvertFrom-Json | Where-Object { -not $_.draft } | Sort-Object created_at -Descending | Select-Object -First 1
 
           $fmt = "- [%h]($repoUrl/commit/%H) %s - %an (%ad)"
           $logArgs = @('log', "--pretty=format:$fmt", '--date=short', '--no-merges')
@@ -178,11 +188,44 @@ jobs:
           $delimiter >> $env:GITHUB_OUTPUT
           "commit_count=$commitCount" >> $env:GITHUB_OUTPUT
 
-      - name: Create GitHub Release
+      - name: Create update manifest
+        if: steps.prep_release.outputs.exists == 'false'
+        env:
+          RELEASE_VERSION: ${{ steps.prep_version.outputs.semantic_version }}
+          RELEASE_TAG: ${{ steps.prep_version.outputs.tag_name }}
+          RELEASE_SOURCE_COMMIT: ${{ github.sha }}
+          RELEASE_PUBLISHED_AT: ${{ steps.prep_version.outputs.published_at }}
+          RELEASE_NOTES: ${{ steps.prep_release.outputs.commits_text }}
+        run: node scripts/create-update-manifest.mjs
+
+      - name: Attest update manifest and Windows executables
+        if: steps.prep_release.outputs.exists == 'false'
+        id: attest_update
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            src-tauri/target/release/latest.json
+            src-tauri/target/release/Beanfun.exe
+            src-tauri/target/release/bundle/nsis/Beanfun_${{ steps.prep_version.outputs.semantic_version }}_x64-setup.exe
+
+      - name: Prepare attestation bundle for offline verification
+        if: steps.prep_release.outputs.exists == 'false'
+        shell: pwsh
+        env:
+          ATTESTATION_BUNDLE: ${{ steps.attest_update.outputs.bundle-path }}
+        run: |
+          $bundle = Get-Item -LiteralPath $env:ATTESTATION_BUNDLE -ErrorAction Stop
+          if ($bundle.Length -le 0 -or $bundle.Length -gt 8MB) {
+              throw 'The Sigstore bundle is empty or exceeds the updater download limit.'
+          }
+          Copy-Item -LiteralPath $bundle.FullName -Destination src-tauri/target/release/latest.json.sigstore.json
+
+      - name: Upload complete draft release
         if: steps.prep_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.prep_version.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
           name: >
             ${{
               github.event.inputs.release_name != ''
@@ -232,9 +275,19 @@ jobs:
             </details>
           files: |
             src-tauri/target/release/Beanfun.exe
-            src-tauri/target/release/bundle/nsis/*-setup.exe
-          draft: false
+            src-tauri/target/release/bundle/nsis/Beanfun_${{ steps.prep_version.outputs.semantic_version }}_x64-setup.exe
+            src-tauri/target/release/latest.json
+            src-tauri/target/release/latest.json.sigstore.json
+          fail_on_unmatched_files: true
+          draft: true
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
+
+      - name: Publish complete release
+        if: steps.prep_release.outputs.exists == 'false'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.prep_version.outputs.tag_name }}
+        run: gh release edit "$env:RELEASE_TAG" --draft=false
 
       - name: Commit version bump
         if: steps.prep_release.outputs.exists == 'false'
