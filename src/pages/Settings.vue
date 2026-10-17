@@ -497,8 +497,8 @@ async function pickGamePath(): Promise<void> {
      * `null`). Surface the message so the user knows why the
      * picker didn't appear.
      */
-    const msg = err instanceof Error ? err.message : String(err)
-    ElMessage.error(msg)
+    console.error('[file dialogue] failed', err)
+    ElMessage.error(t('errors.ui.file_dialog_failed'))
     return
   }
 
@@ -738,8 +738,8 @@ async function handleBrowseClassicNgm(): Promise<void> {
       filters: [{ name: 'NGM (*.exe)', extensions: ['exe'] }],
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    ElMessage.error(msg)
+    console.error('[file dialogue] failed', err)
+    ElMessage.error(t('errors.ui.file_dialog_failed'))
     return
   }
   if (picked === null || Array.isArray(picked)) return
