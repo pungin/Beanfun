@@ -41,6 +41,8 @@
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime};
+use tokio::sync::Mutex;
+use tokio::time::Instant;
 
 /// Where the published values live, and the mirrors that serve the same
 /// file where GitHub itself is unreachable — which is most of the
@@ -68,6 +70,15 @@ const CACHE_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 /// Total budget for reaching a mirror. Missing the hotfix costs a
 /// fallback; waiting on it costs the user their password.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Avoid repeating an unsuccessful mirror sweep on every OTP request.
+const RETRY_DELAY: Duration = Duration::from_secs(60);
+
+#[derive(Default)]
+struct RefreshState {
+    retry_at: Option<Instant>,
+    latest: Option<(PublishedValues, Instant)>,
+}
 
 /// Directory holding the cached / pinned file. Set once at boot.
 static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -115,19 +126,54 @@ pub fn pinned() -> Option<PublishedValues> {
 /// A stale copy beats nothing: it was good enough to publish, and the
 /// alternative is the compiled-in pair that is by definition older.
 pub async fn published() -> Option<PublishedValues> {
-    if let Some((values, fetched_at)) = cached() {
+    static REFRESH: OnceLock<Mutex<RefreshState>> = OnceLock::new();
+    published_with(REFRESH.get_or_init(Default::default), cached, fetch).await
+}
+
+async fn published_with<F, Fut>(
+    state: &Mutex<RefreshState>,
+    read_cache: impl Fn() -> Option<(PublishedValues, SystemTime)>,
+    fetch_values: F,
+) -> Option<PublishedValues>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Option<PublishedValues>>,
+{
+    // Recheck the cache after acquiring the lock so concurrent callers share
+    // one refresh. Keep a successful result even if the cache cannot be written.
+    let mut state = state.lock().await;
+    let cached = read_cache();
+    if let Some((values, fetched_at)) = &cached {
         if fetched_at.elapsed().unwrap_or(CACHE_TTL) < CACHE_TTL {
-            return Some(values);
+            return Some(values.clone());
         }
-        return match fetch().await {
-            Some(fresh) => Some(fresh),
-            None => {
-                tracing::info!("ggm-hotfix: refresh failed; keeping the cached values");
-                Some(values)
-            }
-        };
     }
-    fetch().await
+    if let Some((values, fetched_at)) = &state.latest {
+        if fetched_at.elapsed() < CACHE_TTL {
+            return Some(values.clone());
+        }
+    }
+    let fallback = cached
+        .map(|(values, _)| values)
+        .or_else(|| state.latest.as_ref().map(|(values, _)| values.clone()));
+    if state
+        .retry_at
+        .is_some_and(|retry_at| Instant::now() < retry_at)
+    {
+        return fallback;
+    }
+    match fetch_values().await {
+        Some(values) => {
+            state.retry_at = None;
+            state.latest = Some((values.clone(), Instant::now()));
+            Some(values)
+        }
+        None => {
+            state.retry_at = Some(Instant::now() + RETRY_DELAY);
+            tracing::info!("ggm-hotfix: refresh failed; delaying the next attempt");
+            fallback
+        }
+    }
 }
 
 /// Read the cached file and when it was written.
@@ -228,6 +274,82 @@ fn is_sha256(hash: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn failed_refreshes_keep_stale_values_and_wait_before_retrying() {
+        let state = Mutex::new(RefreshState::default());
+        let old = PublishedValues {
+            cv: "1.5.0.2".into(),
+            hash: GOOD_HASH.into(),
+        };
+        let read = || {
+            Some((
+                old.clone(),
+                SystemTime::now() - CACHE_TTL - Duration::from_secs(1),
+            ))
+        };
+        assert_eq!(
+            published_with(&state, read, || async { None }).await,
+            Some(old.clone())
+        );
+        assert_eq!(
+            published_with(&state, read, || async { panic!("retry was not delayed") }).await,
+            Some(old.clone())
+        );
+        state.lock().await.retry_at = Some(Instant::now());
+        let fresh = PublishedValues {
+            cv: "1.5.0.3".into(),
+            hash: GOOD_HASH.into(),
+        };
+        assert_eq!(
+            published_with(&state, read, || async { Some(fresh.clone()) }).await,
+            Some(fresh)
+        );
+    }
+
+    #[tokio::test]
+    async fn concurrent_refreshes_share_one_result_even_without_a_disk_cache() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let state = Mutex::new(RefreshState::default());
+        let calls = AtomicUsize::new(0);
+        let fetch = || async {
+            calls.fetch_add(1, Ordering::SeqCst);
+            tokio::task::yield_now().await;
+            Some(PublishedValues {
+                cv: "1.5.0.2".into(),
+                hash: GOOD_HASH.into(),
+            })
+        };
+        let (a, b) = tokio::join!(
+            published_with(&state, || None, fetch),
+            published_with(&state, || None, fetch),
+        );
+        assert_eq!(a, b);
+        assert!(a.is_some());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn a_fresh_disk_cache_is_used_during_retry_delay() {
+        let state = Mutex::new(RefreshState::default());
+        assert_eq!(
+            published_with(&state, || None, || async { None }).await,
+            None
+        );
+        let values = PublishedValues {
+            cv: "1.5.0.3".into(),
+            hash: GOOD_HASH.into(),
+        };
+        assert_eq!(
+            published_with(
+                &state,
+                || Some((values.clone(), SystemTime::now())),
+                || async { panic!("fresh cache should not fetch") },
+            )
+            .await,
+            Some(values)
+        );
+    }
 
     const GOOD_HASH: &str = "dfd568a69d87abcd8f4a93d1a4481ebb57712d1d28ab0b6fc018fcf140101e06";
 
