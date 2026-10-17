@@ -130,6 +130,7 @@ import {
   safeInvoke,
   surfaceCommandError,
   wrapCommand,
+  translateCommandError,
 } from '../services/invoke'
 import { useInAppBrowser } from '../composables/useInAppBrowser'
 import { useClassicLaunch } from '../composables/useClassicLaunch'
@@ -273,7 +274,7 @@ async function loadList(): Promise<void> {
      */
     loadState.value = 'error'
     if (err instanceof CommandInvocationError) {
-      loadError.value = err.cause.message
+      loadError.value = translateCommandError(err.cause)
     } else {
       loadError.value = t('accountList.loadFailed')
     }
@@ -512,7 +513,7 @@ const inAppBrowser = useInAppBrowser()
 async function handleMemberCenter(): Promise<void> {
   const result = await safeInvoke(commands.openMemberCenterBrowser())
   if (!result.ok) {
-    ElMessage.error(result.error.message || t('inAppBrowser.openFailed'))
+    ElMessage.error(translateCommandError(result.error) || t('inAppBrowser.openFailed'))
   }
 }
 
@@ -556,7 +557,7 @@ async function handleCustomerService(): Promise<void> {
 async function handleGashRecharge(): Promise<void> {
   const result = await safeInvoke(commands.openGashRechargeBrowser())
   if (!result.ok) {
-    ElMessage.error(result.error.message || t('inAppBrowser.openFailed'))
+    ElMessage.error(translateCommandError(result.error) || t('inAppBrowser.openFailed'))
   }
 }
 
