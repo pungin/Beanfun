@@ -647,6 +647,7 @@ const zhTW = {
       window_not_found: '找不到應用程式主視窗。',
       minimize_failed: '無法最小化主視窗。',
       reset_window_failed: '無法重設視窗位置。',
+      window_geometry_failed: '無法調整視窗大小或位置。',
       clear_cache_failed: '無法清除瀏覽器快取。',
     },
     game: {
@@ -1104,6 +1105,7 @@ const zhCN = {
       window_not_found: '找不到应用程序主窗口。',
       minimize_failed: '无法最小化主窗口。',
       reset_window_failed: '无法重置窗口位置。',
+      window_geometry_failed: '无法调整窗口大小或位置。',
       clear_cache_failed: '无法清除浏览器缓存。',
     },
     game: {
@@ -1596,6 +1598,7 @@ const enUS = {
       window_not_found: 'The main application window could not be found.',
       minimize_failed: 'Unable to minimise the main window.',
       reset_window_failed: 'Unable to reset the window position.',
+      window_geometry_failed: 'Unable to adjust the window size or position.',
       clear_cache_failed: 'Unable to clear the browser cache.',
     },
     game: {
