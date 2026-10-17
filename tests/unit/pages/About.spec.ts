@@ -6,12 +6,46 @@ import { commands } from '../../../src/types/bindings'
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ back: vi.fn() }) }))
+vi.mock('element-plus', async (importOriginal) => {
+  const original = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...original,
+    ElMessage: Object.assign(vi.fn(), { error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
+  }
+})
 vi.mock('../../../src/stores/ui', () => ({ useUiStore: () => ({ updateChannel: 'Stable' }) }))
 vi.mock('../../../src/types/bindings', () => ({
   commands: { version: vi.fn(async () => ({ app: '6.1.4' })), checkUpdate: vi.fn() },
 }))
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.clearAllMocks()
+  vi.unstubAllGlobals()
+})
+
+describe('QQ contact copying', () => {
+  it.each([true, false])('uses translated copy feedback when success is %s', async (success) => {
+    const writeText = success
+      ? vi.fn().mockResolvedValue(undefined)
+      : vi.fn().mockRejectedValue(new Error('clipboard unavailable'))
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const wrapper = shallowMount(About)
+    const contact = wrapper.findAll('a').find((link) => link.text() === 'QQ 2157875454')!
+    await contact.trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith('2157875454')
+    if (success) {
+      expect(ElMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'about.qqCopied', type: 'success' }),
+      )
+    } else {
+      expect(ElMessage.error).toHaveBeenCalledWith('about.copyManually')
+    }
+    wrapper.unmount()
+  })
+})
 
 describe('manual update checks', () => {
   it.each(['no-update', 'failed'] as const)(

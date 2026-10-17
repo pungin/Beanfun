@@ -201,20 +201,18 @@ async function handleEmail(to: string): Promise<void> {
   await safeInvoke(commands.openUrl(mailtoUrl))
 }
 
-// 處理複製 QQ 號碼
+// Copy the QQ contact number.
 async function handleCopyQQ(qqNumber: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(qqNumber)
-
-    // 如果你有設定多國語言，可以將 '已複製' 換成 t('Copied') 等等
     ElMessage({
-      message: `QQ ${qqNumber} 已複製`,
+      message: t('about.qqCopied', { number: qqNumber }),
       type: 'success',
       duration: 2000,
     })
   } catch (error) {
     console.error('Failed to copy text: ', error)
-    ElMessage.error('複製失敗，請手動複製')
+    ElMessage.error(t('about.copyManually'))
   }
 }
 
@@ -289,7 +287,7 @@ onMounted(() => {
           <div class="about__header-text">
             <div class="about__title-row">
               <h1 class="about__title bf-text-gradient">{{ t('AppName') }}</h1>
-              <span class="about__author">By Pungin, YCC3741 and lshw54</span>
+              <span class="about__author">{{ t('about.authors') }}</span>
             </div>
             <p class="about__version-row" data-test="about-version-row">
               <span>{{ t('Version') }}</span>
@@ -348,7 +346,7 @@ onMounted(() => {
                   <span>lshw54</span>
                 </a>
 
-                <!-- QQ 複製連結 -->
+                <!-- Copy the QQ contact number. -->
                 <a
                   href="#"
                   class="about__contact-link"
