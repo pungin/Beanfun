@@ -352,3 +352,251 @@ fn validate_provenance(statement: &Value, source_commit: &str) -> Result<(), Ver
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FIXTURE_BUNDLE: &str = include_str!("fixtures/conda-attestation.sigstore.json");
+    const FIXTURE_ARTIFACT: &[u8] =
+        include_bytes!("fixtures/signed-package-2.1.0-hb0f4dca_0.conda");
+    const COMMIT: &str = "1234567890abcdef1234567890abcdef12345678";
+
+    fn fixture_root() -> TrustedRoot {
+        // Immutable upstream fixtures use their embedded historical public roots.
+        // Production never falls back to these bytes when TUF is unavailable.
+        TrustedRoot::from_json(sigstore_trust_root::SIGSTORE_PRODUCTION_TRUSTED_ROOT).unwrap()
+    }
+
+    fn fixture_policy() -> VerificationPolicy {
+        VerificationPolicy::new(
+            IdentityMatcher::Uri("https://github.com/prefix-dev/sigstore-example/.github/workflows/action.yaml@refs/heads/main".to_owned()),
+            ISSUER,
+        )
+    }
+
+    #[test]
+    fn authentic_upstream_attestation_passes_all_cryptographic_checks() {
+        let bundle = Bundle::from_json(FIXTURE_BUNDLE).unwrap();
+        let result = verify_crypto(
+            FIXTURE_ARTIFACT,
+            &bundle,
+            &fixture_root(),
+            &fixture_policy(),
+        )
+        .unwrap();
+        assert_eq!(
+            result
+                .certificate()
+                .unwrap()
+                .ci_claims
+                .source_repository_digest
+                .as_deref(),
+            Some("193b5bd7d3985809503963ae400594ea16df31cf")
+        );
+    }
+
+    #[test]
+    fn changed_artifact_is_rejected() {
+        let bundle = Bundle::from_json(FIXTURE_BUNDLE).unwrap();
+        let mut artifact = FIXTURE_ARTIFACT.to_vec();
+        artifact[0] ^= 1;
+        assert!(verify_crypto(&artifact, &bundle, &fixture_root(), &fixture_policy()).is_err());
+    }
+
+    #[test]
+    fn changed_transparency_proof_is_rejected() {
+        let mut bundle = Bundle::from_json(FIXTURE_BUNDLE).unwrap();
+        let proof = bundle.verification_material.tlog_entries[0]
+            .inclusion_proof
+            .as_mut()
+            .unwrap();
+        proof.hashes[0] = sigstore_types::Sha256Hash::new([0; 32]);
+        assert!(verify_crypto(
+            FIXTURE_ARTIFACT,
+            &bundle,
+            &fixture_root(),
+            &fixture_policy()
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn changed_dsse_payload_is_rejected_even_when_its_json_is_equivalent() {
+        let mut bundle = Bundle::from_json(FIXTURE_BUNDLE).unwrap();
+        let SignatureContent::DsseEnvelope(envelope) = &mut bundle.content else {
+            panic!("DSSE fixture");
+        };
+        let mut payload = envelope.payload.as_bytes().to_vec();
+        payload.push(b' ');
+        envelope.payload = payload.into();
+        assert!(verify_crypto(
+            FIXTURE_ARTIFACT,
+            &bundle,
+            &fixture_root(),
+            &fixture_policy()
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn authentic_attestation_from_another_repository_is_rejected() {
+        let bundle = Bundle::from_json(FIXTURE_BUNDLE).unwrap();
+        assert!(verify_crypto(
+            FIXTURE_ARTIFACT,
+            &bundle,
+            &fixture_root(),
+            &release_policy()
+        )
+        .is_err());
+    }
+
+    fn authorised_claims() -> FulcioCiClaims {
+        let mut claims = FulcioCiClaims::default();
+        claims.build_signer_uri = Some(WORKFLOW.into());
+        claims.build_signer_digest = Some(COMMIT.into());
+        claims.build_config_uri = Some(WORKFLOW.into());
+        claims.build_config_digest = Some(COMMIT.into());
+        claims.source_repository_uri = Some(REPOSITORY.into());
+        claims.source_repository_identifier = Some(REPOSITORY_ID.into());
+        claims.source_repository_owner_uri = Some(OWNER.into());
+        claims.source_repository_owner_identifier = Some(OWNER_ID.into());
+        claims.source_repository_ref = Some(SOURCE_REF.into());
+        claims.source_repository_digest = Some(COMMIT.into());
+        claims.runner_environment = Some("github-hosted".into());
+        claims.build_trigger = Some("workflow_dispatch".into());
+        claims.source_repository_visibility_at_signing = Some("public".into());
+        claims
+    }
+
+    #[test]
+    fn release_claim_policy_rejects_wrong_source_repository_runner_and_event() {
+        let claims = authorised_claims();
+        validate_claims(&claims, COMMIT).unwrap();
+        let mut invalid = Vec::new();
+        let mut value = claims.clone();
+        value.source_repository_identifier = Some("1".into());
+        invalid.push(value);
+        let mut value = claims.clone();
+        value.source_repository_owner_identifier = Some("1".into());
+        invalid.push(value);
+        let mut value = claims.clone();
+        value.source_repository_ref = Some("refs/pull/1/merge".into());
+        invalid.push(value);
+        let mut value = claims.clone();
+        value.source_repository_digest = Some("0".repeat(40));
+        invalid.push(value);
+        let mut value = claims.clone();
+        value.build_trigger = Some("pull_request".into());
+        invalid.push(value);
+        let mut value = claims.clone();
+        value.runner_environment = Some("self-hosted".into());
+        invalid.push(value);
+        let mut value = claims;
+        value.build_signer_uri = None;
+        invalid.push(value);
+        for value in invalid {
+            assert!(validate_claims(&value, COMMIT).is_err());
+        }
+    }
+
+    fn authorised_statement() -> Value {
+        serde_json::json!({
+            "_type": "https://in-toto.io/Statement/v1",
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "subject": [
+                {"name": "latest.json", "digest": {"sha256": "1".repeat(64)}},
+                {"name": "Beanfun.exe", "digest": {"sha256": "2".repeat(64)}},
+                {"name": "Beanfun_6.2.0_x64-setup.exe", "digest": {"sha256": "3".repeat(64)}}
+            ],
+            "predicate": {
+                "buildDefinition": {
+                    "buildType": BUILD_TYPE,
+                    "externalParameters": {"workflow": {"ref": SOURCE_REF, "repository": REPOSITORY, "path": WORKFLOW_PATH}},
+                    "internalParameters": {"github": {"event_name": "workflow_dispatch", "repository_id": REPOSITORY_ID, "repository_owner_id": OWNER_ID, "runner_environment": "github-hosted"}},
+                    "resolvedDependencies": [{"uri": SOURCE_URI, "digest": {"gitCommit": COMMIT}}]
+                },
+                "runDetails": {"builder": {"id": WORKFLOW}}
+            }
+        })
+    }
+
+    #[test]
+    fn provenance_requires_bound_source_and_workflow() {
+        let statement = authorised_statement();
+        validate_provenance(&statement, COMMIT).unwrap();
+        let mut changed = statement.clone();
+        changed["predicate"]["buildDefinition"]["resolvedDependencies"][0]["digest"]["gitCommit"] =
+            Value::String("0".repeat(40));
+        assert!(validate_provenance(&changed, COMMIT).is_err());
+        let mut changed = statement;
+        changed["predicate"]["buildDefinition"]["externalParameters"]["workflow"]["ref"] =
+            Value::String("refs/heads/other".into());
+        assert!(validate_provenance(&changed, COMMIT).is_err());
+    }
+
+    #[test]
+    fn statement_requires_manifest_digest_and_both_unique_executables() {
+        // These are policy-only mutations; no test treats them as signed evidence.
+        let mut bundle = Bundle::from_json(FIXTURE_BUNDLE).unwrap();
+        let SignatureContent::DsseEnvelope(envelope) = &mut bundle.content else {
+            panic!("DSSE fixture");
+        };
+        let statement = authorised_statement();
+        envelope.payload = serde_json::to_vec(&statement).unwrap().into();
+        validate_statement(&bundle, COMMIT, &"1".repeat(64)).unwrap();
+        assert!(validate_statement(&bundle, COMMIT, &"0".repeat(64)).is_err());
+        let mut duplicate = statement;
+        duplicate["subject"][2]["name"] = Value::String("Beanfun.exe".into());
+        let SignatureContent::DsseEnvelope(envelope) = &mut bundle.content else {
+            unreachable!();
+        };
+        envelope.payload = serde_json::to_vec(&duplicate).unwrap().into();
+        assert!(validate_statement(&bundle, COMMIT, &"1".repeat(64)).is_err());
+    }
+
+    #[tokio::test]
+    async fn arbitrary_cached_root_cannot_establish_trust() {
+        let directory = tempfile::tempdir().unwrap();
+        let targets = directory.path().join("targets");
+        std::fs::create_dir(&targets).unwrap();
+        std::fs::write(directory.path().join("root.json"), b"{}").unwrap();
+        std::fs::write(
+            targets.join("trusted_root.json"),
+            sigstore_trust_root::SIGSTORE_PRODUCTION_TRUSTED_ROOT,
+        )
+        .unwrap();
+        let error = load_cached_trust_root(directory.path()).await.unwrap_err();
+        assert_eq!(error.code, "update.trust_unavailable");
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires the public Sigstore TUF service; ordinary tests remain offline"]
+    async fn live_tuf_cache_roundtrip_rejects_tampering() {
+        let directory = tempfile::tempdir().unwrap();
+        fetch_trust_root(directory.path()).await.unwrap();
+        load_cached_trust_root(directory.path()).await.unwrap();
+
+        let target = directory.path().join("targets/trusted_root.json");
+        let original = std::fs::read(&target).unwrap();
+        std::fs::write(&target, b"{}").unwrap();
+        assert_eq!(
+            load_cached_trust_root(directory.path())
+                .await
+                .unwrap_err()
+                .code,
+            "update.trust_unavailable"
+        );
+
+        std::fs::write(&target, original).unwrap();
+        load_cached_trust_root(directory.path()).await.unwrap();
+        std::fs::write(directory.path().join("timestamp.json"), b"{}").unwrap();
+        assert_eq!(
+            load_cached_trust_root(directory.path())
+                .await
+                .unwrap_err()
+                .code,
+            "update.trust_unavailable"
+        );
+    }
+}
