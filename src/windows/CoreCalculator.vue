@@ -96,7 +96,7 @@
  * long as the user keeps it open).
  */
 
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElButton, ElDialog, ElIcon, ElInput, ElMessage, ElOption, ElSelect } from 'element-plus'
 import { CircleClose, Cpu } from '@element-plus/icons-vue'
@@ -105,14 +105,13 @@ import {
   type CoreItem,
   coreItemEquals,
   coreItemToString,
-  findPerfectCores,
-  formatPerfectCoreResult,
   mustCoreCount as computeMustCoreCount,
 } from '../services/coreCalculator'
+import { startCoreCalculation, type CoreCalculationTask } from '../services/coreCalculatorTask'
 
 defineOptions({ name: 'CoreCalculatorDialog' })
 
-defineProps<{
+const props = defineProps<{
   /**
    * Two-way visibility binding (`v-model:visible`). Same
    * convention as every other `windows/*.vue`.
@@ -311,28 +310,43 @@ function handleDeleteCore(): void {
 }
 
 async function handleCalculate(): Promise<void> {
-  /*
-   * The pure helper is synchronous, but we still flip the
-   * `calculating` flag (and yield to the event loop with
-   * `await Promise.resolve()`) so the disabled state has a
-   * chance to render before a heavy enumeration starts. WPF
-   * relied on the UI thread blocking long enough for the
-   * `IsEnabled = false` to paint; SPA needs the explicit
-   * micro-task break for the same effect.
-   */
+  cancelCalculation()
   calculating.value = true
-  await Promise.resolve()
+  let task: CoreCalculationTask | undefined
   try {
-    const groups = findPerfectCores(coreItems.value, mustSkills.value)
-    resultText.value = formatPerfectCoreResult(groups, {
+    task = startCoreCalculation(coreItems.value, mustSkills.value, {
       mainLabel: t('Main'),
       notFound: t('NotFindPerfectCore'),
-      formatGroup: (n) => t('CoreGroup', [n]),
+      groupTemplate: t('CoreGroup', ['{index}']),
     })
+    activeCalculation = task
+    const text = await task.result
+    if (activeCalculation === task) resultText.value = text
+  } catch (error) {
+    if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      ElMessage.error(t('UnknownError'))
+    }
   } finally {
-    calculating.value = false
+    if (activeCalculation === task) {
+      activeCalculation = undefined
+      calculating.value = false
+    }
   }
 }
+
+let activeCalculation: CoreCalculationTask | undefined
+
+function cancelCalculation(): void {
+  activeCalculation?.cancel()
+  activeCalculation = undefined
+  calculating.value = false
+}
+
+watch([() => props.visible, coreItems, mustSkills], cancelCalculation, {
+  deep: true,
+  flush: 'sync',
+})
+onBeforeUnmount(cancelCalculation)
 
 function handleClose(): void {
   emit('update:visible', false)
