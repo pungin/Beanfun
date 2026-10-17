@@ -62,7 +62,12 @@ import { defineStore } from 'pinia'
 
 import { commands } from '../types/bindings'
 import type { GameIniEntry, GameInfoBundle, GameService, LoginRegion } from '../types/bindings'
-import { CommandInvocationError, safeInvoke, surfaceCommandError } from '../services/invoke'
+import {
+  CommandInvocationError,
+  safeInvoke,
+  surfaceCommandError,
+  translateCommandError,
+} from '../services/invoke'
 
 /**
  * `<service_code>_<service_region>` pairs WPF treats as
@@ -316,7 +321,7 @@ export const useGameStore = defineStore('game', () => {
       applyBundle(result.data)
       return
     }
-    loadError.value = result.error.message
+    loadError.value = translateCommandError(result.error)
     loadState.value = 'error'
     surfaceCommandError(result.error)
     /*
