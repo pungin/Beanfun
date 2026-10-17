@@ -241,60 +241,39 @@ pub async fn minimize_main_window<R: tauri::Runtime>(
     Ok(())
 }
 
-/// Filename the `tauri-plugin-window-state` plugin persists the window
-/// position into, under `app_config_dir()` (Windows:
-/// `%APPDATA%\tw.beanfun.app\.window-state.json`). The plugin's documented
-/// default; kept as a named constant so [`reset_window_position`] and the
-/// plugin stay in sync if it is ever customised in `lib.rs`.
-const WINDOW_STATE_FILENAME: &str = ".window-state.json";
+/// Apply a route's logical content size through the native geometry manager.
+/// Only the trusted main webview can resize the main window.
+#[tauri::command]
+#[specta::specta]
+pub async fn resize_main_window<R: tauri::Runtime>(
+    window: tauri::Window<R>,
+    webview: tauri::Webview<R>,
+    width: f64,
+    height: f64,
+) -> Result<(), CommandError> {
+    if window.label() != "main" || webview.label() != "main" || webview.window().label() != "main" {
+        return Err(CommandError::new(
+            "system.window_geometry_failed",
+            "only the main webview may resize the main window",
+        ));
+    }
+    crate::window_geometry::resize_main(window, width, height)
+        .await
+        .map_err(|error| CommandError::new("system.window_geometry_failed", error))
+}
 
-/// Reset the main window to a safe, on-screen position.
-///
-/// `tauri-plugin-window-state` persists the window **position** (see
-/// `lib.rs`), so a window dragged off-screen — or stranded by a disconnected
-/// monitor — restores to that bad spot on the next launch. This re-centers the
-/// live window and deletes the saved state file so the next launch also starts
-/// centered.
-///
-/// # Errors
-///
-/// - `system.window_not_found` — the `main` window is not registered.
-/// - `system.reset_window_failed` — `window.center()` returned an OS error.
+/// Centre the main window and explicitly replace its saved user preference.
 #[tauri::command]
 #[specta::specta]
 pub async fn reset_window_position<R: tauri::Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<(), CommandError> {
-    let win = app_handle.get_webview_window("main").ok_or_else(|| {
-        CommandError::new(
-            "system.window_not_found",
-            "main webview window is not currently registered",
-        )
+    let window = app_handle.get_window("main").ok_or_else(|| {
+        CommandError::new("system.window_not_found", "main window is not currently registered")
     })?;
-    win.center().map_err(|err| {
-        CommandError::new(
-            "system.reset_window_failed",
-            format!("failed to center main window: {err}"),
-        )
-    })?;
-
-    // Best-effort: drop the persisted position so a future launch starts from
-    // the centered spot rather than restoring the old (possibly off-screen)
-    // one. Non-fatal — the live window is already centered, and the plugin
-    // re-saves the good position on the next clean exit.
-    if let Ok(config_dir) = app_handle.path().app_config_dir() {
-        let state_file = config_dir.join(WINDOW_STATE_FILENAME);
-        match std::fs::remove_file(&state_file) {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => tracing::warn!(
-                step = "ResetWindow.RemoveState",
-                error = %err,
-                "could not delete persisted window-state file (non-fatal)"
-            ),
-        }
-    }
-    Ok(())
+    crate::window_geometry::reset_main(window)
+        .await
+        .map_err(|error| CommandError::new("system.reset_window_failed", error))
 }
 
 /// Clear the main webview's browsing data (the WebView2 cache on Windows).

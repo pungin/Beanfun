@@ -1325,22 +1325,23 @@ async minimizeMainWindow() : Promise<Result<null, CommandError>> {
 }
 },
 /**
- * Reset the main window to a safe, on-screen position.
- * 
- * `tauri-plugin-window-state` persists the window **position** (see
- * `lib.rs`), so a window dragged off-screen — or stranded by a disconnected
- * monitor — restores to that bad spot on the next launch. This re-centers the
- * live window and deletes the saved state file so the next launch also starts
- * centered.
- * 
- * # Errors
- * 
- * - `system.window_not_found` — the `main` window is not registered.
- * - `system.reset_window_failed` — `window.center()` returned an OS error.
+ * Centre the main window and explicitly replace its saved user preference.
  */
 async resetWindowPosition() : Promise<Result<null, CommandError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("reset_window_position") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Apply a route's logical content size through the native geometry manager.
+ * Only the trusted main webview can resize the main window.
+ */
+async resizeMainWindow(width: number, height: number) : Promise<Result<null, CommandError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("resize_main_window", { width, height }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

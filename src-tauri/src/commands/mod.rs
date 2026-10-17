@@ -283,6 +283,7 @@ pub fn build_specta_builder<R: tauri::Runtime>() -> Builder<R> {
             // system (Settings → Maintenance: window/cache recovery). Generic over
             // `R` for the same `AppHandle<R>` reason as `minimize_main_window`.
             system::reset_window_position::<tauri::Wry>,
+            system::resize_main_window::<tauri::Wry>,
             system::clear_webview2_cache::<tauri::Wry>,
             system::open_logs_folder,
             // config (P10.3 — D2)
