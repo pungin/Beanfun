@@ -717,6 +717,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(commands::update::UpdateState::default())
         // Main placement remembers user movement only. Automatically clamped
         // positions and standalone popup placements are never persisted.
         .manage(window_geometry::WindowGeometryManager::default())
