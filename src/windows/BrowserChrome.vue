@@ -33,7 +33,7 @@ import { useI18n } from 'vue-i18n'
 import ConnectionPanel from './ConnectionPanel.vue'
 import { commands } from '../types/bindings'
 import type { ConnectionInfo, NavState } from '../types/bindings'
-import { safeInvoke } from '../services/invoke'
+import { safeInvoke, translateCommandError } from '../services/invoke'
 import { IN_APP_BROWSER_INVALID_URL_CODE } from '../composables/useInAppBrowser'
 
 /** Matches `BAR_HEIGHT` in `commands/web_browser.rs`. */
@@ -131,11 +131,11 @@ async function go(url: string): Promise<void> {
      */
     say(t('inAppBrowser.fallbackToSystem'))
     const fallback = await safeInvoke(commands.openUrl(url))
-    if (!fallback.ok) say(fallback.error.message)
+    if (!fallback.ok) say(translateCommandError(fallback.error))
     return
   }
 
-  say(result.error.message || t('browserChrome.navigateFailed'))
+  say(translateCommandError(result.error) || t('browserChrome.navigateFailed'))
 }
 
 function onSubmit(): void {
