@@ -11,6 +11,15 @@ then reads `latest.json` from that exact release tag, rather than GitHub's globa
 `releases/latest` redirect. Draft releases are excluded from update checks. Both editions
 use the same channel rules and release version.
 
+With "Notify when a new version is available" enabled, the main window checks once
+in the background after configuration and language initialisation. It only prompts
+for a newer release, waits for any startup announcement to close, and never starts
+a download without confirmation. No-update and network-error results stay silent
+during startup. Manual checks remain available from the About page and report their
+results. Both entry points share one update flow, so they cannot download or prompt
+twice concurrently. An approved update opens the About page before downloading,
+keeping progress and restart feedback visible in the selected language.
+
 ## Signing identity and maintainer access
 
 The release workflow uses GitHub's official

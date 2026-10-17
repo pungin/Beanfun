@@ -39,16 +39,18 @@
  * matches the WPF intent without introducing a parser dependency.
  */
 
-import { computed, onMounted, ref } from 'vue'
+import { computed, inject, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
-import { ElButton, ElIcon, ElMessage, ElMessageBox, ElProgress } from 'element-plus'
+import { ElButton, ElIcon, ElMessage, ElProgress } from 'element-plus'
 import { ArrowLeft, InfoFilled, Message } from '@element-plus/icons-vue'
 
-import { useUiStore } from '../stores/ui'
 import { commands } from '../types/bindings'
 import { safeInvoke } from '../services/invoke'
-import { useAppUpdate } from '../composables/useAppUpdate'
+import {
+  APP_UPDATE_CONTROLLER,
+  createAppUpdateController,
+} from '../composables/useAppUpdateController'
 import iconUrl from '../assets/icon.png'
 import TitleBar from '../components/TitleBar.vue'
 
@@ -56,7 +58,6 @@ defineOptions({ name: 'AboutPage' })
 
 const { t } = useI18n()
 const router = useRouter()
-const ui = useUiStore()
 
 /* --------------- version --------------- */
 
@@ -91,9 +92,8 @@ async function loadVersion(): Promise<void> {
 
 /* --------------- update check --------------- */
 
-const checkingUpdate = ref(false)
-const { isUpdating, phase, percentage, downloadAndInstall } = useAppUpdate()
-const updateBusy = computed(() => checkingUpdate.value || isUpdating.value)
+const { isUpdating, phase, percentage, updateBusy, checkForUpdate } =
+  inject(APP_UPDATE_CONTROLLER, null) ?? createAppUpdateController()
 const updateStatus = computed(() => {
   switch (phase.value) {
     case 'preparing':
@@ -116,43 +116,7 @@ const updateStatus = computed(() => {
 onBeforeRouteLeave(() => !isUpdating.value)
 
 async function handleCheckUpdate(): Promise<void> {
-  if (updateBusy.value) return
-  checkingUpdate.value = true
-  // Keep the channel tied to the release the user approved.
-  const channel = ui.updateChannel
-  try {
-    const outcome = await commands.checkUpdate(channel, null)
-    if (outcome.status === 'error') {
-      ElMessage.warning(t('UpdateCheckFailed'))
-      return
-    }
-    const info = outcome.data
-    if (info === null) {
-      ElMessage.info(t('NoUpdatesDetected'))
-      return
-    }
-
-    const body = t('appUpdate.confirmBody', {
-      version: info.new_version_display,
-      current: versionString.value,
-      notes: info.body,
-    })
-    try {
-      await ElMessageBox.confirm(body, t('CheckUpdate'), {
-        confirmButtonText: t('appUpdate.downloadAndRestart'),
-        cancelButtonText: t('Cancel'),
-        type: 'info',
-      })
-    } catch {
-      return
-    }
-    await downloadAndInstall(channel, info.tag_name)
-  } catch (err) {
-    console.warn('[About] update check failed', err)
-    ElMessage.warning(t('UpdateCheckFailed'))
-  } finally {
-    checkingUpdate.value = false
-  }
+  await checkForUpdate()
 }
 
 /* --------------- email / github / back --------------- */
