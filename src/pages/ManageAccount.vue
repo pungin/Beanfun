@@ -100,6 +100,7 @@ import {
 } from '@element-plus/icons-vue'
 import { open as openFileDialog, save as saveFileDialog } from '@tauri-apps/plugin-dialog'
 
+import { CommandInvocationError, translateCommandError } from '../services/invoke'
 import AccRecovery from '../windows/AccRecovery.vue'
 import AddAccount from '../windows/AddAccount.vue'
 import ChangeAccount from '../windows/ChangeAccount.vue'
@@ -135,7 +136,8 @@ async function loadList(): Promise<void> {
     const list = await account.loadAccounts()
     loadState.value = list.length === 0 ? 'empty' : 'ready'
   } catch (err) {
-    loadError.value = err instanceof Error ? err.message : null
+    loadError.value =
+      err instanceof CommandInvocationError ? translateCommandError(err.cause) : null
     loadState.value = 'error'
   }
 }
@@ -319,13 +321,8 @@ async function handleCopyId(target: Account): Promise<void> {
     await navigator.clipboard.writeText(target.account_id)
     ElMessage.success(t('manageAccount.idCopied'))
   } catch (err) {
-    /*
-     * Clipboard write can fail on some Windows session contexts
-     * (RDP, locked screen). Surface the platform error verbatim so
-     * the user has actionable info without the SPA inventing copy.
-     */
-    const msg = err instanceof Error ? err.message : String(err)
-    ElMessage.error(msg)
+    console.error('[ManageAccount] clipboard write failed', err)
+    ElMessage.error(t('CopyFailed'))
   }
 }
 
@@ -362,8 +359,8 @@ async function handleImport(): Promise<void> {
       filters: [{ name: 'JSON', extensions: ['json'] }],
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    ElMessage.error(msg)
+    console.error('[file dialogue] failed', err)
+    ElMessage.error(t('errors.ui.file_dialog_failed'))
     return
   }
   if (selected === null || Array.isArray(selected)) return
@@ -413,8 +410,8 @@ async function handleExport(): Promise<void> {
       filters: [{ name: 'JSON', extensions: ['json'] }],
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    ElMessage.error(msg)
+    console.error('[file dialogue] failed', err)
+    ElMessage.error(t('errors.ui.file_dialog_failed'))
     return
   }
   if (target === null) return
