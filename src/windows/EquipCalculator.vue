@@ -525,7 +525,9 @@ function handleVisibleChange(value: boolean): void {
         </p>
 
         <div class="equip-calc__row">
-          <span class="equip-calc__field-label equip-calc__field-label--accent">REQ LEV:</span>
+          <span class="equip-calc__field-label equip-calc__field-label--accent">{{
+            t('equipCalculator.requiredLevel')
+          }}</span>
           <el-radio-group v-model="reqLev" data-test="equip-calculator-req-lev">
             <el-radio :value="150" data-test="equip-calculator-req-lev-150">150</el-radio>
             <el-radio v-if="showHigherLevels" :value="160" data-test="equip-calculator-req-lev-160"
