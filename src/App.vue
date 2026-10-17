@@ -42,6 +42,7 @@
  */
 
 import { computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElConfigProvider, ElMessage } from 'element-plus'
 import enLocale from 'element-plus/dist/locale/en.mjs'
 import zhCnLocale from 'element-plus/dist/locale/zh-cn.mjs'
@@ -53,6 +54,7 @@ import { useAccountStore } from './stores/account'
 import { useConfigStore } from './stores/config'
 import { useUiStore, type AppLocale } from './stores/ui'
 
+const { t } = useI18n()
 const account = useAccountStore()
 const config = useConfigStore()
 const ui = useUiStore()
@@ -78,7 +80,7 @@ onMounted(async () => {
     // the user can still see *something* (default theme + zh-TW) and
     // retry from Settings instead of staring at a blank window.
     console.error('[App.vue] config.loadAll failed; falling back to defaults', err)
-    ElMessage.warning('Config.xml 載入失敗，使用預設設定。')
+    ElMessage.warning(t('app.configLoadFailed'))
   }
 
   try {

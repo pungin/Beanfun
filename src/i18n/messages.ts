@@ -259,6 +259,9 @@ type KeysMatch<T, U> = keyof T extends keyof U ? (keyof U extends keyof T ? unkn
 /* -------- zh-TW (canonical / authoritative source) -------- */
 
 const zhTW = {
+  app: {
+    configLoadFailed: 'Config.xml 載入失敗，使用預設設定。',
+  },
   titleBar: {
     minimize: '最小化',
     close: '關閉',
@@ -705,6 +708,9 @@ const zhTW = {
 /* -------- zh-CN (Simplified) -------- */
 
 const zhCN = {
+  app: {
+    configLoadFailed: 'Config.xml 加载失败，使用默认设置。',
+  },
   titleBar: {
     minimize: '最小化',
     close: '关闭',
@@ -1151,6 +1157,9 @@ const zhCN = {
 /* -------- en-US -------- */
 
 const enUS = {
+  app: {
+    configLoadFailed: 'Unable to load Config.xml. Using the default settings.',
+  },
   titleBar: {
     minimize: 'Minimize',
     close: 'Close',
