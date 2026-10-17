@@ -878,7 +878,7 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
         let mut revealed = start_visible;
         let reveal = |window: &tauri::WebviewWindow<R>, revealed: &mut bool| {
             if !*revealed {
-                let _ = crate::window_geometry::show_webview(&window);
+                let _ = crate::window_geometry::show_webview(window);
                 let _ = window.set_focus();
                 *revealed = true;
             }

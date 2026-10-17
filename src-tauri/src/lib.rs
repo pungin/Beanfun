@@ -753,7 +753,9 @@ pub fn run() {
                 win_builder = win_builder.additional_browser_args(&browser_args);
             }
             let main = win_builder.build()?;
-            let native = app.get_window("main").ok_or("main window was not registered")?;
+            let native = app
+                .get_window("main")
+                .ok_or("main window was not registered")?;
             window_geometry::initialise(&native).map_err(std::io::Error::other)?;
             main.show()?;
 

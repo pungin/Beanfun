@@ -269,7 +269,10 @@ pub async fn reset_window_position<R: tauri::Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<(), CommandError> {
     let window = app_handle.get_window("main").ok_or_else(|| {
-        CommandError::new("system.window_not_found", "main window is not currently registered")
+        CommandError::new(
+            "system.window_not_found",
+            "main window is not currently registered",
+        )
     })?;
     crate::window_geometry::reset_main(window)
         .await
