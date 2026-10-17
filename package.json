@@ -25,7 +25,7 @@
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
     "sortablejs": "^1.15.7",
-    "vue": "^3.5.13",
+    "vue": "^3.5.44",
     "vue-i18n": "^11.3.2",
     "vue-router": "^4.6.4"
   },
