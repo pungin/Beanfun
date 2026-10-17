@@ -12,7 +12,6 @@
     "core:window:allow-current-monitor",
     "core:webview:allow-set-webview-zoom",
     "opener:default",
-    "dialog:default",
-    "window-state:default"
+    "dialog:default"
   ]
 }
