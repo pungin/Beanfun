@@ -106,6 +106,11 @@ export function registerErrorTranslator(t: Translator): void {
   translator = t
 }
 
+/** Resolve a command error without logging, toasts or session side effects. */
+export function translateCommandError(error: CommandError): string {
+  return translator(`errors.${error.code}`, error.message)
+}
+
 /**
  * Register the boot-time handler that fires when any command surfaces
  * `auth.session_required`. Pass `null` to clear (mainly for tests).
@@ -144,7 +149,7 @@ export function surfaceCommandError(error: CommandError, opts: WrapOptions = {})
   }
 
   if (!opts.silent) {
-    const localized = translator(`errors.${error.code}`, error.message)
+    const localized = translateCommandError(error)
     ElMessage.error(localized)
   }
 }
