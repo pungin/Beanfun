@@ -209,7 +209,16 @@ pub async fn fetch_releases_at(
     base_url: &str,
     user_agent: &str,
 ) -> Result<Vec<GitHubRelease>, UpdaterError> {
+    fetch_releases_with_timeout(base_url, user_agent, std::time::Duration::from_secs(15)).await
+}
+
+async fn fetch_releases_with_timeout(
+    base_url: &str,
+    user_agent: &str,
+    timeout: std::time::Duration,
+) -> Result<Vec<GitHubRelease>, UpdaterError> {
     let client = reqwest::Client::builder()
+        .timeout(timeout)
         .user_agent(user_agent)
         .build()
         .map_err(UpdaterError::Fetch)?;
@@ -432,6 +441,27 @@ mod tests {
             .expect("happy path");
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].tag_name, "v5.8.3.2604011114");
+    }
+
+    #[tokio::test]
+    async fn a_stalled_release_request_times_out() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string("[]")
+                    .set_delay(std::time::Duration::from_secs(1)),
+            )
+            .mount(&server)
+            .await;
+        let error = fetch_releases_with_timeout(
+            &server.uri(),
+            "test-ua",
+            std::time::Duration::from_millis(50),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, UpdaterError::Fetch(error) if error.is_timeout()));
     }
 
     #[tokio::test]
