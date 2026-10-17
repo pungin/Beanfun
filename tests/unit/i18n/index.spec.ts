@@ -58,47 +58,15 @@ function collectKeyPaths(obj: unknown, prefix = ''): string[] {
 }
 
 describe('locale assets', () => {
-  /*
-   * WPF-generated JSON drift policy (P11 reality check):
-   *
-   * The original P11 Q3 plan assumed three XAML dictionaries share an
-   * identical key set — they don't. `Beanfun/Lang/zh-Hans.xaml` is
-   * genuinely missing ~30 keys vs `zh.xaml` / `en.xaml`, and the
-   * legacy WPF app relies on ResourceDictionary's built-in fallback
-   * chain at runtime to paper over this. Mirroring WPF 1:1 means
-   * we inherit that drift as-is rather than back-filling strings
-   * we have no authoritative translation for.
-   *
-   * So the invariants we actually enforce here are:
-   *
-   * 1. Every generated JSON loads non-empty — catches a broken
-   *    `convert-lang.mjs` invocation (empty output silently).
-   * 2. zh-CN is a *subset* of zh-TW — catches a renegade key added
-   *    to zh-CN that doesn't match the canonical source. (Upstream
-   *    WPF never adds zh-CN-only keys, so this also serves as a
-   *    forward guard: if the WPF translator starts inventing keys,
-   *    we notice.)
-   * 3. zh-TW and en-US match each other — both are kept parallel by
-   *    upstream convention and empirically ship with the same key
-   *    set today.
-   *
-   * Runtime gaps in zh-CN are filled by vue-i18n's per-locale
-   * fallback chain `zh-CN → zh-TW → en-US` (see `i18n/index.ts`
-   * `createAppI18n.fallbackLocale`), which mirrors WPF
-   * `Helper/I18n.cs::LoadLanguage`'s `MergedDictionaries` stack
-   * walking the culture parent chain (`zh-Hans → zh`). The
-   * `fallback chain` test below pins this WPF parity contract.
-   */
+  // Generated dictionaries must stay complete in every supported locale.
   it('all three generated WPF dictionaries load non-empty', () => {
     expect(Object.keys(zhTwGenerated).length).toBeGreaterThan(0)
     expect(Object.keys(zhCnGenerated).length).toBeGreaterThan(0)
     expect(Object.keys(enUsGenerated).length).toBeGreaterThan(0)
   })
 
-  it('zh-CN introduces no keys that do not exist in the zh-TW canonical dictionary', () => {
-    const zhTwKeys = new Set(Object.keys(zhTwGenerated))
-    const renegade = Object.keys(zhCnGenerated).filter((k) => !zhTwKeys.has(k))
-    expect(renegade).toEqual([])
+  it('zh-CN declares the same generated keys as zh-TW', () => {
+    expect(Object.keys(zhCnGenerated).sort()).toEqual(Object.keys(zhTwGenerated).sort())
   })
 
   it('zh-TW and en-US declare an identical key set (no drift between parallel translations)', () => {
@@ -124,6 +92,26 @@ describe('locale assets', () => {
   it('exposes a message map covering every supported locale', () => {
     for (const locale of SUPPORTED_LOCALES) {
       expect(i18nMessages).toHaveProperty(locale)
+    }
+  })
+
+  it('keeps every message non-empty with matching interpolation parameters', () => {
+    const flatten = (obj: object, prefix = ''): Record<string, string> =>
+      Object.fromEntries(
+        Object.entries(obj).flatMap(([key, value]) => {
+          const path = prefix ? `${prefix}.${key}` : key
+          return typeof value === 'object' ? Object.entries(flatten(value, path)) : [[path, value]]
+        }),
+      )
+    const reference = flatten(i18nMessages['zh-TW'])
+    const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort()
+    for (const [locale, messages] of Object.entries(i18nMessages)) {
+      const flat = flatten(messages)
+      expect(Object.keys(flat).sort(), locale).toEqual(Object.keys(reference).sort())
+      for (const [key, value] of Object.entries(flat)) {
+        expect(value.trim(), `${locale}: ${key}`).not.toBe('')
+        expect(placeholders(value), `${locale}: ${key}`).toEqual(placeholders(reference[key]))
+      }
     }
   })
 
@@ -168,38 +156,12 @@ describe('createAppI18n', () => {
     expect(i18n.global.t('titleBar.minimize')).toBe(i18nMessages['en-US'].titleBar.minimize)
   })
 
-  it('zh-CN falls back to zh-TW (NOT en-US) for keys missing in zh-Hans.xaml (WPF parity)', () => {
-    /*
-     * P12.5 D11 regression guard.
-     *
-     * `Beanfun/Lang/zh-Hans.xaml` is missing ~30 keys that
-     * `zh.xaml` and `en.xaml` define (`Cancel`, `Yes`, `No`,
-     * `Tools`, `Weapon`, `ScrollBlack`, `PerfectCoreNeedSkills`,
-     * …). WPF runtime fills those via `MergedDictionaries`
-     * culture-parent chain (`zh-Hans → zh`), so a Simplified
-     * Chinese WPF user sees the Traditional Chinese string for
-     * those keys, NOT English.
-     *
-     * The vue-i18n per-locale fallback map in `i18n/index.ts`
-     * mirrors that chain (`zh-CN → zh-TW → en-US`). This test
-     * pins the parity by exercising a representative key
-     * (`Cancel`) that exists only in zh-TW + en-US — a
-     * regression that flips the chain back to a flat `en-US`
-     * fallback would render "Cancel" instead of "取消" and fail
-     * here loudly.
-     */
+  it('keeps the zh-CN to zh-TW fallback order for a missing resource', () => {
     const i18n = createAppI18n()
+    i18n.global.mergeLocaleMessage('zh-TW', { fallbackProbe: '繁體備援' })
+    i18n.global.mergeLocaleMessage('en-US', { fallbackProbe: 'English fallback' })
     setLocale(i18n, 'zh-CN')
-
-    const cancel = i18n.global.t('Cancel')
-    expect(cancel).toBe('取消')
-    /*
-     * Defensive: prove the en-US table really does carry a
-     * different (English) value for the same key, so the
-     * "fall back to zh-TW" assertion above isn't accidentally
-     * passing because both tables happen to share the value.
-     */
-    expect(i18nMessages['en-US'].Cancel).not.toBe('取消')
+    expect(i18n.global.t('fallbackProbe')).toBe('繁體備援')
   })
 })
 
@@ -219,6 +181,7 @@ describe('wireI18n', () => {
     __resetInvokeRegistriesForTesting()
     consoleErrorSpy.mockRestore()
   })
+
 
   it('registers a locale applier so ui.setLanguage flips the i18n locale', async () => {
     const i18n = createAppI18n()

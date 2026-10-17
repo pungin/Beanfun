@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 
 // `convert-lang.mjs` is a Node ESM script (no .d.ts), so we declare the
 // shape we rely on locally and use a dynamic import to bypass the
@@ -12,6 +13,23 @@ const importConvertLang = async (): Promise<ConvertLangModule> => {
   const mod = (await import('../../../scripts/convert-lang.mjs')) as unknown
   return mod as ConvertLangModule
 }
+
+it('preserves every shipped locale key when converting the legacy sources', async () => {
+  const { parseXamlStrings, LOCALE_FILE_MAP } = await importConvertLang()
+  const sourceKeySets: string[][] = []
+  for (const { source, target } of LOCALE_FILE_MAP) {
+    const parsed = parseXamlStrings(readFileSync(`Lang/${source}`, 'utf8'))
+    const generated = JSON.parse(readFileSync(`src/locales/${target}`, 'utf8'))
+    sourceKeySets.push(Object.keys(parsed).sort())
+    expect(
+      Object.keys(generated).filter((key) => !(key in parsed)),
+      source,
+    ).toEqual([])
+    expect(parsed.UpdateCheckFailed).toBe(generated.UpdateCheckFailed)
+  }
+  expect(sourceKeySets[1]).toEqual(sourceKeySets[0])
+  expect(sourceKeySets[2]).toEqual(sourceKeySets[0])
+})
 
 describe('parseXamlStrings', () => {
   it('extracts all <system:String x:Key="…"> entries as a flat KV object', async () => {
