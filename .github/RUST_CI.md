@@ -28,8 +28,8 @@ account operations or build a release installer.
 
 ## Cache warming
 
-The schedule runs at 03:17 UTC (11:17 Taipei) on days 1, 6, 11, 16, 21, 26 and 31
-where those dates exist. The intended gap is at most five days. Scheduled runs
+The schedule runs at 03:17 UTC (11:17 Taipei) on days 1, 7, 13, 19, 25 and 31
+where those dates exist. The intended gap is at most six days. Scheduled runs
 execute on the default branch, `code`, and skip the frontend job.
 
 Only successful runs on `code` save Rust caches. Pull requests restore these

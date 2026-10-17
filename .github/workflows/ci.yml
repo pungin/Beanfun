@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [code]
   schedule:
-    # Keep the default-branch cache in use at intervals of at most five days.
-    - cron: '17 3 */5 * *'
+    # Keep the default-branch cache in use at intervals of at most six days.
+    - cron: '17 3 */6 * *'
   workflow_dispatch:
 
 permissions:
