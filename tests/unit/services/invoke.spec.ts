@@ -7,6 +7,7 @@ import {
   registerErrorTranslator,
   registerSessionExpiredHandler,
   safeInvoke,
+  translateCommandError,
   wrapCommand,
 } from '../../../src/services/invoke'
 
@@ -41,6 +42,18 @@ describe('wrapCommand', () => {
   it('returns the unwrapped data on success', async () => {
     const data = await wrapCommand(ok({ greeting: 'hello' }))
     expect(data).toEqual({ greeting: 'hello' })
+    expect(elMessageError).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
+  })
+
+  it('can translate an inline error without triggering toast, logging or session expiry', () => {
+    const expired = vi.fn()
+    registerSessionExpiredHandler(expired)
+    const error = { code: 'auth.session_required', message: 'raw fallback', details: null }
+    expect(translateCommandError(error)).toBe('raw fallback')
+    registerErrorTranslator(() => 'Translated message')
+    expect(translateCommandError(error)).toBe('Translated message')
+    expect(expired).not.toHaveBeenCalled()
     expect(elMessageError).not.toHaveBeenCalled()
     expect(consoleErrorSpy).not.toHaveBeenCalled()
   })
