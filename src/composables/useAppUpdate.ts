@@ -1,7 +1,7 @@
 import { computed, onScopeDispose, ref } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { commands, type Channel } from '../types/bindings'
-import { safeInvoke, surfaceCommandError } from '../services/invoke'
+import { commands, type Channel, type CommandError } from '../types/bindings'
+import { safeInvoke } from '../services/invoke'
 
 export interface AppUpdateProgress {
   phase: 'downloading' | 'verifying' | 'ready' | 'installing'
@@ -35,8 +35,11 @@ export function useAppUpdate() {
     stopListening()
   })
 
-  async function downloadAndInstall(channel: Channel, tagName: string): Promise<void> {
-    if (isUpdating.value || disposed) return
+  async function downloadAndInstall(
+    channel: Channel,
+    tagName: string,
+  ): Promise<CommandError | null> {
+    if (isUpdating.value || disposed) return null
     isUpdating.value = true
     phase.value = 'preparing'
     downloaded.value = 0
@@ -54,40 +57,39 @@ export function useAppUpdate() {
       })
       if (disposed) {
         releaseListener()
-        return
+        return null
       }
       unlisten = releaseListener
 
       const prepared = await safeInvoke(commands.prepareUpdate(channel, tagName))
-      if (disposed) return
+      if (disposed) return null
       if (!prepared.ok) {
-        surfaceCommandError(prepared.error)
         phase.value = 'failed'
-        return
+        return prepared.error
       }
 
       installing = true
       phase.value = 'installing'
       const installed = await safeInvoke(commands.installUpdate())
-      if (disposed) return
+      if (disposed) return null
       if (!installed.ok) {
-        surfaceCommandError(installed.error)
         phase.value = 'failed'
-        return
+        return installed.error
       }
       // Keep navigation locked until the backend exits the application.
       installationStarted = true
+      return null
     } catch (error) {
-      if (disposed) return
+      if (disposed) return null
       console.warn('[AppUpdate] update command failed', error)
-      surfaceCommandError({
+      phase.value = 'failed'
+      return {
         code: installing ? 'update.install_failed' : 'update.prepare_failed',
         message: installing
           ? 'The update could not be installed.'
           : 'The update could not be prepared.',
         details: null,
-      })
-      phase.value = 'failed'
+      }
     } finally {
       stopListening()
       if (!installationStarted) isUpdating.value = false
