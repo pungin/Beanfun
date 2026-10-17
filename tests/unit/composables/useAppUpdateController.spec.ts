@@ -3,6 +3,12 @@ import { flushPromises } from '@vue/test-utils'
 import { effectScope, reactive, ref, type EffectScope } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createAppUpdateController } from '../../../src/composables/useAppUpdateController'
+import UpdateConfirmation from '../../../src/components/UpdateConfirmation.vue'
+import UpdateFallback from '../../../src/components/UpdateFallback.vue'
+import {
+  __resetInvokeRegistriesForTesting,
+  registerErrorTranslator,
+} from '../../../src/services/invoke'
 import {
   commands,
   type CommandError,
@@ -19,11 +25,11 @@ const state = vi.hoisted(() => ({
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: state.translate }) }))
 vi.mock('element-plus', () => ({
   ElMessage: { info: vi.fn(), warning: vi.fn(), error: vi.fn() },
-  ElMessageBox: { confirm: vi.fn() },
+  ElMessageBox: { confirm: vi.fn(), alert: vi.fn() },
 }))
 vi.mock('../../../src/stores/ui', () => ({ useUiStore: () => state.ui }))
 vi.mock('../../../src/types/bindings', () => ({
-  commands: { version: vi.fn(), checkUpdate: vi.fn() },
+  commands: { version: vi.fn(), checkUpdate: vi.fn(), openUrl: vi.fn() },
 }))
 vi.mock('../../../src/composables/useAppUpdate', () => ({
   useAppUpdate: () => ({
@@ -65,12 +71,15 @@ beforeEach(() => {
   vi.mocked(commands.version).mockReset().mockResolvedValue({ app: '6.2.2', tauri: '2.0.0' })
   vi.mocked(commands.checkUpdate).mockReset().mockResolvedValue({ status: 'ok', data: release })
   vi.mocked(ElMessageBox.confirm).mockReset().mockResolvedValue('confirm')
+  vi.mocked(ElMessageBox.alert).mockReset().mockResolvedValue('confirm')
+  registerErrorTranslator((key) => key)
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 
 afterEach(() => {
   for (const scope of scopes.splice(0)) scope.stop()
   vi.restoreAllMocks()
+  __resetInvokeRegistriesForTesting()
 })
 
 describe('startup update checks', () => {
@@ -113,6 +122,8 @@ describe('startup update checks', () => {
       expect(commands.checkUpdate).toHaveBeenCalledOnce()
       expect(ElMessage.warning).not.toHaveBeenCalled()
       expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+      expect(ElMessageBox.alert).not.toHaveBeenCalled()
+      expect(controller.manualDownload.value).toBeNull()
       expect(controller.updateBusy.value).toBe(false)
       await controller.checkForUpdate()
       expect(commands.checkUpdate).toHaveBeenCalledTimes(2)
@@ -190,9 +201,22 @@ describe('shared update confirmation', () => {
     vi.mocked(commands.checkUpdate).mockRejectedValueOnce(new Error('Network unavailable'))
     const { controller } = createHarness()
     await controller.checkForUpdate()
-    expect(ElMessage.warning).toHaveBeenCalledWith('UpdateCheckFailed')
+    expect(ElMessageBox.alert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: UpdateFallback,
+        props: { reason: 'UpdateCheckFailed', releaseTag: null },
+      }),
+      'UpdateCheckFailed',
+      expect.any(Object),
+    )
+    expect(controller.manualDownload.value).toEqual({
+      releaseTag: null,
+      reason: 'UpdateCheckFailed',
+    })
+    expect(ElMessage.warning).not.toHaveBeenCalled()
     expect(state.downloadAndInstall).not.toHaveBeenCalled()
     expect(controller.updateBusy.value).toBe(false)
+    expect(commands.openUrl).not.toHaveBeenCalled()
   })
 
   it('keeps the approved channel and waits for the update page before downloading', async () => {
@@ -203,15 +227,20 @@ describe('shared update confirmation', () => {
     const { controller } = createHarness({ showUpdatePage })
     const running = controller.checkForUpdate()
     await flushPromises()
-    expect(state.translate).toHaveBeenCalledWith('appUpdate.confirmBody', {
-      version: release.new_version_display,
-      current: '6.2.2',
-      notes: release.body,
-    })
     expect(ElMessageBox.confirm).toHaveBeenCalledWith(
-      'appUpdate.confirmBody',
+      expect.objectContaining({
+        type: UpdateConfirmation,
+        props: {
+          currentVersion: '6.2.2',
+          newVersion: release.new_version_display,
+          releaseTag: release.tag_name,
+        },
+      }),
       'CheckUpdate',
-      expect.objectContaining({ confirmButtonText: 'appUpdate.downloadAndRestart' }),
+      expect.objectContaining({
+        confirmButtonText: 'appUpdate.downloadAndRestart',
+        customClass: 'app-update-confirm',
+      }),
     )
     state.ui.updateChannel = 'Beta'
     confirmation.resolve('confirm')
@@ -231,6 +260,8 @@ describe('shared update confirmation', () => {
     expect(showUpdatePage).not.toHaveBeenCalled()
     expect(state.downloadAndInstall).not.toHaveBeenCalled()
     expect(controller.updateBusy.value).toBe(false)
+    expect(controller.manualDownload.value).toEqual({ releaseTag: release.tag_name, reason: null })
+    expect(commands.openUrl).not.toHaveBeenCalled()
   })
 
   it('does not download when navigation to the progress page is rejected', async () => {
@@ -239,6 +270,35 @@ describe('shared update confirmation', () => {
     expect(state.downloadAndInstall).not.toHaveBeenCalled()
     expect(controller.updateBusy.value).toBe(false)
   })
+
+  it.each(['download_failed', 'signature_invalid', 'install_failed'] as const)(
+    'shows one %s message with a persistent manual link without opening a browser',
+    async (code) => {
+      state.downloadAndInstall.mockResolvedValueOnce({
+        code: `update.${code}`,
+        message: 'Synthetic failure',
+        details: null,
+      })
+      const { controller } = createHarness()
+      await controller.checkForUpdate()
+      expect(ElMessageBox.alert).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          type: UpdateFallback,
+          props: { reason: `errors.update.${code}`, releaseTag: release.tag_name },
+        }),
+        'appUpdate.failedTitle',
+        expect.objectContaining({ confirmButtonText: 'Close' }),
+      )
+      expect(controller.manualDownload.value).toEqual({
+        releaseTag: release.tag_name,
+        reason: `errors.update.${code}`,
+      })
+      expect(ElMessage.error).not.toHaveBeenCalled()
+      expect(ElMessage.warning).not.toHaveBeenCalled()
+      expect(commands.openUrl).not.toHaveBeenCalled()
+      expect(controller.updateBusy.value).toBe(false)
+    },
+  )
 
   it('ignores a late check result after its owning scope is disposed', async () => {
     const check = deferred<Result<UpdateInfo | null, CommandError>>()

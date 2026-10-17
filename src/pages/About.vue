@@ -53,6 +53,7 @@ import {
 } from '../composables/useAppUpdateController'
 import iconUrl from '../assets/icon.png'
 import TitleBar from '../components/TitleBar.vue'
+import UpdateFallback from '../components/UpdateFallback.vue'
 
 defineOptions({ name: 'AboutPage' })
 
@@ -92,7 +93,7 @@ async function loadVersion(): Promise<void> {
 
 /* --------------- update check --------------- */
 
-const { isUpdating, phase, percentage, updateBusy, checkForUpdate } =
+const { isUpdating, phase, percentage, updateBusy, manualDownload, checkForUpdate } =
   inject(APP_UPDATE_CONTROLLER, null) ?? createAppUpdateController()
 const updateStatus = computed(() => {
   switch (phase.value) {
@@ -107,7 +108,7 @@ const updateStatus = computed(() => {
     case 'installing':
       return t('appUpdate.installing')
     case 'failed':
-      return t('appUpdate.failed')
+      return manualDownload.value?.reason ? t('appUpdate.failed') : ''
     default:
       return ''
   }
@@ -258,12 +259,12 @@ onMounted(() => {
         </header>
 
         <section
-          v-if="phase !== 'idle'"
+          v-if="updateStatus || manualDownload"
           class="about__update bf-glass-panel"
           aria-live="polite"
           data-test="about-update-status"
         >
-          <p>{{ updateStatus }}</p>
+          <p v-if="updateStatus">{{ updateStatus }}</p>
           <el-progress
             v-if="phase === 'downloading'"
             :percentage="percentage ?? 0"
@@ -272,6 +273,12 @@ onMounted(() => {
             data-test="about-update-progress"
           />
           <p v-if="isUpdating" class="about__update-hint">{{ t('appUpdate.keepOpen') }}</p>
+          <UpdateFallback
+            v-if="manualDownload && !isUpdating"
+            :reason="manualDownload.reason"
+            :release-tag="manualDownload.releaseTag"
+            data-test="about-update-fallback"
+          />
         </section>
 
         <!-- Body: about text + contact + footer -->

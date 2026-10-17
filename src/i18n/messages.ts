@@ -269,8 +269,14 @@ const zhTW = {
   },
   appUpdate: {
     downloadAndRestart: '下載並重新啟動',
+    confirmVersions: '目前 {current} → 新版 {version}',
     confirmBody:
-      '發現新版本 {version}，目前版本為 {current}。\n\n{notes}\n\n下載完成並驗證後，Beanfun 將關閉、安裝更新並重新啟動。帳號與設定會保留。是否繼續？',
+      '按「下載並重新啟動」即可自動下載、驗證及安裝更新，完成後重新啟動。帳號與設定會保留。',
+    cancelForManualDownload: '若要手動下載，請按「取消」，再前往 GitHub。',
+    releasePage: 'GitHub：更新說明／手動下載',
+    releasePageFailed: '無法開啟 GitHub 頁面，請稍後再試。',
+    manualDownloadHint: '也可以前往 GitHub 手動下載並安裝更新。',
+    failedTitle: '自動更新未完成',
     preparing: '正在準備更新…',
     downloading: '正在下載更新…',
     verifying: '正在驗證更新…',
@@ -752,8 +758,14 @@ const zhCN = {
   },
   appUpdate: {
     downloadAndRestart: '下载并重新启动',
+    confirmVersions: '当前 {current} → 新版 {version}',
     confirmBody:
-      '发现新版本 {version}，当前版本为 {current}。\n\n{notes}\n\n下载完成并验证后，Beanfun 将关闭、安装更新并重新启动。账号与设置会保留。是否继续？',
+      '点击“下载并重新启动”即可自动下载、验证及安装更新，完成后重新启动。账号与设置会保留。',
+    cancelForManualDownload: '如需手动下载，请点击“取消”，再前往 GitHub。',
+    releasePage: 'GitHub：更新说明／手动下载',
+    releasePageFailed: '无法打开 GitHub 页面，请稍后再试。',
+    manualDownloadHint: '也可以前往 GitHub 手动下载并安装更新。',
+    failedTitle: '自动更新未完成',
     preparing: '正在准备更新…',
     downloading: '正在下载更新…',
     verifying: '正在验证更新…',
@@ -1234,8 +1246,14 @@ const enUS = {
   },
   appUpdate: {
     downloadAndRestart: 'Download and restart',
+    confirmVersions: 'Current {current} → New {version}',
     confirmBody:
-      'Version {version} is available. Current version: {current}.\n\n{notes}\n\nAfter downloading and verifying the update, Beanfun will close, install the update and restart. Your accounts and settings will be kept. Continue?',
+      'Select Download and restart to automatically download, verify and install the update, then restart. Your accounts and settings will be kept.',
+    cancelForManualDownload: 'To download manually, select Cancel, then visit GitHub.',
+    releasePage: 'GitHub: release notes / manual download',
+    releasePageFailed: 'Unable to open GitHub. Please try again later.',
+    manualDownloadHint: 'You can also download and install the update manually from GitHub.',
+    failedTitle: 'Automatic update did not finish',
     preparing: 'Preparing the update…',
     downloading: 'Downloading the update…',
     verifying: 'Verifying the update…',
