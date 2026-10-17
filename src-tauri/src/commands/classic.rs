@@ -609,8 +609,7 @@ fn spawn_portal_window<R: tauri::Runtime>(
     .min_inner_size(400.0, 300.0)
     .decorations(true)
     .resizable(true)
-    .center()
-    .visible(visible)
+    .visible(false)
     .user_agent(CLASSIC_PORTAL_USER_AGENT)
     // TW users sign in inside this window, and that form's links
     // (register / forgot password) are `target="_blank"` — dead without
@@ -631,12 +630,19 @@ fn spawn_portal_window<R: tauri::Runtime>(
             builder = builder.additional_browser_args(args);
         }
     }
-    builder.build().map_err(|e| {
+    let window = builder.build().map_err(|e| {
         CommandError::new(
             WINDOW_FAILED_CODE,
             format!("failed to create classic portal window: {e}"),
         )
-    })
+    })?;
+    crate::window_geometry::initialise_webview(&window)
+        .map_err(|error| CommandError::new("system.window_geometry_failed", error))?;
+    if visible {
+        crate::window_geometry::show_webview(&window)
+            .map_err(|error| CommandError::new("system.window_geometry_failed", error))?;
+    }
+    Ok(window)
 }
 
 /// Answer the native game-account picker: select `value` in the open
@@ -862,7 +868,7 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
     // Without interception the prompt can't be suppressed — the user has
     // to confirm it, so the window must be visible.
     if !intercept_ok {
-        let _ = window.show();
+        let _ = crate::window_geometry::show_webview(&window);
         let _ = window.set_focus();
         return Ok(());
     }
@@ -872,7 +878,7 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
         let mut revealed = start_visible;
         let reveal = |window: &tauri::WebviewWindow<R>, revealed: &mut bool| {
             if !*revealed {
-                let _ = window.show();
+                let _ = crate::window_geometry::show_webview(&window);
                 let _ = window.set_focus();
                 *revealed = true;
             }
@@ -930,7 +936,7 @@ async fn open_classic_login_windows<R: tauri::Runtime>(
 
         tracing::warn!("classic: no launch within the hard deadline");
         let _ = window.app_handle().emit(CLASSIC_FAILED_EVENT, ());
-        let _ = window.show();
+        let _ = crate::window_geometry::show_webview(&window);
         let _ = window.set_focus();
     });
 
