@@ -214,3 +214,9 @@ test-fixtures = []
 [[test]]
 name = "storage_legacy"
 required-features = ["test-fixtures"]
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
