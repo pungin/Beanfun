@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   resize: vi.fn<(width: number, height: number) => Promise<{ status: 'ok'; data: null }>>(
     async () => ({ status: 'ok', data: null }),
   ),
-  zoom: vi.fn(async () => {}),
+  zoom: vi.fn<(zoom: number) => Promise<void>>(async () => {}),
   monitor: vi.fn(async () => ({ workArea: { size: { width: 1280, height: 900 } } })),
   scaleFactor: vi.fn(async () => 1),
   onScaleChanged: vi.fn(async () => vi.fn()),
@@ -40,6 +40,8 @@ let disconnect = vi.fn()
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
+  mocks.zoom.mockReset()
+  mocks.scaleFactor.mockReset()
   resetMainWindowGeometryForTests()
   contentHeight = 500
   notifyResize = null
@@ -140,6 +142,47 @@ describe('main-window content measurement', () => {
     notifyResize?.()
     await settle()
     expect(mocks.resize).toHaveBeenLastCalledWith(660, 700)
+  })
+
+  it.each([
+    { textScale: 1, scaleFactor: 1, size: [652, 790] },
+    { textScale: 1.3, scaleFactor: 1.25, size: [847, 1027] },
+    { textScale: 1.5, scaleFactor: 1.5, size: [978, 1185] },
+  ])(
+    'settles one-pixel zoom feedback at text scale $textScale and DPI scale $scaleFactor',
+    async ({ textScale, scaleFactor, size }) => {
+      vi.stubGlobal('screen', { availWidth: 1536, availHeight: 832 })
+      vi.stubGlobal('devicePixelRatio', scaleFactor * textScale)
+      mocks.scaleFactor.mockResolvedValue(scaleFactor)
+      contentHeight = 800
+      mocks.zoom.mockImplementation(async (zoom: number) => {
+        vi.stubGlobal('devicePixelRatio', scaleFactor * textScale * zoom)
+        contentHeight = contentHeight === 800 ? 801 : 800
+        notifyResize?.()
+      })
+      await install()
+      for (let pass = 0; pass < 5; pass += 1) await settle()
+      expect(mocks.zoom).toHaveBeenCalledExactlyOnceWith(790 / 800)
+      expect(mocks.resize).toHaveBeenCalledExactlyOnceWith(...size)
+    },
+  )
+
+  it('recalculates after native DPI changes even when the CSS work area stays the same', async () => {
+    vi.stubGlobal('screen', { availWidth: 1536, availHeight: 832 })
+    let scaleFactor = 1
+    mocks.scaleFactor.mockImplementation(async () => scaleFactor)
+    mocks.zoom.mockImplementation(async (zoom: number) => {
+      vi.stubGlobal('devicePixelRatio', scaleFactor * zoom)
+    })
+    contentHeight = 800
+    await install()
+    scaleFactor = 1.5
+    vi.stubGlobal('devicePixelRatio', scaleFactor * (790 / 800))
+    contentHeight = 801
+    window.dispatchEvent(new Event('resize'))
+    await settle()
+    expect(mocks.zoom).toHaveBeenCalledTimes(2)
+    expect(mocks.zoom).toHaveBeenLastCalledWith(790 / 801)
   })
 
   it('remeasures the new layout after applying a route width', async () => {

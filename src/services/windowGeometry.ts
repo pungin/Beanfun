@@ -9,6 +9,8 @@ export interface WindowEnvironment {
   width: number
   height: number
   textScale: number
+  /** Native monitor DPI scale, independent of text scaling and webview zoom. */
+  scaleFactor: number
 }
 
 export interface WindowFit extends WindowDemand {
@@ -44,6 +46,11 @@ interface SizeRequest {
   sizing: 'content' | 'text-scaled' | 'logical'
 }
 
+interface ContentMeasurement {
+  demand: WindowDemand
+  environment: WindowEnvironment
+}
+
 /**
  * Own every main-window size request. Native placement remains in Rust.
  *
@@ -60,22 +67,28 @@ export class WindowGeometryController {
   private running: Promise<void> | null = null
   private applied: WindowFit | null = null
   private appliedZoom: number | null = null
+  private appliedContent: ContentMeasurement | null = null
 
   constructor(private readonly adapter: WindowGeometryAdapter) {}
 
   setRoute(demand: WindowDemand | null, sizing: 'content' | 'text-scaled' = 'content'): void {
+    if (!demand || sizing !== 'content') this.appliedContent = null
     this.route = demand ? { demand, sizing } : null
     this.refresh()
   }
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled
-    if (!enabled) this.route = null
+    if (!enabled) {
+      this.route = null
+      this.appliedContent = null
+    }
     this.refresh()
   }
 
   /** Fixed logical size; release is independent and idempotent, even out of order. */
   override(demand: WindowDemand): () => void {
+    this.appliedContent = null
     const token = Symbol('window-size-override')
     this.overrides.set(token, demand)
     this.refresh()
@@ -109,6 +122,20 @@ export class WindowGeometryController {
     return override ? { demand: override, sizing: 'logical' } : this.route
   }
 
+  private isMeasurementNoise({ demand, environment }: ContentMeasurement): boolean {
+    const previous = this.appliedContent
+    return (
+      previous !== null &&
+      demand.width === previous.demand.width &&
+      Math.abs(demand.height - previous.demand.height) <= 1 &&
+      environment.width === previous.environment.width &&
+      environment.height === previous.environment.height &&
+      environment.scaleFactor === previous.environment.scaleFactor &&
+      // Removing webview zoom from devicePixelRatio can introduce round-off.
+      Math.abs(environment.textScale - previous.environment.textScale) < 0.000001
+    )
+  }
+
   private async applyLatest(): Promise<void> {
     while (this.processedRevision !== this.revision) {
       const revision = this.revision
@@ -118,12 +145,15 @@ export class WindowGeometryController {
       try {
         const { demand, sizing } = request
         let fit: WindowFit
+        let content: ContentMeasurement | null = null
         if (sizing === 'logical') {
           // The announcement has always requested a fixed logical size while
           // retaining the route's existing zoom and accessibility text scale.
           fit = { ...demand, zoom: this.appliedZoom ?? 1 }
         } else {
           const environment = await this.adapter.environment()
+          if (sizing === 'content')
+            content = { demand: { ...demand }, environment: { ...environment } }
           fit =
             sizing === 'content'
               ? calculateWindowFit(demand, environment)
@@ -134,6 +164,10 @@ export class WindowGeometryController {
                 }
         }
         if (revision !== this.revision) continue
+        // A one-pixel measurement can change zoom even when rounded native
+        // dimensions stay the same. Suppress both against a fixed anchor;
+        // ignored samples must not hide gradual growth by moving that anchor.
+        if (content && this.isMeasurementNoise(content)) continue
         const zoomChanged =
           sizing === 'content' &&
           (this.appliedZoom === null || Math.abs(this.appliedZoom - fit.zoom) > 0.001)
@@ -142,6 +176,9 @@ export class WindowGeometryController {
           Math.abs(this.applied.width - fit.width) > 1 ||
           Math.abs(this.applied.height - fit.height) > 1
         if (!zoomChanged && !sizeChanged) continue
+        // An interrupted or partially failed apply must not reuse the old
+        // measurement after the native zoom or size may already have changed.
+        this.appliedContent = null
         if (zoomChanged) {
           await this.adapter.setZoom(fit.zoom)
           this.appliedZoom = fit.zoom
@@ -150,7 +187,10 @@ export class WindowGeometryController {
         if (sizeChanged) await this.adapter.resize(fit.width, fit.height)
         // A failed command never becomes the remembered successful state.
         this.applied = fit
-        if (revision === this.revision) this.adapter.onApplied?.(fit)
+        if (revision === this.revision) {
+          this.appliedContent = content
+          this.adapter.onApplied?.(fit)
+        }
       } catch (error) {
         // Retry only when another request arrives; never spin on an IPC failure.
         this.adapter.onError?.(error)
