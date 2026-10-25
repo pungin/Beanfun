@@ -29,6 +29,7 @@ export function mainWindowGeometry(): WindowGeometryController {
         width: screen && screen.availWidth > 0 ? screen.availWidth : 1280,
         height: screen && screen.availHeight > 0 ? screen.availHeight : 900,
         textScale: textScaleFactor(window.devicePixelRatio || 1),
+        scaleFactor: scale,
       }
     },
     async setZoom(zoom) {
